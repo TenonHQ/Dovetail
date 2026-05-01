@@ -24,6 +24,7 @@ export {
   verifyArtifact,
   cloneSubflow,
   cloneActionType,
+  triggerPublication,
   generateSysId,
   topoSort,
   executeWritePlan,
@@ -43,6 +44,8 @@ export type {
   CloneSubflowResult,
   CloneActionTypeParams,
   CloneActionTypeResult,
+  TriggerPublicationParams,
+  TriggerPublicationResult,
   WriteOp,
   WriteOpResult
 } from "./flowDesigner";

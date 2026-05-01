@@ -23,6 +23,9 @@ export type { CloneSubflowParams, CloneSubflowResult } from "./cloneSubflow";
 export { cloneActionType } from "./cloneActionType";
 export type { CloneActionTypeParams, CloneActionTypeResult } from "./cloneActionType";
 
+export { triggerPublication } from "./triggerPublication";
+export type { TriggerPublicationParams, TriggerPublicationResult } from "./triggerPublication";
+
 export {
   generateSysId,
   stripSystemFields,

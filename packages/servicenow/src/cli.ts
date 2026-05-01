@@ -26,6 +26,8 @@ import * as fs from "fs";
 import { createClient } from "./client";
 import { addChoicesToField } from "./choices";
 import { formatAddChoicesResult } from "./formatter";
+import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
+import { formatBuildFlowResult } from "./flowDesigner-formatter";
 import type { AddChoicesParams, ChoiceValue } from "./types";
 
 interface ParsedArgs {
@@ -100,28 +102,80 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
   process.stdout.write(formatAddChoicesResult(params.table, params.column, result) + "\n");
 }
 
+/**
+ * sinc-sn build-flow:
+ *   --from-json <path>      Required. JSON spec for the artifact (clone | create).
+ *   --update-set <sys_id>   Optional. Overrides spec.updateSetSysId at the CLI level.
+ *   --dry-run               Optional. Emit the planned write graph; do nothing.
+ *   --skip-publish          Optional. Skip the publish trigger entirely.
+ *   --json                  Optional. Emit the structured BuildFlowResult instead of human text.
+ *
+ * Exit codes (mirror BuildFlowResult.outcome):
+ *   0 — done OR unchanged OR dry-run
+ *   2 — needs-ui-publish (writes ok, verify ok, publish degraded)
+ *   3 — verify-mismatch  (writes ok but verify saw counts that don't match)
+ *   4 — write-failed     (partial state in update set; discard to roll back)
+ *   5 — unrecoverable    (spec or auth bug; never reached SN)
+ */
+async function runBuildFlowCmd(flags: Record<string, string>): Promise<number> {
+  if (!flags["from-json"]) {
+    process.stderr.write("build-flow: --from-json <path> is required\n");
+    return 5;
+  }
+  var raw: unknown;
+  try {
+    raw = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
+  } catch (err: any) {
+    process.stderr.write("build-flow: failed to read/parse spec file: " + err.message + "\n");
+    return 5;
+  }
+  if (flags["update-set"] && raw && typeof raw === "object") {
+    (raw as Record<string, unknown>).updateSetSysId = flags["update-set"];
+  }
+  var client = createClient({});
+  var result = await runBuildFlow(client, raw, {
+    dryRun: flags["dry-run"] === "true",
+    skipPublish: flags["skip-publish"] === "true",
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatBuildFlowResult(result) + "\n");
+  }
+  return result.exitCode;
+}
+
 function printHelp(): void {
   process.stdout.write(
     "sinc-sn — ServiceNow helpers\n\n" +
     "Commands:\n" +
-    "  add-choices   Upsert sys_choice rows for a table.column (see --help in source)\n"
+    "  add-choices   Upsert sys_choice rows for a table.column\n" +
+    "  build-flow    Author Custom Action Types and Subflows from a JSON spec\n" +
+    "                (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n"
   );
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   if (parsed.command === "add-choices") {
     await runAddChoices(parsed.flags);
-    return;
+    return 0;
+  }
+  if (parsed.command === "build-flow") {
+    return await runBuildFlowCmd(parsed.flags);
   }
   if (!parsed.command || parsed.command === "help" || parsed.flags.help === "true") {
     printHelp();
-    return;
+    return 0;
   }
   throw new Error("Unknown command: " + parsed.command);
 }
 
-main().catch(function (err) {
-  process.stderr.write("sinc-sn error: " + (err && err.message ? err.message : String(err)) + "\n");
-  process.exit(1);
-});
+main()
+  .then(function (code) {
+    process.exit(code);
+  })
+  .catch(function (err) {
+    process.stderr.write("sinc-sn error: " + (err && err.message ? err.message : String(err)) + "\n");
+    process.exit(1);
+  });
