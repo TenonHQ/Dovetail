@@ -16,3 +16,20 @@ export type {
   VerifyReport,
   VerifyArtifactParams,
 } from "./verifyArtifact";
+
+export { cloneSubflow } from "./cloneSubflow";
+export type { CloneSubflowParams, CloneSubflowResult } from "./cloneSubflow";
+
+export { cloneActionType } from "./cloneActionType";
+export type { CloneActionTypeParams, CloneActionTypeResult } from "./cloneActionType";
+
+export {
+  generateSysId,
+  stripSystemFields,
+  applyScope,
+  assertSysId,
+  SYSTEM_FIELDS_TO_STRIP,
+} from "./shape";
+
+export { topoSort, executeWritePlan, WriteOrderError } from "./writeOrder";
+export type { WriteOp, WriteOpResult } from "./writeOrder";

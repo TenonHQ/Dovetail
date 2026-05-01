@@ -21,7 +21,13 @@ export { sincPlugin } from "./plugin";
 
 export {
   listTemplates,
-  verifyArtifact
+  verifyArtifact,
+  cloneSubflow,
+  cloneActionType,
+  generateSysId,
+  topoSort,
+  executeWritePlan,
+  WriteOrderError
 } from "./flowDesigner";
 
 export type {
@@ -32,7 +38,13 @@ export type {
   VerifyFound,
   VerifyFailure,
   VerifyReport,
-  VerifyArtifactParams
+  VerifyArtifactParams,
+  CloneSubflowParams,
+  CloneSubflowResult,
+  CloneActionTypeParams,
+  CloneActionTypeResult,
+  WriteOp,
+  WriteOpResult
 } from "./flowDesigner";
 
 export type {
