@@ -6,13 +6,34 @@
  */
 
 export { createClient } from "./client";
-export type { ServiceNowClient, TableQueryOptions } from "./client";
+export type {
+  ServiceNowClient,
+  TableQueryOptions,
+  TableSchema,
+  TableSchemaField
+} from "./client";
 
 export { addChoicesToField } from "./choices";
 
 export { formatAddChoicesResult } from "./formatter";
 
 export { sincPlugin } from "./plugin";
+
+export {
+  listTemplates,
+  verifyArtifact
+} from "./flowDesigner";
+
+export type {
+  TemplateRef,
+  ListTemplatesParams,
+  FlowKind,
+  VerifyExpect,
+  VerifyFound,
+  VerifyFailure,
+  VerifyReport,
+  VerifyArtifactParams
+} from "./flowDesigner";
 
 export type {
   ServiceNowClientConfig,
