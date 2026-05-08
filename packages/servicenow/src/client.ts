@@ -70,10 +70,18 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+export interface TableQueryOptions {
+  limit?: number;
+  fields?: string[];
+}
+
 export interface ServiceNowClient {
   table: {
     /** GET /api/now/table/<t>?sysparm_query=...&sysparm_limit=N — returns result array. */
-    query: <T = Record<string, any>>(table: string, query: string, limit?: number) => Promise<Array<T>>;
+    query: {
+      <T = Record<string, any>>(table: string, query: string, limit?: number): Promise<Array<T>>;
+      <T = Record<string, any>>(table: string, query: string, options: TableQueryOptions): Promise<Array<T>>;
+    };
   };
   claude: {
     /** POST /api/cadso/claude/createRecord. */
@@ -173,12 +181,36 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
 
   return {
     table: {
-      query: async function <T = Record<string, any>>(table: string, query: string, limit: number = 100): Promise<Array<T>> {
+      query: async function <T = Record<string, any>>(
+        table: string,
+        query: string,
+        limitOrOptions?: number | TableQueryOptions
+      ): Promise<Array<T>> {
+        var limit: number = 100;
+        var fields: string[] | undefined;
+        if (typeof limitOrOptions === "number") {
+          limit = limitOrOptions;
+        } else if (limitOrOptions && typeof limitOrOptions === "object") {
+          if (typeof limitOrOptions.limit === "number") {
+            limit = limitOrOptions.limit;
+          }
+          if (limitOrOptions.fields && limitOrOptions.fields.length > 0) {
+            fields = limitOrOptions.fields;
+          }
+        }
+        var params: Record<string, any> = {
+          sysparm_query: query,
+          sysparm_limit: limit,
+          sysparm_display_value: false
+        };
+        if (fields) {
+          params.sysparm_fields = fields.join(",");
+        }
         var data = await request<{ result: Array<T> }>(
           {
             method: "GET",
             url: "/api/now/table/" + encodeURIComponent(table),
-            params: { sysparm_query: query, sysparm_limit: limit, sysparm_display_value: false }
+            params: params
           },
           "table.query(" + table + ")"
         );

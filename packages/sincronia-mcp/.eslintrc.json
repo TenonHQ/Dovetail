@@ -1,0 +1,50 @@
+{
+  "rules": {
+    "no-restricted-imports": ["error", {
+      "paths": [
+        {
+          "name": "@tenonhq/sincronia-gmail",
+          "importNames": [
+            "archiveEmail",
+            "labelEmail",
+            "markAsRead",
+            "markAsUnread",
+            "moveToTrash",
+            "starEmail",
+            "unstarEmail"
+          ],
+          "message": "sincronia-mcp is read-only; write operations on Gmail are forbidden."
+        },
+        {
+          "name": "@tenonhq/sincronia-google-calendar",
+          "importNames": ["createEvent", "updateEvent", "deleteEvent"],
+          "message": "sincronia-mcp is read-only; write operations on Calendar are forbidden."
+        },
+        {
+          "name": "@tenonhq/sincronia-clickup",
+          "importNames": [
+            "createTask",
+            "updateTask",
+            "updateTaskStatus",
+            "deleteTask",
+            "addComment"
+          ],
+          "message": "sincronia-mcp is read-only; ClickUp write operations are forbidden."
+        },
+        {
+          "name": "@tenonhq/sincronia-servicenow",
+          "importNames": ["addChoicesToField"],
+          "message": "sincronia-mcp is read-only; addChoicesToField performs writes."
+        }
+      ]
+    }]
+  },
+  "overrides": [
+    {
+      "files": ["src/tests/**/*"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}
