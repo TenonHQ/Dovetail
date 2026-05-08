@@ -17,12 +17,20 @@ function makeClient(overrides: { query?: QueryFn } = {}): {
     pushWithUpdateSet: [] as Array<any>
   };
   var queryImpl: QueryFn = overrides.query || (async function () { return []; });
+  var queryFn = async function <T = any>(
+    table: string,
+    query: string,
+    limitOrOptions?: number | { limit?: number; fields?: string[] }
+  ): Promise<Array<T>> {
+    calls.tableQuery.push({ table: table, query: query });
+    var limit = typeof limitOrOptions === "number"
+      ? limitOrOptions
+      : (limitOrOptions && limitOrOptions.limit);
+    return (await queryImpl(table, query, limit)) as Array<T>;
+  };
   var client: ServiceNowClient = {
     table: {
-      query: async function <T>(table: string, query: string, limit?: number): Promise<Array<T>> {
-        calls.tableQuery.push({ table: table, query: query });
-        return (await queryImpl(table, query, limit)) as Array<T>;
-      }
+      query: queryFn as ServiceNowClient["table"]["query"]
     },
     claude: {
       createRecord: async function (params) {

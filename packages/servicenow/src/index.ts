@@ -6,7 +6,7 @@
  */
 
 export { createClient } from "./client";
-export type { ServiceNowClient } from "./client";
+export type { ServiceNowClient, TableQueryOptions } from "./client";
 
 export { addChoicesToField } from "./choices";
 
