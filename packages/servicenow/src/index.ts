@@ -1,7 +1,7 @@
 /**
- * @tenonhq/sincronia-servicenow
+ * @tenonhq/dovetail-servicenow
  *
- * ServiceNow helpers that route writes through the Sincronia "Claude" Scripted
+ * ServiceNow helpers that route writes through the Dovetail "Claude" Scripted
  * REST API so every change lands in the target update set and scope.
  */
 

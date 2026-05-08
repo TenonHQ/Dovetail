@@ -2,8 +2,8 @@ import { createClickUpApi } from "./client";
 import type { ClickUpTeam } from "./types";
 
 /**
- * Structural type matching Sinc.InitContext from sincronia-types.
- * Defined locally so this package doesn't need a runtime dependency on sincronia-types.
+ * Structural type matching Sinc.InitContext from dovetail-types.
+ * Defined locally so this package doesn't need a runtime dependency on dovetail-types.
  */
 interface PluginContext {
   env: Record<string, string>;
@@ -15,9 +15,9 @@ interface PluginContext {
 }
 
 /**
- * @description ClickUp init plugin for Sincronia.
- * Discovered automatically by sincronia-core when this package is installed.
- * Adds ClickUp API token login and workspace selection to `sinc init`.
+ * @description ClickUp init plugin for Dovetail.
+ * Discovered automatically by dovetail-core when this package is installed.
+ * Adds ClickUp API token login and workspace selection to `dove init`.
  */
 export const sincPlugin = {
   name: "clickup",

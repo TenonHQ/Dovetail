@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Bump Version Script for Sincronia Core Package
+# Bump Version Script for Dovetail Core Package
 # Usage: ./bump-version.sh [options]
 # Options:
 #   --commit    Also create a git commit with the version bump
@@ -72,7 +72,7 @@ if [ "$COMMIT" = true ]; then
   git add "$SCRIPT_DIR/package.json"
   
   # Also check for package.json in scope directories if they exist
-  if [ -f "$SCRIPT_DIR/../../sinc.config.js" ]; then
+  if [ -f "$SCRIPT_DIR/../../dove.config.js" ]; then
     # Look for any modified package.json files in scope directories
     git add "**/package.json" 2>/dev/null
   fi

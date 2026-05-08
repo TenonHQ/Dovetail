@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-prettier-plugin
+# @tenonhq/dovetail-prettier-plugin
 
 ## Overview
 
@@ -7,7 +7,7 @@ This plugin allows you to run [Prettier](https://prettier.io/) on all supported 
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-prettier-plugin
+npm i -D @tenonhq/dovetail-prettier-plugin
 ```
 
 ## Options
@@ -17,19 +17,19 @@ This plugin takes the exact same options as [.prettierrc](https://prettier.io/do
 ### Order of Configurations
 
 1. Check for `.prettierrc` file and load those options
-2. Load from `sinc.config.js` options and override any overlapping values.
+2. Load from `dove.config.js` options and override any overlapping values.
 
 ## Example Usage
 
 This example takes `.js` files and prettifies them.
 
 ```javascript
-//sinc.config.js
+//dove.config.js
 module.exports={
   rules:{
     match:/\.js$/,
     plugins:[
-      name:"@tenonhq/sincronia-prettier-plugin",
+      name:"@tenonhq/dovetail-prettier-plugin",
       //Prettier options
       options:{
         //sets tabs to be 2 spaces

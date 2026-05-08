@@ -1,4 +1,4 @@
-import { SN, Sinc } from "@tenonhq/sincronia-types";
+import { SN, Sinc } from "@tenonhq/dovetail-types";
 import { PATH_DELIMITER } from "./constants";
 import fs, { promises as fsp } from "fs";
 import path from "path";

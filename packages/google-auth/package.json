@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-google-auth",
+  "name": "@tenonhq/dovetail-google-auth",
   "version": "0.0.9",
-  "description": "Google OAuth2 auth client for Sincronia Google integrations",
+  "description": "Google OAuth2 auth client for Dovetail Google integrations",
   "main": "./dist/index.js",
   "scripts": {
     "test": "jest",
@@ -30,9 +30,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   }
 }

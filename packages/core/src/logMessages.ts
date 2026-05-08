@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import { logger } from "./Logger";
 import chalk from "chalk";
 

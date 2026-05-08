@@ -1,5 +1,5 @@
 /**
- * Google Calendar API type definitions for Sincronia integration.
+ * Google Calendar API type definitions for Dovetail integration.
  */
 
 import { calendar_v3 } from "@googleapis/calendar";

@@ -2,7 +2,7 @@
  * Tests for US-012: Add staleness warning for active task
  *
  * Validates:
- * - On startup, if .sinc-active-task.json is older than 7 days, a warning is logged
+ * - On startup, if .dove-active-task.json is older than 7 days, a warning is logged
  * - Fresh task files produce no warning
  * - Warning includes task name and age in days
  */
@@ -65,8 +65,8 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/sinc.manifest.${scope}.json`),
-  getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
 // Filesystem mock store
@@ -140,7 +140,7 @@ describe("US-012: Add staleness warning for active task", () => {
     jest.clearAllMocks();
     mockFsStore = {};
     mockFsStatStore = {};
-    taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+    taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
   });
 
   it("should warn when active task file is older than 7 days", () => {
@@ -164,7 +164,7 @@ describe("US-012: Add staleness warning for active task", () => {
       expect.stringContaining("10 days ago")
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("sinc task clear")
+      expect.stringContaining("dove task clear")
     );
   });
 

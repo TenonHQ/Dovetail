@@ -1,11 +1,11 @@
-# @tenonhq/sincronia-clickup
+# @tenonhq/dovetail-clickup
 
-ClickUp API v2 client for Sincronia. Provides task management, workspace navigation, and formatting utilities used by CTO automation scripts and the `sinc clickup` CLI subcommand.
+ClickUp API v2 client for Dovetail. Provides task management, workspace navigation, and formatting utilities used by CTO automation scripts and the `dove clickup` CLI subcommand.
 
 ## Install
 
 ```bash
-npm i -D @tenonhq/sincronia-clickup
+npm i -D @tenonhq/dovetail-clickup
 ```
 
 ## Setup
@@ -27,7 +27,7 @@ import {
   createTask,
   updateTaskStatus,
   formatTeamSync,
-} from "@tenonhq/sincronia-clickup";
+} from "@tenonhq/dovetail-clickup";
 
 var api = createClickUpApi({ token: process.env.CLICKUP_API_TOKEN });
 
@@ -53,11 +53,11 @@ var digest = await formatTeamSync({ api: api, teamId: process.env.CLICKUP_TEAM_I
 - **Hierarchy:** `getSpaces`, `getFolders`, `getLists`, `getSpaceLists`, `getListTasks`, `findListByName`
 - **Formatting:** `formatForClaude`, `formatTaskDetail`, `formatTaskSummary`, `formatTeamSync`
 - **Parsing:** `parseClickUpIdentifier` — extracts task/list/space IDs from ClickUp URLs
-- **Plugin:** `sincPlugin` — auto-discovered by `sincronia-core` for `sinc clickup` subcommands
+- **Plugin:** `sincPlugin` — auto-discovered by `dovetail-core` for `dove clickup` subcommands
 
 See `src/types.ts` for the full type surface.
 
 ## Related
 
-- [`@tenonhq/sincronia-core`](../core) — CLI host that discovers this plugin
-- [`@tenonhq/sincronia-gmail`](../gmail) / [`@tenonhq/sincronia-google-calendar`](../google-calendar) — sibling integration packages
+- [`@tenonhq/dovetail-core`](../core) — CLI host that discovers this plugin
+- [`@tenonhq/dovetail-gmail`](../gmail) / [`@tenonhq/dovetail-google-calendar`](../google-calendar) — sibling integration packages

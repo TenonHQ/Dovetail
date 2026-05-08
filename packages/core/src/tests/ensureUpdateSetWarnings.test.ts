@@ -65,8 +65,8 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/sinc.manifest.${scope}.json`),
-  getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
 // Filesystem mock store
@@ -146,7 +146,7 @@ describe("US-006: Surface warning when no update set is configured", () => {
   });
 
   it("warns with specific message when no active task and no update set configured", async () => {
-    // No .sinc-update-sets.json and no .sinc-active-task.json
+    // No .dove-update-sets.json and no .dove-active-task.json
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_core");
 
     expect(logger.warn).toHaveBeenCalledWith(
@@ -156,7 +156,7 @@ describe("US-006: Surface warning when no update set is configured", () => {
       expect.stringContaining("Changes will go to Default")
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("sinc createUpdateSet")
+      expect.stringContaining("dove createUpdateSet")
     );
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("activate a task in the dashboard")
@@ -165,7 +165,7 @@ describe("US-006: Surface warning when no update set is configured", () => {
 
   it("does not warn when update set already configured for scope", async () => {
     // Pre-populate the update set config
-    var configPath = require("path").resolve(process.cwd(), ".sinc-update-sets.json");
+    var configPath = require("path").resolve(process.cwd(), ".dove-update-sets.json");
     mockFsStore[configPath] = JSON.stringify({
       x_test_core: { sys_id: "us_123", name: "My Update Set" }
     });
@@ -179,7 +179,7 @@ describe("US-006: Surface warning when no update set is configured", () => {
 
   it("logs error and skips creation when scope not found on instance (scopeSysId is undefined)", async () => {
     // Active task exists so we get past the no-task check
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -208,7 +208,7 @@ describe("US-006: Surface warning when no update set is configured", () => {
   });
 
   it("logs error and skips creation when getScopeId returns null", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -234,7 +234,7 @@ describe("US-006: Surface warning when no update set is configured", () => {
   });
 
   it("proceeds to create update set when scope is valid", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",

@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-sass-plugin
+# @tenonhq/dovetail-sass-plugin
 
 ## Overview
 
@@ -7,7 +7,7 @@ This plugin allows you to run [Sass](https://sass-lang.com/) on scss/sass files.
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-sass-plugin
+npm i -D @tenonhq/dovetail-sass-plugin
 ```
 
 ## Options
@@ -19,13 +19,13 @@ No options required.
 This example takes `.scss` files and compiles them with the Sass compiler.
 
 ```javascript
-//sinc.config.js
+//dove.config.js
 module.exports={
   rules:{
     match:/\.scss$/,
     plugins:[
       {
-        name:"@tenonhq/sincronia-sass-plugin",
+        name:"@tenonhq/dovetail-sass-plugin",
         //No options necessary
         options:{}
       }

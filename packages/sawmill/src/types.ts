@@ -1,5 +1,5 @@
 /**
- * @tenonhq/sincronia-sawmill — type definitions.
+ * @tenonhq/dovetail-sawmill — type definitions.
  */
 
 export interface SawmillApiConfig {

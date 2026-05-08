@@ -1,8 +1,19 @@
-import { SN, Sinc } from "@tenonhq/sincronia-types";
+import { SN, Sinc } from "@tenonhq/dovetail-types";
 import path from "path";
-import { promises as fsp } from "fs";
+import fs, { promises as fsp } from "fs";
 import { logger } from "./Logger";
 import { includes, excludes, tableOptions, scopes } from "./defaultOptions";
+
+// Resolve an artifact path, preferring the dove.* name and falling back to the
+// legacy sinc.* name when only the legacy file exists. Returns the new path if
+// neither exists (so writes default to the new name).
+function resolveDovePath(rootDir: string, doveName: string, sincName: string): string {
+  const newPath = path.join(rootDir, doveName);
+  const oldPath = path.join(rootDir, sincName);
+  if (fs.existsSync(newPath)) return newPath;
+  if (fs.existsSync(oldPath)) return oldPath;
+  return newPath;
+}
 
 const DEFAULT_CONFIG: Sinc.ScopedConfig = {
   sourceDirectory: "src",
@@ -80,7 +91,7 @@ export function getManifest(setup = false) {
 export function getManifestPath(scope?: string) {
   if (scope) {
     const rootDir = getRootDir();
-    return path.join(rootDir, `sinc.manifest.${scope}.json`);
+    return resolveDovePath(rootDir, `dove.manifest.${scope}.json`, `sinc.manifest.${scope}.json`);
   }
   if (manifest_path) return manifest_path;
   throw new Error("Error getting manifest path");
@@ -88,7 +99,7 @@ export function getManifestPath(scope?: string) {
 
 export function getScopeManifestPath(scope: string) {
   const rootDir = getRootDir();
-  return path.join(rootDir, `sinc.manifest.${scope}.json`);
+  return resolveDovePath(rootDir, `dove.manifest.${scope}.json`, `sinc.manifest.${scope}.json`);
 }
 
 export function getSourcePath() {
@@ -145,11 +156,11 @@ export function getDefaultConfigFile(): string {
 }
 
 /**
- * @description Generates a full sinc.config.js with multi-scope support, table whitelist,
- * field type overrides, and plugin rules. Used by sinc init when creating a new config.
+ * @description Generates a full dove.config.js with multi-scope support, table whitelist,
+ * field type overrides, and plugin rules. Used by `dove init` when creating a new config.
  * @param {Object} params - Configuration parameters
  * @param {Array<{scope: string, sourceDirectory: string}>} params.scopes - Selected scopes with source directories
- * @returns {string} Complete sinc.config.js file content
+ * @returns {string} Complete dove.config.js file content
  */
 export function generateConfigFile(params: {
   scopes: Array<{ scope: string; sourceDirectory: string }>;
@@ -168,7 +179,7 @@ export function generateConfigFile(params: {
     "\t\t\tmatch: /sys_script_include.*\\.ts$/,\n" +
     "\t\t\tplugins: [\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/sincronia-typescript-plugin\",\n" +
+    "\t\t\t\t\tname: \"@tenonhq/dovetail-typescript-plugin\",\n" +
     "\t\t\t\t\toptions: {\n" +
     "\t\t\t\t\t\ttranspile: true,\n" +
     "\t\t\t\t\t\ttypeCheck: true,\n" +
@@ -176,7 +187,7 @@ export function generateConfigFile(params: {
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/sincronia-eslint-plugin\",\n" +
+    "\t\t\t\t\tname: \"@tenonhq/dovetail-eslint-plugin\",\n" +
     "\t\t\t\t\toptions: {\n" +
     "\t\t\t\t\t\tconfigFile: \"./.eslintrc.js\",\n" +
     "\t\t\t\t\t\tfix: false,\n" +
@@ -184,13 +195,13 @@ export function generateConfigFile(params: {
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/sincronia-babel-plugin\",\n" +
+    "\t\t\t\t\tname: \"@tenonhq/dovetail-babel-plugin\",\n" +
     "\t\t\t\t\toptions: {\n" +
     "\t\t\t\t\t\tconfigFile: \"./.babelrc\",\n" +
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/sincronia-prettier-plugin\",\n" +
+    "\t\t\t\t\tname: \"@tenonhq/dovetail-prettier-plugin\",\n" +
     "\t\t\t\t\toptions: {\n" +
     "\t\t\t\t\t\tconfigFile: \"./.prettierrc.js\",\n" +
     "\t\t\t\t\t},\n" +
@@ -315,7 +326,7 @@ async function loadConfig(skipConfigPath = false): Promise<Sinc.ScopedConfig> {
     let configPath = getConfigPath();
     if (configPath) {
       let projectConfig: Sinc.ScopedConfig = (await import(configPath)).default;
-      // Config is king — no merging with defaults. sinc.config.js is the single source of truth.
+      // Config is king — no merging with defaults. dove.config.js is the single source of truth.
       var {
         includes: pIncludes = {},
         excludes: pExcludes = {},
@@ -356,17 +367,21 @@ async function loadAllScopeManifests(): Promise<SN.AppManifest | undefined> {
   try {
     const rootDir = getRootDir();
     const files = await fsp.readdir(rootDir);
-    const manifestFiles = files.filter(f => f.startsWith('sinc.manifest.') && f.endsWith('.json') && f !== 'sinc.manifest.json');
-    
+    const manifestFiles = files.filter(f =>
+      ((f.startsWith('dove.manifest.') && f !== 'dove.manifest.json') ||
+       (f.startsWith('sinc.manifest.') && f !== 'sinc.manifest.json')) &&
+      f.endsWith('.json'),
+    );
+
     if (manifestFiles.length === 0) {
       return undefined;
     }
-    
+
     // Combine all scope manifests into a single structure for backward compatibility
     const combinedManifest: any = {};
-    
+
     for (const file of manifestFiles) {
-      const scope = file.replace('sinc.manifest.', '').replace('.json', '');
+      const scope = file.replace(/^(dove|sinc)\.manifest\./, '').replace('.json', '');
       const manifestPath = path.join(rootDir, file);
       try {
         const content = await fsp.readFile(manifestPath, "utf-8");
@@ -441,14 +456,19 @@ async function loadConfigPath(pth?: string): Promise<string | false> {
   }
   // check to see if config is found
   let files = await fsp.readdir(pth);
-  if (files.includes("sinc.config.js")) {
-    return path.join(pth, "sinc.config.js");
-  } else {
-    if (isRoot(pth)) {
-      return false;
-    }
-    return loadConfigPath(path.dirname(pth));
+  if (files.includes("dove.config.js")) {
+    return path.join(pth, "dove.config.js");
   }
+  if (files.includes("sinc.config.js")) {
+    logger.warn(
+      "Found legacy 'sinc.config.js' — please rename to 'dove.config.js' (run 'npx dove migrate'). Continuing with the legacy file.",
+    );
+    return path.join(pth, "sinc.config.js");
+  }
+  if (isRoot(pth)) {
+    return false;
+  }
+  return loadConfigPath(path.dirname(pth));
   function isRoot(pth: string) {
     return path.parse(pth).root === pth;
   }
@@ -478,12 +498,12 @@ async function loadEnvPath() {
 
 async function loadManifestPath() {
   let rootDir = getRootDir();
-  manifest_path = path.join(rootDir, "sinc.manifest.json");
+  manifest_path = resolveDovePath(rootDir, "dove.manifest.json", "sinc.manifest.json");
 }
 
 async function loadDiffPath() {
   let rootDir = getRootDir();
-  diff_path = path.join(rootDir, "sinc.diff.manifest.json");
+  diff_path = resolveDovePath(rootDir, "dove.diff.manifest.json", "sinc.diff.manifest.json");
 }
 
 async function loadDiffFile() {

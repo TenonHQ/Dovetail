@@ -1,5 +1,5 @@
 /**
- * Gmail API type definitions for Sincronia integration.
+ * Gmail API type definitions for Dovetail integration.
  */
 
 import { gmail_v1 } from "@googleapis/gmail";

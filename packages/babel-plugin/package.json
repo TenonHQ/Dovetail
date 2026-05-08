@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-babel-plugin",
+  "name": "@tenonhq/dovetail-babel-plugin",
   "version": "0.0.6",
-  "description": "Babel Plugin for sincronia",
+  "description": "Babel Plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {
     "prepack": "tsc",
@@ -10,14 +10,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "author": "",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   },
-  "homepage": "https://github.com/tenon/sincronia#readme",
+  "homepage": "https://github.com/tenonhq/dovetail#readme",
   "files": [
     "dist"
   ],
@@ -29,7 +29,7 @@
     "@babel/types": "^7.23.0"
   },
   "devDependencies": {
-    "@tenonhq/sincronia-types": "^0.0.10",
+    "@tenonhq/dovetail-types": "^0.0.10",
     "@types/babel__core": "^7.20.2"
   },
   "gitHead": "67b694054cf072be150b9bd4dc3d1b01f8e24ed9"

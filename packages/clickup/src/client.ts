@@ -55,7 +55,7 @@ function handleApiError(error: unknown, context: string): never {
       if (response.status === 401) {
         throw new Error(
           "ClickUp authentication failed. Check your CLICKUP_API_TOKEN. " +
-            "Run 'sinc clickup setup' or verify your .env file."
+            "Run 'dove clickup setup' or verify your .env file."
         );
       }
       if (response.status === 404) {

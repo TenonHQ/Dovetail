@@ -1,11 +1,11 @@
 {
-  "name": "@tenonhq/sincronia-webpack-plugin",
+  "name": "@tenonhq/dovetail-webpack-plugin",
   "version": "0.0.6",
-  "description": "Webpack plugin for Sincronia",
+  "description": "Webpack plugin for Dovetail",
   "main": "./dist/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "scripts": {
     "prepack": "tsc",
@@ -21,15 +21,15 @@
   "author": "",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   },
-  "homepage": "https://github.com/tenon/sincronia#readme",
+  "homepage": "https://github.com/tenonhq/dovetail#readme",
   "dependencies": {
     "memory-fs": "^0.5.0",
     "webpack": "^5.88.2"
   },
   "devDependencies": {
-    "@tenonhq/sincronia-types": "^0.0.3",
+    "@tenonhq/dovetail-types": "^0.0.3",
     "@types/memory-fs": "^0.3.4",
     "@types/webpack": "^5.28.3"
   }

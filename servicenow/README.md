@@ -1,10 +1,17 @@
-# Sincronia — ServiceNow-side Source
+# ServiceNow-side Source (legacy Sincronia REST API)
 
-Source for the global-scope ServiceNow records that back the Sincronia REST API
-(`@tenonhq/sincronia-core` calls into these). These records aren't synced via
-Sincronia itself because `sinc.config.js` doesn't include the global scope —
-this directory is the source of truth and changes are pushed via the
-`scripts/deploy.js` helper.
+Source for the global-scope ServiceNow records that back the legacy Sincronia
+REST API at `/api/sinc/sincronia/*` (`@tenonhq/dovetail-core` calls into these).
+These records aren't synced via Dovetail itself because `dove.config.js` doesn't
+include the global scope — this directory is the source of truth and changes
+are pushed via the `scripts/deploy.js` helper.
+
+**Rebrand status:** the API and script-include names below still use the
+"Sincronia"/"Sinc" names. They are scheduled to be renamed alongside the
+`/api/cadso/dovetail/` rebrand — see
+[`docs/dovetail-servicenow-migration.md`](../docs/dovetail-servicenow-migration.md)
+for the planned changes. The current names are documented as-is below to match
+what is actually deployed to ServiceNow today.
 
 ## Layout
 

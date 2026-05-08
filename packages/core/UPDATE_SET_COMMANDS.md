@@ -1,6 +1,6 @@
-# Update Set Management Commands for Sincronia
+# Update Set Management Commands for Dovetail
 
-This document describes the new update set management commands added to the Sincronia core package.
+This document describes the new update set management commands added to the Dovetail core package.
 
 ## Commands Overview
 
@@ -12,7 +12,7 @@ Three new commands have been added to manage ServiceNow update sets directly fro
 
 ## Installation
 
-These commands are included in the `@tenonhq/sincronia-core` package. Ensure you have the latest version installed.
+These commands are included in the `@tenonhq/dovetail-core` package. Ensure you have the latest version installed.
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ These commands are included in the `@tenonhq/sincronia-core` package. Ensure you
 Create a new update set and automatically switch to it:
 
 ```bash
-npx sinc createUpdateSet
+npx dove createUpdateSet
 ```
 
 #### Options:
@@ -44,17 +44,17 @@ npx sinc createUpdateSet
 
 Interactive mode (prompts for details):
 ```bash
-npx sinc createUpdateSet
+npx dove createUpdateSet
 ```
 
 Create with all parameters:
 ```bash
-npx sinc createUpdateSet -n "Feature XYZ Updates" -d "Adding new functionality for XYZ" -s x_company_app
+npx dove createUpdateSet -n "Feature XYZ Updates" -d "Adding new functionality for XYZ" -s x_company_app
 ```
 
 Create with just a name:
 ```bash
-npx sinc createUpdateSet -n "Quick Fix" --skipDescription --skipScope
+npx dove createUpdateSet -n "Quick Fix" --skipDescription --skipScope
 ```
 
 ### Switch Update Set
@@ -62,7 +62,7 @@ npx sinc createUpdateSet -n "Quick Fix" --skipDescription --skipScope
 Switch to an existing update set:
 
 ```bash
-npx sinc switchUpdateSet
+npx dove switchUpdateSet
 ```
 
 #### Options:
@@ -74,17 +74,17 @@ npx sinc switchUpdateSet
 
 Interactive mode (shows list to select from):
 ```bash
-npx sinc switchUpdateSet
+npx dove switchUpdateSet
 ```
 
 Switch by partial name match:
 ```bash
-npx sinc switchUpdateSet -n "Feature XYZ"
+npx dove switchUpdateSet -n "Feature XYZ"
 ```
 
 Switch to update set in specific scope:
 ```bash
-npx sinc switchUpdateSet -s x_company_app
+npx dove switchUpdateSet -s x_company_app
 ```
 
 ### List Update Sets
@@ -92,7 +92,7 @@ npx sinc switchUpdateSet -s x_company_app
 List all in-progress update sets:
 
 ```bash
-npx sinc listUpdateSets
+npx dove listUpdateSets
 ```
 
 #### Options:
@@ -103,12 +103,12 @@ npx sinc listUpdateSets
 
 List all in-progress update sets:
 ```bash
-npx sinc listUpdateSets
+npx dove listUpdateSets
 ```
 
 List update sets for a specific scope:
 ```bash
-npx sinc listUpdateSets -s x_company_app
+npx dove listUpdateSets -s x_company_app
 ```
 
 ## Features
@@ -132,36 +132,36 @@ All commands support filtering by scope, making it easy to manage update sets ac
 
 ## Integration with Existing Commands
 
-The update set commands integrate seamlessly with existing Sincronia commands:
+The update set commands integrate seamlessly with existing Dovetail commands:
 
 ### Push Command with Update Set
 The existing `push` command already supports creating an update set:
 ```bash
-npx sinc push --updateSet "My Changes"
+npx dove push --updateSet "My Changes"
 ```
 
 ### Workflow Example
 
 1. Create a new update set for your feature:
 ```bash
-npx sinc createUpdateSet -n "Feature ABC Implementation"
+npx dove createUpdateSet -n "Feature ABC Implementation"
 ```
 
 2. Make your code changes locally
 
 3. Push changes to ServiceNow (they'll be captured in the active update set):
 ```bash
-npx sinc push
+npx dove push
 ```
 
 4. Switch to a different update set for a quick fix:
 ```bash
-npx sinc switchUpdateSet -n "Emergency Fix"
+npx dove switchUpdateSet -n "Emergency Fix"
 ```
 
 5. List all your in-progress work:
 ```bash
-npx sinc listUpdateSets
+npx dove listUpdateSets
 ```
 
 ## Technical Implementation

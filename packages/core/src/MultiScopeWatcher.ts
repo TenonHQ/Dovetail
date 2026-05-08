@@ -2,13 +2,14 @@ import chokidar from "chokidar";
 import { logFilePush } from "./logMessages";
 import { debounce } from "lodash";
 import { getFileContextFromPath, getFileContextWithSkipReason } from "./FileUtils";
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import { groupAppFiles, pushFiles } from "./appUtils";
 import { writeRecentEdit } from "./recentEdits";
 import { logger } from "./Logger";
 import * as path from "path";
 import * as fs from "fs";
 import * as ConfigManager from "./config";
+import { getActiveTaskPath, getUpdateSetsConfigPath } from "./projectFiles";
 
 const DEBOUNCE_MS = 300;
 
@@ -56,7 +57,7 @@ class MultiScopeWatcherManager {
       const config = ConfigManager.getConfig();
 
       if (!config.scopes) {
-        logger.error("No scopes defined in sinc.config.js");
+        logger.error("No scopes defined in dove.config.js");
         throw new Error("No scopes defined in configuration");
       }
 
@@ -160,7 +161,7 @@ class MultiScopeWatcherManager {
   }
 
   private getUpdateSetConfig(): UpdateSetConfig {
-    var configPath = path.resolve(process.cwd(), ".sinc-update-sets.json");
+    var configPath = getUpdateSetsConfigPath();
     try {
       if (fs.existsSync(configPath)) {
         return JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -172,7 +173,7 @@ class MultiScopeWatcherManager {
   }
 
   private readActiveTask(): ActiveTaskFile | null {
-    var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = getActiveTaskPath();
     try {
       if (fs.existsSync(taskPath)) {
         var parsed = JSON.parse(fs.readFileSync(taskPath, "utf8"));
@@ -189,7 +190,7 @@ class MultiScopeWatcherManager {
         var ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
         if (ageDays >= 7) {
           var taskName = parsed.taskName || parsed.taskId;
-          logger.warn("Active task " + taskName + " was selected " + ageDays + " days ago. Run sinc task clear if you have moved on.");
+          logger.warn("Active task " + taskName + " was selected " + ageDays + " days ago. Run dove task clear if you have moved on.");
         }
         return parsed;
       }
@@ -200,7 +201,7 @@ class MultiScopeWatcherManager {
   }
 
   private saveUpdateSetConfig(config: UpdateSetConfig): void {
-    var configPath = path.resolve(process.cwd(), ".sinc-update-sets.json");
+    var configPath = getUpdateSetsConfigPath();
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   }
 
@@ -366,8 +367,7 @@ class MultiScopeWatcherManager {
           activeTask.scopes = {};
         }
         activeTask.scopes[scopeName] = { sys_id: updateSet.sys_id, name: updateSet.name };
-        var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
-        fs.writeFileSync(taskPath, JSON.stringify(activeTask, null, 2));
+        fs.writeFileSync(getActiveTaskPath(), JSON.stringify(activeTask, null, 2));
       }
     } catch (error) {
       logger.error(`[${scopeName}] Failed to auto-create update set: ${error}`);
@@ -471,8 +471,12 @@ class MultiScopeWatcherManager {
       
       const fs = await import("fs");
       
-      // First try to load scope-specific manifest file
-      const scopeManifestPath = path.join(projectRoot, `sinc.manifest.${scopeName}.json`);
+      // First try to load scope-specific manifest file (prefer dove.*, fall back to sinc.*).
+      const doveScopeManifestPath = path.join(projectRoot, `dove.manifest.${scopeName}.json`);
+      const sincScopeManifestPath = path.join(projectRoot, `sinc.manifest.${scopeName}.json`);
+      const scopeManifestPath = fs.existsSync(doveScopeManifestPath)
+        ? doveScopeManifestPath
+        : sincScopeManifestPath;
       if (fs.existsSync(scopeManifestPath)) {
         const manifestContent = await fs.promises.readFile(scopeManifestPath, "utf-8");
         const scopeManifest = JSON.parse(manifestContent);
@@ -485,8 +489,10 @@ class MultiScopeWatcherManager {
         return;
       }
       
-      // Fall back to checking legacy single manifest file
-      const manifestPath = path.join(projectRoot, "sinc.manifest.json");
+      // Fall back to checking single manifest file (prefer dove.manifest.json, then legacy sinc.manifest.json)
+      const doveManifestPath = path.join(projectRoot, "dove.manifest.json");
+      const sincManifestPath = path.join(projectRoot, "sinc.manifest.json");
+      const manifestPath = fs.existsSync(doveManifestPath) ? doveManifestPath : sincManifestPath;
       if (fs.existsSync(manifestPath)) {
         const manifestContent = await fs.promises.readFile(manifestPath, "utf-8");
         const fullManifest = JSON.parse(manifestContent);

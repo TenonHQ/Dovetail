@@ -18,7 +18,7 @@ var mockApi = {
   getListTasks: jest.fn(),
 };
 
-jest.mock("@tenonhq/sincronia-clickup", function () {
+jest.mock("@tenonhq/dovetail-clickup", function () {
   return {
     createClickUpApi: jest.fn(function () {
       return mockApi;
@@ -101,7 +101,7 @@ import {
   parseClickUpIdentifier,
   formatForClaude,
   formatTaskDetail,
-} from "@tenonhq/sincronia-clickup";
+} from "@tenonhq/dovetail-clickup";
 import inquirer from "inquirer";
 import { logger } from "../Logger";
 

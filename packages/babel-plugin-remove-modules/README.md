@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-babel-plugin-remove-modules
+# @tenonhq/dovetail-babel-plugin-remove-modules
 
 ## Overview
 
@@ -7,7 +7,7 @@ This [Babel](https://babeljs.io) plugin is for stripping import/export statement
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-babel-plugin-remove-modules
+npm i -D @tenonhq/dovetail-babel-plugin-remove-modules
 ```
 
 ## Usage

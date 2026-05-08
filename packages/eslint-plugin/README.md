@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-eslint-plugin
+# @tenonhq/dovetail-eslint-plugin
 
 ## Overview
 
@@ -7,12 +7,12 @@ This plugin allows you to run the [ESLint](https://eslint.org/) checker on files
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-eslint-plugin
+npm i -D @tenonhq/dovetail-eslint-plugin
 ```
 
 ### Order of Configurations
 
-1. Load from `sinc.config.js` options.
+1. Load from `dove.config.js` options.
 2. Check for `.eslintrc` file or generate one.
 
 ## Example Usage
@@ -21,12 +21,12 @@ This example takes `.ts` files and runs eslint on them. The output with errors a
 is printed on the console. If there are any errors the code is not pushed.
 
 ```javascript
-//sinc.config.js
+//dove.config.js
 module.exports={
   rules:{
     match:/\.ts$/,
     plugins:[
-      name:"@tenonhq/sincronia-eslint-plugin",
+      name:"@tenonhq/dovetail-eslint-plugin",
     ]
   }
 }; 

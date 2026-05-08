@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-typescript-plugin",
+  "name": "@tenonhq/dovetail-typescript-plugin",
   "version": "0.0.7",
-  "description": "TypeScript plugin for Sincronia",
+  "description": "TypeScript plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {
     "prepack": "tsc",
@@ -14,7 +14,7 @@
     "typescript": "^5.2.2"
   },
   "devDependencies": {
-    "@tenonhq/sincronia-types": "^0.0.10"
+    "@tenonhq/dovetail-types": "^0.0.10"
   },
   "files": [
     "dist"
@@ -24,9 +24,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   }
 }

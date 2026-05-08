@@ -1,6 +1,6 @@
 import { gmail as gmailApi } from "@googleapis/gmail";
 import { OAuth2Client } from "google-auth-library";
-import { handleAuthError } from "@tenonhq/sincronia-google-auth";
+import { handleAuthError } from "@tenonhq/dovetail-google-auth";
 import sanitizeHtml from "sanitize-html";
 import {
   GmailEmail,

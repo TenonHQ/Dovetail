@@ -1,5 +1,5 @@
 /**
- * @tenonhq/sincronia-servicenow — type definitions
+ * @tenonhq/dovetail-servicenow — type definitions
  */
 
 export interface ServiceNowClientConfig {

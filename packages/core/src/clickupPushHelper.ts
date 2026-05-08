@@ -1,7 +1,7 @@
 import {
   createClickUpApi,
   parseClickUpIdentifier,
-} from "@tenonhq/sincronia-clickup";
+} from "@tenonhq/dovetail-clickup";
 import { refineUpdateSetName } from "./clickupCommands";
 import { logger } from "./Logger";
 import chalk from "chalk";
@@ -17,7 +17,7 @@ export async function resolveClickUpForPush(
   var token = process.env.CLICKUP_API_TOKEN;
   if (!token || token === "") {
     throw new Error(
-      "CLICKUP_API_TOKEN not set. Run 'sinc clickup setup' or add it to your .env file."
+      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add it to your .env file."
     );
   }
 

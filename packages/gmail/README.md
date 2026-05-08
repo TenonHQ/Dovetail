@@ -1,16 +1,16 @@
-# @tenonhq/sincronia-gmail
+# @tenonhq/dovetail-gmail
 
-Gmail API client for Sincronia. Provides inbox operations and LLM-optimized formatting for the CTO morning digest (`context/email-digest.md`).
+Gmail API client for Dovetail. Provides inbox operations and LLM-optimized formatting for the CTO morning digest (`context/email-digest.md`).
 
 ## Install
 
 ```bash
-npm i -D @tenonhq/sincronia-gmail @tenonhq/sincronia-google-auth
+npm i -D @tenonhq/dovetail-gmail @tenonhq/dovetail-google-auth
 ```
 
 ## Setup
 
-Gmail auth is handled by [`@tenonhq/sincronia-google-auth`](../google-auth). Follow the setup in that package's README to obtain `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`. The OAuth consent screen must enable the **Gmail API** with the `gmail.modify` scope.
+Gmail auth is handled by [`@tenonhq/dovetail-google-auth`](../google-auth). Follow the setup in that package's README to obtain `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`. The OAuth consent screen must enable the **Gmail API** with the `gmail.modify` scope.
 
 ```bash
 # .env
@@ -22,7 +22,7 @@ GOOGLE_REFRESH_TOKEN=...
 ## Usage
 
 ```typescript
-import { createGoogleAuth, configFromEnv } from "@tenonhq/sincronia-google-auth";
+import { createGoogleAuth, configFromEnv } from "@tenonhq/dovetail-google-auth";
 import {
   createGmailClient,
   getUnread,
@@ -30,7 +30,7 @@ import {
   getVipEmails,
   getActionRequired,
   formatDigest,
-} from "@tenonhq/sincronia-gmail";
+} from "@tenonhq/dovetail-gmail";
 
 var { auth } = createGoogleAuth({ config: configFromEnv() });
 var client = createGmailClient({ auth: auth });
@@ -63,5 +63,5 @@ See `src/types.ts` for the full type surface including `VipConfig` and `ActionRe
 
 ## Related
 
-- [`@tenonhq/sincronia-google-auth`](../google-auth) — shared OAuth2 layer
-- [`@tenonhq/sincronia-google-calendar`](../google-calendar) — sibling Google integration
+- [`@tenonhq/dovetail-google-auth`](../google-auth) — shared OAuth2 layer
+- [`@tenonhq/dovetail-google-calendar`](../google-calendar) — sibling Google integration

@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-types",
+  "name": "@tenonhq/dovetail-types",
   "version": "0.0.16",
-  "description": "Type Declarations for Sincronia",
+  "description": "Type Declarations for Dovetail",
   "main": "index.d.ts",
   "scripts": {
     "version:bump": "node ./../../Scripts/bump-version.js ./package.json",
@@ -9,14 +9,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "author": "",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   },
-  "homepage": "https://github.com/tenon/sincronia#readme",
+  "homepage": "https://github.com/tenonhq/dovetail#readme",
   "publishConfig": {
     "access": "public"
   }

@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-clickup",
+  "name": "@tenonhq/dovetail-clickup",
   "version": "0.0.7",
-  "description": "ClickUp API v2 client for Sincronia — task management, update set integration",
+  "description": "ClickUp API v2 client for Dovetail — task management, update set integration",
   "main": "./dist/index.js",
   "scripts": {
     "test": "jest",
@@ -29,9 +29,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   }
 }

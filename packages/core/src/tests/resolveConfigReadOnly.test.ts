@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import { resolveConfigForScope } from "../config";
 
 const baseConfig: Sinc.ScopedConfig = {

@@ -1,4 +1,4 @@
-import { pullSchema } from "@tenonhq/sincronia-schema";
+import { pullSchema } from "@tenonhq/dovetail-schema";
 import { logger } from "./Logger";
 import * as ConfigManager from "./config";
 import path from "path";
@@ -23,7 +23,7 @@ export async function schemaPullCommand(args: SchemaCommandArgs) {
 
   if (configScopes.length === 0) {
     throw new Error(
-      "No scopes configured in sinc.config.js. Add scopes to the 'scopes' object in your configuration."
+      "No scopes configured in dove.config.js. Add scopes to the 'scopes' object in your configuration."
     );
   }
 
@@ -32,7 +32,7 @@ export async function schemaPullCommand(args: SchemaCommandArgs) {
   if (args.scope) {
     if (!configScopes.includes(args.scope)) {
       throw new Error(
-        `Scope "${args.scope}" is not configured in sinc.config.js. Available scopes: ${configScopes.join(", ")}`
+        `Scope "${args.scope}" is not configured in dove.config.js. Available scopes: ${configScopes.join(", ")}`
       );
     }
     scopes = [args.scope];

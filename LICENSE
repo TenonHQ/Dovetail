@@ -1,3 +1,18 @@
+Dovetail (originally distributed as Sincronia)
+
+Copyright (C) 2024-present TenonHQ
+Copyright (C) Nuvolo Technologies and original Sincronia contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 of the License. The full text of the GPLv3 follows.
+
+Modifications since the project's adoption by TenonHQ have been recorded in
+the Git history of this repository, in CHANGELOG.md, and in the per-package
+release notes (per GPLv3 §5(a)).
+
+--------------------------------------------------------------------------------
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 

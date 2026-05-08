@@ -1,15 +1,20 @@
 /**
- * ServiceNow REST client for @tenonhq/sincronia-servicenow.
+ * ServiceNow REST client for @tenonhq/dovetail-servicenow.
  *
  * Provides two entry points:
  *   - `table.*`       — read-only GETs against the native Table API
- *   - `claude.*`      — writes via the Sincronia "Claude" Scripted REST API
- *                       (/api/cadso/claude/*), which handles update-set + scope
+ *   - `claude.*`      — writes via the Dovetail Scripted REST API
+ *                       (/api/cadso/dovetail/*), which handles update-set + scope
  *                       switching atomically so every write lands in the right
  *                       update set without touching sys_user_preference.
+ *                       Falls back to the legacy /api/cadso/claude/* path on
+ *                       instances where the API has not yet been re-imported.
+ *                       The namespace name `claude` is preserved for API
+ *                       compatibility; the underlying server-side API is now
+ *                       named "Dovetail".
  *
- * Env fallbacks mirror scripts/sinch-dashboard-fetch/sn-client.js so dev setups
- * that already have SN_INSTANCE/SN_USER/SN_PASSWORD work without reconfiguration.
+ * Env fallbacks mirror prior dashboard-fetch helpers so dev setups that already
+ * have SN_INSTANCE/SN_USER/SN_PASSWORD work without reconfiguration.
  */
 
 import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
@@ -84,7 +89,7 @@ export interface ServiceNowClient {
     };
   };
   claude: {
-    /** POST /api/cadso/claude/createRecord. */
+    /** POST /api/cadso/dovetail/createRecord (legacy path: /api/cadso/claude/createRecord). */
     createRecord: (params: {
       table: string;
       fields: Record<string, any>;
@@ -92,14 +97,14 @@ export interface ServiceNowClient {
       update_set_sys_id?: string;
       sys_id?: string;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
-    /** POST /api/cadso/claude/pushWithUpdateSet. */
+    /** POST /api/cadso/dovetail/pushWithUpdateSet (legacy: /api/cadso/claude/pushWithUpdateSet). */
     pushWithUpdateSet: (params: {
       update_set_sys_id: string;
       table: string;
       record_sys_id: string;
       fields: Record<string, any>;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
-    /** GET /api/cadso/claude/currentUpdateSet?scope=... */
+    /** GET /api/cadso/dovetail/currentUpdateSet?scope=... (legacy: /api/cadso/claude/currentUpdateSet). */
     currentUpdateSet: (scope?: string) => Promise<{ sys_id: string; name: string }>;
   };
 }
@@ -125,6 +130,11 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
   });
 
   var lastAt = 0;
+  // Dovetail Scripted REST API rebrand: prefer /api/cadso/dovetail/* and fall back
+  // to the legacy /api/cadso/claude/* path on instances where the rename hasn't
+  // been imported yet. Latch the legacy flag after the first 404 to avoid paying
+  // the round-trip cost on every subsequent call.
+  var useDovetailLegacyClaudePath = false;
 
   async function request<T = any>(cfg: AxiosRequestConfig, ctx: string): Promise<T> {
     var attempt429 = 0;
@@ -179,6 +189,37 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     }
   }
 
+  // Dovetail Scripted REST API request: try /api/cadso/dovetail/<op>, fall back to
+  // /api/cadso/claude/<op> on 404 (with a one-time deprecation warning).
+  async function dovetailRequest<T = any>(
+    method: string,
+    op: string,
+    body: any | null,
+    params: any | null,
+    ctx: string,
+  ): Promise<T> {
+    var url = useDovetailLegacyClaudePath
+      ? "/api/cadso/claude/" + op
+      : "/api/cadso/dovetail/" + op;
+    try {
+      return await request<T>({ method: method, url: url, data: body, params: params }, ctx);
+    } catch (e: any) {
+      var msg = e && e.message ? String(e.message) : "";
+      if (!useDovetailLegacyClaudePath && msg.indexOf("SN 404 on") === 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[deprecation] /api/cadso/dovetail/" + op +
+            " returned 404. Falling back to legacy /api/cadso/claude/" + op +
+            ". Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+        );
+        useDovetailLegacyClaudePath = true;
+        var legacyUrl = "/api/cadso/claude/" + op;
+        return await request<T>({ method: method, url: legacyUrl, data: body, params: params }, ctx);
+      }
+      throw e;
+    }
+  }
+
   return {
     table: {
       query: async function <T = Record<string, any>>(
@@ -219,27 +260,32 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     },
     claude: {
       createRecord: async function (params) {
-        var data = await request<{ result: any }>(
-          { method: "POST", url: "/api/cadso/claude/createRecord", data: params },
-          "claude.createRecord(" + params.table + ")"
+        var data = await dovetailRequest<{ result: any }>(
+          "POST",
+          "createRecord",
+          params,
+          null,
+          "claude.createRecord(" + params.table + ")",
         );
         return data.result || data;
       },
       pushWithUpdateSet: async function (params) {
-        var data = await request<{ result: any }>(
-          { method: "POST", url: "/api/cadso/claude/pushWithUpdateSet", data: params },
-          "claude.pushWithUpdateSet(" + params.table + ")"
+        var data = await dovetailRequest<{ result: any }>(
+          "POST",
+          "pushWithUpdateSet",
+          params,
+          null,
+          "claude.pushWithUpdateSet(" + params.table + ")",
         );
         return data.result || data;
       },
       currentUpdateSet: async function (scope) {
-        var data = await request<{ result: any }>(
-          {
-            method: "GET",
-            url: "/api/cadso/claude/currentUpdateSet",
-            params: scope ? { scope: scope } : {}
-          },
-          "claude.currentUpdateSet"
+        var data = await dovetailRequest<{ result: any }>(
+          "GET",
+          "currentUpdateSet",
+          null,
+          scope ? { scope: scope } : null,
+          "claude.currentUpdateSet",
         );
         return data.result || data;
       }

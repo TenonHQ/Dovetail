@@ -1,4 +1,4 @@
-import { Sinc, TSFIXME } from "@tenonhq/sincronia-types";
+import { Sinc, TSFIXME } from "@tenonhq/dovetail-types";
 import fs from "fs";
 import path from "path";
 import inquirer from "inquirer";
@@ -261,7 +261,7 @@ export async function deleteRecordCommand(args: TSFIXME): Promise<void> {
         }
       } catch (cleanupErr) {
         logger.warn("Record deleted on instance but local cleanup failed.");
-        logger.warn("Run 'npx sinc refresh' to sync local files.");
+        logger.warn("Run 'npx dove refresh' to sync local files.");
         if (cleanupErr instanceof Error) {
           fileLogger.error("Cleanup error:", cleanupErr.message);
         }

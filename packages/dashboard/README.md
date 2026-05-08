@@ -1,13 +1,13 @@
-# @tenonhq/sincronia-dashboard
+# @tenonhq/dovetail-dashboard
 
 Web-based UI for managing ServiceNow update sets across scopes, with optional ClickUp task integration.
 
 ## What It Does
 
-- Displays all configured scopes from `sinc.config.js`
+- Displays all configured scopes from `dove.config.js`
 - Lists in-progress update sets per scope
 - Lets you select, create, close, and clear update sets per scope
-- Persists selections to `.sinc-update-sets.json` — **`sinc push` and `sinc watch` honor these selections** via the `pushWithUpdateSet` REST endpoint
+- Persists selections to `.dove-update-sets.json` — **`dove push` and `dove watch` honor these selections** via the `pushWithUpdateSet` REST endpoint
 - Optional ClickUp integration: select a task, auto-generate and activate update sets across all scopes
 
 ## Setup
@@ -15,7 +15,7 @@ Web-based UI for managing ServiceNow update sets across scopes, with optional Cl
 ### Prerequisites
 
 - Node.js 20+
-- A configured Sincronia project with `sinc.config.js` and `.env`
+- A configured Dovetail project with `dove.config.js` and `.env`
 
 ### Environment Variables
 
@@ -33,11 +33,11 @@ Add these to your project's `.env`:
 ### Running
 
 ```bash
-# From your Sincronia project directory
-sinc dashboard
+# From your Dovetail project directory
+dove dashboard
 
 # Custom port (useful for multiple sessions)
-sinc dashboard --port 3457
+dove dashboard --port 3457
 ```
 
 This starts an Express server and opens `http://localhost:3456` (or your custom port) in your browser.
@@ -46,7 +46,7 @@ Port precedence: `--port` flag > `DASHBOARD_PORT` env var > default `3456`.
 
 ## How It Integrates with Push
 
-When you select an update set for a scope in the dashboard, it saves the mapping to `.sinc-update-sets.json`:
+When you select an update set for a scope in the dashboard, it saves the mapping to `.dove-update-sets.json`:
 
 ```json
 {
@@ -57,7 +57,7 @@ When you select an update set for a scope in the dashboard, it saves the mapping
 }
 ```
 
-The core Sincronia push logic (`appUtils.ts:pushRec`) reads this file on every push. If an update set is mapped for the record's scope, it routes the push through `/api/cadso/claude/pushWithUpdateSet` — ensuring the change lands in the correct update set. This works for both `sinc push` and `sinc watch`.
+The core Dovetail push logic (`appUtils.ts:pushRec`) reads this file on every push. If an update set is mapped for the record's scope, it routes the push through `/api/cadso/dovetail/pushWithUpdateSet` — ensuring the change lands in the correct update set. This works for both `dove push` and `dove watch`.
 
 ## ClickUp Integration
 
@@ -68,7 +68,7 @@ When `CLICKUP_API_TOKEN` is configured, a "Tasks" button appears in the header. 
 3. Auto-generate update set names in the format `CU-{taskId} — {task name}`
 4. Auto-activate all configured scopes — finds existing update sets or creates new ones
 
-Active task state is persisted to `.sinc-active-task.json` and survives dashboard restarts.
+Active task state is persisted to `.dove-active-task.json` and survives dashboard restarts.
 
 ## API Endpoints
 
@@ -99,8 +99,8 @@ Active task state is persisted to `.sinc-active-task.json` and survives dashboar
 
 | File | Purpose | Read By |
 |------|---------|---------|
-| `.sinc-update-sets.json` | Scope-to-update-set mapping | Dashboard, `sinc push`, `sinc watch` |
-| `.sinc-active-task.json` | Currently selected ClickUp task | Dashboard only |
+| `.dove-update-sets.json` | Scope-to-update-set mapping | Dashboard, `dove push`, `dove watch` |
+| `.dove-active-task.json` | Currently selected ClickUp task | Dashboard only |
 
 Both files are written to the project root (CWD). Add them to `.gitignore`.
 
@@ -113,4 +113,4 @@ The dashboard respects ServiceNow's 20 requests-per-second limit. When bulk oper
 The dashboard uses two ServiceNow APIs:
 
 - **Table API** (`/api/now/table/`) — standard CRUD for update sets and scopes
-- **Claude Scripted REST API** (`/api/cadso/claude/changeUpdateSet`) — switches the active update set on the instance after activation
+- **Dovetail Scripted REST API** (`/api/cadso/dovetail/changeUpdateSet`) — switches the active update set on the instance after activation

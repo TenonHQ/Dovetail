@@ -4,8 +4,8 @@ import {
   formatForClaude,
   formatTaskDetail,
   formatTaskSummary,
-} from "@tenonhq/sincronia-clickup";
-import type { ClickUpApi, ClickUpTeam } from "@tenonhq/sincronia-clickup";
+} from "@tenonhq/dovetail-clickup";
+import type { ClickUpApi, ClickUpTeam } from "@tenonhq/dovetail-clickup";
 import inquirer from "inquirer";
 import chalk from "chalk";
 import { logger } from "./Logger";
@@ -18,7 +18,7 @@ function getClickUpToken(): string {
   var token = process.env.CLICKUP_API_TOKEN;
   if (!token || token === "") {
     throw new Error(
-      "CLICKUP_API_TOKEN not set. Run 'sinc clickup setup' or add CLICKUP_API_TOKEN to your .env file."
+      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add CLICKUP_API_TOKEN to your .env file."
     );
   }
   return token;

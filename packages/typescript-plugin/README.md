@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-typescript-plugin
+# @tenonhq/dovetail-typescript-plugin
 
 ## Overview
 
@@ -7,7 +7,7 @@ This plugin allows you to run the [TypeScript](https://www.typescriptlang.org/) 
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-typescript-plugin
+npm i -D @tenonhq/dovetail-typescript-plugin
 ```
 
 ## Options
@@ -19,7 +19,7 @@ npm i -D @tenonhq/sincronia-typescript-plugin
 
 ### Order of Configurations
 
-1. Load from `sinc.config.js` options.
+1. Load from `dove.config.js` options.
 2. Check for `tsconfig.json` file and and override any overlapping values.
 
 ## Example Usage
@@ -27,12 +27,12 @@ npm i -D @tenonhq/sincronia-typescript-plugin
 This example takes `.ts` files and only type checks them.
 
 ```javascript
-//sinc.config.js
+//dove.config.js
 module.exports={
   rules:{
     match:/\.ts$/,
     plugins:[
-      name:"@tenonhq/sincronia-typescript-plugin",
+      name:"@tenonhq/dovetail-typescript-plugin",
       options:{
         transpile:false
       }

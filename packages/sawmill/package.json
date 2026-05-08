@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-sawmill",
+  "name": "@tenonhq/dovetail-sawmill",
   "version": "0.0.1",
-  "description": "Sawmill REST client for Sincronia — ServiceNow update set retrieve/preview/commit across Tenon instances",
+  "description": "Sawmill REST client for Dovetail — ServiceNow update set retrieve/preview/commit across Tenon instances",
   "main": "./dist/index.js",
   "scripts": {
     "test": "jest",
@@ -30,9 +30,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   }
 }

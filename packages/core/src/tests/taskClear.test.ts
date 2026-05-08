@@ -71,11 +71,11 @@ describe("taskClearCommand", function () {
 
   beforeEach(function () {
     logMessages = [];
-    taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+    taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
     jest.clearAllMocks();
   });
 
-  it("should remove .sinc-active-task.json when it exists", async function () {
+  it("should remove .dove-active-task.json when it exists", async function () {
     var taskData = JSON.stringify({
       taskId: "abc123",
       taskName: "My Test Task",

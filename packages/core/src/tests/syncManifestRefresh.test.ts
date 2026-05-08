@@ -1,7 +1,7 @@
 /**
  * Tests for the refresh content-compare path.
  *
- * Regression target: `npx sinc refresh` previously only downloaded files that
+ * Regression target: `npx dove refresh` previously only downloaded files that
  * were absent from disk. Files edited on the ServiceNow instance would never
  * propagate to a developer's local copy — the refresh command silently
  * skipped existing files without checking content.
@@ -64,7 +64,7 @@ var mockConfig: any = {
   }),
   getSourcePathForScope: jest.fn(),
   getSourcePath: jest.fn(),
-  getManifestPath: jest.fn().mockReturnValue("/tmp/sinc.manifest.json"),
+  getManifestPath: jest.fn().mockReturnValue("/tmp/dove.manifest.json"),
   resolveConfigForScope: jest.fn().mockImplementation(function () {
     return {
       tables: ["sys_script_include"],

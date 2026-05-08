@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import inquirer from "inquirer";
 import chalk from "chalk";
 import dotenv from "dotenv";
@@ -41,10 +41,15 @@ function buildInitContext(plugins: Sinc.InitPlugin[]): Sinc.InitContext {
 
   let hasConfig = false;
   try {
-    fs.accessSync(path.join(rootDir, "sinc.config.js"), fs.constants.F_OK);
+    fs.accessSync(path.join(rootDir, "dove.config.js"), fs.constants.F_OK);
     hasConfig = true;
   } catch (e) {
-    // No config yet
+    try {
+      fs.accessSync(path.join(rootDir, "sinc.config.js"), fs.constants.F_OK);
+      hasConfig = true;
+    } catch (_e) {
+      // No config yet
+    }
   }
 
   return { env, answers: {}, rootDir, hasConfig, inquirer, chalk };
@@ -243,7 +248,7 @@ async function runConfigPhase(context: Sinc.InitContext): Promise<void> {
     var answer = await inquirer.prompt([{
       type: "list",
       name: "configAction",
-      message: "Existing sinc.config.js found:",
+      message: "Existing config (dove.config.js or legacy sinc.config.js) found:",
       choices: [
         { name: "Use current config", value: "keep" },
         { name: "Replace config (regenerate after scope selection)", value: "replace" },
@@ -253,7 +258,7 @@ async function runConfigPhase(context: Sinc.InitContext): Promise<void> {
     context.answers.configAction = answer.configAction;
 
     if (answer.configAction === "keep") {
-      logger.info(chalk.green("  ✓ Using existing sinc.config.js"));
+      logger.info(chalk.green("  ✓ Using existing config"));
     }
     return;
   }
@@ -324,7 +329,7 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
 
   try {
     logger.info("");
-    logger.info(chalk.bold("  Sincronia Setup"));
+    logger.info(chalk.bold("  Dovetail Setup"));
     logger.info("  " + "═".repeat(40));
     logger.info("");
 
@@ -333,9 +338,9 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
 
     if (externalPlugins.length > 0) {
       logger.info("  Detected packages:");
-      logger.info("    ● sincronia-core (" + chalk.cyan("ServiceNow") + ")");
+      logger.info("    ● dovetail-core (" + chalk.cyan("ServiceNow") + ")");
       externalPlugins.forEach(p => {
-        logger.info("    ● sincronia-" + p.name + " (" + chalk.cyan(p.displayName) + ")");
+        logger.info("    ● dovetail-" + p.name + " (" + chalk.cyan(p.displayName) + ")");
       });
       logger.info("");
     }
@@ -397,7 +402,7 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
     if (failed) {
       logger.warn("  Setup completed with errors. Review the output above.");
     } else {
-      logger.success(chalk.green("  Setup complete!") + " Run " + chalk.cyan("sinc watch") + " to start.");
+      logger.success(chalk.green("  Setup complete!") + " Run " + chalk.cyan("dove watch") + " to start.");
     }
     logger.info("");
   } catch (e) {
@@ -469,9 +474,9 @@ export async function runLogin(options?: RunLoginOptions): Promise<void> {
 
     logger.info("");
     logger.info("You can now use:");
-    logger.info("  sinc init              — Initialize a new project");
-    logger.info("  sinc watch             — Watch for changes");
-    logger.info("  sinc status            — Check instance connection");
+    logger.info("  dove init              — Initialize a new project");
+    logger.info("  dove watch             — Watch for changes");
+    logger.info("  dove status            — Check instance connection");
     logger.info("");
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

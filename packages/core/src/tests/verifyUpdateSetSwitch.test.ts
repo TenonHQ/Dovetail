@@ -66,8 +66,8 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/sinc.manifest.${scope}.json`),
-  getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
 var mockFsStore: Record<string, string> = {};
@@ -147,7 +147,7 @@ describe("US-007: Verify update set is active after creation", () => {
 
   it("verifies update set switch by calling getCurrentUpdateSet after changeUpdateSet", async () => {
     // Setup: active task + no existing config
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -189,7 +189,7 @@ describe("US-007: Verify update set is active after creation", () => {
   });
 
   it("retries switch when verification shows wrong update set, succeeds on retry", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -234,7 +234,7 @@ describe("US-007: Verify update set is active after creation", () => {
   });
 
   it("logs explicit error when both switch attempts fail verification", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -271,7 +271,7 @@ describe("US-007: Verify update set is active after creation", () => {
   });
 
   it("does not retry when verification passes on first attempt", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -308,7 +308,7 @@ describe("US-007: Verify update set is active after creation", () => {
   });
 
   it("handles getCurrentUpdateSet throwing during verification gracefully", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",

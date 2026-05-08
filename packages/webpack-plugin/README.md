@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-webpack-plugin
+# @tenonhq/dovetail-webpack-plugin
 
 ## Overview
 
@@ -7,33 +7,33 @@ This plugin allows you to run [Webpack](https://webpack.js.org/) on your desired
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-webpack-plugin
+npm i -D @tenonhq/dovetail-webpack-plugin
 ```
 
 ## Options
 
 | Key               | Type                                                | Default  | Description                                                                                                                                                                                                              |
 | ----------------- | --------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `configGenerator` | `(context:Sinc.FileContext)=>webpack.Configuration` | `()=>{}` | Function that can generate a webpack configuration object. A [Sinc.FileContext](https://github.com/tenon/sincronia/blob/bdb/packages/types/index.d.ts) is passed in so that you can substitute options using the context |
+| `configGenerator` | `(context:Sinc.FileContext)=>webpack.Configuration` | `()=>{}` | Function that can generate a webpack configuration object. A [Sinc.FileContext](https://github.com/tenon/dovetail/blob/bdb/packages/types/index.d.ts) is passed in so that you can substitute options using the context |
 | `webpackConfig`   | `webpack.Configuration`                             | `{}`     | Same as [webpack.config.js](https://webpack.js.org/configuration/) object                                                                                                                                                |
 
 ### Order of Configurations
 
 1. Load from closest `webpack.config.js`.
-2. Load from `webpackConfig` in `sinc.config.js` and override any overlapping values.
-3. Run `configGenerator()` from `configGenerator` option in `sinc.config.js` and override any overlapping values.
+2. Load from `webpackConfig` in `dove.config.js` and override any overlapping values.
+3. Run `configGenerator()` from `configGenerator` option in `dove.config.js` and override any overlapping values.
 
 ## Example Usage
 
 This example takes `.wp.js` files and bundles them with webpack by generating the options with a function
 
 ```javascript
-//sinc.config.js
+//dove.config.js
 module.exports={
   rules:{
     match:/\.wp\.js$/,
     plugins:[
-      name:"@tenonhq/sincronia-webpack-plugin",
+      name:"@tenonhq/dovetail-webpack-plugin",
       options:{
         configGenerator:(context)=>{
           mode:"production",

@@ -34,7 +34,7 @@ export async function initClaudeCommand(args: InitClaudeCmdArgs) {
 
   var skillsDir = findSkillsDir();
   if (!skillsDir) {
-    logger.error("Could not find Sincronia skills directory.");
+    logger.error("Could not find Dovetail skills directory.");
     process.exit(1);
     return;
   }
