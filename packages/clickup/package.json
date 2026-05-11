@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-clickup",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "ClickUp API v2 client for Dovetail — task management, update set integration",
   "main": "./dist/index.js",
   "scripts": {

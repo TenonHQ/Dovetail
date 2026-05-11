@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-babel-plugin-remove-modules",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Babel plugin that removes imports and exports from code",
   "main": "./dist/index.js",
   "scripts": {
@@ -23,7 +23,7 @@
     "@babel/types": "^7.23.0"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.10",
+    "@tenonhq/dovetail-types": "^0.0.17",
     "@types/babel__core": "^7.20.2"
   },
   "files": [

@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-google-auth",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Google OAuth2 auth client for Dovetail Google integrations",
   "main": "./dist/index.js",
   "scripts": {

@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-dashboard",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Update Set Dashboard for Dovetail",
   "main": "server.js",
   "scripts": {
