@@ -343,9 +343,9 @@ export async function clickupSetupCommand(args: any): Promise<void> {
     );
     logger.info("");
     logger.info("You can now use:");
-    logger.info("  sinc clickup tasks        — List your tasks");
-    logger.info("  sinc clickup task <id>     — Get task details");
-    logger.info("  sinc createUpdateSet -cu <task-id> — Create update set from task");
+    logger.info("  dove clickup tasks        — List your tasks");
+    logger.info("  dove clickup task <id>     — Get task details");
+    logger.info("  dove createUpdateSet -cu <task-id> — Create update set from task");
   } catch (e) {
     logger.error("ClickUp setup failed");
     if (e instanceof Error) logger.error(e.message);

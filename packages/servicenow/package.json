@@ -4,7 +4,7 @@
   "description": "ServiceNow platform helpers for Dovetail — dictionary, choices, update-set-aware writes via the Dovetail Scripted REST API",
   "main": "./dist/index.js",
   "bin": {
-    "sinc-sn": "./dist/cli.js"
+    "dove-sn": "./dist/cli.js"
   },
   "scripts": {
     "test": "jest",

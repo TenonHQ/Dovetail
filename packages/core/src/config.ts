@@ -450,7 +450,8 @@ export function resolveScopeFromPath(filePath: string): string | undefined {
   return undefined;
 }
 
-async function loadConfigPath(pth?: string): Promise<string | false> {
+// Exported for tests only.
+export async function loadConfigPath(pth?: string): Promise<string | false> {
   if (!pth) {
     pth = process.cwd();
   }

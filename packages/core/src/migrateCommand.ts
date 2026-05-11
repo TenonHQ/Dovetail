@@ -46,11 +46,17 @@ function buildPackageJsonStep(rootDir: string): MigrationStep | null {
   if (!fs.existsSync(pkgPath)) return null;
   const original = fs.readFileSync(pkgPath, "utf8");
 
+  // Order matters: rewrite the @tenonhq/sincronia-* deps first so the
+  // subsequent \bsinc\b sweep doesn't have to know about package-name
+  // collisions. \bsinc\b doesn't match `sincronia` (no word boundary between
+  // `c` and `r`), so the package-name replace and the script-token replace
+  // are independent. The standalone \bsinc\b catches every CLI invocation
+  // shape — bare (`sinc watch`), chained (`&& sinc push`), prefixed
+  // (`npx sinc`), trailing (`build && sinc deploy`) — without the four
+  // separate fragile regexes we had before.
   const updated = original
     .replace(/@tenonhq\/sincronia-/g, "@tenonhq/dovetail-")
-    .replace(/"sinc /g, '"dove ')
-    .replace(/'sinc /g, "'dove ")
-    .replace(/\bnpx sinc\b/g, "npx dove");
+    .replace(/\bsinc\b/g, "dove");
 
   if (updated === original) return null;
 
