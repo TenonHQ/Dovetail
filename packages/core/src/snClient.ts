@@ -66,7 +66,15 @@ function _dovetailEndpoint(op: string): string {
     ? "api/cadso/claude/" + op
     : "api/cadso/dovetail/" + op;
 }
-async function _callDovetailApi<T>(
+// Exported for tests only: reset the latched fallback state between test cases.
+export function _resetDovetailApiFallback(): void {
+  _dovetailApiUseLegacyClaudePath = false;
+}
+// Exported for tests only: inspect the latched fallback state.
+export function _isUsingLegacyClaudePath(): boolean {
+  return _dovetailApiUseLegacyClaudePath;
+}
+export async function _callDovetailApi<T>(
   op: string,
   call: (endpoint: string) => Promise<AxiosResponse<T>>,
 ): Promise<AxiosResponse<T>> {

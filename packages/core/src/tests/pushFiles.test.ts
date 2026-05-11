@@ -143,9 +143,12 @@ describe("pushFiles", function () {
 
     await pushFiles(records);
 
-    // Config should be read exactly once (existsSync check at batch start)
-    // not 3 times (once per record)
-    expect(configReadCount).toBe(1);
+    // Config existsSync is hit twice at batch start: once by resolveDoveDotfile
+    // (preferring .dove-update-sets.json over the legacy .sinc-* fallback) and
+    // once by getUpdateSetConfig() to gate the JSON read. The point of this
+    // test is that the count is bounded by the resolution + read pattern, not
+    // by record count — 3 records still produces 2 checks, not 6.
+    expect(configReadCount).toBe(2);
   });
 
   it("does not re-read config mid-batch even with multiple scopes", async function () {
@@ -162,8 +165,8 @@ describe("pushFiles", function () {
 
     await pushFiles(records);
 
-    // Only 1 read regardless of record count
-    expect(configReadCount).toBe(1);
+    // Bounded by resolver + read-gate (see note above), not by record count.
+    expect(configReadCount).toBe(2);
   });
 
   it("routes records to correct update sets from cached config", async function () {
