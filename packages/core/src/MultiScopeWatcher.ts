@@ -233,7 +233,7 @@ class MultiScopeWatcherManager {
             logger.warn(
               `[${scopeName}] No update set configured for scope ${scopeName}. ` +
               `Changes will go to Default. ` +
-              `Use sinc createUpdateSet or activate a task in the dashboard.`
+              `Use dove createUpdateSet or activate a task in the dashboard.`
             );
           } else {
             // Use the session's current non-Default update set
@@ -246,14 +246,14 @@ class MultiScopeWatcherManager {
           logger.warn(
             `[${scopeName}] No update set configured for scope ${scopeName}. ` +
             `Changes will go to Default. ` +
-            `Use sinc createUpdateSet or activate a task in the dashboard.`
+            `Use dove createUpdateSet or activate a task in the dashboard.`
           );
         }
       } catch (queryErr) {
         logger.warn(
           `[${scopeName}] No update set configured for scope ${scopeName}. ` +
           `Changes will go to Default (could not query current update set). ` +
-          `Use sinc createUpdateSet or activate a task in the dashboard.`
+          `Use dove createUpdateSet or activate a task in the dashboard.`
         );
       }
       return;

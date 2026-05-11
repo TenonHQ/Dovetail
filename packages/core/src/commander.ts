@@ -638,15 +638,13 @@ export async function initCommands() {
     .command(
       "migrate",
       "Migrate a project from Sincronia to Dovetail (renames sinc.* artifacts, updates package.json deps and scripts)",
-      function (cmdArgs: TSFIXME) {
-        cmdArgs.options({
-          ...sharedOptions,
-          apply: {
-            type: "boolean",
-            default: false,
-            describe: "Actually perform the migration. Without this flag, only the plan is printed.",
-          },
-        });
+      {
+        ...sharedOptions,
+        apply: {
+          type: "boolean",
+          default: false,
+          describe: "Actually perform the migration. Without this flag, only the plan is printed.",
+        },
       },
       migrateCommand,
     )
