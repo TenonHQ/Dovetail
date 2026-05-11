@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import { setLogLevel } from "./commands";
 import { logger } from "./Logger";
 import { spawn } from "child_process";
@@ -8,10 +8,10 @@ export async function dashboardCommand(args: Sinc.SharedCmdArgs & { port?: numbe
 
   let serverPath: string;
   try {
-    serverPath = require.resolve("@tenonhq/sincronia-dashboard/server.js");
+    serverPath = require.resolve("@tenonhq/dovetail-dashboard/server.js");
   } catch (e) {
     throw new Error(
-      "Dashboard package not installed. Run: npm install @tenonhq/sincronia-dashboard",
+      "Dashboard package not installed. Run: npm install @tenonhq/dovetail-dashboard",
     );
   }
 

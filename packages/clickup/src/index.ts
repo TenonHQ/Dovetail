@@ -1,7 +1,7 @@
 /**
- * @tenonhq/sincronia-clickup
+ * @tenonhq/dovetail-clickup
  *
- * ClickUp API v2 client for Sincronia.
+ * ClickUp API v2 client for Dovetail.
  * Provides task management, workspace navigation, and formatting utilities.
  */
 
@@ -40,7 +40,7 @@ export {
 // URL/ID parsing
 export { parseClickUpIdentifier } from "./parser";
 
-// Init plugin — discovered automatically by sincronia-core
+// Init plugin — discovered automatically by dovetail-core
 export { sincPlugin } from "./plugin";
 
 // Type definitions

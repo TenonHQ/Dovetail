@@ -1,23 +1,23 @@
-# @tenonhq/sincronia-schema
+# @tenonhq/dovetail-schema
 
-ServiceNow table schema fetcher and organizer for Sincronia. Reads scopes from your `sinc.config.js` and fetches all custom table definitions for those scopes from your ServiceNow instance.
+ServiceNow table schema fetcher and organizer for Dovetail. Reads scopes from your `dove.config.js` and fetches all custom table definitions for those scopes from your ServiceNow instance.
 
-## Usage via Sincronia CLI
+## Usage via Dovetail CLI
 
 ```bash
-# Fetch schemas for all scopes defined in sinc.config.js
-sinc schema pull
+# Fetch schemas for all scopes defined in dove.config.js
+dove schema pull
 
 # Fetch schema for a single scope
-sinc schema pull --scope x_cadso_work
+dove schema pull --scope x_cadso_work
 
 # Custom output directory
-sinc schema pull --output ./tables
+dove schema pull --output ./tables
 ```
 
 Requires `SN_INSTANCE`, `SN_USER`, and `SN_PASSWORD` in your `.env` file.
 
-Scopes are read from the `scopes` object in your `sinc.config.js`:
+Scopes are read from the `scopes` object in your `dove.config.js`:
 
 ```javascript
 module.exports = {
@@ -33,7 +33,7 @@ module.exports = {
 ## Usage as Library
 
 ```typescript
-import { pullSchema, fetchSchema, organizeSchema } from "@tenonhq/sincronia-schema";
+import { pullSchema, fetchSchema, organizeSchema } from "@tenonhq/dovetail-schema";
 
 // Full pipeline: fetch + organize
 const index = await pullSchema({
@@ -73,7 +73,7 @@ schema/
 ├── core/                   # Tables from x_cadso_core scope
 │   ├── _summary.json
 │   └── ...
-└── sinc/                   # Tables from x_nuvo_sinc scope
+└── sinc/                   # Tables from x_nuvo_dove scope
     └── ...
 ```
 

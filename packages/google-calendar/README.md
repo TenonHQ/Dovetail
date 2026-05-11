@@ -1,16 +1,16 @@
-# @tenonhq/sincronia-google-calendar
+# @tenonhq/dovetail-google-calendar
 
-Google Calendar API client for Sincronia. Provides event management and LLM-optimized agenda formatting for the CTO morning digest (`context/calendar.md`).
+Google Calendar API client for Dovetail. Provides event management and LLM-optimized agenda formatting for the CTO morning digest (`context/calendar.md`).
 
 ## Install
 
 ```bash
-npm i -D @tenonhq/sincronia-google-calendar @tenonhq/sincronia-google-auth
+npm i -D @tenonhq/dovetail-google-calendar @tenonhq/dovetail-google-auth
 ```
 
 ## Setup
 
-Calendar auth is handled by [`@tenonhq/sincronia-google-auth`](../google-auth). Follow the setup in that package's README to obtain `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`. The OAuth consent screen must enable the **Google Calendar API** with the `calendar` scope.
+Calendar auth is handled by [`@tenonhq/dovetail-google-auth`](../google-auth). Follow the setup in that package's README to obtain `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN`. The OAuth consent screen must enable the **Google Calendar API** with the `calendar` scope.
 
 ```bash
 # .env
@@ -22,14 +22,14 @@ GOOGLE_REFRESH_TOKEN=...
 ## Usage
 
 ```typescript
-import { createGoogleAuth, configFromEnv } from "@tenonhq/sincronia-google-auth";
+import { createGoogleAuth, configFromEnv } from "@tenonhq/dovetail-google-auth";
 import {
   createCalendarClient,
   getTodayEvents,
   getUpcomingEvents,
   createEvent,
   formatDailyAgenda,
-} from "@tenonhq/sincronia-google-calendar";
+} from "@tenonhq/dovetail-google-calendar";
 
 var { auth } = createGoogleAuth({ config: configFromEnv() });
 var client = createCalendarClient({ auth: auth });
@@ -58,5 +58,5 @@ See `src/types.ts` for the full type surface.
 
 ## Related
 
-- [`@tenonhq/sincronia-google-auth`](../google-auth) — shared OAuth2 layer
-- [`@tenonhq/sincronia-gmail`](../gmail) — sibling Google integration
+- [`@tenonhq/dovetail-google-auth`](../google-auth) — shared OAuth2 layer
+- [`@tenonhq/dovetail-gmail`](../gmail) — sibling Google integration

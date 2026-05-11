@@ -2,7 +2,7 @@
  * addChoicesToField — upsert sys_choice rows for a given table.column,
  * and (optionally) flip sys_dictionary.choice so the column renders as a dropdown.
  *
- * All writes go through the Sincronia "Claude" Scripted REST API, which pins
+ * All writes go through the Dovetail "Claude" Scripted REST API, which pins
  * each write to the supplied update set regardless of the REST user's current
  * preference. sys_scope on sys_choice is inherited from the dictionary record
  * so choices stay in the same application as the field.

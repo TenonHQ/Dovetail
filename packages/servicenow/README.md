@@ -1,6 +1,6 @@
-# @tenonhq/sincronia-servicenow
+# @tenonhq/dovetail-servicenow
 
-ServiceNow platform helpers for Sincronia. The first shipped feature is
+ServiceNow platform helpers for Dovetail. The first shipped feature is
 **`addChoicesToField`** — upserts `sys_choice` rows for a given `table.column`
 and flips `sys_dictionary.choice` in one idempotent call, with every write
 captured in the update set you pass in.
@@ -30,15 +30,17 @@ await addChoicesToField(client, {
 });
 ```
 
-Writes go through the Sincronia **"Claude" Scripted REST API**
-(`/api/cadso/claude/*`), which pins every write to the supplied update set
-regardless of the REST user's current preference. Re-running with the same
-inputs is safe — every row comes back as `unchanged`.
+Writes go through the **Dovetail Scripted REST API** (`/api/cadso/dovetail/*`,
+historically named "Claude" at `/api/cadso/claude/*`; the client falls back to
+the legacy path on instances where the rename hasn't been imported yet). The
+API pins every write to the supplied update set regardless of the REST user's
+current preference, so re-running with the same inputs is safe — every row
+comes back as `unchanged`.
 
 ## Install
 
 ```bash
-npm install @tenonhq/sincronia-servicenow
+npm install @tenonhq/dovetail-servicenow
 ```
 
 Requires Node 20 LTS.
@@ -96,7 +98,7 @@ JSON payload shape:
 ## Programmatic
 
 ```ts
-import { createClient, addChoicesToField } from "@tenonhq/sincronia-servicenow";
+import { createClient, addChoicesToField } from "@tenonhq/dovetail-servicenow";
 
 var client = createClient({});
 var result = await addChoicesToField(client, { /* ... */ });
@@ -113,4 +115,4 @@ console.log(result.choices);
 Same package will grow to cover the rest of the `sinch-dlr-manual-steps`
 patterns: indexes (`sys_db_object_ix`), table properties (`accessible_from`),
 `sys_trigger` creation, `sys_property` creation. Pattern stays identical —
-query to diff, write through the Claude REST API, report per-row actions.
+query to diff, write through the Dovetail REST API, report per-row actions.

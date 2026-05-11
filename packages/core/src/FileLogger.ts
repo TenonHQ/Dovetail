@@ -20,7 +20,7 @@ class FileLogger {
     if (this.initialized) return;
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const logFileName = `sincronia-debug-${timestamp}.log`;
+    const logFileName = `dovetail-debug-${timestamp}.log`;
     
     // Create log file in the current working directory (ServiceNow folder)
     this.logFilePath = path.join(process.cwd(), logFileName);
@@ -32,7 +32,7 @@ class FileLogger {
       
       // Write header to log file
       this.writeToFile(`\n${"=".repeat(80)}`);
-      this.writeToFile(`Sincronia Debug Log - Started at ${new Date().toISOString()}`);
+      this.writeToFile(`Dovetail Debug Log - Started at ${new Date().toISOString()}`);
       this.writeToFile(`Log file: ${this.logFilePath}`);
       this.writeToFile(`Working directory: ${process.cwd()}`);
       this.writeToFile(`${"=".repeat(80)}\n`);

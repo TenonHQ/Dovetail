@@ -1,4 +1,4 @@
-import { Sinc, TSFIXME } from "@tenonhq/sincronia-types";
+import { Sinc, TSFIXME } from "@tenonhq/dovetail-types";
 import fs from "fs";
 import path from "path";
 import inquirer from "inquirer";
@@ -9,6 +9,7 @@ import { fileLogger } from "./FileLogger";
 import { setLogLevel } from "./commands";
 import * as ConfigManager from "./config";
 import * as AppUtils from "./appUtils";
+import { getUpdateSetsConfigPath } from "./projectFiles";
 
 interface CreateRecordArgs {
   table: string;
@@ -28,7 +29,7 @@ interface UpdateSetSelection {
 type UpdateSetConfig = Record<string, UpdateSetSelection>;
 
 const getUpdateSetConfig = (): UpdateSetConfig => {
-  const configPath = path.resolve(process.cwd(), ".sinc-update-sets.json");
+  const configPath = getUpdateSetsConfigPath();
   try {
     if (fs.existsSync(configPath)) {
       return JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -310,7 +311,7 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
       logger.success(chalk.green("Local files created at: ") + localPath);
     } catch (syncErr) {
       logger.warn("Record created on instance but local sync failed.");
-      logger.warn("Run 'npx sinc refresh' to pull the record locally.");
+      logger.warn("Run 'npx dove refresh' to pull the record locally.");
       if (syncErr instanceof Error) {
         fileLogger.error("Sync error:", syncErr.message);
       }

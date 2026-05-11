@@ -1,7 +1,7 @@
 /**
- * @tenonhq/sincronia-sawmill
+ * @tenonhq/dovetail-sawmill
  *
- * ServiceNow update set promotion client for Sincronia.
+ * ServiceNow update set promotion client for Dovetail.
  * Wraps the Sawmill Scripted REST API (POST /api/cadso/sawmill/promote).
  */
 

@@ -2,7 +2,7 @@ import { setLogLevel } from "./commands";
 import { runLogin } from "./initSystem/orchestrator";
 
 /**
- * @description Command handler for `sinc login`.
+ * @description Command handler for `dove login`.
  * Authenticates with ServiceNow and other integrations, saves credentials to .env.
  */
 export async function loginCommand(args: any): Promise<void> {

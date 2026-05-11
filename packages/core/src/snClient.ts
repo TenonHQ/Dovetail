@@ -1,4 +1,4 @@
-import { Sinc, SN } from "@tenonhq/sincronia-types";
+import { Sinc, SN } from "@tenonhq/dovetail-types";
 import axios, { AxiosPromise, AxiosResponse, AxiosError } from "axios";
 import { wrapper } from "axios-cookiejar-support";
 import rateLimit from "axios-rate-limit";
@@ -53,6 +53,37 @@ function _getHttpStatus(e: unknown): number | undefined {
     return e.response.status;
   }
   return undefined;
+}
+
+// Dovetail server-side Scripted REST API was renamed from "Claude" (path
+// /api/cadso/claude/*) to "Dovetail" (path /api/cadso/dovetail/*). On instances
+// where the rename hasn't been imported yet, the new path returns 404. We try
+// the dovetail path first; if it 404s we fall back to the legacy claude path
+// for the rest of the session, with a one-time deprecation warning.
+let _dovetailApiUseLegacyClaudePath = false;
+function _dovetailEndpoint(op: string): string {
+  return _dovetailApiUseLegacyClaudePath
+    ? "api/cadso/claude/" + op
+    : "api/cadso/dovetail/" + op;
+}
+async function _callDovetailApi<T>(
+  op: string,
+  call: (endpoint: string) => Promise<AxiosResponse<T>>,
+): Promise<AxiosResponse<T>> {
+  try {
+    return await call(_dovetailEndpoint(op));
+  } catch (e) {
+    if (!_dovetailApiUseLegacyClaudePath && _getHttpStatus(e) === 404) {
+      logger.warn(
+        "[deprecation] /api/cadso/dovetail/" + op +
+          " returned 404. Falling back to legacy /api/cadso/claude/" + op +
+          ". Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+      );
+      _dovetailApiUseLegacyClaudePath = true;
+      return await call(_dovetailEndpoint(op));
+    }
+    throw e;
+  }
 }
 
 function _getRetryAfterMs(e: unknown): number {
@@ -428,15 +459,13 @@ export const snClient = (
     name?: string;
     scope?: string;
   }) => {
-    const endpoint = "api/cadso/claude/changeUpdateSet";
     type ChangeUpdateSetResponse = { message?: string; error?: string };
-    return client.get<ChangeUpdateSetResponse>(endpoint, {
-      params,
-    });
+    return _callDovetailApi<ChangeUpdateSetResponse>("changeUpdateSet", (endpoint) =>
+      client.get<ChangeUpdateSetResponse>(endpoint, { params }),
+    );
   };
 
   const getCurrentUpdateSet = (scope?: string) => {
-    const endpoint = "api/cadso/claude/currentUpdateSet";
     type CurrentUpdateSetResponse = {
       message?: string;
       sysId?: string;
@@ -447,22 +476,21 @@ export const snClient = (
     if (scope) {
       params.scope = scope;
     }
-    return client.get<CurrentUpdateSetResponse>(endpoint, {
-      params,
-    });
+    return _callDovetailApi<CurrentUpdateSetResponse>("currentUpdateSet", (endpoint) =>
+      client.get<CurrentUpdateSetResponse>(endpoint, { params }),
+    );
   };
 
   const changeScope = (scope: string) => {
-    const endpoint = "api/cadso/claude/changeScope";
     type ChangeScopeResponse = {
       message?: string;
       sysId?: string;
       name?: string;
       error?: string;
     };
-    return client.get<ChangeScopeResponse>(endpoint, {
-      params: { scope },
-    });
+    return _callDovetailApi<ChangeScopeResponse>("changeScope", (endpoint) =>
+      client.get<ChangeScopeResponse>(endpoint, { params: { scope } }),
+    );
   };
 
   const pushWithUpdateSet = (
@@ -471,13 +499,14 @@ export const snClient = (
     recordSysId: string,
     fields: Record<string, string>,
   ) => {
-    const endpoint = "api/cadso/claude/pushWithUpdateSet";
-    return client.post(endpoint, {
-      update_set_sys_id: updateSetSysId,
-      table,
-      record_sys_id: recordSysId,
-      fields,
-    });
+    return _callDovetailApi<unknown>("pushWithUpdateSet", (endpoint) =>
+      client.post(endpoint, {
+        update_set_sys_id: updateSetSysId,
+        table,
+        record_sys_id: recordSysId,
+        fields,
+      }),
+    );
   };
 
   const createRecord = (params: {
@@ -487,7 +516,6 @@ export const snClient = (
     scope?: string;
     update_set_sys_id?: string;
   }) => {
-    const endpoint = "api/cadso/claude/createRecord";
     type CreateRecordResponse = {
       result: {
         sys_id: string;
@@ -496,7 +524,9 @@ export const snClient = (
         error?: string;
       };
     };
-    return client.post<CreateRecordResponse>(endpoint, params);
+    return _callDovetailApi<CreateRecordResponse>("createRecord", (endpoint) =>
+      client.post<CreateRecordResponse>(endpoint, params),
+    );
   };
 
   const deleteRecord = (params: {
@@ -504,7 +534,6 @@ export const snClient = (
     sys_id: string;
     scope?: string;
   }) => {
-    const endpoint = "api/cadso/claude/deleteRecord";
     type DeleteRecordResponse = {
       result: {
         success: boolean;
@@ -514,7 +543,9 @@ export const snClient = (
         error?: string;
       };
     };
-    return client.post<DeleteRecordResponse>(endpoint, params);
+    return _callDovetailApi<DeleteRecordResponse>("deleteRecord", (endpoint) =>
+      client.post<DeleteRecordResponse>(endpoint, params),
+    );
   };
 
   return {

@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 
 // --- Mock setup ---
 
@@ -105,8 +105,8 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/sinc.manifest.${scope}.json`),
-  getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
 // Mock fs for manifest loading and config file access
@@ -523,7 +523,7 @@ describe("MultiScopeWatcherManager", () => {
     it("loads scope-specific manifest when it exists", async () => {
       const manifest = { tables: {}, scope: "x_test_core" };
       (fs.existsSync as jest.Mock).mockImplementation((p: string) =>
-        p.includes("sinc.manifest.x_test_core.json"),
+        p.includes("dove.manifest.x_test_core.json"),
       );
       (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
 
@@ -535,7 +535,7 @@ describe("MultiScopeWatcherManager", () => {
     it("sets scope field on manifest if missing", async () => {
       const manifest = { tables: {} };
       (fs.existsSync as jest.Mock).mockImplementation((p: string) =>
-        p.includes("sinc.manifest.x_test_core.json"),
+        p.includes("dove.manifest.x_test_core.json"),
       );
       (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
 
@@ -554,8 +554,8 @@ describe("MultiScopeWatcherManager", () => {
 
       // Scope-specific file doesn't exist, legacy does
       (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p.includes("sinc.manifest.x_test_core.json")) return false;
-        if (p.includes("sinc.manifest.json")) return true;
+        if (p.includes("dove.manifest.x_test_core.json")) return false;
+        if (p.includes("dove.manifest.json")) return true;
         return false;
       });
       (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(legacyManifest));
@@ -571,8 +571,8 @@ describe("MultiScopeWatcherManager", () => {
       const manifest = { tables: {}, scope: "x_test_core" };
 
       (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p.includes("sinc.manifest.x_test_core.json")) return false;
-        if (p.includes("sinc.manifest.json")) return true;
+        if (p.includes("dove.manifest.x_test_core.json")) return false;
+        if (p.includes("dove.manifest.json")) return true;
         return false;
       });
       (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
@@ -586,8 +586,8 @@ describe("MultiScopeWatcherManager", () => {
       const manifest = { tables: { sys_script_include: {} } };
 
       (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p.includes("sinc.manifest.x_test_core.json")) return false;
-        if (p.includes("sinc.manifest.json")) return true;
+        if (p.includes("dove.manifest.x_test_core.json")) return false;
+        if (p.includes("dove.manifest.json")) return true;
         return false;
       });
       (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
@@ -603,8 +603,8 @@ describe("MultiScopeWatcherManager", () => {
       const manifest = { other_scope: { tables: {} } };
 
       (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
-        if (p.includes("sinc.manifest.x_test_core.json")) return false;
-        if (p.includes("sinc.manifest.json")) return true;
+        if (p.includes("dove.manifest.x_test_core.json")) return false;
+        if (p.includes("dove.manifest.json")) return true;
         return false;
       });
       (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));

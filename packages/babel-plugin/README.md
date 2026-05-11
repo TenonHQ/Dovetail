@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-babel-plugin
+# @tenonhq/dovetail-babel-plugin
 
 ## Overview
 
@@ -9,7 +9,7 @@ Whatever Babel plugins and presets you use, you still need to `npm install` them
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-babel-plugin
+npm i -D @tenonhq/dovetail-babel-plugin
 ```
 
 ## Options
@@ -31,17 +31,17 @@ Feel free to riot so we can get more modern javascript features in ServiceNow ðŸ
 This example takes `.ts` files and transpiles it to valid ServiceNow javascript.
 
 ```javascript
-//sinc.config.js
+//dove.config.js
 module.exports={
   rules:{
     match:/\.ts$/,
     plugins:[
-      name:"@tenonhq/sincronia-babel-plugin",
+      name:"@tenonhq/dovetail-babel-plugin",
       //Babel options. Numbering shows order of execution
       options:{
         presets: [
           //6. Sanitize output code for ServiceNow
-          "@tenonhq/sincronia-servicenow",
+          "@tenonhq/dovetail-servicenow",
           //5. Babel env preset, transforms syntactic sugar to valid older javascript
           "@babel/env",
           //4. Typescript preset. Removes type information and makes it valid javascript
@@ -49,7 +49,7 @@ module.exports={
           ],
         plugins: [
           //1. Remove import/export statements used for type inference
-          "@tenonhq/sincronia-remove-modules",
+          "@tenonhq/dovetail-remove-modules",
           //2 and 3. Required babel plugins for typescript
           "@babel/proposal-class-properties",
           "@babel/proposal-object-rest-spread"

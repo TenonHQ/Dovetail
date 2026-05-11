@@ -1,4 +1,4 @@
-# @tenonhq/sincronia-babel-preset-servicenow
+# @tenonhq/dovetail-babel-preset-servicenow
 
 ## Overview
 
@@ -8,7 +8,7 @@ Right now it is fairly simple, but it might be enhanced in the future if more is
 ## Installation
 
 ```bash
-npm i -D @tenonhq/sincronia-babel-preset-servicenow
+npm i -D @tenonhq/dovetail-babel-preset-servicenow
 ```
 
 After the installation is completed, add it to the `presets` section of your Babel configuration.

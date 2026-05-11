@@ -63,7 +63,7 @@ var mockConfig: any = {
   }),
   getSourcePathForScope: jest.fn(),
   getSourcePath: jest.fn(),
-  getManifestPath: jest.fn().mockReturnValue("/tmp/sinc.manifest.json"),
+  getManifestPath: jest.fn().mockReturnValue("/tmp/dove.manifest.json"),
   resolveConfigForScope: jest.fn().mockImplementation(function () {
     return { tables: ["sys_script_include"], fieldOverrides: {}, apiIncludes: {}, apiExcludes: {} };
   }),

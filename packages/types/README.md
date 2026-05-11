@@ -1,24 +1,24 @@
-# @tenonhq/sincronia-types
+# @tenonhq/dovetail-types
 
-Shared TypeScript type definitions for the Sincronia monorepo.
+Shared TypeScript type definitions for the Dovetail monorepo.
 
 ## Install
 
 ```bash
-npm i -D @tenonhq/sincronia-types
+npm i -D @tenonhq/dovetail-types
 ```
 
 ## Contents
 
 A single ambient declaration file (`index.d.ts`) exposing two namespaces:
 
-- **`Sinc`** — Sincronia internal types: config shape (`Config`, `ScopedConfig`), CLI args (`PushCmdArgs`, `WatchCmdArgs`, etc.), manifests, plugin rules, field maps, and build-pipeline transforms.
+- **`Sinc`** — Dovetail internal types: config shape (`Config`, `ScopedConfig`), CLI args (`PushCmdArgs`, `WatchCmdArgs`, etc.), manifests, plugin rules, field maps, and build-pipeline transforms.
 - **`SN`** — ServiceNow platform types: `FileType`, record shapes, REST response payloads used when talking to ServiceNow.
 
 ## Usage
 
 ```typescript
-import type { Sinc, SN } from "@tenonhq/sincronia-types";
+import type { Sinc, SN } from "@tenonhq/dovetail-types";
 
 function loadConfig(raw: unknown): Sinc.Config { /* ... */ }
 
@@ -29,4 +29,4 @@ Because these are ambient types, consumers typically install as a `devDependency
 
 ## Related
 
-Consumed by `@tenonhq/sincronia-core` and every build plugin package in this monorepo (`babel-plugin`, `typescript-plugin`, `webpack-plugin`, `sass-plugin`, `eslint-plugin`, `prettier-plugin`).
+Consumed by `@tenonhq/dovetail-core` and every build plugin package in this monorepo (`babel-plugin`, `typescript-plugin`, `webpack-plugin`, `sass-plugin`, `eslint-plugin`, `prettier-plugin`).

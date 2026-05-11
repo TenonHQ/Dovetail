@@ -1,4 +1,4 @@
-import { SN, Sinc } from "@tenonhq/sincronia-types";
+import { SN, Sinc } from "@tenonhq/dovetail-types";
 import path from "path";
 import fs from "fs";
 import ProgressBar from "progress";
@@ -13,6 +13,7 @@ import {
 } from "./constants";
 import PluginManager from "./PluginManager";
 import { fileLogger } from "./FileLogger";
+import { getUpdateSetsConfigPath } from "./projectFiles";
 import {
   defaultClient,
   processPushResponse,
@@ -35,7 +36,7 @@ interface UpdateSetSelection {
 type UpdateSetConfig = Record<string, UpdateSetSelection>;
 
 const getUpdateSetConfig = (): UpdateSetConfig => {
-  const configPath = path.resolve(process.cwd(), ".sinc-update-sets.json");
+  const configPath = getUpdateSetsConfigPath();
   try {
     if (fs.existsSync(configPath)) {
       return JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -278,12 +279,12 @@ export const syncManifest = async (
 
     // If a specific scope is provided, sync only that scope
     if (scope) {
-      // Scope whitelist gate: refuse to refresh scopes not declared in sinc.config.js.
-      // Without this, stale entries in sinc.manifest.json leak undeclared scopes into
+      // Scope whitelist gate: refuse to refresh scopes not declared in dove.config.js.
+      // Without this, stale entries in dove.manifest.json leak undeclared scopes into
       // the refresh loop (see RFC-0004 / sys_alias debris incident 2026-04-14).
       if (declaredScopes.length > 0 && declaredScopes.indexOf(scope) === -1) {
         logger.warn(
-          "Skipping scope '" + scope + "' — not declared in sinc.config.js `scopes`. " +
+          "Skipping scope '" + scope + "' — not declared in dove.config.js `scopes`. " +
           "Add it to config.scopes to sync, or remove its manifest file."
         );
         fileLogger.debug("syncManifest: skipped undeclared scope '" + scope + "'");

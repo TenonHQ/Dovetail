@@ -1,5 +1,5 @@
 {
-  "name": "@tenonhq/sincronia-core",
+  "name": "@tenonhq/dovetail-core",
   "version": "0.0.85",
   "description": "Next-gen file syncer",
   "license": "GPL-3.0",
@@ -16,13 +16,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/tenon/sincronia.git"
+    "url": "https://github.com/tenonhq/dovetail.git"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@tenonhq/sincronia-types": "^0.0.13",
+    "@tenonhq/dovetail-types": "^0.0.13",
     "@types/dotenv": "^6.1.1",
     "@types/inquirer": "^8.2.10",
     "@types/jest": "^29.5.5",
@@ -38,8 +38,8 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@tenonhq/sincronia-clickup": "^0.0.6",
-    "@tenonhq/sincronia-schema": "^0.0.1",
+    "@tenonhq/dovetail-clickup": "^0.0.6",
+    "@tenonhq/dovetail-schema": "^0.0.1",
     "axios": "^1.5.1",
     "axios-cookiejar-support": "^4.0.7",
     "axios-rate-limit": "^1.3.0",
@@ -55,6 +55,7 @@
     "yargs": "^17.7.2"
   },
   "bin": {
+    "dove": "./dist/index.js",
     "sinc": "./dist/index.js"
   },
   "files": [

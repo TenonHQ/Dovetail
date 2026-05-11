@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import inquirer from "inquirer";
 import { defaultClient, unwrapSNResponse, unwrapTableAPIFirstItem } from "./snClient";
 import { logger } from "./Logger";
@@ -8,7 +8,7 @@ import {
   createClickUpApi,
   parseClickUpIdentifier,
   formatTaskSummary,
-} from "@tenonhq/sincronia-clickup";
+} from "@tenonhq/dovetail-clickup";
 import { refineUpdateSetName } from "./clickupCommands";
 
 interface UpdateSetDetails {
@@ -227,7 +227,7 @@ export async function createUpdateSetCommand(args: any): Promise<void> {
       logger.info(chalk.green(`✓ Update set "${name}" created and activated`));
     } catch (switchError) {
       logger.warn(`Update set "${name}" created but could not be activated automatically`);
-      logger.info(`You can manually switch to it using: npx sinc switchUpdateSet --name "${name}"`);
+      logger.info(`You can manually switch to it using: npx dove switchUpdateSet --name "${name}"`);
       if (switchError instanceof Error) {
         logger.warn(`Switch error: ${switchError.message}`);
       }
@@ -722,7 +722,7 @@ async function resolveClickUpTaskForUpdateSet(
   var token = process.env.CLICKUP_API_TOKEN;
   if (!token || token === "") {
     throw new Error(
-      "CLICKUP_API_TOKEN not set. Run 'sinc clickup setup' or add it to your .env file."
+      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add it to your .env file."
     );
   }
 

@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-eslint-plugin",
+  "name": "@tenonhq/dovetail-eslint-plugin",
   "version": "0.0.6",
-  "description": "ESLint plugin for Sincronia",
+  "description": "ESLint plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {
     "prepack": "tsc",
@@ -14,7 +14,7 @@
     "eslint": "8.51.0"
   },
   "devDependencies": {
-    "@tenonhq/sincronia-types": "^0.0.10",
+    "@tenonhq/dovetail-types": "^0.0.10",
     "@types/eslint": "^8.44.4",
     "@types/prettier": "^2.7.3",
     "typescript": "^5.2.2"
@@ -27,11 +27,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   },
-  "homepage": "https://github.com/tenon/sincronia#readme",
+  "homepage": "https://github.com/tenonhq/dovetail#readme",
   "gitHead": "67b694054cf072be150b9bd4dc3d1b01f8e24ed9"
 }

@@ -1,4 +1,4 @@
-import { Sinc, SN } from "@tenonhq/sincronia-types";
+import { Sinc, SN } from "@tenonhq/dovetail-types";
 import { snClient, unwrapSNResponse } from "../snClient";
 import { logger } from "../Logger";
 import * as ConfigManager from "../config";
@@ -8,9 +8,22 @@ import chalk from "chalk";
 import fs from "fs";
 import path from "path";
 
+// Read whichever project config exists (dove.config.js preferred, sinc.config.js as legacy fallback).
+// Returns the parsed module or null if neither exists / cannot be required.
+function readExistingProjectConfig(rootDir: string): any | null {
+  var names = ["dove.config.js", "sinc.config.js"];
+  for (var i = 0; i < names.length; i++) {
+    var p = path.join(rootDir, names[i]);
+    if (fs.existsSync(p)) {
+      try { return require(p); } catch (e) { return null; }
+    }
+  }
+  return null;
+}
+
 /**
  * @description Core init plugin — handles ServiceNow authentication, app selection, and file download.
- * This plugin is always included in sinc init and sinc login.
+ * This plugin is always included in `dove init` and `dove login`.
  */
 export const corePlugin: Sinc.InitPlugin = {
   name: "core",
@@ -64,15 +77,11 @@ export const corePlugin: Sinc.InitPlugin = {
         // Pre-check scopes that exist in the current config
         var existingScopes = new Set<string>();
         if (context.hasConfig) {
-          try {
-            var existingConfig = require(path.join(context.rootDir, "sinc.config.js"));
-            if (existingConfig.scopes) {
-              Object.keys(existingConfig.scopes).forEach(function(s) {
-                existingScopes.add(s);
-              });
-            }
-          } catch (e) {
-            // ignore — no existing config or malformed
+          var existingConfig = readExistingProjectConfig(context.rootDir);
+          if (existingConfig && existingConfig.scopes) {
+            Object.keys(existingConfig.scopes).forEach(function(s) {
+              existingScopes.add(s);
+            });
           }
         }
 
@@ -114,13 +123,10 @@ export const corePlugin: Sinc.InitPlugin = {
           // Check if existing config already has a sourceDirectory for this scope
           var existingDir = "";
           if (existingScopes.has(scope)) {
-            try {
-              var cfgScopes = require(path.join(context.rootDir, "sinc.config.js")).scopes;
-              if (cfgScopes && cfgScopes[scope] && cfgScopes[scope].sourceDirectory) {
-                existingDir = cfgScopes[scope].sourceDirectory;
-              }
-            } catch (e) {
-              // ignore
+            var existingCfg = readExistingProjectConfig(context.rootDir);
+            var cfgScopes = existingCfg && existingCfg.scopes;
+            if (cfgScopes && cfgScopes[scope] && cfgScopes[scope].sourceDirectory) {
+              existingDir = cfgScopes[scope].sourceDirectory;
             }
           }
 
@@ -156,31 +162,33 @@ export const corePlugin: Sinc.InitPlugin = {
     }
 
     var rootDir = context.rootDir;
-    var configPath = path.join(rootDir, "sinc.config.js");
+    var doveConfigPath = path.join(rootDir, "dove.config.js");
+    var sincConfigPath = path.join(rootDir, "sinc.config.js");
     var scopeDirectories: Record<string, string> = context.answers.scopeDirectories || {};
 
-    // Write or preserve sinc.config.js
+    // Write or preserve config. New configs are always written as dove.config.js;
+    // existing sinc.config.js files are honored as legacy until the user runs `dove migrate`.
     var configAction = context.answers.configAction || "keep";
-    var hasExistingConfig = false;
-    try {
-      fs.accessSync(configPath, fs.constants.F_OK);
-      hasExistingConfig = true;
-    } catch (e) {
-      // No existing config
-    }
+    var existingConfigPath: string | null = null;
+    if (fs.existsSync(doveConfigPath)) existingConfigPath = doveConfigPath;
+    else if (fs.existsSync(sincConfigPath)) existingConfigPath = sincConfigPath;
 
-    if (!hasExistingConfig || configAction === "replace") {
-      logger.info("Generating sinc.config.js...");
+    if (!existingConfigPath || configAction === "replace") {
+      logger.info("Generating dove.config.js...");
       var scopeEntries = selectedScopes.map(function(scope) {
         return {
           scope: scope,
           sourceDirectory: scopeDirectories[scope] || ("src/" + scope),
         };
       });
-      fs.writeFileSync(configPath, ConfigManager.generateConfigFile({ scopes: scopeEntries }), "utf8");
-      logger.success(chalk.green("✓ Generated sinc.config.js with " + selectedScopes.length + " scope(s)"));
+      fs.writeFileSync(doveConfigPath, ConfigManager.generateConfigFile({ scopes: scopeEntries }), "utf8");
+      logger.success(chalk.green("✓ Generated dove.config.js with " + selectedScopes.length + " scope(s)"));
+      if (existingConfigPath === sincConfigPath) {
+        logger.warn("Legacy sinc.config.js still present alongside new dove.config.js. Run 'dove migrate' or delete sinc.config.js once you're satisfied.");
+      }
     } else {
-      logger.info("sinc.config.js already exists — preserving configuration.");
+      var configFileName = path.basename(existingConfigPath);
+      logger.info(configFileName + " already exists — preserving configuration.");
     }
 
     // Reload configs so ConfigManager picks up the new/existing config
@@ -196,14 +204,9 @@ export const corePlugin: Sinc.InitPlugin = {
 
     for (var i = 0; i < selectedScopes.length; i++) {
       var scope = selectedScopes[i];
-      var manifestPath = path.join(rootDir, "sinc.manifest." + scope + ".json");
-      var hasManifest = false;
-      try {
-        fs.accessSync(manifestPath, fs.constants.F_OK);
-        hasManifest = true;
-      } catch (e) {
-        // No manifest
-      }
+      var doveManifestPath = path.join(rootDir, "dove.manifest." + scope + ".json");
+      var sincManifestPath = path.join(rootDir, "dove.manifest." + scope + ".json");
+      var hasManifest = fs.existsSync(doveManifestPath) || fs.existsSync(sincManifestPath);
 
       if (hasManifest) {
         scopesWithManifests.push(scope);

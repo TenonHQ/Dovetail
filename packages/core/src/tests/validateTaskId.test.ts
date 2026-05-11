@@ -66,8 +66,8 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/sinc.manifest.${scope}.json`),
-  getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
 // Filesystem mock store
@@ -149,7 +149,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
   describe("readActiveTask() validation", () => {
     it("returns null and logs error when taskId is empty string", () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskId: "",
         taskName: "Test Task",
@@ -168,7 +168,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     });
 
     it("returns null and logs error when taskId is undefined", () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskName: "Test Task",
         updateSetName: "CU-abc Test Task",
@@ -186,7 +186,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     });
 
     it("returns null and logs error when updateSetName is empty string", () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskId: "abc123",
         taskName: "Test Task",
@@ -205,7 +205,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     });
 
     it("returns null and logs error when updateSetName is missing", () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskId: "abc123",
         taskName: "Test Task",
@@ -223,7 +223,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     });
 
     it("returns valid task when both taskId and updateSetName are present", () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskId: "abc123",
         taskName: "Test Task",
@@ -244,7 +244,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
   describe("ensureUpdateSetForScope() taskId validation", () => {
     it("skips update set lookup when taskId is whitespace-only", async () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskId: "   ",
         taskName: "Test Task",
@@ -269,7 +269,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     });
 
     it("does not crash with missing required fields in task file", async () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskName: "Partial Task",
       });
@@ -290,7 +290,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     });
 
     it("proceeds with valid taskId and makes ServiceNow query", async () => {
-      var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+      var taskPath = path.resolve(process.cwd(), ".dove-active-task.json");
       mockFsStore[taskPath] = JSON.stringify({
         taskId: "abc123",
         taskName: "Test Task",

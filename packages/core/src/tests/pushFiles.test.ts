@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 
 // Track how many times the update set config file is read
 var configReadCount = 0;
@@ -13,14 +13,14 @@ jest.mock("fs", function () {
   return {
     ...actualFs,
     existsSync: function (p: string) {
-      if (typeof p === "string" && p.endsWith(".sinc-update-sets.json")) {
+      if (typeof p === "string" && p.endsWith(".dove-update-sets.json")) {
         configReadCount++;
         return Object.keys(mockConfigData).length > 0;
       }
       return actualFs.existsSync(p);
     },
     readFileSync: function (p: string, encoding?: string) {
-      if (typeof p === "string" && p.endsWith(".sinc-update-sets.json")) {
+      if (typeof p === "string" && p.endsWith(".dove-update-sets.json")) {
         return JSON.stringify(mockConfigData);
       }
       return actualFs.readFileSync(p, encoding);

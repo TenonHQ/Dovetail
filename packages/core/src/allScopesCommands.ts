@@ -1,4 +1,4 @@
-import { Sinc, SN } from "@tenonhq/sincronia-types";
+import { Sinc, SN } from "@tenonhq/dovetail-types";
 import { logger } from "./Logger";
 import { fileLogger } from "./FileLogger";
 import * as ConfigManager from "./config";
@@ -347,7 +347,7 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
     const config = ConfigManager.getConfig();
 
     if (!config.scopes) {
-      logger.error("No scopes defined in sinc.config.js");
+      logger.error("No scopes defined in dove.config.js");
       throw new Error("No scopes defined in configuration");
     }
 
@@ -398,8 +398,8 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
     if (failCount > 0) {
       logger.warn(failCount + " scope(s) failed — check errors above");
     }
-    logger.info("Manifests: sinc.manifest.<scope>.json");
-    logger.success("Run 'npx sinc watch' to start development");
+    logger.info("Manifests: dove.manifest.<scope>.json");
+    logger.success("Run 'npx dove watch' to start development");
   } catch (e) {
     logger.error("Error initializing scopes: " + e);
     throw e;
@@ -460,10 +460,10 @@ export async function watchAllScopesCommand(args: Sinc.WatchCmdArgs) {
 function startDashboardProcess(portOverride?: number): ChildProcess | null {
   var serverPath: string;
   try {
-    serverPath = require.resolve("@tenonhq/sincronia-dashboard/server.js");
+    serverPath = require.resolve("@tenonhq/dovetail-dashboard/server.js");
   } catch (e) {
     logger.warn(
-      "Dashboard package not installed. Run: npm install @tenonhq/sincronia-dashboard",
+      "Dashboard package not installed. Run: npm install @tenonhq/dovetail-dashboard",
     );
     return null;
   }

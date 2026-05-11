@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import * as ConfigManager from "./config";
 import fs from "fs";
 import path from "path";

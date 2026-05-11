@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-dashboard",
+  "name": "@tenonhq/dovetail-dashboard",
   "version": "0.0.13",
-  "description": "Update Set Dashboard for Sincronia",
+  "description": "Update Set Dashboard for Dovetail",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

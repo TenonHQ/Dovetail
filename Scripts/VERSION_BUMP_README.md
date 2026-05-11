@@ -48,7 +48,7 @@ npm run version:bump:release
 ## Features
 
 ### Automatic Scope Detection
-The script can detect Sincronia scope-based directory structures. If a `sinc.config.js` file exists with scope configurations, the script will look for package.json in the appropriate scope/sourceDirectory path.
+The script can detect Dovetail scope-based directory structures. If a `dove.config.js` file exists with scope configurations, the script will look for package.json in the appropriate scope/sourceDirectory path.
 
 ### Version Format
 The script only increments the patch version (last number):
@@ -65,9 +65,9 @@ When using `--commit` flag:
 
 ## Examples
 
-### For Sincronia Core Package
+### For Dovetail Core Package
 ```bash
-cd /Users/dman89/Documents/Tenon/Development/Craftsman/Sincronia/packages/core
+cd /Users/dman89/Documents/Tenon/Development/Craftsman/Dovetail/packages/core
 
 # Quick version bump for testing
 npm run version:bump
@@ -77,9 +77,9 @@ npm run version:bump:release
 ```
 
 ### For Scope-Based Projects
-If your project uses `sinc.config.js` with scopes:
+If your project uses `dove.config.js` with scopes:
 ```javascript
-// sinc.config.js
+// dove.config.js
 module.exports = {
   scopes: {
     myScope: {

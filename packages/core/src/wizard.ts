@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import inquirer from "inquirer";
 import { writeEnvVars } from "./FileUtils";
 

@@ -376,12 +376,12 @@ describe("addComment", function () {
     var result = await addComment({
       client: mockAxiosInstance as any,
       taskId: "t1",
-      commentText: "Hello from Sincronia",
+      commentText: "Hello from Dovetail",
     });
 
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/t1/comment",
-      { comment_text: "Hello from Sincronia" }
+      { comment_text: "Hello from Dovetail" }
     );
   });
 });

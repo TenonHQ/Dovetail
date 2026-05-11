@@ -1,5 +1,5 @@
 /**
- * ClickUp API v2 type definitions for Sincronia integration.
+ * ClickUp API v2 type definitions for Dovetail integration.
  */
 
 // --- Client Configuration ---

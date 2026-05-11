@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import memoryFS from "memory-fs";
 import webpack from "webpack";
 import path from "path";

@@ -1,0 +1,50 @@
+{
+  "rules": {
+    "no-restricted-imports": ["error", {
+      "paths": [
+        {
+          "name": "@tenonhq/dovetail-gmail",
+          "importNames": [
+            "archiveEmail",
+            "labelEmail",
+            "markAsRead",
+            "markAsUnread",
+            "moveToTrash",
+            "starEmail",
+            "unstarEmail"
+          ],
+          "message": "dovetail-mcp is read-only; write operations on Gmail are forbidden."
+        },
+        {
+          "name": "@tenonhq/dovetail-google-calendar",
+          "importNames": ["createEvent", "updateEvent", "deleteEvent"],
+          "message": "dovetail-mcp is read-only; write operations on Calendar are forbidden."
+        },
+        {
+          "name": "@tenonhq/dovetail-clickup",
+          "importNames": [
+            "createTask",
+            "updateTask",
+            "updateTaskStatus",
+            "deleteTask",
+            "addComment"
+          ],
+          "message": "dovetail-mcp is read-only; ClickUp write operations are forbidden."
+        },
+        {
+          "name": "@tenonhq/dovetail-servicenow",
+          "importNames": ["addChoicesToField"],
+          "message": "dovetail-mcp is read-only; addChoicesToField performs writes."
+        }
+      ]
+    }]
+  },
+  "overrides": [
+    {
+      "files": ["src/tests/**/*"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

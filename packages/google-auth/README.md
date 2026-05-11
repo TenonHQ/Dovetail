@@ -1,6 +1,6 @@
-# @tenonhq/sincronia-google-auth
+# @tenonhq/dovetail-google-auth
 
-Google OAuth2 authentication for Sincronia Google integrations. Shared auth layer used by `@tenonhq/sincronia-gmail` and `@tenonhq/sincronia-google-calendar`.
+Google OAuth2 authentication for Dovetail Google integrations. Shared auth layer used by `@tenonhq/dovetail-gmail` and `@tenonhq/dovetail-google-calendar`.
 
 ## Setup
 
@@ -54,7 +54,7 @@ GOOGLE_REFRESH_TOKEN=your-refresh-token
 ## Usage
 
 ```typescript
-import { createGoogleAuth, configFromEnv } from "@tenonhq/sincronia-google-auth";
+import { createGoogleAuth, configFromEnv } from "@tenonhq/dovetail-google-auth";
 
 // Load config from environment variables
 var config = configFromEnv();

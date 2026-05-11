@@ -1,4 +1,4 @@
-import { Sinc, TSFIXME } from "@tenonhq/sincronia-types";
+import { Sinc, TSFIXME } from "@tenonhq/dovetail-types";
 import {
   refreshCommand,
   pushCommand,
@@ -24,6 +24,7 @@ import { schemaPullCommand } from "./schemaCommand";
 import { initClaudeCommand } from "./claudeCommand";
 import { createRecordCommand } from "./createRecordCommand";
 import { deleteRecordCommand } from "./deleteRecordCommand";
+import { migrateCommand } from "./migrateCommand";
 import {
   clickupTasksCommand,
   clickupTaskCommand,
@@ -159,7 +160,7 @@ export async function initCommands() {
     )
     .command(
       "init",
-      "Set up Sincronia — discovers installed packages, authenticates, and configures your project",
+      "Set up Dovetail — discovers installed packages, authenticates, and configures your project",
       sharedOptions,
       initCommand,
     )
@@ -478,7 +479,7 @@ export async function initCommands() {
             alias: "s",
             type: "string",
             describe:
-              "Pull schema for a single scope (default: all scopes from sinc.config.js)",
+              "Pull schema for a single scope (default: all scopes from dove.config.js)",
           },
         });
         return cmdArgs;
@@ -491,7 +492,7 @@ export async function initCommands() {
     )
     .command(
       "init-claude",
-      "Install Sincronia Claude Code skills to .claude/commands/",
+      "Install Dovetail Claude Code skills to .claude/commands/",
       (cmdArgs) => {
         cmdArgs.options({
           ...sharedOptions,
@@ -635,13 +636,28 @@ export async function initCommands() {
       },
     )
     .command(
+      "migrate",
+      "Migrate a project from Sincronia to Dovetail (renames sinc.* artifacts, updates package.json deps and scripts)",
+      function (cmdArgs: TSFIXME) {
+        cmdArgs.options({
+          ...sharedOptions,
+          apply: {
+            type: "boolean",
+            default: false,
+            describe: "Actually perform the migration. Without this flag, only the plan is printed.",
+          },
+        });
+      },
+      migrateCommand,
+    )
+    .command(
       "task",
       "Manage the active ClickUp task for update set routing",
       function (cmdArgs: TSFIXME) {
         return cmdArgs
           .command(
             "clear",
-            "Clear the active task (removes .sinc-active-task.json)",
+            "Clear the active task (removes .dove-active-task.json)",
             sharedOptions,
             taskClearCommand,
           )

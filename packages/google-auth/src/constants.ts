@@ -1,5 +1,5 @@
 /**
- * Shared constants for Sincronia Google OAuth2 flow.
+ * Shared constants for Dovetail Google OAuth2 flow.
  */
 
 export var DEFAULT_REDIRECT_PORT = 3000;

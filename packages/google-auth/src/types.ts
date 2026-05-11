@@ -1,5 +1,5 @@
 /**
- * Google OAuth2 type definitions for Sincronia Google integrations.
+ * Google OAuth2 type definitions for Dovetail Google integrations.
  */
 
 import { OAuth2Client } from "google-auth-library";

@@ -5,7 +5,7 @@
  * - JSON parse errors in getUpdateSetConfig() log at warn level with file path and error message
  * - API failures in processScopeQueue() log at error level
  * - Expected missing data (file not in manifest) logs at info level
- * - sinc status shows the current update set for each configured scope
+ * - dove status shows the current update set for each configured scope
  * - No errors affecting push correctness are logged at debug-only level
  */
 
@@ -69,8 +69,8 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/sinc.manifest.${scope}.json`),
-  getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
 // Filesystem mock store
@@ -155,7 +155,7 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
 
   test("JSON parse error in getUpdateSetConfig logs at warn level with file path", () => {
     // Put invalid JSON in the update set config
-    var configPath = require("path").resolve(process.cwd(), ".sinc-update-sets.json");
+    var configPath = require("path").resolve(process.cwd(), ".dove-update-sets.json");
     mockFsStore[configPath] = "{invalid json!!!";
 
     var result = (multiScopeWatcher as any).getUpdateSetConfig();
@@ -221,7 +221,7 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
     };
 
     // Manifest load should succeed
-    var manifestPath = "/project/sinc.manifest.x_cadso_core.json";
+    var manifestPath = "/project/dove.manifest.x_cadso_core.json";
     mockFsStore[manifestPath] = JSON.stringify({ tables: {}, scope: "x_cadso_core" });
 
     await (multiScopeWatcher as any).processScopeQueue(scopeWatcher);
@@ -235,7 +235,7 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
     );
   });
 
-  test("sinc status shows update set for each configured scope", async () => {
+  test("dove status shows update set for each configured scope", async () => {
     // Set up config with scopes
     (ConfigManager.getConfig as jest.Mock).mockReturnValue({
       scopes: {
@@ -245,7 +245,7 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
     });
 
     // Set up update set config
-    var updateSetConfigPath = require("path").resolve(process.cwd(), ".sinc-update-sets.json");
+    var updateSetConfigPath = require("path").resolve(process.cwd(), ".dove-update-sets.json");
     mockFsStore[updateSetConfigPath] = JSON.stringify({
       x_cadso_core: { sys_id: "us1", name: "CU-1234 Feature Work" },
     });
@@ -290,7 +290,7 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
 
   test("readActiveTask parse error logs at warn level", () => {
     // Put invalid JSON in active task file
-    var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
     mockFsStore[taskPath] = "not valid json{{{";
 
     var result = (multiScopeWatcher as any).readActiveTask();

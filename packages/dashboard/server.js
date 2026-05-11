@@ -6,7 +6,7 @@ const { CookieJar } = require("tough-cookie");
 const fs = require("fs");
 const RateLimit = require("express-rate-limit");
 
-// Everything resolves from CWD — run this from your Sincronia project directory
+// Everything resolves from CWD — run this from your Dovetail project directory
 const PROJECT_ROOT = process.cwd();
 const envPath = path.resolve(PROJECT_ROOT, ".env");
 require("dotenv").config({ path: envPath });
@@ -26,9 +26,19 @@ const recentEditsLimiter = RateLimit({
 const SN_PASSWORD = process.env.SN_PASSWORD || "";
 const BASE_URL = `https://${SN_INSTANCE}`;
 
-const UPDATE_SET_CONFIG = path.join(PROJECT_ROOT, ".sinc-update-sets.json");
-const SINC_CONFIG_PATH = path.join(PROJECT_ROOT, "sinc.config.js");
-const ACTIVE_TASK_FILE = path.join(PROJECT_ROOT, ".sinc-active-task.json");
+// Resolve an artifact path, preferring the dove.* name and falling back to the
+// legacy sinc.* name when only the legacy file exists.
+function resolveDovePath(doveName, sincName) {
+  var dovePath = path.join(PROJECT_ROOT, doveName);
+  var sincPath = path.join(PROJECT_ROOT, sincName);
+  if (fs.existsSync(dovePath)) return dovePath;
+  if (fs.existsSync(sincPath)) return sincPath;
+  return dovePath;
+}
+
+const UPDATE_SET_CONFIG = resolveDovePath(".dove-update-sets.json", ".sinc-update-sets.json");
+const DOVE_CONFIG_PATH = resolveDovePath("dove.config.js", "sinc.config.js");
+const ACTIVE_TASK_FILE = resolveDovePath(".dove-active-task.json", ".sinc-active-task.json");
 
 const CLICKUP_TOKEN = process.env.CLICKUP_API_TOKEN || "";
 const CLICKUP_TEAM_ID = process.env.CLICKUP_TEAM_ID || "";
@@ -83,14 +93,42 @@ var snClient = wrapper(axios.create({
   withCredentials: true,
 }));
 
-// ServiceNow API helper — waits for rate limit clearance before firing
+// Dovetail Scripted REST API rebrand: the API path moved from /api/cadso/claude/*
+// to /api/cadso/dovetail/*. snApi rewrites legacy /api/cadso/claude/* URLs to the
+// new path on first call; if that 404s (instance hasn't been re-imported yet) we
+// latch back to the legacy path for the rest of the session and warn once.
+var _dovetailApiUseLegacyClaudePath = false;
+
 async function snApi(method, endpoint, data) {
   await waitForRateLimit();
-  return snClient({
-    method: method,
-    url: endpoint,
-    data: data,
-  });
+  // Rewrite legacy /api/cadso/claude/* call sites to the new dovetail path,
+  // unless we've already discovered this instance only speaks the legacy path.
+  var rewritten = endpoint;
+  var isDovetailScopedApi = endpoint.indexOf("api/cadso/claude/") === 0
+    || endpoint.indexOf("/api/cadso/claude/") === 0
+    || endpoint.indexOf("api/cadso/dovetail/") === 0
+    || endpoint.indexOf("/api/cadso/dovetail/") === 0;
+  if (isDovetailScopedApi) {
+    rewritten = _dovetailApiUseLegacyClaudePath
+      ? endpoint.replace("api/cadso/dovetail/", "api/cadso/claude/")
+      : endpoint.replace("api/cadso/claude/", "api/cadso/dovetail/");
+  }
+  try {
+    return await snClient({ method: method, url: rewritten, data: data });
+  } catch (e) {
+    var status = e && e.response && e.response.status;
+    if (isDovetailScopedApi && !_dovetailApiUseLegacyClaudePath && status === 404) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[deprecation] " + rewritten +
+          " returned 404. Falling back to legacy /api/cadso/claude/* path. Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+      );
+      _dovetailApiUseLegacyClaudePath = true;
+      var legacyUrl = rewritten.replace("api/cadso/dovetail/", "api/cadso/claude/");
+      return await snClient({ method: method, url: legacyUrl, data: data });
+    }
+    throw e;
+  }
 }
 
 // ClickUp API helper
@@ -167,11 +205,11 @@ function findBestMatch(updateSets, baseName) {
   return best;
 }
 
-// GET /api/scopes — read from sinc.config.js + resolve display names
+// GET /api/scopes — read from dove.config.js (or legacy sinc.config.js) + resolve display names
 app.get("/api/scopes", async (req, res) => {
   try {
-    delete require.cache[require.resolve(SINC_CONFIG_PATH)];
-    const config = require(SINC_CONFIG_PATH);
+    delete require.cache[require.resolve(DOVE_CONFIG_PATH)];
+    const config = require(DOVE_CONFIG_PATH);
     const scopeKeys = Object.keys(config.scopes || {});
 
     // Batch query for all scope records
@@ -207,7 +245,7 @@ app.get("/api/scopes", async (req, res) => {
 });
 
 // GET /api/recent-edits — read local recent edits file, enrich with live SN data
-var RECENT_EDITS_FILE = path.join(PROJECT_ROOT, ".sinc-recent-edits.json");
+var RECENT_EDITS_FILE = resolveDovePath(".dove-recent-edits.json", ".sinc-recent-edits.json");
 
 app.get("/api/recent-edits", recentEditsLimiter, async function (req, res) {
   try {
@@ -672,9 +710,9 @@ app.post("/api/clickup/activate-all-scopes", async function (req, res) {
       return res.status(400).json({ error: "No active task selected" });
     }
 
-    // Read scopes from sinc.config.js
-    delete require.cache[require.resolve(SINC_CONFIG_PATH)];
-    var config = require(SINC_CONFIG_PATH);
+    // Read scopes from dove.config.js
+    delete require.cache[require.resolve(DOVE_CONFIG_PATH)];
+    var config = require(DOVE_CONFIG_PATH);
     var scopeKeys = Object.keys(config.scopes || {});
 
     // Resolve scope sys_ids
@@ -739,7 +777,7 @@ app.post("/api/clickup/deselect-task", function (req, res) {
 // spawn("node", [serverPath]) which sets require.main === module.
 if (require.main === module) {
   app.listen(PORT, "127.0.0.1", function () {
-    console.log("\n  Sincronia Update Set Dashboard");
+    console.log("\n  Dovetail Update Set Dashboard");
     console.log("  Instance:  " + SN_INSTANCE);
     console.log("  Project:   " + PROJECT_ROOT);
     console.log("  Dashboard: http://localhost:" + PORT + "\n");

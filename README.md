@@ -1,10 +1,10 @@
-[![Build Status](https://dev.azure.com/nuvoengineering/sincronia/_apis/build/status/tenon.sincronia?branchName=dev)](https://dev.azure.com/nuvoengineering/sincronia/_build/latest?definitionId=15&branchName=dev)
+# Dovetail
 
-# Sincronia
+> Formerly **Sincronia** — see [Migrating from Sincronia](docs/migrate-from-sincronia.md) if you're upgrading an existing project.
 
 ## Overview
 
-Sincronia is a tool for managing ServiceNow code in a more modern way. It allows you to:
+Dovetail is a tool for managing ServiceNow code in a more modern way. It allows you to:
 
 1. Store scoped app code in GitHub in an editable way.🐙 (Looking at you studio source control👀)
 2. Run your code through build pipelines that enable you to write modern JavaScript and use modern development tools such as [TypeScript](https://www.typescriptlang.org/), [Babel](https://babeljs.io/), and [Webpack](https://webpack.js.org/). 🎉
@@ -14,7 +14,7 @@ Check out the [tutorial videos](https://www.youtube.com/watch?v=CqdppnM-FvM&list
 
 **Table of Contents**
 
-- [Sincronia](#sincronia)
+- [Dovetail](#dovetail)
   - [Overview](#overview)
   - [Installation](#installation)
     - [Requirements](#requirements)
@@ -24,9 +24,9 @@ Check out the [tutorial videos](https://www.youtube.com/watch?v=CqdppnM-FvM&list
       - [Using the diff option](#using-the-diff-option)
     - [Workflow](#workflow)
     - [File Structure](#file-structure)
-      - [sinc.config.js](#sincconfigjs)
-      - [sinc.manifest.json](#sincmanifestjson)
-      - [sinc.diff.manifest.json](#sincdiffmanifestjson)
+      - [dove.config.js](#sincconfigjs)
+      - [dove.manifest.json](#sincmanifestjson)
+      - [dove.diff.manifest.json](#sincdiffmanifestjson)
       - [.env](#env)
     - [Asymmetric Source Code](#asymmetric-source-code)
     - [Power of Extensions](#power-of-extensions)
@@ -45,7 +45,7 @@ Check out the [tutorial videos](https://www.youtube.com/watch?v=CqdppnM-FvM&list
 
 ### Requirements
 
-In order to use Sincronia, you will need:
+In order to use Dovetail, you will need:
 
 - [Node.js](https://nodejs.org/en/) version 20 LTS or later
 - **If you are on Windows** you will also need :
@@ -57,22 +57,22 @@ In order to use Sincronia, you will need:
 
 1. Create a folder to store the scoped app code.
 2. In a terminal, run `npm init` inside the newly created folder and follow the instructions to set up your node module.
-3. Import [the scoped app](https://github.com/tenon/sincronia-server-scoped-app) from source control into your instance.
-4. Install `@tenonhq/sincronia-core`
+3. Import [the scoped app](https://github.com/tenon/dovetail-server-scoped-app) from source control into your instance.
+4. Install `@tenonhq/dovetail-core`
 
 ```bash
-npm i -D @tenonhq/sincronia-core
+npm i -D @tenonhq/dovetail-core
 ```
 
-4. Initialize your Sincronia project
+4. Initialize your Dovetail project
 
 ```bash
-npx sinc init
+npx dove init
 ```
 
 5. [Configure your project!](#configuration)
 6. **OPTIONAL BUT HIGHLY RECOMMENDED** Once your project is configured the way you like, you can commit and push it to a git repository for superior tracking and version control! Make sure to create a `.gitignore` file and ignore `node_modules` and `.env` because you **really** don't want those files in your repository.
-7. Start dev mode and start working! Every time you save a file that is tracked by Sincronia, it will be built with your ruleset and the result will be placed in ServiceNow!
+7. Start dev mode and start working! Every time you save a file that is tracked by Dovetail, it will be built with your ruleset and the result will be placed in ServiceNow!
 
 ```bash
 npx sinc dev
@@ -80,40 +80,40 @@ npx sinc dev
 
 ## How does it work?
 
-Sincronia takes a two-pronged approach to managing your ServiceNow scoped app. Architecture, creation of records, deletion of records, metadata and other ServiceNow objects besides your actual source code will be managed normally. Your _source code itself_ will be managed inside of your Sincronia project.
+Dovetail takes a two-pronged approach to managing your ServiceNow scoped app. Architecture, creation of records, deletion of records, metadata and other ServiceNow objects besides your actual source code will be managed normally. Your _source code itself_ will be managed inside of your Dovetail project.
 
 ### Commands
 
-Sincronia has a few basic commands to help you get the job done
+Dovetail has a few basic commands to help you get the job done
 
 | Command            | Aliases  | Description                                                                                                                                                 | Usage                           |
 | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `refresh`          | `r`      | Refreshes the `sinc.manifest.json` file and downloads all new files created in ServiceNow since the last refresh. Does not override existing file contents. | `npx sinc refresh`              |
+| `refresh`          | `r`      | Refreshes the `dove.manifest.json` file and downloads all new files created in ServiceNow since the last refresh. Does not override existing file contents. | `npx dove refresh`              |
 | `dev`              | `d`      | Starts development mode. Watches files for changes, then builds and pushes them to the corresponding record. Only works on files in the manifest file.      | `npx sinc dev`                  |
-| `init`             | **none** | Walks you through creating a basic Sincronia project. This is the recommended way to create a Sincronia project from scratch.                               | `npx sinc init`                 |
-| `push`             | **none** | Builds and pushes all files in your local Sincronia project to the ServiceNow instance in your `.env` file                                                  | `npx sinc push`                 |
-| `download <scope>` | **none** | Downloads the specified scoped app, overwriting all local files in the way. **Only use this if you know what you are doing!**                               | `npx sinc download my_test_app` |
-| `build`            | **none** | Builds the local Sincronia project and stores the files locally                                                                                             | `npx sinc build`                |
-| `deploy`           | **none** | Deploys the files in the build folder to the ServiceNow instance.                                                                                           | `npx sinc deploy`               |
-| `status`           | **none** | Lists the connected ServiceNow instance, scope, and user                                                                                                    | `npx sinc status`               |
+| `init`             | **none** | Walks you through creating a basic Dovetail project. This is the recommended way to create a Dovetail project from scratch.                               | `npx dove init`                 |
+| `push`             | **none** | Builds and pushes all files in your local Dovetail project to the ServiceNow instance in your `.env` file                                                  | `npx dove push`                 |
+| `download <scope>` | **none** | Downloads the specified scoped app, overwriting all local files in the way. **Only use this if you know what you are doing!**                               | `npx dove download my_test_app` |
+| `build`            | **none** | Builds the local Dovetail project and stores the files locally                                                                                             | `npx dove build`                |
+| `deploy`           | **none** | Deploys the files in the build folder to the ServiceNow instance.                                                                                           | `npx dove deploy`               |
+| `status`           | **none** | Lists the connected ServiceNow instance, scope, and user                                                                                                    | `npx dove status`               |
 
 #### Using the diff option
 
-When using the `push` and `build` commands you can specify a branch to compare changes against using the `--diff` option. When using diff with build, Sincronia will build all files from the source folder but will create a `sinc.diff.manifest.json` file that tracks changes for deploy.
+When using the `push` and `build` commands you can specify a branch to compare changes against using the `--diff` option. When using diff with build, Dovetail will build all files from the source folder but will create a `dove.diff.manifest.json` file that tracks changes for deploy.
 
 ```bash
-npx sinc build --diff master
+npx dove build --diff master
 ```
 
 ### Workflow
 
-![Development Workflow](https://github.com/tenon/sincronia/raw/master/docs/images/sincronia-development.png)
+![Development Workflow](https://github.com/tenon/dovetail/raw/master/docs/images/dovetail-development.png)
 
-![Deployment Workflow](https://github.com/tenon/sincronia/raw/master/docs/images/sincronia-deployment.png)
+![Deployment Workflow](https://github.com/tenon/dovetail/raw/master/docs/images/dovetail-deployment.png)
 
 ### File Structure
 
-When you download your source code using Sincronia, it creates a folder structure that goes as follows:
+When you download your source code using Dovetail, it creates a folder structure that goes as follows:
 
 ```text
 project_folder/
@@ -125,15 +125,15 @@ project_folder/
 
 Records are shown as folders because there are times where there are multiple code files per record. This makes it very important that you **never have records with the exact same display value in the same table!** If you do, then you will notice issues building your files to the right record in ServiceNow.
 
-#### sinc.config.js
+#### dove.config.js
 
-This is the configuration file for Sincronia. [Learn More](#configuration)
+This is the configuration file for Dovetail. [Learn More](#configuration)
 
-#### sinc.manifest.json
+#### dove.manifest.json
 
-Keeps track of all ServiceNow files that are watched by Sincronia. **Do not manually modify it**
+Keeps track of all ServiceNow files that are watched by Dovetail. **Do not manually modify it**
 
-#### sinc.diff.manifest.json
+#### dove.diff.manifest.json
 
 Tracks changed files for build and deploy commands when using diff option.
 
@@ -143,11 +143,11 @@ Stores login credentials and and the instance URL. **Do not commit this to git**
 
 ### Asymmetric Source Code
 
-When you download your source code using Sincronia, you are effectively 'taking control' of that code. **Once the code is in your project, you no longer want to edit it directly in ServiceNow!** This is why putting your code into source control is highly recommended. **Anything else besides code, such as tables, configuration of script records, metadata, etc. must still be tracked in ServiceNow and passed along with your preferred method of moving ServiceNow architecture**
+When you download your source code using Dovetail, you are effectively 'taking control' of that code. **Once the code is in your project, you no longer want to edit it directly in ServiceNow!** This is why putting your code into source control is highly recommended. **Anything else besides code, such as tables, configuration of script records, metadata, etc. must still be tracked in ServiceNow and passed along with your preferred method of moving ServiceNow architecture**
 
 Modern javascript development workflows are **asymmetric**, meaning that the source code you write is usually not the code that gets executed. It is built using various tools and compiled/transpiled into some more compatible or smaller javascript code that is run by browsers or node environments.
 
-Sincronia takes advantage of this same principle by allowing you to leverage some of those same tools. This means that you will no longer be able to store your source code directly in ServiceNow, instead you will have a local version of your source code that gets built and the result of that build will be put into ServiceNow.
+Dovetail takes advantage of this same principle by allowing you to leverage some of those same tools. This means that you will no longer be able to store your source code directly in ServiceNow, instead you will have a local version of your source code that gets built and the result of that build will be put into ServiceNow.
 
 **EXAMPLE**
 
@@ -160,7 +160,7 @@ class Example {
     gs.info(message);
   }
   sayHello() {
-    gs.info("Hello, Sincronia!");
+    gs.info("Hello, Dovetail!");
   }
 }
 ```
@@ -206,7 +206,7 @@ var Example =
       {
         key: "sayHello",
         value: function sayHello() {
-          gs.info("Hello, Sincronia!");
+          gs.info("Hello, Dovetail!");
         },
       },
     ]);
@@ -217,7 +217,7 @@ var Example =
 
 ### Power of Extensions
 
-File extensions are typically only one short blurb (e.g. `.js`, `.css`, etc.). When you use Sincronia, you may find that you want to treat one `.js` file differently than another. That's where extensions can become more powerful! You could create an extension in your project such as `.server.js` and `.client.js` which you could combine with the [rules](#plugin-configuration) configuration of Sincronia to have _two different build pipelines_. You could use Webpack for client scripts and Babel for server scripts! Pretty cool huh?
+File extensions are typically only one short blurb (e.g. `.js`, `.css`, etc.). When you use Dovetail, you may find that you want to treat one `.js` file differently than another. That's where extensions can become more powerful! You could create an extension in your project such as `.server.js` and `.client.js` which you could combine with the [rules](#plugin-configuration) configuration of Dovetail to have _two different build pipelines_. You could use Webpack for client scripts and Babel for server scripts! Pretty cool huh?
 
 As long as the main filename stays the same, you can add as many extensions as you want.
 
@@ -227,11 +227,11 @@ As long as the main filename stays the same, you can add as many extensions as y
 
 ## Configuration
 
-Sincronia aims to be as configurable as possible. To do that, it creates a special javascript file in your project directory called `sinc.config.js`. It's contents will look something like this:
+Dovetail aims to be as configurable as possible. To do that, it creates a special javascript file in your project directory called `dove.config.js`. It's contents will look something like this:
 
 ```javascript
 module.exports = {
-  // Directory where your source files will be kept and will be watched by Sincronia
+  // Directory where your source files will be kept and will be watched by Dovetail
   // during development.
   sourceDirectory: "src",
   //Directory where local builds will be stored
@@ -241,17 +241,17 @@ module.exports = {
   // only one that gets executed.
   rules: [],
   // === INCLUDES/EXCLUDES apply on top of the default config! See more below ===
-  // Tables/fields to exclude (AKA not download or track) from Sincronia
+  // Tables/fields to exclude (AKA not download or track) from Dovetail
   excludes: {},
-  // Tables/fields to explicitly include in your Sincronia project.
+  // Tables/fields to explicitly include in your Dovetail project.
   // Can override excludes if necessary.
   includes: {},
-  //How often sincronia will refresh the manifest in development mode
+  //How often dovetail will refresh the manifest in development mode
   refreshInterval: 30,
 };
 ```
 
-If you find that your config is getting too large, you can use typical nodejs techniques for splitting it into smaller modules and loading them into the `sinc.config.js`.
+If you find that your config is getting too large, you can use typical nodejs techniques for splitting it into smaller modules and loading them into the `dove.config.js`.
 
 ### There are WAY too many files in here!
 
@@ -259,16 +259,16 @@ If you find that your config is getting too large, you can use typical nodejs te
 
 ### I'm not seeing all my code files!
 
-When you first set up your project, you may notice you may have more files than you want to manage or some files are missing. This can be easily resolved by tweaking your `includes` and `excludes` section of your `sinc.config.js`. Sincronia attempts to establish sane defaults for these values [here](https://github.com/tenon/sincronia/blob/master/packages/core/src/defaultManifestConfig.ts).
+When you first set up your project, you may notice you may have more files than you want to manage or some files are missing. This can be easily resolved by tweaking your `includes` and `excludes` section of your `dove.config.js`. Dovetail attempts to establish sane defaults for these values [here](https://github.com/tenon/dovetail/blob/master/packages/core/src/defaultManifestConfig.ts).
 
 If you think there is something wrong with the default setup, feel free to submit a pull request! 🐙👍
 
-The `excludes` and `includes` sections in your `sinc.config.js` act as additions to that default setting. You can override parts of it or turn parts of it off.
+The `excludes` and `includes` sections in your `dove.config.js` act as additions to that default setting. You can override parts of it or turn parts of it off.
 
-Once you have updated your includes and excludes, run `npx sinc refresh` to load the new files and update the manifest. You will have to manually delete any newly excluded tables/fields.
+Once you have updated your includes and excludes, run `npx dove refresh` to load the new files and update the manifest. You will have to manually delete any newly excluded tables/fields.
 
 ```javascript
-// sinc.config.js
+// dove.config.js
 module.exports = {
   excludes: {
     // Turns off the default exclusion of the `sys_scope_privilege` table
@@ -301,10 +301,10 @@ module.exports = {
 
 ### Plugin Configuration
 
-Plugins are where the true 💪 **POWER** 💪 of Sincronia comes from! The `rules` section is used to configure plugins. When configuring plugins, **Make sure to always put your rules in the order you want them matched! The first rule that gets matched will be the only one that runs!**
+Plugins are where the true 💪 **POWER** 💪 of Dovetail comes from! The `rules` section is used to configure plugins. When configuring plugins, **Make sure to always put your rules in the order you want them matched! The first rule that gets matched will be the only one that runs!**
 
 ```javascript
-// sinc.config.js
+// dove.config.js
 module.exports = {
   rules: [
     {
@@ -326,7 +326,7 @@ module.exports = {
         {
           // The name of the plugin, it is the same as the name of the NPM package of
           // the plugin.
-          name: "@tenonhq/sincronia-typescript-plugin",
+          name: "@tenonhq/dovetail-typescript-plugin",
           // Options to pass to the plugin. This will be defined by the plugin itself.
           // In this case, we are telling the typescript plugin to only type check and
           // not transpile.
@@ -347,7 +347,7 @@ module.exports = {
 The `tableOptions` section allows for special setups on any table. Example:
 
 ```javascript
-// sinc.config.js
+// dove.config.js
 module.exports = {
   // ...
   tableOptions: {
@@ -373,32 +373,38 @@ This feature will currently put a colon in the filename. This will break the Win
 
 ### How do I Delete Something?
 
-Deleting something in Sincronia is relatively simple. Just follow these steps:
+Deleting something in Dovetail is relatively simple. Just follow these steps:
 
-1. Turn off dev mode if you are currently running Sincronia
+1. Turn off dev mode if you are currently running Dovetail
 2. Delete the record in ServiceNow
-3. Run `npx sinc refresh`
+3. Run `npx dove refresh`
 4. Remove the files from your project
 
 Why is this not automatic? Deleting files can be a dangerous game and it should be a deliberate action!
 
 ### How do I Add New Scripts?
 
-1. Turn off dev mode if you are currently running Sincronia
+1. Turn off dev mode if you are currently running Dovetail
 2. Create the record in ServiceNow
-3. Run `npx sinc refresh` and the files will get created automatically 👍
+3. Run `npx dove refresh` and the files will get created automatically 👍
 
 ## Examples
 
-For an example project, we uploaded the [server side code for Sincronia](https://github.com/tenon/sincronia-server)! Feel free to contribute to that code if you'd like 🐙
+For an example project, we uploaded the [server side code for Dovetail](https://github.com/tenon/dovetail-server)! Feel free to contribute to that code if you'd like 🐙
 
 ## Plugin List
 
 | Name                                                                                                                | Description                                 |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| [@tenonhq/sincronia-babel-plugin](https://github.com/tenon/sincronia/blob/master/packages/babel-plugin/README.md)           | Runs Babel on .js/.ts files                 |
-| [@tenonhq/sincronia-prettier-plugin](https://github.com/tenon/sincronia/blob/master/packages/prettier-plugin/README.md)     | Prettifies your output files using Prettier |
-| [@tenonhq/sincronia-sass-plugin](https://github.com/tenon/sincronia/blob/master/packages/sass-plugin/README.md)             | Runs the Sass compiler on your files        |
-| [@tenonhq/sincronia-typescript-plugin](https://github.com/tenon/sincronia/blob/master/packages/typescript-plugin/README.md) | Type checks and compiles TypeScript files   |
-| [@tenonhq/sincronia-webpack-plugin](https://github.com/tenon/sincronia/blob/master/packages/webpack-plugin/README.md)       | Creates Webpack bundles with your files     |
-| [@tenonhq/sincronia-eslint-plugin](https://github.com/tenon/sincronia/blob/master/packages/eslint-plugin/README.md)         | Runs ESLint on your files on build          |
+| [@tenonhq/dovetail-babel-plugin](https://github.com/tenon/dovetail/blob/master/packages/babel-plugin/README.md)           | Runs Babel on .js/.ts files                 |
+| [@tenonhq/dovetail-prettier-plugin](https://github.com/tenon/dovetail/blob/master/packages/prettier-plugin/README.md)     | Prettifies your output files using Prettier |
+| [@tenonhq/dovetail-sass-plugin](https://github.com/tenon/dovetail/blob/master/packages/sass-plugin/README.md)             | Runs the Sass compiler on your files        |
+| [@tenonhq/dovetail-typescript-plugin](https://github.com/tenon/dovetail/blob/master/packages/typescript-plugin/README.md) | Type checks and compiles TypeScript files   |
+| [@tenonhq/dovetail-webpack-plugin](https://github.com/tenon/dovetail/blob/master/packages/webpack-plugin/README.md)       | Creates Webpack bundles with your files     |
+| [@tenonhq/dovetail-eslint-plugin](https://github.com/tenon/dovetail/blob/master/packages/eslint-plugin/README.md)         | Runs ESLint on your files on build          |
+
+## History and License
+
+Dovetail is a fork of [Sincronia](https://github.com/Nuvolo/sincronia), originally authored by Nuvolo and the Sincronia contributors. TenonHQ has maintained and extended the project since 2024 — modifications are recorded in this repository's Git history and in [CHANGELOG.md](CHANGELOG.md). The project remains licensed under the GNU General Public License v3 (see [LICENSE](LICENSE)).
+
+If you're upgrading an existing Sincronia project, see [docs/migrate-from-sincronia.md](docs/migrate-from-sincronia.md). The npm packages have been republished under the `@tenonhq/dovetail-*` namespace and the CLI binary is now `dove` (`sinc` remains as a deprecated alias for one minor release).

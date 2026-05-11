@@ -1,7 +1,7 @@
 /**
- * @tenonhq/sincronia-google-calendar
+ * @tenonhq/dovetail-google-calendar
  *
- * Google Calendar API client for Sincronia.
+ * Google Calendar API client for Dovetail.
  * Provides event management, agenda queries, and LLM-optimized formatting.
  */
 

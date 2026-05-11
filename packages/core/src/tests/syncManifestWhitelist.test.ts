@@ -3,8 +3,8 @@
  * processTablesInManifest().
  *
  * Regression target: 2026-04-14 sys_alias debris incident.
- *  - `npx sinc refresh` iterated every scope in the persisted multi-scope
- *    manifest, including scopes not declared in sinc.config.js.
+ *  - `npx dove refresh` iterated every scope in the persisted multi-scope
+ *    manifest, including scopes not declared in dove.config.js.
  *  - For each of those scopes, the server-side getManifest response returned
  *    hundreds of tables (up to 129 for x_cadso_work) that the config _tables
  *    whitelist never authorised, and the client wrote all of them to disk —
@@ -64,7 +64,7 @@ var mockConfig: any = {
   getManifest: jest.fn(),
   getSourcePathForScope: jest.fn().mockReturnValue("/tmp/src"),
   getSourcePath: jest.fn().mockReturnValue("/tmp/src"),
-  getManifestPath: jest.fn().mockReturnValue("/tmp/sinc.manifest.json"),
+  getManifestPath: jest.fn().mockReturnValue("/tmp/dove.manifest.json"),
   resolveConfigForScope: jest.fn(),
   isMultiScopeManifest: jest.fn().mockReturnValue(true),
   updateManifest: jest.fn(),

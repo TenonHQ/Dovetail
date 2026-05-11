@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import * as sass from "sass";
 const run: Sinc.PluginFunc = async function(
   context: Sinc.FileContext,

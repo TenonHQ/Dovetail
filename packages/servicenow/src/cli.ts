@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * sinc-sn — thin CLI adapter for @tenonhq/sincronia-servicenow.
+ * sinc-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
  *
  * Usage:
  *   sinc-sn add-choices \

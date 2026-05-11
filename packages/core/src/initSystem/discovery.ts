@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import * as fs from "fs";
 import * as path from "path";
 import { logger } from "../Logger";
@@ -7,16 +7,23 @@ import { logger } from "../Logger";
 // - core/types: the discovery system itself
 // - dashboard: starts Express server on require (side effect)
 // - schema: library imported directly by schemaCommand, not a plugin
+// Both new (dovetail-*) and legacy (sincronia-*) names are listed so the deprecation
+// shim packages on npm are also skipped during the rebrand transition window.
 const SKIP_PACKAGES = new Set([
+  "dovetail-core",
+  "dovetail-types",
+  "dovetail-dashboard",
+  "dovetail-schema",
   "sincronia-core",
   "sincronia-types",
   "sincronia-dashboard",
   "sincronia-schema",
 ]);
+const PLUGIN_PACKAGE_PREFIXES = ["dovetail-", "sincronia-"];
 const MAX_PARENT_DEPTH = 3;
 
 /**
- * @description Scans node_modules for @tenonhq/sincronia-* packages that export a sincPlugin.
+ * @description Scans node_modules for @tenonhq/dovetail-* (and legacy @tenonhq/sincronia-*) packages that export a sincPlugin.
  * @returns {Sinc.InitPlugin[]} Array of discovered init plugins.
  */
 export function discoverPlugins(): Sinc.InitPlugin[] {
@@ -49,7 +56,7 @@ export function discoverPlugins(): Sinc.InitPlugin[] {
     }
 
     dirs
-      .filter(name => name.startsWith("sincronia-") && !SKIP_PACKAGES.has(name) && !seen.has(name))
+      .filter(name => PLUGIN_PACKAGE_PREFIXES.some(p => name.startsWith(p)) && !SKIP_PACKAGES.has(name) && !seen.has(name))
       .forEach(dirName => {
         seen.add(dirName);
 

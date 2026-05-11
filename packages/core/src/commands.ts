@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import * as ConfigManager from "./config";
 import * as AppUtils from "./appUtils";
 import { runInit } from "./initSystem/orchestrator";
@@ -12,6 +12,7 @@ import { defaultClient, unwrapSNResponse } from "./snClient";
 import inquirer from "inquirer";
 import { gitDiffToEncodedPaths } from "./gitUtils";
 import { encodedPathsToFilePaths } from "./FileUtils";
+import { getActiveTaskPath, getUpdateSetsConfigPath } from "./projectFiles";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -283,16 +284,23 @@ export async function deployCommand(args: Sinc.SharedCmdArgs): Promise<void> {
 
 export async function taskClearCommand(args: Sinc.SharedCmdArgs) {
   setLogLevel(args);
-  var taskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+  var taskPath = getActiveTaskPath();
+  // Always sweep both filenames so a clear leaves no stale state behind.
+  var legacyTaskPath = path.resolve(process.cwd(), ".sinc-active-task.json");
+  var newTaskPath = path.resolve(process.cwd(), ".dove-active-task.json");
   if (fs.existsSync(taskPath)) {
     try {
       var parsed = JSON.parse(fs.readFileSync(taskPath, "utf8"));
       var taskName = parsed.taskName || parsed.taskId || "unknown";
-      fs.unlinkSync(taskPath);
+      [newTaskPath, legacyTaskPath].forEach(function (p) {
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      });
       logger.success("Active task '" + taskName + "' cleared.");
     } catch (e) {
       // File exists but can't be parsed — still remove it
-      fs.unlinkSync(taskPath);
+      [newTaskPath, legacyTaskPath].forEach(function (p) {
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      });
       logger.success("Active task file removed.");
     }
   } else {
@@ -311,13 +319,13 @@ export async function statusCommand() {
 
     // Read update set config
     var updateSetConfig: Record<string, { sys_id: string; name: string }> = {};
-    var updateSetConfigPath = path.resolve(process.cwd(), ".sinc-update-sets.json");
+    var updateSetConfigPath = getUpdateSetsConfigPath();
     try {
       if (fs.existsSync(updateSetConfigPath)) {
         updateSetConfig = JSON.parse(fs.readFileSync(updateSetConfigPath, "utf8"));
       }
     } catch (e) {
-      logger.warn("Failed to parse .sinc-update-sets.json: " + (e instanceof Error ? e.message : String(e)));
+      logger.warn("Failed to parse update-sets config at " + updateSetConfigPath + ": " + (e instanceof Error ? e.message : String(e)));
     }
 
     if (config.scopes) {

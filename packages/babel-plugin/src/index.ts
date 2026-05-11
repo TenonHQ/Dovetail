@@ -1,4 +1,4 @@
-import {Sinc} from "@tenonhq/sincronia-types";
+import {Sinc} from "@tenonhq/dovetail-types";
 import * as babel from "@babel/core";
 export async function run(
   context: Sinc.FileContext,

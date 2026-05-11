@@ -141,8 +141,8 @@ jest.mock("../config", function () {
     updateManifest: jest.fn(),
     getManifest: jest.fn(),
     getSourcePath: jest.fn().mockReturnValue("/project/src"),
-    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/sinc.manifest." + scope + ".json"; }),
-    getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/dove.manifest." + scope + ".json"; }),
+    getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
   };
 });
 
@@ -165,16 +165,16 @@ import { multiScopeWatcher, stopMultiScopeWatching } from "../MultiScopeWatcher"
 
 // --- Helpers ---
 
-var CONFIG_PATH = "/fake/.sinc-update-sets.json";
-var TASK_PATH = "/fake/.sinc-active-task.json";
+var CONFIG_PATH = "/fake/.dove-update-sets.json";
+var TASK_PATH = "/fake/.dove-active-task.json";
 
 function setActiveTask(task: any) {
-  var taskPath = require("path").resolve(process.cwd(), ".sinc-active-task.json");
+  var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
   mockFsStore[taskPath] = JSON.stringify(task);
 }
 
 function getConfigPath() {
-  return require("path").resolve(process.cwd(), ".sinc-update-sets.json");
+  return require("path").resolve(process.cwd(), ".dove-update-sets.json");
 }
 
 function readPersistedConfig(): Record<string, any> {

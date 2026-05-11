@@ -1,6 +1,6 @@
 import { calendar as calendarApi } from "@googleapis/calendar";
 import { OAuth2Client } from "google-auth-library";
-import { handleAuthError } from "@tenonhq/sincronia-google-auth";
+import { handleAuthError } from "@tenonhq/dovetail-google-auth";
 import {
   CalendarEvent,
   EventDateTime,

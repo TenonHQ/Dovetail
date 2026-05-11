@@ -1,6 +1,6 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 
-// INTENTIONALLY EMPTY — sinc.config.js is the single source of truth.
+// INTENTIONALLY EMPTY — dove.config.js is the single source of truth.
 // Legacy defaults (26 excluded tables + content_css include) were removed
 // during the config-as-king overhaul. See Claude memory for the preserved list.
 let excludes: Sinc.TablePropMap = {};

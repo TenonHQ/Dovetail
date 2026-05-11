@@ -1,7 +1,7 @@
 /**
- * @tenonhq/sincronia-google-auth
+ * @tenonhq/dovetail-google-auth
  *
- * Google OAuth2 authentication for Sincronia Google integrations.
+ * Google OAuth2 authentication for Dovetail Google integrations.
  * Provides auth client factory, env config helper, and error handling.
  */
 

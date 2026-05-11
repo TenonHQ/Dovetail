@@ -1,11 +1,11 @@
 import * as fs from "fs";
-import * as path from "path";
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
+import { getRecentEditsPath } from "./projectFiles";
 
 const MAX_ENTRIES = 5;
 
 function getFilePath(): string {
-  return path.resolve(process.cwd(), ".sinc-recent-edits.json");
+  return getRecentEditsPath();
 }
 
 export function writeRecentEdit(context: Sinc.FileContext): void {

@@ -1,7 +1,7 @@
 /**
- * @tenonhq/sincronia-gmail
+ * @tenonhq/dovetail-gmail
  *
- * Gmail API client for Sincronia.
+ * Gmail API client for Dovetail.
  * Provides email management, inbox operations, and LLM-optimized formatting.
  */
 

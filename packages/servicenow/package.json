@@ -1,7 +1,7 @@
 {
-  "name": "@tenonhq/sincronia-servicenow",
+  "name": "@tenonhq/dovetail-servicenow",
   "version": "0.0.2",
-  "description": "ServiceNow platform helpers for Sincronia — dictionary, choices, update-set-aware writes via the Claude Scripted REST API",
+  "description": "ServiceNow platform helpers for Dovetail — dictionary, choices, update-set-aware writes via the Dovetail Scripted REST API",
   "main": "./dist/index.js",
   "bin": {
     "sinc-sn": "./dist/cli.js"
@@ -32,9 +32,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenon/sincronia.git"
+    "url": "git+https://github.com/tenonhq/dovetail.git"
   },
   "bugs": {
-    "url": "https://github.com/tenon/sincronia/issues"
+    "url": "https://github.com/tenonhq/dovetail/issues"
   }
 }

@@ -1,4 +1,4 @@
-import { Sinc } from "@tenonhq/sincronia-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 
 // --- Mock setup ---
 
@@ -112,8 +112,8 @@ jest.mock("../config", function () {
     updateManifest: jest.fn(),
     getManifest: jest.fn(),
     getSourcePath: jest.fn().mockReturnValue("/project/src"),
-    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/sinc.manifest." + scope + ".json"; }),
-    getManifestPath: jest.fn().mockReturnValue("/project/sinc.manifest.json"),
+    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/dove.manifest." + scope + ".json"; }),
+    getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
   };
 });
 
