@@ -29,6 +29,30 @@ function encodeQueryValue(v: string): string {
   return v;
 }
 
+/**
+ * Resolve a sys_scope record's namespace name (e.g. "x_cadso_core") from its
+ * sys_id. The Claude REST API's `scope` parameter expects the namespace name,
+ * not the sys_id, so dictionary records (whose sys_scope is a sys_id) need
+ * a translation step before we can pass them through.
+ */
+async function resolveScopeName(
+  client: ServiceNowClient,
+  scopeSysId: string
+): Promise<string> {
+  if (!scopeSysId) return "";
+  var rows = await client.table.query<{ scope: string; name: string }>(
+    "sys_scope",
+    "sys_id=" + encodeQueryValue(scopeSysId),
+    1
+  );
+  if (rows.length === 0) {
+    throw new Error("sys_scope record not found for sys_id " + scopeSysId);
+  }
+  // sys_scope.scope is the namespace (e.g. "x_cadso_core"); fall back to name
+  // if a scope record was created without a populated scope field.
+  return rows[0].scope || rows[0].name || "";
+}
+
 async function fetchDictionary(
   client: ServiceNowClient,
   table: string,
@@ -156,6 +180,7 @@ export async function addChoicesToField(
 
   var dict = await fetchDictionary(client, params.table, params.column);
   var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
+  var scopeName = await resolveScopeName(client, dict.sys_scope);
   var targetChoiceType: ChoiceType = params.choiceType === null
     ? (Number(dict.choice) as ChoiceType)
     : (params.choiceType != null ? params.choiceType : 3);
@@ -209,7 +234,7 @@ export async function addChoicesToField(
     var created = await client.claude.createRecord({
       table: "sys_choice",
       fields: buildChoiceFields(params.table, params.column, choice, dict.sys_scope),
-      scope: dict.sys_scope,
+      scope: scopeName,
       update_set_sys_id: params.updateSetSysId
     });
     results.push({

@@ -69,6 +69,8 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [dictRow];
         if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
         if (table === "sys_choice") return [];
         return [];
       }
@@ -93,6 +95,7 @@ describe("addChoicesToField", function () {
     expect(ctx.calls.createRecord[0].fields.element).toBe("state");
     expect(ctx.calls.createRecord[0].fields.sys_scope).toBe("scope_core");
     expect(ctx.calls.createRecord[0].update_set_sys_id).toBe("us1");
+    expect(ctx.calls.createRecord[0].scope).toBe("x_cadso_core");
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
     expect(ctx.calls.pushWithUpdateSet[0].table).toBe("sys_dictionary");
     expect(ctx.calls.pushWithUpdateSet[0].fields.choice).toBe("3");
@@ -103,6 +106,7 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
         if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
         if (table === "sys_choice") {
           return [
             {
@@ -136,6 +140,7 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
         if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
         if (table === "sys_choice") {
           return [
             {
@@ -169,6 +174,7 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [];
         if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
         return [];
       }
     });
@@ -188,6 +194,7 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [dictRow];
         if (table === "sys_update_set") return [{ ...updateSetRow, state: "complete" }];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
         return [];
       }
     });
