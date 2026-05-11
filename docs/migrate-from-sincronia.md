@@ -44,8 +44,9 @@ Until the next major release of Dovetail:
 
 - The `sinc` bin alias remains alongside `dove` and prints a one-line deprecation warning when invoked.
 - The CLI accepts `sinc.config.js` if `dove.config.js` is not present, and similarly for the other `sinc.*` artifacts. A warning is logged.
-- The `@tenonhq/sincronia-*` packages on npm have been published as deprecation shims that re-export from `@tenonhq/dovetail-*`.
 - The Dovetail CLI requests `/api/cadso/dovetail/<op>` first; on 404 it retries against `/api/cadso/claude/<op>` and warns once.
+
+The `@tenonhq/sincronia-*` packages on npm are **not** being republished as deprecation shims. Switch to the `@tenonhq/dovetail-*` namespace by running `npx dove migrate`, which rewrites your `package.json` deps and scripts in one step.
 
 The next major release removes the `sinc` aliases, drops the `sinc.*` filename fallbacks, and stops retrying the legacy `/api/cadso/claude/` API path. Run `dove migrate` and re-import the ServiceNow API XML before that release ships.
 
@@ -116,10 +117,10 @@ If you see deprecation warnings about `sinc.config.js` or `/api/cadso/claude/*`,
 
 ## Rolling back
 
-If something breaks, both naming conventions still work simultaneously during the deprecation window. To roll back:
+The `@tenonhq/sincronia-*` packages on npm are frozen at their pre-rebrand versions and will not receive further releases. If you need to roll back during migration:
 
 ```bash
-# Restore the legacy package
+# Re-pin the legacy packages at their last published versions
 npm install --save-dev @tenonhq/sincronia-core@latest
 
 # Rename the dove.* files back to sinc.*
@@ -128,7 +129,7 @@ mv dove.manifest.json sinc.manifest.json
 # (and any other dove.* artifacts the tool created)
 ```
 
-The legacy `@tenonhq/sincronia-core` package on npm is a shim that re-exports from `@tenonhq/dovetail-core`, so functionality stays the same — only the binary name (`sinc` vs `dove`) and filenames differ.
+Note: rolling back means you stop getting fixes and new features — those only ship to `@tenonhq/dovetail-*` going forward. Plan to re-run `dove migrate` once the issue is resolved.
 
 ## Reporting issues
 
