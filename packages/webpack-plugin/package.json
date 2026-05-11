@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-webpack-plugin",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Webpack plugin for Dovetail",
   "main": "./dist/index.js",
   "repository": {
@@ -29,7 +29,7 @@
     "webpack": "^5.88.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.3",
+    "@tenonhq/dovetail-types": "^0.0.17",
     "@types/memory-fs": "^0.3.4",
     "@types/webpack": "^5.28.3"
   }

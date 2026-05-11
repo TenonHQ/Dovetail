@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-prettier-plugin",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Prettier plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {
@@ -11,7 +11,7 @@
   "author": "Multiple",
   "license": "GPL-3.0",
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.10",
+    "@tenonhq/dovetail-types": "^0.0.17",
     "@types/prettier": "^2.7.3",
     "typescript": "^5.2.2"
   },

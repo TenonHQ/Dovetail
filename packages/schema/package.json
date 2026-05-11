@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-schema",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "ServiceNow table schema fetcher and organizer for Dovetail",
   "main": "./dist/index.js",
   "scripts": {
@@ -15,7 +15,7 @@
     "chalk": "^4.1.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.10",
+    "@tenonhq/dovetail-types": "^0.0.17",
     "@types/node": ">=20.8.4",
     "typescript": "^5.2.2"
   },

@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-core",
-  "version": "0.0.85",
+  "version": "0.0.86",
   "description": "Next-gen file syncer",
   "license": "GPL-3.0",
   "main": "./dist/index.js",
@@ -22,7 +22,7 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.13",
+    "@tenonhq/dovetail-types": "^0.0.17",
     "@types/dotenv": "^6.1.1",
     "@types/inquirer": "^8.2.10",
     "@types/jest": "^29.5.5",
@@ -38,8 +38,8 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@tenonhq/dovetail-clickup": "^0.0.6",
-    "@tenonhq/dovetail-schema": "^0.0.1",
+    "@tenonhq/dovetail-clickup": "^0.0.7",
+    "@tenonhq/dovetail-schema": "^0.0.5",
     "axios": "^1.5.1",
     "axios-cookiejar-support": "^4.0.7",
     "axios-rate-limit": "^1.3.0",

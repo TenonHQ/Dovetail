@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-typescript-plugin",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "TypeScript plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "typescript": "^5.2.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.10"
+    "@tenonhq/dovetail-types": "^0.0.17"
   },
   "files": [
     "dist"

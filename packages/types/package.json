@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-types",
-  "version": "0.0.16",
+  "version": "0.0.18",
   "description": "Type Declarations for Dovetail",
   "main": "index.d.ts",
   "scripts": {
