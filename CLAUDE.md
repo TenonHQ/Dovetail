@@ -246,7 +246,7 @@ Sawmill REST client — retrieve, preview, and commit update sets across instanc
 
 ### `@tenonhq/dovetail-mcp`
 
-MCP stdio server, **Phase 1 read-only**. Exposes 12 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads for Claude Code. Read-only enforced via import denylist + ESLint + symbol-scan tests. Telemetry at `~/.sincronia-mcp/telemetry.jsonl` (redacted). Phase 2 (gated writes) and Phase 3 (high-blast-radius writes) deferred.
+MCP stdio server, **Phase 1 read-only**. Exposes 12 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads for Claude Code. Read-only enforced via import denylist + ESLint + symbol-scan tests. Telemetry at `~/.dovetail-mcp/telemetry.jsonl` (redacted). Phase 2 (gated writes) and Phase 3 (high-blast-radius writes) deferred.
 
 ## Integration Points
 
