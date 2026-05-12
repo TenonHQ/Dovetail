@@ -225,6 +225,29 @@ module.exports = {
 };
 ```
 
+## Action Layer & Specialized Subsystems
+
+Beyond the sync engine + build plugins, Dovetail ships a small action layer for programmatic ServiceNow work and cross-system reads. These are the packages Claude Code agents reach for most often.
+
+### V2 Flow Designer Values Codec
+
+`packages/core/src/flowDesigner/values.ts` — `decodeV2Values` and `encodeV2Values` for Flow Designer V2 storage blobs (base64-encoded gzip JSON). Round-trip tested against real ServiceNow fixtures. Use these when reading or writing `sys_hub_flow` step values programmatically; do not hand-roll base64/gzip.
+
+### `@tenonhq/dovetail-servicenow`
+
+ServiceNow platform helpers, layered on top of the Dovetail Scripted REST API:
+
+- **`addChoicesToField`** — upserts `sys_choice` + `sys_dictionary` rows. Update-set-aware (pins writes to a target update set), idempotent.
+- **`buildFlow` CLI (`dove-sn` binary, Phase 1)** — orchestrator for Custom Action Type + Subflow authoring. Validates specs → clones templates → verifies artifacts → triggers publication. `createBranch` is currently `NotImplemented`. Exit codes: `0` (done), `2` (needs UI publish), `3-5` (escalations). See `packages/servicenow/README.md`.
+
+### `@tenonhq/dovetail-sawmill`
+
+Sawmill REST client — retrieve, preview, and commit update sets across instances. Powers cross-environment code movement (dev → test → UAT → prod).
+
+### `@tenonhq/dovetail-mcp`
+
+MCP stdio server, **Phase 1 read-only**. Exposes 12 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads for Claude Code. Read-only enforced via import denylist + ESLint + symbol-scan tests. Telemetry at `~/.sincronia-mcp/telemetry.jsonl` (redacted). Phase 2 (gated writes) and Phase 3 (high-blast-radius writes) deferred.
+
 ## Integration Points
 
 ### ServiceNow Connection
@@ -354,7 +377,7 @@ npx dove refresh --scope x_cadso_core
 
 ## Design Document
 
-The comprehensive Dovetail design document lives at [`Development/docs/dovetail-design-doc.md`](../../docs/dovetail-design-doc.md). It covers:
+The comprehensive Dovetail design document lives at [`docs/dovetail-platform-spec.md`](docs/dovetail-platform-spec.md). It covers:
 
 - **What Dovetail is** — Integration platform and Claude Code's action layer (not just a SN dev tool)
 - **What we built** — Detailed breakdown of all 19 packages, APIs, and usage

@@ -24,9 +24,9 @@ Check out the [tutorial videos](https://www.youtube.com/watch?v=CqdppnM-FvM&list
       - [Using the diff option](#using-the-diff-option)
     - [Workflow](#workflow)
     - [File Structure](#file-structure)
-      - [dove.config.js](#sincconfigjs)
-      - [dove.manifest.json](#sincmanifestjson)
-      - [dove.diff.manifest.json](#sincdiffmanifestjson)
+      - [dove.config.js](#doveconfigjs)
+      - [dove.manifest.json](#dovemanifestjson)
+      - [dove.diff.manifest.json](#dovediffmanifestjson)
       - [.env](#env)
     - [Asymmetric Source Code](#asymmetric-source-code)
     - [Power of Extensions](#power-of-extensions)
@@ -72,10 +72,10 @@ npx dove init
 
 5. [Configure your project!](#configuration)
 6. **OPTIONAL BUT HIGHLY RECOMMENDED** Once your project is configured the way you like, you can commit and push it to a git repository for superior tracking and version control! Make sure to create a `.gitignore` file and ignore `node_modules` and `.env` because you **really** don't want those files in your repository.
-7. Start dev mode and start working! Every time you save a file that is tracked by Dovetail, it will be built with your ruleset and the result will be placed in ServiceNow!
+7. Start watch mode and start working! Every time you save a file that is tracked by Dovetail, it will be built with your ruleset and the result will be placed in ServiceNow!
 
 ```bash
-npx sinc dev
+npx dove watch
 ```
 
 ## How does it work?
@@ -89,7 +89,7 @@ Dovetail has a few basic commands to help you get the job done
 | Command            | Aliases  | Description                                                                                                                                                 | Usage                           |
 | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | `refresh`          | `r`      | Refreshes the `dove.manifest.json` file and downloads all new files created in ServiceNow since the last refresh. Does not override existing file contents. | `npx dove refresh`              |
-| `dev`              | `d`      | Starts development mode. Watches files for changes, then builds and pushes them to the corresponding record. Only works on files in the manifest file.      | `npx sinc dev`                  |
+| `watch`            | `w`, `watchAllScopes` | Watches files for changes, then builds and pushes them to the corresponding record. Multi-scope by default. Only works on files in the manifest file. | `npx dove watch`                |
 | `init`             | **none** | Walks you through creating a basic Dovetail project. This is the recommended way to create a Dovetail project from scratch.                               | `npx dove init`                 |
 | `push`             | **none** | Builds and pushes all files in your local Dovetail project to the ServiceNow instance in your `.env` file                                                  | `npx dove push`                 |
 | `download <scope>` | **none** | Downloads the specified scoped app, overwriting all local files in the way. **Only use this if you know what you are doing!**                               | `npx dove download my_test_app` |

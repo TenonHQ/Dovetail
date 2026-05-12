@@ -1,6 +1,6 @@
-# Troubleshooting `npx sinc refresh` 500 Errors
+# Troubleshooting `npx dove refresh` 500 Errors
 
-> When `npx sinc refresh` fails on some scopes but not others with `Request failed with status code 500` and nothing useful in the debug log — start here.
+> When `npx dove refresh` fails on some scopes but not others with `Request failed with status code 500` and nothing useful in the debug log — start here.
 
 ---
 
@@ -8,7 +8,7 @@
 
 Both of the issues described below were fixed on branch `fix/sincronia-refresh-500-diagnostics`:
 
-1. **Error-logging blindness** — `unwrapSNResponse` now dumps the full Axios response surface (status, URL, ServiceNow error body, headers, scope) to `sincronia-debug-*.log` on every failed REST call. Every future 500 anywhere in Sincronia is now diagnosable in one pass.
+1. **Error-logging blindness** — `unwrapSNResponse` now dumps the full Axios response surface (status, URL, ServiceNow error body, headers, scope) to `dovetail-debug-*.log` on every failed REST call. Every future 500 anywhere in Sincronia is now diagnosable in one pass.
 2. **Actual root cause** — turned out to be `POST api/sinc/sincronia/bulkDownload`, **not** `/getManifest`. ServiceNow rejects REST payloads over 10 MB, and the `refresh` code path called `getMissingFiles` in one shot. The `watch` path in `allScopesCommands.ts` already chunked by 5 tables; `processMissingFiles` in `appUtils.ts` now does the same. All 15 scopes on `tenonworkstudio` refresh successfully post-fix.
 
 The original investigation narrative below is preserved because the methodology — **fix the observability before guessing at root cause** — was correct even though the initial hypothesis about which endpoint was failing was wrong.
@@ -17,7 +17,7 @@ The original investigation narrative below is preserved because the methodology 
 
 ## Symptom
 
-Running `npx sinc refresh` from the `ServiceNow/` directory, some scopes complete and others fail:
+Running `npx dove refresh` from the `ServiceNow/` directory, some scopes complete and others fail:
 
 ```
 Refreshing scope: x_cadso_automate...
@@ -30,7 +30,7 @@ x_cadso_cloud ======================================== 203/203 (100%)
 ...
 ```
 
-The `sincronia-debug-*.log` file is created but contains no detail about the 500 — no response body, no status code context, no server-side error message.
+The `dovetail-debug-*.log` file is created but contains no detail about the 500 — no response body, no status code context, no server-side error message.
 
 ---
 
@@ -117,15 +117,15 @@ This change is scoped to one function and improves diagnostics for **every** Sin
 
 ```bash
 cd Craftsman/Sincronia
-npx lerna run build --scope=@tenonhq/sincronia-core
+npx lerna run build --scope=@tenonhq/dovetail-core
 ```
 
-Confirm `npx sinc` in `ServiceNow/` resolves to the local build:
+Confirm `npx dove` in `ServiceNow/` resolves to the local build:
 
 ```bash
 cd Craftsman/ServiceNow
-which sinc
-ls -la node_modules/@tenonhq/sincronia-core
+which dove
+ls -la node_modules/@tenonhq/dovetail-core
 ```
 
 If `node_modules/@tenonhq/sincronia-core` does not symlink back to the monorepo package, either `npm link` it or invoke the CLI entry script directly from `Sincronia/packages/core/build/...` for the test.
@@ -134,12 +134,12 @@ If `node_modules/@tenonhq/sincronia-core` does not symlink back to the monorepo 
 
 ```bash
 cd Craftsman/ServiceNow
-npx sinc refresh --logLevel debug
+npx dove refresh --logLevel debug
 ```
 
 > Verify the exact flag casing — `Sinc.SharedCmdArgs.logLevel` is camelCase internally, but the CLI may accept `--logLevel` or `--loglevel`. Check `Sincronia/packages/core/src/commander.ts`.
 
-Then open the newest `sincronia-debug-*.log` and search for the failing scopes. Each 500 now has a block with the ServiceNow `{error: {message, detail}, status}` payload.
+Then open the newest `dovetail-debug-*.log` and search for the failing scopes. Each 500 now has a block with the ServiceNow `{error: {message, detail}, status}` payload.
 
 ### Step 4 — Map the error to a root cause
 
@@ -148,33 +148,33 @@ Match what the log shows against these patterns:
 | Error pattern in `response.data` | Likely cause | Where to fix |
 |---|---|---|
 | Stack trace / `TypeError: Cannot read property X of null` | Server-side script error in sinc REST resource | ServiceNow instance → System Web Services → Scripted REST APIs → `sinc` |
-| `User Not Authorized` / `read access denied on table X` | Missing ACL or scope access | Grant role or correct `sinc.config.js` reference |
-| `Invalid table` / `No such scope` | Table or scope doesn't exist on this instance | `sinc.config.js` — remove/fix the reference |
+| `User Not Authorized` / `read access denied on table X` | Missing ACL or scope access | Grant role or correct `dove.config.js` reference |
+| `Invalid table` / `No such scope` | Table or scope doesn't exist on this instance | `dove.config.js` — remove/fix the reference |
 | `Invalid JSON` / unexpected payload keys | Payload shape mismatch | `snClient.ts:343-370` or server-side parsing |
 
-### Step 5 — Cross-reference `sinc.config.js`
+### Step 5 — Cross-reference `dove.config.js`
 
 Compare the `_scopes.<scope>` entries for the 4 failing scopes (`x_cadso_automate`, `x_cadso_email_spok`, `x_cadso_guide`, `x_cadso_journey`) against the 5 succeeding scopes. Look for:
 
 - Tables added to `_scopes.<scope>._tables` that don't exist on `tenonworkstudio`
 - Field-type overrides that point to fields missing on the scope's tables
-- Recently added entries — `git log -p sinc.config.js` for the last few commits that touched scope config
+- Recently added entries — `git log -p dove.config.js` for the last few commits that touched scope config
 
-`Sincronia/CLAUDE.md` documents `sinc.config.js` as the single source of truth — there are no hidden defaults — so any delta here is a prime suspect.
+`Sincronia/CLAUDE.md` documents `dove.config.js` as the single source of truth — there are no hidden defaults — so any delta here is a prime suspect.
 
 ### Step 6 — Apply the fix
 
 Branch by what Step 4 revealed:
 
 - **Server-side script bug** — fix the scripted REST resource on the instance, export it, and commit the XML so this can't regress unseen.
-- **ACL / missing table / missing scope** — correct `sinc.config.js`, or grant access, or create the missing scope on the instance.
+- **ACL / missing table / missing scope** — correct `dove.config.js`, or grant access, or create the missing scope on the instance.
 - **Payload shape** — adjust `getManifest` request construction or server-side parsing.
 
 ### Step 7 — Verify
 
 ```bash
 cd Craftsman/ServiceNow
-npx sinc refresh
+npx dove refresh
 ```
 
 Expect all scopes to complete 100%. If any still fail, the enhanced log now tells you exactly why.
@@ -189,7 +189,7 @@ Expect all scopes to complete 100%. If any still fail, the enhanced log now tell
 | `Sincronia/packages/core/src/snClient.ts:343-370` | `getManifest` — endpoint + payload shape |
 | `Sincronia/packages/core/src/FileLogger.ts` | File logger (`debug()` already available) |
 | `Sincronia/packages/core/src/commands.ts:22-36` | `refreshCommand` entry point |
-| `ServiceNow/sinc.config.js` | Per-scope config — review for failing scopes |
+| `ServiceNow/dove.config.js` | Per-scope config — review for failing scopes |
 | ServiceNow instance: `/api/sinc/sincronia/getManifest` | Server-side scripted REST resource |
 
 ## Out of scope

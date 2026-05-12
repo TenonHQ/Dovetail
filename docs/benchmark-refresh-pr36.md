@@ -99,8 +99,8 @@ This report is the first empirical look at the new profile.
 
 ```bash
 cd ServiceNow     # project with .env pointed at workstudio
-npx sinc refresh --benchmark                           # all scopes
-npx sinc refresh --benchmark --scope x_cadso_automate  # one scope
+npx dove refresh --benchmark                           # all scopes
+npx dove refresh --benchmark --scope x_cadso_automate  # one scope
 ```
 
 Output goes to the normal logger at info level. Zero overhead when
