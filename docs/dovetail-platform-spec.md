@@ -1,6 +1,6 @@
-# Sincronia: Complete Platform Specification
+# Dovetail: Complete Platform Specification
 
-> **Purpose:** This document describes Sincronia in enough detail that a software engineer or AI agent with zero prior context could implement the full system from scratch.
+> **Purpose:** This document describes Dovetail in enough detail that a software engineer or AI agent with zero prior context could implement the full system from scratch.
 >
 > **Audience:** Claude Code agents, developers onboarding to the project, or anyone building a compatible implementation.
 >
@@ -10,7 +10,7 @@
 
 ## Table of Contents
 
-1. [What Sincronia Is](#1-what-sincronia-is)
+1. [What Dovetail Is](#1-what-dovetail-is)
 2. [Architecture Overview](#2-architecture-overview)
 3. [Type System](#3-type-system)
 4. [The Init System](#4-the-init-system)
@@ -26,7 +26,7 @@
 
 ---
 
-## 1. What Sincronia Is
+## 1. What Dovetail Is
 
 ### The Problem
 
@@ -34,25 +34,25 @@ ServiceNow stores application code (scripts, styles, UI components) inside datab
 
 ### The Solution
 
-Sincronia is a bidirectional synchronization tool that lets developers:
+Dovetail is a bidirectional synchronization tool that lets developers:
 
 1. **Write code locally** using any editor, with full access to Git, TypeScript, Babel, Webpack, SASS, ESLint, and Prettier
 2. **Build code through a configurable plugin pipeline** before it reaches ServiceNow (e.g., TypeScript compilation, import/export stripping for ServiceNow's Rhino engine)
 3. **Push transformed code to ServiceNow** via REST API, with update set tracking and multi-scope support
 4. **Pull code from ServiceNow** to establish or refresh the local file tree
 
-The key insight is **asymmetric source code**: the code developers write (TypeScript with imports) is not the code that runs on ServiceNow (plain JavaScript with no modules). Sincronia manages this transformation transparently.
+The key insight is **asymmetric source code**: the code developers write (TypeScript with imports) is not the code that runs on ServiceNow (plain JavaScript with no modules). Dovetail manages this transformation transparently.
 
 ### Dual Purpose
 
-Sincronia has evolved beyond a dev tool. It now serves two roles:
+Dovetail has evolved beyond a dev tool. It now serves two roles:
 
-1. **Developer tool** — The `sinc` CLI for ServiceNow file synchronization, build pipelines, update set management, and record CRUD
-2. **Integration platform** — A collection of npm packages (`@tenonhq/sincronia-*`) that give Claude Code programmatic access to external systems: ServiceNow, ClickUp, Gmail, Google Calendar. Each package wraps one external service with typed clients, API methods, and LLM-friendly formatters.
+1. **Developer tool** — The `dove` CLI for ServiceNow file synchronization, build pipelines, update set management, and record CRUD
+2. **Integration platform** — A collection of npm packages (`@tenonhq/dovetail-*`) that give Claude Code programmatic access to external systems: ServiceNow, ClickUp, Gmail, Google Calendar. Each package wraps one external service with typed clients, API methods, and LLM-friendly formatters.
 
 ### Monorepo Structure
 
-Sincronia is a **Lerna monorepo** with **16 packages** published under the `@tenonhq/sincronia-*` npm scope. The CLI binary is `sinc`, shipped from `@tenonhq/sincronia-core`.
+Dovetail is a **Lerna monorepo** with **19 packages** published under the `@tenonhq/dovetail-*` npm scope. The CLI binary is `dove`, shipped from `@tenonhq/dovetail-core`.
 
 **Runtime requirements:** Node.js 20 LTS, npm workspaces.
 
@@ -62,15 +62,15 @@ Sincronia is a **Lerna monorepo** with **16 packages** published under the `@ten
 
 ### 2.1 Package Taxonomy
 
-Sincronia's 16 packages fall into four categories:
+Dovetail's 19 packages fall into four categories:
 
 #### Core Layer
 
 | Package | Purpose |
 |---|---|
-| `sincronia-core` | CLI engine, command routing, file watching, sync orchestration, plugin discovery. Ships the `sinc` binary. |
-| `sincronia-types` | TypeScript type definitions (`Sinc.*` and `SN.*` namespaces). No runtime code. |
-| `sincronia-schema` | Fetches ServiceNow table schemas via REST API, organizes by application/scope, outputs JSON. |
+| `dovetail-core` | CLI engine, command routing, file watching, sync orchestration, plugin discovery. Ships the `dove` binary. |
+| `dovetail-types` | TypeScript type definitions (`Sinc.*` and `SN.*` namespaces). No runtime code. |
+| `dovetail-schema` | Fetches ServiceNow table schemas via REST API, organizes by application/scope, outputs JSON. |
 
 #### Build Pipeline Plugins
 
@@ -78,14 +78,14 @@ Each plugin transforms source code before it's pushed to ServiceNow. All follow 
 
 | Package | What It Does |
 |---|---|
-| `sincronia-typescript-plugin` | TypeScript type-checking and transpilation. Reads `tsconfig.json`. |
-| `sincronia-babel-plugin` | Babel transformation wrapper. Applies user-configured Babel transforms. |
-| `sincronia-babel-plugin-remove-modules` | Strips `import`/`export` statements for ServiceNow's Rhino engine. Preserves `@keepModule` tagged imports. Converts `export default` to raw declarations. |
-| `sincronia-babel-preset-servicenow` | Babel preset that wraps `babel-plugin-remove-modules`. Single entry point for ServiceNow code sanitization. |
-| `sincronia-webpack-plugin` | Webpack module bundling. Uses in-memory filesystem. Outputs single `bundle.js`. |
-| `sincronia-sass-plugin` | SASS/SCSS compilation to CSS. |
-| `sincronia-eslint-plugin` | ESLint linting. Fails build if errors found. Does not transform code. |
-| `sincronia-prettier-plugin` | Prettier formatting. Resolves `.prettierrc` from file location. |
+| `dovetail-typescript-plugin` | TypeScript type-checking and transpilation. Reads `tsconfig.json`. |
+| `dovetail-babel-plugin` | Babel transformation wrapper. Applies user-configured Babel transforms. |
+| `dovetail-babel-plugin-remove-modules` | Strips `import`/`export` statements for ServiceNow's Rhino engine. Preserves `@keepModule` tagged imports. Converts `export default` to raw declarations. |
+| `dovetail-babel-preset-servicenow` | Babel preset that wraps `babel-plugin-remove-modules`. Single entry point for ServiceNow code sanitization. |
+| `dovetail-webpack-plugin` | Webpack module bundling. Uses in-memory filesystem. Outputs single `bundle.js`. |
+| `dovetail-sass-plugin` | SASS/SCSS compilation to CSS. |
+| `dovetail-eslint-plugin` | ESLint linting. Fails build if errors found. Does not transform code. |
+| `dovetail-prettier-plugin` | Prettier formatting. Resolves `.prettierrc` from file location. |
 
 #### Integration Packages
 
@@ -93,25 +93,33 @@ Each wraps one external service with typed clients, API methods, and formatters.
 
 | Package | Service | Auth |
 |---|---|---|
-| `sincronia-clickup` | ClickUp API v2 (tasks, comments, workspaces) | `CLICKUP_API_TOKEN` |
-| `sincronia-google-auth` | Shared Google OAuth2 layer | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
-| `sincronia-gmail` | Gmail API (read, search, triage, archive) | Peer dep on `google-auth` |
-| `sincronia-google-calendar` | Google Calendar API (events, agenda) | Peer dep on `google-auth` |
+| `dovetail-clickup` | ClickUp API v2 (tasks, comments, workspaces) | `CLICKUP_API_TOKEN` |
+| `dovetail-google-auth` | Shared Google OAuth2 layer | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
+| `dovetail-gmail` | Gmail API (read, search, triage, archive) | Peer dep on `google-auth` |
+| `dovetail-google-calendar` | Google Calendar API (events, agenda) | Peer dep on `google-auth` |
 
 #### UI
 
 | Package | Purpose |
 |---|---|
-| `sincronia-dashboard` | Express.js web UI for update set management with ClickUp task integration. Port 3456 by default. Launched by `sinc dashboard` or embedded in `sinc watch`. |
+| `dovetail-dashboard` | Express.js web UI for update set management with ClickUp task integration. Port 3456 by default. Launched by `dove dashboard` or embedded in `dove watch`. |
+
+#### Platform Helpers & Action Layer
+
+| Package | Purpose |
+|---|---|
+| `dovetail-servicenow` | ServiceNow platform helpers using the Dovetail Scripted REST API. Includes `addChoicesToField` (sys_choice + sys_dictionary upsert, update-set-aware) and the `buildFlow` CLI Phase 1 (`dove-sn` binary) for Custom Action Type + Subflow authoring. |
+| `dovetail-sawmill` | Sawmill REST client — retrieve, preview, and commit update sets across instances. Powers cross-environment code movement. |
+| `dovetail-mcp` | MCP stdio server (Phase 1, read-only) exposing 12 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads. Telemetry written to `~/.dovetail-mcp/telemetry.jsonl` (redacted). |
 
 ### 2.2 Dependency Graph
 
 ```
-                    sincronia-types
+                    dovetail-types
                          |
            +-------------+------------------+
            |             |                   |
-     sincronia-core  [all plugins]   [integrations]
+     dovetail-core  [all plugins]   [integrations]
            |                                |
      +-----+-----+              +----------+----------+
      |           |              |          |           |
@@ -121,10 +129,10 @@ Each wraps one external service with typed clients, API methods, and formatters.
      |           |              +-----+----+           |
      |           |                    +----------------+
      |           |
-  dashboard -----+ (standalone, no sincronia deps)
+  dashboard -----+ (standalone, no dovetail deps)
 ```
 
-**Rules:** No circular dependencies. Google packages share auth via peer dependency. Plugins are fully independent of each other. Dashboard has no sincronia package dependencies (standalone Express app).
+**Rules:** No circular dependencies. Google packages share auth via peer dependency. Plugins are fully independent of each other. Dashboard has no dovetail package dependencies (standalone Express app).
 
 ### 2.3 Package Pattern
 
@@ -160,7 +168,7 @@ Init-capable packages additionally export `{ sincPlugin: InitPlugin }` from thei
 index.ts (shebang: #!/usr/bin/env node)
   -> main()
     -> bootstrap.ts: init()
-      -> config.ts: loadConfigs()        # Find sinc.config.js, load manifest, set paths
+      -> config.ts: loadConfigs()        # Find dove.config.js, load manifest, set paths
       -> dotenv: load .env               # Credentials into process.env
       -> commander.ts: initCommands()    # Register all yargs commands
         -> yargs parses argv
@@ -182,7 +190,7 @@ index.ts (shebang: #!/usr/bin/env node)
 
 ## 3. Type System
 
-The `@tenonhq/sincronia-types` package (`packages/types/index.d.ts`) defines all shared interfaces. These are the load-bearing contracts. Every package depends on them.
+The `@tenonhq/dovetail-types` package (`packages/types/index.d.ts`) defines all shared interfaces. These are the load-bearing contracts. Every package depends on them.
 
 ### 3.1 Sinc Namespace (Framework Types)
 
@@ -502,14 +510,14 @@ export type TSFIXME = any;
 
 ## 4. The Init System
 
-The init system bootstraps a new Sincronia project through an 8-phase interactive wizard. It is plugin-driven: each installed `@tenonhq/sincronia-*` package can hook into the init flow.
+The init system bootstraps a new Dovetail project through an 8-phase interactive wizard. It is plugin-driven: each installed `@tenonhq/dovetail-*` package can hook into the init flow.
 
 ### 4.1 Two Entry Points
 
 | Command | Purpose |
 |---|---|
-| `sinc init` | Full 8-phase setup wizard (plugin discovery, login, config, download) |
-| `sinc login [plugin]` | Credential-only flow. Supports `--instance`, `--user`, `--password` for non-interactive mode. |
+| `dove init` | Full 8-phase setup wizard (plugin discovery, login, config, download) |
+| `dove login [plugin]` | Credential-only flow. Supports `--instance`, `--user`, `--password` for non-interactive mode. |
 
 Both share the same plugin infrastructure defined in `packages/core/src/initSystem/`.
 
@@ -523,8 +531,8 @@ The `discoverPlugins()` function scans the filesystem for init-capable packages:
 3. Parent directories up to 3 levels (capped traversal)
 
 **Discovery criteria:**
-- Directory name starts with `sincronia-`
-- Skips: `sincronia-core`, `sincronia-types`, `sincronia-dashboard`, `sincronia-schema`
+- Directory name starts with `dovetail-`
+- Skips: `dovetail-core`, `dovetail-types`, `dovetail-dashboard`, `dovetail-schema`
 - Package must `require()` successfully
 - Must export `pkg.sincPlugin` object with `.name` and `.displayName` properties
 
@@ -537,7 +545,7 @@ Orchestrated by `runInit()` in `packages/core/src/initSystem/orchestrator.ts`.
 #### Phase 1: Banner + Plugin Discovery
 
 ```
-1. Print "Sincronia Setup" header
+1. Print "Dovetail Setup" header
 2. Call discoverPlugins()
 3. List detected packages (core is always present)
 ```
@@ -561,7 +569,7 @@ function buildInitContext(plugins: Sinc.InitPlugin[]): Sinc.InitContext {
   // 3. For each env key declared by plugins' login hooks:
   //    - If key exists in process.env but NOT in .env, copy it over
   //    - (This allows CI/CD to pass credentials via environment)
-  // 4. Check if sinc.config.js exists in rootDir
+  // 4. Check if dove.config.js exists in rootDir
   // 5. Return { env, answers: {}, rootDir, hasConfig, inquirer, chalk }
 }
 ```
@@ -616,7 +624,7 @@ For each selected plugin, calls `runLoginPhase(plugin, context)`.
 #### Phase 6: Config Phase
 
 ```
-1. If sinc.config.js exists:
+1. If dove.config.js exists:
    - Prompt: "Use current config" or "Update config"
    - If "keep": return (no changes)
 2. If updating or no config:
@@ -645,11 +653,11 @@ For each selected plugin, calls `plugin.initialize(context)` if defined.
 
 **Core plugin initialize:**
 ```
-1. Write sinc.config.js (if doesn't exist):
+1. Write dove.config.js (if doesn't exist):
    - Uses ConfigManager.getDefaultConfigFile() template
    - If exists: preserves current config
 2. Reload configs via ConfigManager.loadConfigs()
-3. Check for existing manifest (sinc.manifest.{scope}.json):
+3. Check for existing manifest (dove.manifest.{scope}.json):
    - If exists: prompt "Re-download files?"
    - If user says no: skip download, return
 4. Download application files:
@@ -664,7 +672,7 @@ For each selected plugin, calls `plugin.initialize(context)` if defined.
             - Write file: src/{table}/{record_name}/{field_name}.{type}
           - Write metaData.json with timestamps
       - Strip content from manifest (keep structure only)
-      - Write sinc.manifest.{scope}.json
+      - Write dove.manifest.{scope}.json
 5. Print summary: "{N} tables, {M} records downloaded"
 ```
 
@@ -674,12 +682,12 @@ For each selected plugin, calls `plugin.initialize(context)` if defined.
 
 ```
 1. If any plugin failed: "Setup completed with errors. Review the output above."
-2. If all succeeded: "Setup complete! Run sinc watch to start."
+2. If all succeeded: "Setup complete! Run dove watch to start."
 ```
 
 ### 4.4 Login Flow (`runLogin`)
 
-The `sinc login` command supports targeted and non-interactive login:
+The `dove login` command supports targeted and non-interactive login:
 
 **Flags:**
 | Flag | Purpose |
@@ -733,14 +741,14 @@ const corePlugin: Sinc.InitPlugin = {
 
 ### 4.6 Writing a New Init Plugin
 
-To make any `@tenonhq/sincronia-*` package discoverable by `sinc init`:
+To make any `@tenonhq/dovetail-*` package discoverable by `dove init`:
 
 1. Export `sincPlugin: Sinc.InitPlugin` from the package's index
 2. Define `login` hooks with `envKey` (the env var to store) and `prompt` config
 3. Optionally define `configure` hooks for post-login configuration
 4. Optionally define `initialize(context)` for file/config setup
-5. Install the package in the user's project: `npm i -D @tenonhq/sincronia-{name}`
-6. Run `sinc init` — it will be auto-discovered
+5. Install the package in the user's project: `npm i -D @tenonhq/dovetail-{name}`
+6. Run `dove init` — it will be auto-discovered
 
 ---
 
@@ -748,9 +756,9 @@ To make any `@tenonhq/sincronia-*` package discoverable by `sinc init`:
 
 ### 5.1 Design Principle
 
-**`sinc.config.js` is the single source of truth.** There are no hidden defaults.
+**`dove.config.js` is the single source of truth.** There are no hidden defaults.
 
-The file `defaultOptions.ts` exports empty objects — this is intentional. It was cleared during a config overhaul. Do not add defaults back. All configuration must be explicit in `sinc.config.js`.
+The file `defaultOptions.ts` exports empty objects — this is intentional. It was cleared during a config overhaul. Do not add defaults back. All configuration must be explicit in `dove.config.js`.
 
 ### 5.2 Config Shape
 
@@ -758,21 +766,21 @@ The file `defaultOptions.ts` exports empty objects — this is intentional. It w
 // Sinc.ScopedConfig (extends Sinc.Config)
 module.exports = {
   sourceDirectory: "src",           // Where local source files live
-  buildDirectory: "build",          // Where built files go (for sinc build)
+  buildDirectory: "build",          // Where built files go (for dove build)
   refreshInterval: 30,              // Seconds between manifest refresh cycles
 
   rules: [                          // Build pipeline rules (first match wins)
     {
       match: /\.ts$/,               // Regex matched against file path
       plugins: [
-        { name: "@tenonhq/sincronia-typescript-plugin", options: { transpile: true } },
-        { name: "@tenonhq/sincronia-babel-plugin", options: {} },
+        { name: "@tenonhq/dovetail-typescript-plugin", options: { transpile: true } },
+        { name: "@tenonhq/dovetail-babel-plugin", options: {} },
       ]
     },
     {
       match: /\.scss$/,
       plugins: [
-        { name: "@tenonhq/sincronia-sass-plugin", options: {} },
+        { name: "@tenonhq/dovetail-sass-plugin", options: {} },
       ]
     }
   ],
@@ -858,10 +866,10 @@ When resolving config for scope `x_cadso_automate`:
 
 `loadConfigs()` runs at bootstrap:
 
-1. Search up directory tree for `sinc.config.js` (current dir, then parent dirs)
+1. Search up directory tree for `dove.config.js` (current dir, then parent dirs)
 2. Load via dynamic `import()` (supports ES module config)
 3. Set module-level state: source path, build path, manifest paths
-4. Load manifest file(s): `sinc.manifest.json` (single-scope) or `sinc.manifest.{scope}.json` (multi-scope)
+4. Load manifest file(s): `dove.manifest.json` (single-scope) or `dove.manifest.{scope}.json` (multi-scope)
 5. Resolve `.env` path relative to config location
 
 ### 5.6 Multi-Scope Support
@@ -869,13 +877,13 @@ When resolving config for scope `x_cadso_automate`:
 The `scopes` key in config maps scope names to per-scope configuration with at minimum `sourceDirectory`. Each scope gets:
 
 - Its own source directory: `src/{scope_name}/`
-- Its own manifest file: `sinc.manifest.{scope}.json`
+- Its own manifest file: `dove.manifest.{scope}.json`
 - Its own update set tracking
 - Independent table whitelist (union of global + scope-specific `_tables`)
 
 ### 5.7 Default Config Template
 
-Generated by `getDefaultConfigFile()` when `sinc init` creates a new project:
+Generated by `getDefaultConfigFile()` when `dove init` creates a new project:
 
 ```javascript
 module.exports = {
@@ -893,11 +901,11 @@ module.exports = {
 
 ## 6. ServiceNow REST API Contract
 
-Sincronia communicates with ServiceNow through two REST APIs: a custom Sincronia-specific API and a custom "Claude" API for update set operations.
+Dovetail communicates with ServiceNow through two REST APIs: a custom Dovetail-specific API and a custom "Claude" API for update set operations.
 
-### 6.1 Sincronia Scripted REST API (`/api/sinc/sincronia/`)
+### 6.1 Dovetail Scripted REST API (`/api/cadso/dovetail/`)
 
-Custom endpoints installed on the ServiceNow instance, scoped to the Sincronia application.
+Custom endpoints installed on the ServiceNow instance, scoped to the Dovetail application.
 
 | Method | Endpoint | Request | Response | Purpose |
 |---|---|---|---|---|
@@ -928,7 +936,7 @@ Global-scoped endpoints for update set and record management.
 
 ### 6.3 Standard Table API
 
-Sincronia also uses ServiceNow's built-in Table API for supporting operations:
+Dovetail also uses ServiceNow's built-in Table API for supporting operations:
 
 | Purpose | Method | Endpoint |
 |---|---|---|
@@ -959,9 +967,9 @@ The ServiceNow REST client is built on Axios with these features:
 
 ### 7.1 How It Works
 
-When a file is pushed to ServiceNow (via `sinc push` or `sinc watch`), it passes through a configurable plugin pipeline before reaching the instance:
+When a file is pushed to ServiceNow (via `dove push` or `dove watch`), it passes through a configurable plugin pipeline before reaching the instance:
 
-1. **Match:** The file path is tested against `rules` in `sinc.config.js`. First matching rule wins.
+1. **Match:** The file path is tested against `rules` in `dove.config.js`. First matching rule wins.
 2. **Execute:** Plugins in the matched rule execute sequentially. Output of one becomes input of the next.
 3. **Push:** Final output is sent to ServiceNow via REST API.
 
@@ -983,7 +991,7 @@ Every build plugin exports:
 export async function run(
   context: Sinc.FileContext,  // File metadata: path, table, field, sys_id, scope
   content: string,            // File content (or output of previous plugin)
-  options: any                // Plugin-specific options from sinc.config.js
+  options: any                // Plugin-specific options from dove.config.js
 ): Promise<Sinc.PluginResults> {
   return {
     success: boolean,  // false = build failure, file not pushed
@@ -1021,7 +1029,7 @@ Source (.js)  ->  (no rules match)  ->  Push as-is  ->  ServiceNow
 
 The manifest is the bridge between local file paths and ServiceNow records. It maps `table/record/field` to `sys_id`.
 
-**File:** `sinc.manifest.{scope}.json` (or `sinc.manifest.json` for single-scope)
+**File:** `dove.manifest.{scope}.json` (or `dove.manifest.json` for single-scope)
 
 **Structure:**
 
@@ -1048,13 +1056,13 @@ The manifest is the bridge between local file paths and ServiceNow records. It m
 
 ### 8.2 File Structure on Disk
 
-After `sinc init` or `sinc download`, local files are organized as:
+After `dove init` or `dove download`, local files are organized as:
 
 ```
 project_root/
-  sinc.config.js
-  sinc.manifest.x_cadso_core.json
-  sinc.manifest.x_cadso_work.json
+  dove.config.js
+  dove.manifest.x_cadso_core.json
+  dove.manifest.x_cadso_work.json
   .env                              # credentials (git-ignored)
   src/
     x_cadso_core/                   # sourceDirectory from scopes config
@@ -1076,14 +1084,14 @@ project_root/
       sys_script_include/
         WorkHelper/
           script.ts
-  build/                            # generated by sinc build
+  build/                            # generated by dove build
     x_cadso_core/
       sys_script_include/
         MyScriptInclude/
           script.js                 # transformed version
 ```
 
-### 8.3 Download Flow (`sinc download <scope>`)
+### 8.3 Download Flow (`dove download <scope>`)
 
 ```
 1. Resolve config for scope (whitelist, field overrides, table options)
@@ -1102,11 +1110,11 @@ project_root/
        - Write metaData.json
    - Uses progress bar for visual feedback
 5. Strip content from manifest (keep structure, remove file contents)
-6. Write sinc.manifest.{scope}.json
+6. Write dove.manifest.{scope}.json
 7. Print summary: "{N} tables, {M} records"
 ```
 
-### 8.4 Refresh Flow (`sinc refresh`)
+### 8.4 Refresh Flow (`dove refresh`)
 
 Refresh is an incremental download — only fetches files that are missing locally.
 
@@ -1123,7 +1131,7 @@ Refresh is an incremental download — only fetches files that are missing local
 4. If no missing files: "Everything is up to date"
 ```
 
-### 8.5 Push Flow (`sinc push`)
+### 8.5 Push Flow (`dove push`)
 
 ```
 1. Determine files to push:
@@ -1144,7 +1152,7 @@ Refresh is an incremental download — only fetches files that are missing local
 7. Report: success/failure counts
 ```
 
-### 8.6 Watch Flow (`sinc watch` / MultiScopeWatcher)
+### 8.6 Watch Flow (`dove watch` / MultiScopeWatcher)
 
 ```
 1. Load config, enumerate scopes from scopes key
@@ -1177,7 +1185,7 @@ Refresh is an incremental download — only fetches files that are missing local
 
 ### 8.8 Synced Table Types
 
-Sincronia synchronizes 16 ServiceNow table types:
+Dovetail synchronizes 16 ServiceNow table types:
 
 `sys_script_include`, `sys_script`, `sys_ui_script`, `sys_ui_page`, `sys_ux_client_script`, `sys_processor`, `sys_ws_operation`, `sys_rest_message_fn`, `sys_ui_action`, `sys_security_acl`, `sysevent_script_action`, `sys_ux_macroponent`, `sys_ux_event`, `sys_ux_client_script_include`, `sys_ux_screen`, `sys_script_fix`
 
@@ -1185,7 +1193,7 @@ Sincronia synchronizes 16 ServiceNow table types:
 
 ## 9. CLI Command Reference
 
-All commands are registered via yargs in `packages/core/src/commander.ts`. The binary is `sinc` (or `npx sinc`).
+All commands are registered via yargs in `packages/core/src/commander.ts`. The binary is `dove` .
 
 ### Core Sync Commands
 
@@ -1237,7 +1245,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 | `schema pull` | Fetch ServiceNow table schemas | `--output <dir>`, `--scope` |
 | `init-claude` | Install Claude Code skills to `.claude/commands/` | `--force` |
 
-### ClickUp Subcommands (`sinc clickup ...`)
+### ClickUp Subcommands (`dove clickup ...`)
 
 | Subcommand | Description | Key Flags |
 |---|---|---|
@@ -1255,7 +1263,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 ## 10. Integration Packages
 
-### 10.1 ClickUp (`@tenonhq/sincronia-clickup`)
+### 10.1 ClickUp (`@tenonhq/dovetail-clickup`)
 
 **Purpose:** ClickUp API v2 client for task management.
 
@@ -1267,11 +1275,11 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 - **Write:** `createTask`, `updateTask`, `updateTaskStatus`, `deleteTask`, `addComment`
 - **Formatters:** `formatForClaude` (LLM-optimized), `formatTaskDetail`, `formatTaskSummary`, `formatTeamSync` (full team board as markdown)
 - **Utilities:** `parseClickUpIdentifier` (extract ID from URL)
-- **Init Plugin:** `sincPlugin` — adds ClickUp token setup to `sinc init`
+- **Init Plugin:** `sincPlugin` — adds ClickUp token setup to `dove init`
 
-**Used by:** CTO operating system scripts (`clickup-sync.ts`), GitHub Actions PR workflow, `sinc` CLI commands, dashboard UI.
+**Used by:** CTO operating system scripts (`clickup-sync.ts`), GitHub Actions PR workflow, `dove` CLI commands, dashboard UI.
 
-### 10.2 Google Auth (`@tenonhq/sincronia-google-auth`)
+### 10.2 Google Auth (`@tenonhq/dovetail-google-auth`)
 
 **Purpose:** Shared OAuth2 authentication for all Google integrations.
 
@@ -1284,11 +1292,11 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 **Token management:** Auto-refresh via refresh token. Setup script walks through OAuth consent flow.
 
-### 10.3 Gmail (`@tenonhq/sincronia-gmail`)
+### 10.3 Gmail (`@tenonhq/dovetail-gmail`)
 
 **Purpose:** Gmail API client for email operations.
 
-**Peer dependency:** Requires `@tenonhq/sincronia-google-auth`.
+**Peer dependency:** Requires `@tenonhq/dovetail-google-auth`.
 
 **Exports:**
 - **Client:** `createGmailClient(auth)`
@@ -1299,11 +1307,11 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 **Used by:** `gmail-digest.js` script, morning brief pipeline.
 
-### 10.4 Google Calendar (`@tenonhq/sincronia-google-calendar`)
+### 10.4 Google Calendar (`@tenonhq/dovetail-google-calendar`)
 
 **Purpose:** Google Calendar API client for event management.
 
-**Peer dependency:** Requires `@tenonhq/sincronia-google-auth`.
+**Peer dependency:** Requires `@tenonhq/dovetail-google-auth`.
 
 **Exports:**
 - **Client:** `createCalendarClient(auth)`
@@ -1313,11 +1321,11 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 **Used by:** `calendar-sync.js` script, morning brief pipeline.
 
-### 10.5 Dashboard (`@tenonhq/sincronia-dashboard`)
+### 10.5 Dashboard (`@tenonhq/dovetail-dashboard`)
 
 **Purpose:** Express.js web UI for update set + ClickUp task management.
 
-**Not a library** — standalone server, no exports. Spawned by `sinc dashboard` or embedded in `sinc watch`.
+**Not a library** — standalone server, no exports. Spawned by `dove dashboard` or embedded in `dove watch`.
 
 **API endpoints:**
 - `GET /api/scopes` — List configured scopes with selected update sets
@@ -1332,13 +1340,13 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 - `POST /api/clickup/activate-scope` — Create/find update set for scope from task
 - `POST /api/clickup/activate-all-scopes` — Activate all scopes for active task
 
-**Persistence:** JSON files (`.sinc-update-sets.json`, `.sinc-active-task.json`, `.sinc-recent-edits.json`).
+**Persistence:** JSON files (`.dove-update-sets.json`, `.dove-active-task.json`, `.dove-recent-edits.json`).
 
 **Rate limiting:** 100 req/15 min per IP on recent edits endpoint. 20 RPS on ServiceNow API calls.
 
 **Default port:** 3456 (configurable via `DASHBOARD_PORT` env or `--port` flag).
 
-### 10.6 Schema (`@tenonhq/sincronia-schema`)
+### 10.6 Schema (`@tenonhq/dovetail-schema`)
 
 **Purpose:** Fetch and organize ServiceNow table schemas.
 
@@ -1354,13 +1362,13 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 ## 11. Design Principles
 
-These principles govern all Sincronia development. They are non-negotiable.
+These principles govern all Dovetail development. They are non-negotiable.
 
 ### The 6 Rules
 
 1. **Every package is Claude Code's interface to an external system.** Design APIs for programmatic consumption first, human CLI second. Formatters produce LLM-friendly markdown.
 
-2. **Read + Write, with gates.** Packages expose both read and write operations. High-risk writes (deploy to prod, send to clients, delete data) require human confirmation — enforced by the consuming layer (CTO operating system), not by Sincronia itself.
+2. **Read + Write, with gates.** Packages expose both read and write operations. High-risk writes (deploy to prod, send to clients, delete data) require human confirmation — enforced by the consuming layer (CTO operating system), not by Dovetail itself.
 
 3. **One package, one service.** No package wraps multiple external systems. Cross-service orchestration happens in consuming code (scripts, CLI commands, Claude Code), not inside packages.
 
@@ -1368,11 +1376,11 @@ These principles govern all Sincronia development. They are non-negotiable.
 
 5. **npm-first distribution.** Packages are published to npm and consumed as dependencies — not imported via relative paths to the monorepo. This makes them available to GitHub Actions, the CTO operating system, and any future consumer.
 
-6. **Env-based credentials.** All auth goes through environment variables. No interactive auth flows at runtime (except initial setup scripts via `sinc init`).
+6. **Env-based credentials.** All auth goes through environment variables. No interactive auth flows at runtime (except initial setup scripts via `dove init`).
 
 ### Implementation Constraints
 
-- **`sinc.config.js` is the single source of truth** — no hidden defaults, no fallback values baked into code
+- **`dove.config.js` is the single source of truth** — no hidden defaults, no fallback values baked into code
 - **`_` prefix convention** — config keys starting with `_` are directives, not table names
 - **Client-side filtering** — ServiceNow returns everything; the whitelist is enforced locally
 - **No circular dependencies** between packages
@@ -1388,22 +1396,22 @@ These principles govern all Sincronia development. They are non-negotiable.
 
 | Package | Version | Status |
 |---|---|---|
-| `sincronia-core` | 0.0.75 | Stable |
-| `sincronia-types` | 0.0.13 | Stable |
-| `sincronia-dashboard` | 0.0.9 | Stable |
-| `sincronia-schema` | 0.0.5 | Stable |
-| `sincronia-clickup` | 0.0.5 | Stable |
-| `sincronia-google-auth` | 0.0.6 | Stable |
-| `sincronia-gmail` | 0.0.5 | Stable |
-| `sincronia-google-calendar` | 0.0.5 | Stable |
-| `sincronia-typescript-plugin` | 0.0.7 | Stable |
-| `sincronia-babel-plugin` | 0.0.6 | Stable |
-| `sincronia-babel-plugin-remove-modules` | 0.0.6 | Stable |
-| `sincronia-babel-preset-servicenow` | 0.0.6 | Stable |
-| `sincronia-webpack-plugin` | 0.0.6 | Stable |
-| `sincronia-sass-plugin` | 0.0.7 | Stable |
-| `sincronia-eslint-plugin` | 0.0.6 | Stable |
-| `sincronia-prettier-plugin` | 0.0.7 | Stable |
+| `dovetail-core` | 0.0.75 | Stable |
+| `dovetail-types` | 0.0.13 | Stable |
+| `dovetail-dashboard` | 0.0.9 | Stable |
+| `dovetail-schema` | 0.0.5 | Stable |
+| `dovetail-clickup` | 0.0.5 | Stable |
+| `dovetail-google-auth` | 0.0.6 | Stable |
+| `dovetail-gmail` | 0.0.5 | Stable |
+| `dovetail-google-calendar` | 0.0.5 | Stable |
+| `dovetail-typescript-plugin` | 0.0.7 | Stable |
+| `dovetail-babel-plugin` | 0.0.6 | Stable |
+| `dovetail-babel-plugin-remove-modules` | 0.0.6 | Stable |
+| `dovetail-babel-preset-servicenow` | 0.0.6 | Stable |
+| `dovetail-webpack-plugin` | 0.0.6 | Stable |
+| `dovetail-sass-plugin` | 0.0.7 | Stable |
+| `dovetail-eslint-plugin` | 0.0.6 | Stable |
+| `dovetail-prettier-plugin` | 0.0.7 | Stable |
 
 **Note:** Monorepo source is always 1 patch version ahead of npm due to postpublish auto-bump.
 
@@ -1411,12 +1419,12 @@ These principles govern all Sincronia development. They are non-negotiable.
 
 | Package | Purpose | Priority |
 |---|---|---|
-| `sincronia-deploy` | Environment management, update set promotion (DEV -> TEST -> UAT -> STAGING -> PROD), conflict detection, rollback | High |
-| `sincronia-atf` | ServiceNow Automated Test Framework execution and result reporting | High |
-| `sincronia-certification` | App Store certification readiness checks (ACL gaps, naming conventions, prohibited APIs) | Medium |
-| `sincronia-slack` | Team notifications, customer channel monitoring | Medium |
-| `sincronia-servicenow-health` | Instance performance metrics, node health | Medium |
-| `sincronia-hubspot` | Sales pipeline data | Low |
+| `dovetail-deploy` | Environment management, update set promotion (DEV -> TEST -> UAT -> STAGING -> PROD), conflict detection, rollback | High |
+| `dovetail-atf` | ServiceNow Automated Test Framework execution and result reporting | High |
+| `dovetail-certification` | App Store certification readiness checks (ACL gaps, naming conventions, prohibited APIs) | Medium |
+| `dovetail-slack` | Team notifications, customer channel monitoring | Medium |
+| `dovetail-servicenow-health` | Instance performance metrics, node health | Medium |
+| `dovetail-hubspot` | Sales pipeline data | Low |
 
 ### 12.3 Known Technical Debt
 
@@ -1435,7 +1443,7 @@ These principles govern all Sincronia development. They are non-negotiable.
 
 ## 13. Appendices
 
-### Appendix A: Full sinc.config.js Example
+### Appendix A: Full dove.config.js Example
 
 ```javascript
 module.exports = {
@@ -1448,15 +1456,15 @@ module.exports = {
       match: /\.ts$/,
       plugins: [
         {
-          name: "@tenonhq/sincronia-typescript-plugin",
+          name: "@tenonhq/dovetail-typescript-plugin",
           options: { transpile: true },
         },
         {
-          name: "@tenonhq/sincronia-babel-plugin",
+          name: "@tenonhq/dovetail-babel-plugin",
           options: {},
         },
         {
-          name: "@tenonhq/sincronia-babel-preset-servicenow",
+          name: "@tenonhq/dovetail-babel-preset-servicenow",
           options: {},
         },
       ],
@@ -1465,7 +1473,7 @@ module.exports = {
       match: /\.js$/,
       plugins: [
         {
-          name: "@tenonhq/sincronia-babel-preset-servicenow",
+          name: "@tenonhq/dovetail-babel-preset-servicenow",
           options: {},
         },
       ],
@@ -1474,7 +1482,7 @@ module.exports = {
       match: /\.scss$/,
       plugins: [
         {
-          name: "@tenonhq/sincronia-sass-plugin",
+          name: "@tenonhq/dovetail-sass-plugin",
           options: {},
         },
       ],
@@ -1528,7 +1536,7 @@ module.exports = {
 
 ### Appendix B: Writing a New Integration Package
 
-Step-by-step guide for adding a new `@tenonhq/sincronia-*` package:
+Step-by-step guide for adding a new `@tenonhq/dovetail-*` package:
 
 1. **Create package directory:**
    ```
@@ -1539,7 +1547,7 @@ Step-by-step guide for adding a new `@tenonhq/sincronia-*` package:
 2. **Create `package.json`:**
    ```json
    {
-     "name": "@tenonhq/sincronia-{name}",
+     "name": "@tenonhq/dovetail-{name}",
      "version": "0.0.1",
      "main": "dist/index.js",
      "types": "dist/index.d.ts",
@@ -1573,7 +1581,7 @@ Step-by-step guide for adding a new `@tenonhq/sincronia-*` package:
 5. **Optional: Add init plugin support:**
    ```typescript
    // src/plugin.ts
-   import { Sinc } from "@tenonhq/sincronia-types";
+   import { Sinc } from "@tenonhq/dovetail-types";
 
    export const sincPlugin: Sinc.InitPlugin = {
      name: "{name}",
@@ -1611,4 +1619,4 @@ All credentials are stored in `.env` at the project root. This file must be git-
 
 ---
 
-*This document describes Sincronia as of v0.0.75 (core). Update it as packages ship or architecture changes.*
+*This document describes Dovetail as of v0.0.75 (core). Update it as packages ship or architecture changes.*

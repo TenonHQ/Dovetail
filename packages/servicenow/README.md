@@ -70,14 +70,14 @@ SN_PASSWORD=...
 
 ```bash
 # Inline form
-npx sinc-sn add-choices \
+npx dove-sn add-choices \
   --table x_cadso_core_event \
   --column state \
   --update-set 0083c3bb33d003507b18bc534d5c7b6d \
   --choices "delivered=Delivered,failed=Failed,expired=Expired"
 
 # JSON payload form (recommended for >5 choices)
-npx sinc-sn add-choices --from-json ./choices.json
+npx dove-sn add-choices --from-json ./choices.json
 ```
 
 JSON payload shape:

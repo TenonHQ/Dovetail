@@ -77,3 +77,7 @@ junit.xml
 
 # Claude Code ephemeral worktrees
 .claude/worktrees/
+
+# Parallel-dev git worktree root
+@GitWorkTrees/
+

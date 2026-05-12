@@ -73,7 +73,7 @@ schema/
 ├── core/                   # Tables from x_cadso_core scope
 │   ├── _summary.json
 │   └── ...
-└── sinc/                   # Tables from x_nuvo_dove scope
+└── dove/                   # Tables from x_nuvo_dove scope
     └── ...
 ```
 
