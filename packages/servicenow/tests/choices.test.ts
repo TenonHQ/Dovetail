@@ -32,6 +32,10 @@ function makeClient(overrides: { query?: QueryFn } = {}): {
     table: {
       query: queryFn as ServiceNowClient["table"]["query"]
     },
+    buildAgent: {
+      runQuery: async function () { return [] as any; },
+      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; }
+    },
     claude: {
       createRecord: async function (params) {
         calls.createRecord.push(params);
