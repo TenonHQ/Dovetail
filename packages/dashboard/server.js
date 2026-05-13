@@ -772,14 +772,203 @@ app.post("/api/clickup/deselect-task", function (req, res) {
   }
 });
 
+// --- Claude Plans Panel ---
+// Reads JSON records written by @tenonhq/dovetail-claude-plans into
+// ~/.dovetail/claude-plans/ and streams updates to the /claude-plans page.
+// Storage layout:
+//   <root>/<plan-slug>.json
+//   <root>/<plan-slug>/artifacts/<artifact-slug>.json
+const os = require("os");
+const chokidar = require("chokidar");
+
+const CLAUDE_PLANS_DIR =
+  process.env.DOVE_CLAUDE_PLANS_DIR ||
+  path.join(os.homedir(), ".dovetail", "claude-plans");
+
+function planFilePath(slug) {
+  return path.join(CLAUDE_PLANS_DIR, slug + ".json");
+}
+
+function artifactsDirFor(slug) {
+  return path.join(CLAUDE_PLANS_DIR, slug, "artifacts");
+}
+
+function safeReadJson(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (e) {
+    return null;
+  }
+}
+
+function listClaudePlans() {
+  if (!fs.existsSync(CLAUDE_PLANS_DIR)) return [];
+  const entries = fs.readdirSync(CLAUDE_PLANS_DIR);
+  const plans = [];
+  for (let i = 0; i < entries.length; i++) {
+    const name = entries[i];
+    if (!name.endsWith(".json")) continue;
+    const plan = safeReadJson(path.join(CLAUDE_PLANS_DIR, name));
+    if (plan) plans.push(plan);
+  }
+  plans.sort(function (a, b) {
+    return (b.updated_at || "").localeCompare(a.updated_at || "");
+  });
+  return plans;
+}
+
+function listClaudeArtifacts(slug) {
+  const dir = artifactsDirFor(slug);
+  if (!fs.existsSync(dir)) return [];
+  const entries = fs.readdirSync(dir);
+  const artifacts = [];
+  for (let i = 0; i < entries.length; i++) {
+    if (!entries[i].endsWith(".json")) continue;
+    const a = safeReadJson(path.join(dir, entries[i]));
+    if (a) artifacts.push(a);
+  }
+  artifacts.sort(function (a, b) {
+    return (a.created_at || "").localeCompare(b.created_at || "");
+  });
+  return artifacts;
+}
+
+// Parse a watcher path like "<root>/<slug>.json" or
+// "<root>/<slug>/artifacts/<artifact-slug>.json" into { kind, slug, artifactSlug }.
+function classifyPath(filePath) {
+  const rel = path.relative(CLAUDE_PLANS_DIR, filePath);
+  if (!rel || rel.startsWith("..")) return null;
+  const parts = rel.split(path.sep);
+  if (parts.length === 1 && parts[0].endsWith(".json")) {
+    return { kind: "plan", slug: parts[0].slice(0, -5) };
+  }
+  if (parts.length === 3 && parts[1] === "artifacts" && parts[2].endsWith(".json")) {
+    return { kind: "artifact", slug: parts[0], artifactSlug: parts[2].slice(0, -5) };
+  }
+  return null;
+}
+
+// SSE fan-out. Each connected client is a response object held open until the
+// client disconnects; broadcastClaudePlanEvent writes a single SSE frame to all.
+const claudePlanSseClients = new Set();
+
+function broadcastClaudePlanEvent(event, data) {
+  const frame = "event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n";
+  for (const res of claudePlanSseClients) {
+    try {
+      res.write(frame);
+    } catch (err) {
+      claudePlanSseClients.delete(res);
+    }
+  }
+}
+
+function handleWatcherChange(event, filePath) {
+  const info = classifyPath(filePath);
+  if (!info) return;
+  if (info.kind === "plan") {
+    if (event === "unlink") {
+      broadcastClaudePlanEvent("plan:delete", { slug: info.slug });
+      return;
+    }
+    const plan = safeReadJson(filePath);
+    if (plan) broadcastClaudePlanEvent("plan:upsert", { plan: plan });
+    return;
+  }
+  if (info.kind === "artifact") {
+    if (event === "unlink") {
+      broadcastClaudePlanEvent("artifact:delete", {
+        plan_slug: info.slug,
+        slug: info.artifactSlug
+      });
+      return;
+    }
+    const artifact = safeReadJson(filePath);
+    if (artifact) broadcastClaudePlanEvent("artifact:upsert", { artifact: artifact });
+  }
+}
+
+// Start the watcher lazily — create the storage dir if missing so chokidar has
+// something to watch. ignoreInitial avoids replaying every file on boot
+// (clients fetch initial state via GET /api/claude-plans).
+let claudePlanWatcher = null;
+function startClaudePlanWatcher() {
+  if (claudePlanWatcher) return;
+  try {
+    fs.mkdirSync(CLAUDE_PLANS_DIR, { recursive: true });
+  } catch (err) {
+    console.warn("[claude-plans] could not create storage dir:", err.message);
+  }
+  claudePlanWatcher = chokidar.watch(CLAUDE_PLANS_DIR, {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
+    depth: 3
+  });
+  claudePlanWatcher.on("add", function (p) { handleWatcherChange("add", p); });
+  claudePlanWatcher.on("change", function (p) { handleWatcherChange("change", p); });
+  claudePlanWatcher.on("unlink", function (p) { handleWatcherChange("unlink", p); });
+}
+
+app.get("/claude-plans", function (req, res) {
+  res.sendFile(path.join(__dirname, "public", "claude-plans.html"));
+});
+
+app.get("/api/claude-plans", function (req, res) {
+  try {
+    res.json({ plans: listClaudePlans(), storage: CLAUDE_PLANS_DIR });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/claude-plans/stream", function (req, res) {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+  res.flushHeaders();
+  res.write("event: hello\ndata: {}\n\n");
+  claudePlanSseClients.add(res);
+
+  const heartbeat = setInterval(function () {
+    try {
+      res.write(": heartbeat\n\n");
+    } catch (err) {
+      clearInterval(heartbeat);
+      claudePlanSseClients.delete(res);
+    }
+  }, 25000);
+
+  req.on("close", function () {
+    clearInterval(heartbeat);
+    claudePlanSseClients.delete(res);
+  });
+});
+
+// :slug must avoid the static "stream" route above; Express matches in order.
+app.get("/api/claude-plans/:slug", function (req, res) {
+  try {
+    const plan = safeReadJson(planFilePath(req.params.slug));
+    if (!plan) return res.status(404).json({ error: "plan not found" });
+    res.json({ plan: plan, artifacts: listClaudeArtifacts(req.params.slug) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Only start the server when run directly (not when require()-d).
 // Callers like dashboardCommand.ts and allScopesCommands.ts use
 // spawn("node", [serverPath]) which sets require.main === module.
 if (require.main === module) {
+  startClaudePlanWatcher();
   app.listen(PORT, "127.0.0.1", function () {
     console.log("\n  Dovetail Update Set Dashboard");
     console.log("  Instance:  " + SN_INSTANCE);
     console.log("  Project:   " + PROJECT_ROOT);
-    console.log("  Dashboard: http://localhost:" + PORT + "\n");
+    console.log("  Dashboard: http://localhost:" + PORT);
+    console.log("  Claude:    http://localhost:" + PORT + "/claude-plans\n");
   });
 }

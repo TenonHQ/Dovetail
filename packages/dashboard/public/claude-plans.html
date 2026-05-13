@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Plans — Dovetail Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="claude-plans.css" />
+</head>
+<body class="cp-body">
+  <header>
+    <div class="header-left">
+      <h1><span>Dovetail</span> Claude Plans</h1>
+    </div>
+    <div class="header-right">
+      <a class="cp-nav-link" href="/">&larr; Update Sets</a>
+      <span class="cp-storage" id="cp-storage" title="storage root"></span>
+    </div>
+  </header>
+
+  <main class="cp-layout">
+    <aside class="cp-rail" id="cp-rail">
+      <div class="cp-rail-header">
+        <span class="cp-rail-title">Plans</span>
+        <span class="cp-count" id="cp-count">0</span>
+      </div>
+      <div class="cp-rail-empty" id="cp-rail-empty">
+        Waiting for plans. Run <code>push_plan</code> from a Claude Code
+        session to populate this list.
+      </div>
+      <ul class="cp-list" id="cp-list"></ul>
+    </aside>
+
+    <section class="cp-detail" id="cp-detail">
+      <div class="cp-detail-empty" id="cp-detail-empty">
+        Select a plan from the left rail.
+      </div>
+      <article class="cp-detail-body" id="cp-detail-body" hidden>
+        <header class="cp-detail-header">
+          <h2 id="cp-detail-title"></h2>
+          <span class="cp-status-pill" id="cp-detail-status"></span>
+          <span class="cp-stamp" id="cp-detail-stamp"></span>
+        </header>
+        <nav class="cp-tabs">
+          <button class="cp-tab active" data-tab="plan">Plan</button>
+          <button class="cp-tab" data-tab="artifacts">
+            Artifacts <span class="cp-tab-count" id="cp-artifact-count">0</span>
+          </button>
+        </nav>
+        <div class="cp-tab-panel" id="cp-tab-plan"></div>
+        <div class="cp-tab-panel" id="cp-tab-artifacts" hidden></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+  <script src="claude-plans.js"></script>
+</body>
+</html>
