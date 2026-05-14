@@ -785,6 +785,15 @@ const CLAUDE_PLANS_DIR =
   process.env.DOVE_CLAUDE_PLANS_DIR ||
   path.join(os.homedir(), ".dovetail", "claude-plans");
 
+// Slugs are written by @tenonhq/dovetail-claude-plans' slugify() — kebab-case,
+// max 64 chars. We re-validate on the read side so a request like `..%2Ffoo`
+// cannot escape CLAUDE_PLANS_DIR via path.join.
+const CLAUDE_PLAN_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+function isValidSlug(slug) {
+  return typeof slug === "string" && CLAUDE_PLAN_SLUG.test(slug);
+}
+
 function planFilePath(slug) {
   return path.join(CLAUDE_PLANS_DIR, slug + ".json");
 }
@@ -819,6 +828,7 @@ function listClaudePlans() {
 }
 
 function listClaudeArtifacts(slug) {
+  if (!isValidSlug(slug)) return [];
   const dir = artifactsDirFor(slug);
   if (!fs.existsSync(dir)) return [];
   const entries = fs.readdirSync(dir);
@@ -951,9 +961,11 @@ app.get("/api/claude-plans/stream", function (req, res) {
 // :slug must avoid the static "stream" route above; Express matches in order.
 app.get("/api/claude-plans/:slug", function (req, res) {
   try {
-    const plan = safeReadJson(planFilePath(req.params.slug));
+    const slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    const plan = safeReadJson(planFilePath(slug));
     if (!plan) return res.status(404).json({ error: "plan not found" });
-    res.json({ plan: plan, artifacts: listClaudeArtifacts(req.params.slug) });
+    res.json({ plan: plan, artifacts: listClaudeArtifacts(slug) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
