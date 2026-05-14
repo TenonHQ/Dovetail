@@ -12,7 +12,9 @@ import {
 
 var SAVED = {
   path: process.env.SINC_MCP_TELEMETRY_PATH,
-  disable: process.env.SINC_MCP_TELEMETRY_DISABLE
+  disable: process.env.SINC_MCP_TELEMETRY_DISABLE,
+  max: process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES,
+  interval: process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL
 };
 
 function makeTmpPath(): string {
@@ -31,6 +33,10 @@ describe("telemetry", function () {
     else process.env.SINC_MCP_TELEMETRY_PATH = SAVED.path;
     if (SAVED.disable === undefined) delete process.env.SINC_MCP_TELEMETRY_DISABLE;
     else process.env.SINC_MCP_TELEMETRY_DISABLE = SAVED.disable;
+    if (SAVED.max === undefined) delete process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES;
+    else process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES = SAVED.max;
+    if (SAVED.interval === undefined) delete process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL;
+    else process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL = SAVED.interval;
   });
 
   it("getTelemetryPath defaults to ~/.dovetail-mcp/telemetry.jsonl", function () {
@@ -125,6 +131,70 @@ describe("telemetry", function () {
     expect(line.tool).toBe("tool_a");
     expect(line.success).toBe(true);
     expect(typeof line.durationMs).toBe("number");
+  });
+
+  it("ring-buffers the file to the configured max entries", async function () {
+    var tmp = makeTmpPath();
+    process.env.SINC_MCP_TELEMETRY_PATH = tmp;
+    process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES = "10";
+    process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL = "20";
+    for (var i = 0; i < 100; i++) {
+      recordEvent({
+        ts: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+        tool: "tool",
+        args: { i: i },
+        durationMs: 1,
+        success: true
+      });
+    }
+    await _flushForTests();
+    var lines = fs.readFileSync(tmp, "utf8").trim().split("\n");
+    // After 100 appends with interval=20 and max=10, trim fires 5 times and
+    // the file ends up at exactly the cap.
+    expect(lines.length).toBe(10);
+    // The retained lines must be the most recent ones (suffix of the stream).
+    var last = JSON.parse(lines[lines.length - 1]);
+    expect(last.args.i).toBe(99);
+    var firstRetained = JSON.parse(lines[0]);
+    expect(firstRetained.args.i).toBe(90);
+  });
+
+  it("preserves mode 0600 across a trim", async function () {
+    var tmp = makeTmpPath();
+    process.env.SINC_MCP_TELEMETRY_PATH = tmp;
+    process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES = "5";
+    process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL = "10";
+    for (var i = 0; i < 30; i++) {
+      recordEvent({
+        ts: "2026-01-01T00:00:00.000Z",
+        tool: "t",
+        args: {},
+        durationMs: 1,
+        success: true
+      });
+    }
+    await _flushForTests();
+    var stat = fs.statSync(tmp);
+    expect((stat.mode & 0o777)).toBe(0o600);
+  });
+
+  it("disables trimming when max entries is 0", async function () {
+    var tmp = makeTmpPath();
+    process.env.SINC_MCP_TELEMETRY_PATH = tmp;
+    process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES = "0";
+    process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL = "5";
+    for (var i = 0; i < 20; i++) {
+      recordEvent({
+        ts: "2026-01-01T00:00:00.000Z",
+        tool: "t",
+        args: {},
+        durationMs: 1,
+        success: true
+      });
+    }
+    await _flushForTests();
+    var lines = fs.readFileSync(tmp, "utf8").trim().split("\n");
+    expect(lines.length).toBe(20);
   });
 
   it("withTelemetry records error and rethrows", async function () {

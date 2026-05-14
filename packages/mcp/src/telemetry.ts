@@ -5,6 +5,11 @@
  *
  * Fire-and-forget — handler latency must not depend on disk I/O, and a write
  * failure must never surface to the MCP client.
+ *
+ * Ring-buffered: file is trimmed to the most recent N entries (default 1000)
+ * every TRIM_CHECK_INTERVAL appends. Worst-case file size is
+ * MAX_ENTRIES + TRIM_CHECK_INTERVAL lines. Override the cap with
+ * SINC_MCP_TELEMETRY_MAX_ENTRIES; 0 or negative disables trimming.
  */
 
 import * as fs from "fs";
@@ -21,8 +26,64 @@ export interface TelemetryEvent {
   error?: string;
 }
 
+var DEFAULT_MAX_ENTRIES = 1000;
+var TRIM_CHECK_INTERVAL = 50;
+
 var dirEnsured = false;
 var writeQueue: Promise<void> = Promise.resolve();
+var appendsSinceTrim = 0;
+
+function getMaxEntries(): number {
+  var raw = process.env.SINC_MCP_TELEMETRY_MAX_ENTRIES;
+  if (raw === undefined || raw === "") {
+    return DEFAULT_MAX_ENTRIES;
+  }
+  var n = parseInt(raw, 10);
+  if (isNaN(n)) {
+    return DEFAULT_MAX_ENTRIES;
+  }
+  return n;
+}
+
+function getTrimInterval(): number {
+  var raw = process.env.SINC_MCP_TELEMETRY_TRIM_INTERVAL;
+  if (raw === undefined || raw === "") {
+    return TRIM_CHECK_INTERVAL;
+  }
+  var n = parseInt(raw, 10);
+  if (isNaN(n) || n < 1) {
+    return TRIM_CHECK_INTERVAL;
+  }
+  return n;
+}
+
+function maybeTrim(filePath: string): void {
+  appendsSinceTrim++;
+  if (appendsSinceTrim < getTrimInterval()) {
+    return;
+  }
+  appendsSinceTrim = 0;
+  var max = getMaxEntries();
+  if (max <= 0) {
+    return;
+  }
+  try {
+    var content = fs.readFileSync(filePath, "utf8");
+    var lines = content.split("\n").filter(function (l) {
+      return l.length > 0;
+    });
+    if (lines.length <= max) {
+      return;
+    }
+    var trimmed = lines.slice(lines.length - max).join("\n") + "\n";
+    var tmp = filePath + ".tmp";
+    fs.writeFileSync(tmp, trimmed, { mode: 0o600 });
+    fs.renameSync(tmp, filePath);
+  } catch {
+    // Best-effort: trimming is opportunistic. If it fails the file may grow
+    // by up to one TRIM_CHECK_INTERVAL beyond the cap before the next attempt.
+  }
+}
 
 export function getTelemetryPath(): string {
   if (process.env.SINC_MCP_TELEMETRY_PATH) {
@@ -86,6 +147,7 @@ export function recordEvent(event: Omit<TelemetryEvent, "args"> & { args: unknow
         return;
       }
       fs.appendFile(filePath, line, function () {
+        maybeTrim(filePath);
         resolve();
       });
     });
@@ -129,6 +191,7 @@ export async function withTelemetry<T>(
 export function _resetForTests(): void {
   dirEnsured = false;
   writeQueue = Promise.resolve();
+  appendsSinceTrim = 0;
 }
 
 /**
