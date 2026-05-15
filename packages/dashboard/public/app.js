@@ -860,10 +860,45 @@ var recentEditsInterval = null;
 async function loadRecentEdits() {
   try {
     var data = await api("GET", "/api/recent-edits");
-    recentEdits = data.edits || [];
+    var incoming = data.edits || [];
+
+    // Warn if a newly-pushed file was already edited in the last 30 minutes
+    var THIRTY_MIN = 30 * 60 * 1000;
+    var now = Date.now();
+    incoming.forEach(function (edit) {
+      var alreadyPresent = recentEdits.some(function (prev) {
+        return prev.sys_id === edit.sys_id && prev.tableName === edit.tableName;
+      });
+      if (!alreadyPresent) {
+        var recentSave = recentEdits.some(function (prev) {
+          return (
+            prev.name === edit.name &&
+            prev.tableName === edit.tableName &&
+            now - new Date(prev.timestamp).getTime() < THIRTY_MIN
+          );
+        });
+        if (recentSave) {
+          toast(edit.name + " was already saved less than 30 minutes ago.", "warn");
+        }
+      }
+    });
+
+    recentEdits = incoming;
     renderRecentEdits();
   } catch (e) {
     // Silently fail — panel just stays hidden or stale
+  }
+}
+
+async function dismissRecentEdit(sys_id, tableName) {
+  try {
+    await api("POST", "/api/recent-edits/dismiss", { sys_id: sys_id, tableName: tableName });
+    recentEdits = recentEdits.filter(function (e) {
+      return !(e.sys_id === sys_id && e.tableName === tableName);
+    });
+    renderRecentEdits();
+  } catch (e) {
+    toast("Failed to dismiss: " + e.message, "error");
   }
 }
 
@@ -926,10 +961,21 @@ function renderRecentEdits() {
     timeEl.className = "recent-edit-time";
     timeEl.textContent = timeAgo(edit.timestamp);
 
+    var dismissBtn = document.createElement("button");
+    dismissBtn.className = "recent-edit-dismiss";
+    dismissBtn.title = "Dismiss";
+    dismissBtn.textContent = "×";
+    (function (id, table) {
+      dismissBtn.addEventListener("click", function () {
+        dismissRecentEdit(id, table);
+      });
+    })(edit.sys_id, edit.tableName);
+
     row.appendChild(nameEl);
     row.appendChild(scopeEl);
     row.appendChild(updateSetEl);
     row.appendChild(timeEl);
+    row.appendChild(dismissBtn);
     list.appendChild(row);
   });
 }

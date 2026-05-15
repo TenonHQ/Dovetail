@@ -25,6 +25,62 @@ The CTO repo's `.mcp.json` already wires this in via `npx -y @tenonhq/dovetail-c
 | `push_artifact` | Generic artifact (`kind: "markdown" \| "mermaid"`) |
 | `push_diagram` | Convenience wrapper around `push_artifact` for Mermaid sources |
 
+## Content formats
+
+`push_plan` accepts three content formats — supply exactly one:
+
+| Field | Format |
+|---|---|
+| `content_md` | Raw Markdown (rendered by marked.js) |
+| `content_html` | Raw HTML (sanitized by DOMPurify) |
+| `content_structured` | Zero-design JSON components (recommended) |
+
+### `content_structured` — component library
+
+Pass a `{ sections: [...] }` object. The server renders it to HTML using the dashboard's component CSS. Claude Code needs no HTML or CSS knowledge.
+
+```json
+{
+  "sections": [
+    { "type": "header", "title": "Deploy PR #42", "subtitle": "feature/auth → PROD" },
+    { "type": "meta", "rows": [
+      { "label": "Author", "value": "Daniel" },
+      { "label": "Status", "value": "Approved", "badge": "success" }
+    ]},
+    { "type": "callout", "variant": "warning", "message": "Touches auth middleware." },
+    { "type": "steps", "steps": [
+      { "label": "DEV",  "status": "done" },
+      { "label": "TEST", "status": "done" },
+      { "label": "UAT",  "status": "active" },
+      { "label": "PROD", "status": "pending" }
+    ]},
+    { "type": "checklist", "title": "Pre-deploy", "items": [
+      { "label": "Tests pass", "done": true },
+      { "label": "Migration run", "done": false }
+    ]},
+    { "type": "metrics", "items": [
+      { "label": "Files changed", "value": "12" },
+      { "label": "Tests", "value": "142 / 142", "sub": "all pass", "variant": "success" }
+    ]}
+  ]
+}
+```
+
+**Section types:**
+
+| Type | Required fields | Optional fields |
+|---|---|---|
+| `header` | `title` | `subtitle` |
+| `meta` | `rows: [{label, value}]` | `title`, `rows[].badge` (`default\|success\|warning\|danger\|info`) |
+| `callout` | `message` | `variant` (`info\|warning\|danger\|success`), `title` |
+| `checklist` | `items: [{label, done}]` | `title`, `items[].note` |
+| `steps` | `steps: [{label, status}]` | `title`, `steps[].note` (`done\|active\|pending\|error`) |
+| `metrics` | `items: [{label, value}]` | `items[].sub`, `items[].variant` |
+| `section` | `title` | — |
+| `table` | `headers: string[]`, `rows: string[][]` | `title` |
+| `text` | `content` | — |
+| `code` | `content` | `title`, `lang` |
+
 ## CLI
 
 ```bash

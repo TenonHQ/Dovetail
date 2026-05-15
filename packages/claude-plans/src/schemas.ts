@@ -8,11 +8,16 @@ import { z } from "zod";
 var planStatus = z.enum(["DRAFT", "APPROVED", "EXITED"]);
 var artifactKind = z.enum(["markdown", "mermaid"]);
 
+var structuredPlanSchema = z.object({
+  sections: z.array(z.record(z.any()))
+});
+
 export var pushPlanSchema = z.object({
   slug: z.string().min(1).max(64).optional(),
   title: z.string().min(1).max(200),
   content_md: z.string().default(""),
   content_html: z.string().optional(),
+  content_structured: structuredPlanSchema.optional(),
   status: planStatus.optional(),
   session_id: z.string().nullable().optional()
 });
