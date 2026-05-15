@@ -559,3 +559,53 @@
   padding: 0;
   font-size: inherit;
 }
+
+/* ─── Copy buttons ─────────────────────────────────────────────────────────── */
+
+.cp-c-copy-wrap {
+  position: relative;
+}
+
+.cp-copy-btn-group {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cp-c-copy-wrap:hover .cp-copy-btn-group {
+  opacity: 1;
+}
+
+.cp-copy-btn {
+  font-size: 10px;
+  font-family: inherit;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--wood-light);
+  color: var(--text-muted);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.cp-copy-btn:hover {
+  background: var(--wood-medium);
+  color: var(--text);
+}
+
+.cp-copy-btn--copied {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* Artifact card copy group — inline in header, always visible */
+.cp-copy-btn-group--artifact {
+  position: static;
+  opacity: 1;
+  margin-left: auto;
+}

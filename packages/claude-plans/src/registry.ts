@@ -96,6 +96,9 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         '    Plain paragraph. Newlines become <br>.\n' +
         '  { type:"code", title?, lang?, content }\n' +
         "    Preformatted code block.\n\n" +
+        "Copy buttons — opt in per section:\n" +
+        '  Add "copy_enabled": true to any section to show MD + Text copy buttons in the viewer.\n' +
+        "  Default: false (no buttons). Use to expose copyable content; omit for sensitive rows.\n\n" +
         "Example content_structured:\n" +
         '  { "sections": [\n' +
         '    { "type":"header", "title":"Deploy PR #42", "subtitle":"DEV → PROD" },\n' +
@@ -159,7 +162,8 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     {
       name: "push_artifact",
       description:
-        "Attach an artifact (markdown or mermaid) to an existing plan. The dashboard renders artifacts under the plan's Artifacts tab.",
+        "Attach an artifact (markdown or mermaid) to an existing plan. The dashboard renders artifacts under the plan's Artifacts tab.\n" +
+        'Set copy_enabled: true to show MD + Text copy buttons on the artifact card (default: false).',
       shape: pushArtifactSchema.shape,
       handler: async function (args: any) {
         var parsed = pushArtifactSchema.parse(args);

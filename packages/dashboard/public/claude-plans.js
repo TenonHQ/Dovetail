@@ -58,6 +58,84 @@
     return d.toLocaleString();
   }
 
+  function stripMarkdown(md) {
+    return (md || "")
+      .replace(/```[\s\S]*?```/g, function (block) {
+        return block.replace(/```\w*\n?/g, "").replace(/\n?```/g, "");
+      })
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/`(.+?)`/g, "$1")
+      .replace(/\[(.+?)\]\(.*?\)/g, "$1")
+      .replace(/^>\s+/gm, "")
+      .replace(/^[-*+]\s+/gm, "")
+      .replace(/^\d+\.\s+/gm, "")
+      .replace(/\|/g, "\t")
+      .replace(/^[-|\t ]+$/gm, "")
+      .trim();
+  }
+
+  function handleCopyClick(e) {
+    var btn = e.currentTarget;
+    var content = btn.dataset.content || "";
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(content).then(function () {
+      var orig = btn.textContent;
+      btn.classList.add("cp-copy-btn--copied");
+      btn.textContent = "✓";
+      setTimeout(function () {
+        btn.classList.remove("cp-copy-btn--copied");
+        btn.textContent = orig;
+      }, 1500);
+    }, function () {});
+  }
+
+  function injectCopyButtons(container) {
+    var sections = container.querySelectorAll("[data-copy-md]");
+    for (var i = 0; i < sections.length; i++) {
+      var section = sections[i];
+      if (section.querySelector(".cp-copy-btn-group")) continue;
+      var group = document.createElement("div");
+      group.className = "cp-copy-btn-group";
+      var mdBtn = document.createElement("button");
+      mdBtn.className = "cp-copy-btn";
+      mdBtn.textContent = "MD";
+      mdBtn.title = "Copy as markdown";
+      mdBtn.dataset.content = section.dataset.copyMd;
+      mdBtn.addEventListener("click", handleCopyClick);
+      var txtBtn = document.createElement("button");
+      txtBtn.className = "cp-copy-btn";
+      txtBtn.textContent = "Text";
+      txtBtn.title = "Copy as plain text";
+      txtBtn.dataset.content = section.dataset.copyText;
+      txtBtn.addEventListener("click", handleCopyClick);
+      group.appendChild(mdBtn);
+      group.appendChild(txtBtn);
+      section.appendChild(group);
+    }
+  }
+
+  function makeArtifactCopyGroup(mdContent, textContent) {
+    var group = document.createElement("div");
+    group.className = "cp-copy-btn-group cp-copy-btn-group--artifact";
+    var mdBtn = document.createElement("button");
+    mdBtn.className = "cp-copy-btn";
+    mdBtn.textContent = "MD";
+    mdBtn.title = "Copy as markdown";
+    mdBtn.dataset.content = mdContent;
+    mdBtn.addEventListener("click", handleCopyClick);
+    var txtBtn = document.createElement("button");
+    txtBtn.className = "cp-copy-btn";
+    txtBtn.textContent = "Text";
+    txtBtn.title = "Copy as plain text";
+    txtBtn.dataset.content = textContent;
+    txtBtn.addEventListener("click", handleCopyClick);
+    group.appendChild(mdBtn);
+    group.appendChild(txtBtn);
+    return group;
+  }
+
   function renderMarkdown(md, target) {
     if (!window.marked || !window.DOMPurify) {
       target.textContent = md;
@@ -145,8 +223,9 @@
 
     if (plan.content_html) {
       els.planPanel.innerHTML = window.DOMPurify
-        ? window.DOMPurify.sanitize(plan.content_html)
+        ? window.DOMPurify.sanitize(plan.content_html, { ADD_ATTR: ["data-copy-md", "data-copy-text"] })
         : plan.content_html;
+      injectCopyButtons(els.planPanel);
     } else {
       renderMarkdown(plan.content_md, els.planPanel);
     }
@@ -172,6 +251,10 @@
         kind.textContent = artifact.kind;
         head.appendChild(title);
         head.appendChild(kind);
+        if (artifact.copy_enabled) {
+          var textContent = artifact.kind === "mermaid" ? artifact.content : stripMarkdown(artifact.content);
+          head.appendChild(makeArtifactCopyGroup(artifact.content, textContent));
+        }
         card.appendChild(head);
 
         var body = document.createElement("div");
