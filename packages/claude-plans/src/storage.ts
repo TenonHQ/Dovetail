@@ -195,6 +195,7 @@ export interface PushArtifactInput {
   kind: ArtifactKind;
   title: string;
   content: string;
+  copy_enabled?: boolean;
 }
 
 export function pushArtifact(input: PushArtifactInput, options: StorageOptions = {}): ClaudeArtifact {
@@ -211,6 +212,7 @@ export function pushArtifact(input: PushArtifactInput, options: StorageOptions =
     kind: input.kind,
     title: input.title,
     content: input.content,
+    copy_enabled: input.copy_enabled,
     created_at: existing ? existing.created_at : now,
     updated_at: now
   };

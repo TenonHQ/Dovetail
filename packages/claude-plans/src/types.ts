@@ -27,6 +27,7 @@ export interface ClaudeArtifact {
   kind: ArtifactKind;
   title: string;
   content: string;
+  copy_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }

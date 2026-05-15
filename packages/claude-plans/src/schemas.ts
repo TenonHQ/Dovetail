@@ -41,7 +41,8 @@ export var pushArtifactSchema = z.object({
   slug: z.string().min(1).max(64).optional(),
   kind: artifactKind,
   title: z.string().min(1).max(200),
-  content: z.string().min(1)
+  content: z.string().min(1),
+  copy_enabled: z.boolean().optional()
 });
 
 export var pushDiagramSchema = z.object({

@@ -16,6 +16,7 @@ export interface HeaderSection {
   type: "header";
   title: string;
   subtitle?: string;
+  copy_enabled?: boolean;
 }
 
 export interface MetaRow {
@@ -28,6 +29,7 @@ export interface MetaSection {
   type: "meta";
   title?: string;
   rows: MetaRow[];
+  copy_enabled?: boolean;
 }
 
 export interface CalloutSection {
@@ -35,6 +37,7 @@ export interface CalloutSection {
   variant?: CalloutVariant;
   title?: string;
   message: string;
+  copy_enabled?: boolean;
 }
 
 export interface ChecklistItem {
@@ -47,6 +50,7 @@ export interface ChecklistSection {
   type: "checklist";
   title?: string;
   items: ChecklistItem[];
+  copy_enabled?: boolean;
 }
 
 export interface PipelineStep {
@@ -59,6 +63,7 @@ export interface StepsSection {
   type: "steps";
   title?: string;
   steps: PipelineStep[];
+  copy_enabled?: boolean;
 }
 
 export interface MetricItem {
@@ -71,11 +76,13 @@ export interface MetricItem {
 export interface MetricsSection {
   type: "metrics";
   items: MetricItem[];
+  copy_enabled?: boolean;
 }
 
 export interface SectionDivider {
   type: "section";
   title: string;
+  copy_enabled?: boolean;
 }
 
 export interface TableSection {
@@ -83,11 +90,13 @@ export interface TableSection {
   title?: string;
   headers: string[];
   rows: string[][];
+  copy_enabled?: boolean;
 }
 
 export interface TextSection {
   type: "text";
   content: string;
+  copy_enabled?: boolean;
 }
 
 export interface CodeSection {
@@ -95,6 +104,7 @@ export interface CodeSection {
   title?: string;
   lang?: string;
   content: string;
+  copy_enabled?: boolean;
 }
 
 export type StructuredSection =
@@ -270,6 +280,178 @@ function renderCode(s: CodeSection): string {
   return out;
 }
 
+function sectionToMarkdown(s: any): string {
+  if (s.type === "header") {
+    var hLines = ["# " + (s.title || "")];
+    if (s.subtitle) hLines.push(s.subtitle);
+    return hLines.join("\n");
+  }
+  if (s.type === "meta") {
+    var metaLines = [];
+    if (s.title) metaLines.push("**" + s.title + "**\n");
+    metaLines.push("| Key | Value |");
+    metaLines.push("|---|---|");
+    if (s.rows && Array.isArray(s.rows)) {
+      for (var mi = 0; mi < s.rows.length; mi++) {
+        var mrow = s.rows[mi];
+        metaLines.push("| " + (mrow.label || "") + " | " + (mrow.value || "") + " |");
+      }
+    }
+    return metaLines.join("\n");
+  }
+  if (s.type === "callout") {
+    var calloutLines = [];
+    if (s.title) calloutLines.push("> **" + s.title + "**");
+    calloutLines.push("> " + (s.message || ""));
+    return calloutLines.join("\n");
+  }
+  if (s.type === "checklist") {
+    var clLines = [];
+    if (s.title) clLines.push("**" + s.title + "**\n");
+    if (s.items && Array.isArray(s.items)) {
+      for (var cli = 0; cli < s.items.length; cli++) {
+        var clItem = s.items[cli];
+        var clLine = (clItem.done ? "- [x] " : "- [ ] ") + (clItem.label || "");
+        if (clItem.note) clLine += " (" + clItem.note + ")";
+        clLines.push(clLine);
+      }
+    }
+    return clLines.join("\n");
+  }
+  if (s.type === "steps") {
+    var stLines = [];
+    if (s.title) stLines.push("**" + s.title + "**\n");
+    if (s.steps && Array.isArray(s.steps)) {
+      for (var sti = 0; sti < s.steps.length; sti++) {
+        var stStep = s.steps[sti];
+        var stLine = (sti + 1) + ". " + (stStep.label || "") + " [" + (stStep.status || "") + "]";
+        if (stStep.note) stLine += " — " + stStep.note;
+        stLines.push(stLine);
+      }
+    }
+    return stLines.join("\n");
+  }
+  if (s.type === "metrics") {
+    var mxLines = ["| Metric | Value |", "|---|---|"];
+    if (s.items && Array.isArray(s.items)) {
+      for (var mxi = 0; mxi < s.items.length; mxi++) {
+        var mxItem = s.items[mxi];
+        var mxVal = mxItem.value || "";
+        if (mxItem.sub) mxVal += " (" + mxItem.sub + ")";
+        mxLines.push("| " + (mxItem.label || "") + " | " + mxVal + " |");
+      }
+    }
+    return mxLines.join("\n");
+  }
+  if (s.type === "section") {
+    return "## " + (s.title || "");
+  }
+  if (s.type === "table") {
+    var tblLines = [];
+    if (s.title) tblLines.push("**" + s.title + "**\n");
+    if (s.headers && Array.isArray(s.headers) && s.headers.length) {
+      tblLines.push("| " + s.headers.join(" | ") + " |");
+      tblLines.push("| " + s.headers.map(function () { return "---"; }).join(" | ") + " |");
+    }
+    if (s.rows && Array.isArray(s.rows)) {
+      for (var ti = 0; ti < s.rows.length; ti++) {
+        if (Array.isArray(s.rows[ti])) tblLines.push("| " + s.rows[ti].join(" | ") + " |");
+      }
+    }
+    return tblLines.join("\n");
+  }
+  if (s.type === "text") return s.content || "";
+  if (s.type === "code") {
+    var lang = s.lang || "";
+    return "```" + lang + "\n" + (s.content || "") + "\n```";
+  }
+  return "";
+}
+
+function sectionToText(s: any): string {
+  if (s.type === "header") {
+    var hParts = [s.title || ""];
+    if (s.subtitle) hParts.push(s.subtitle);
+    return hParts.join("\n");
+  }
+  if (s.type === "meta") {
+    var metaLines = [];
+    if (s.title) metaLines.push(s.title + ":");
+    if (s.rows && Array.isArray(s.rows)) {
+      for (var mi = 0; mi < s.rows.length; mi++) {
+        var mrow = s.rows[mi];
+        metaLines.push((mrow.label || "") + ": " + (mrow.value || ""));
+      }
+    }
+    return metaLines.join("\n");
+  }
+  if (s.type === "callout") {
+    var calloutLines = [];
+    if (s.title) calloutLines.push(s.title);
+    calloutLines.push(s.message || "");
+    return calloutLines.join("\n");
+  }
+  if (s.type === "checklist") {
+    var clLines = [];
+    if (s.title) clLines.push(s.title + ":");
+    if (s.items && Array.isArray(s.items)) {
+      for (var cli = 0; cli < s.items.length; cli++) {
+        var clItem = s.items[cli];
+        var clLine = (clItem.done ? "[x] " : "[ ] ") + (clItem.label || "");
+        if (clItem.note) clLine += " (" + clItem.note + ")";
+        clLines.push(clLine);
+      }
+    }
+    return clLines.join("\n");
+  }
+  if (s.type === "steps") {
+    var stLines = [];
+    if (s.title) stLines.push(s.title + ":");
+    if (s.steps && Array.isArray(s.steps)) {
+      for (var sti = 0; sti < s.steps.length; sti++) {
+        var stStep = s.steps[sti];
+        var stLine = (sti + 1) + ". " + (stStep.label || "") + " (" + (stStep.status || "") + ")";
+        if (stStep.note) stLine += " — " + stStep.note;
+        stLines.push(stLine);
+      }
+    }
+    return stLines.join("\n");
+  }
+  if (s.type === "metrics") {
+    var mxParts = [];
+    if (s.items && Array.isArray(s.items)) {
+      for (var mxi = 0; mxi < s.items.length; mxi++) {
+        var mxItem = s.items[mxi];
+        var mxStr = (mxItem.label || "") + ": " + (mxItem.value || "");
+        if (mxItem.sub) mxStr += " (" + mxItem.sub + ")";
+        mxParts.push(mxStr);
+      }
+    }
+    return mxParts.join(", ");
+  }
+  if (s.type === "section") return s.title || "";
+  if (s.type === "table") {
+    var tblLines = [];
+    if (s.title) tblLines.push(s.title + ":");
+    if (s.rows && Array.isArray(s.rows) && s.headers && Array.isArray(s.headers)) {
+      var colCount = s.headers.length;
+      for (var ti = 0; ti < s.rows.length; ti++) {
+        var rowParts = [];
+        for (var tj = 0; tj < colCount; tj++) {
+          rowParts.push((s.headers[tj] || "") + ": " + ((s.rows[ti] && s.rows[ti][tj]) || ""));
+        }
+        tblLines.push(rowParts.join(", "));
+      }
+    }
+    return tblLines.join("\n");
+  }
+  if (s.type === "text") return s.content || "";
+  if (s.type === "code") {
+    return (s.title ? s.title + ":\n" : "") + (s.content || "");
+  }
+  return "";
+}
+
 export function renderStructured(plan: StructuredPlan): string {
   if (!plan || !Array.isArray(plan.sections)) return "";
   var parts: string[] = ['<div class="cp-structured">'];
@@ -310,7 +492,19 @@ export function renderStructured(plan: StructuredPlan): string {
       default:
         break;
     }
-    if (html) parts.push(html);
+    if (html) {
+      if (s.copy_enabled) {
+        var md = sectionToMarkdown(s);
+        var txt = sectionToText(s);
+        parts.push(
+          '<div class="cp-c-copy-wrap" data-copy-md="' + esc(md) + '" data-copy-text="' + esc(txt) + '">' +
+          html +
+          "</div>"
+        );
+      } else {
+        parts.push(html);
+      }
+    }
   }
   parts.push("</div>");
   return parts.join("\n");
