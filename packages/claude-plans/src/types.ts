@@ -19,6 +19,8 @@ export interface ClaudePlan {
 
 export type ArtifactKind = "markdown" | "mermaid";
 
+export { StructuredPlan, StructuredSection } from "./renderer";
+
 export interface ClaudeArtifact {
   slug: string;
   plan_slug: string;

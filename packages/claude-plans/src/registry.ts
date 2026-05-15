@@ -68,12 +68,48 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     {
       name: "push_plan",
       description:
-        "Create or update a plan. Markdown body (content_md) or raw HTML (content_html, sanitized by DOMPurify in the browser) shows in the dashboard's /claude-plans panel. Auto-slugs from title when slug is omitted. Status defaults to DRAFT.",
+        "Create or update a plan shown in the Dovetail dashboard at /claude-plans. " +
+        "Auto-slugs from title when slug is omitted. Status defaults to DRAFT.\n\n" +
+        "Content — supply exactly one of:\n" +
+        "  content_md: string — raw Markdown\n" +
+        "  content_html: string — raw HTML (sanitized by DOMPurify)\n" +
+        "  content_structured: object — zero-design component layout (preferred). Schema:\n" +
+        "    { sections: [ ...section objects ] }\n\n" +
+        "content_structured section types:\n" +
+        '  { type:"header", title, subtitle? }\n' +
+        '    Large title block, optional subtitle.\n' +
+        '  { type:"meta", title?, rows:[{label,value,badge?}] }\n' +
+        '    Key-value table. badge values: default|success|warning|danger|info\n' +
+        '  { type:"callout", variant?, title?, message }\n' +
+        '    Alert box. variant: info|warning|danger|success (default: info)\n' +
+        '  { type:"checklist", title?, items:[{label,done,note?}] }\n' +
+        '    Task list with checked/unchecked items.\n' +
+        '  { type:"steps", title?, steps:[{label,status,note?}] }\n' +
+        '    Pipeline stages. status: done|active|pending|error\n' +
+        '  { type:"metrics", items:[{label,value,sub?,variant?}] }\n' +
+        '    Stat cards. variant: default|success|warning|danger|info\n' +
+        '  { type:"section", title }\n' +
+        '    Labeled section divider.\n' +
+        '  { type:"table", title?, headers:string[], rows:string[][] }\n' +
+        '    Data table.\n' +
+        '  { type:"text", content }\n' +
+        '    Plain paragraph. Newlines become <br>.\n' +
+        '  { type:"code", title?, lang?, content }\n' +
+        "    Preformatted code block.\n\n" +
+        "Example content_structured:\n" +
+        '  { "sections": [\n' +
+        '    { "type":"header", "title":"Deploy PR #42", "subtitle":"DEV → PROD" },\n' +
+        '    { "type":"meta", "rows":[{"label":"Branch","value":"feature/auth"},{"label":"Status","value":"Approved","badge":"success"}] },\n' +
+        '    { "type":"steps", "steps":[{"label":"DEV","status":"done"},{"label":"TEST","status":"active"},{"label":"PROD","status":"pending"}] },\n' +
+        '    { "type":"checklist", "title":"Pre-deploy", "items":[{"label":"Tests pass","done":true},{"label":"Migration run","done":false}] }\n' +
+        "  ] }",
       shape: pushPlanSchema.shape,
       handler: async function (args: any) {
         var parsed = pushPlanSchema.parse(args);
-        if (!parsed.content_md && !parsed.content_html) {
-          throw new Error("at least one of content_md or content_html must be provided");
+        if (!parsed.content_md && !parsed.content_html && !parsed.content_structured) {
+          throw new Error(
+            "at least one of content_md, content_html, or content_structured must be provided"
+          );
         }
         return pushPlan(
           {
@@ -81,6 +117,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             title: parsed.title,
             content_md: parsed.content_md,
             content_html: parsed.content_html,
+            content_structured: parsed.content_structured as any,
             status: parsed.status,
             session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id
           },

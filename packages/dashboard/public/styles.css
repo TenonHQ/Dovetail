@@ -717,6 +717,11 @@ header h1 span {
   border-color: var(--danger);
 }
 
+.toast.warn {
+  border-color: #c88c2a;
+  color: #e8b86d;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -816,4 +821,25 @@ header h1 span {
   font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.recent-edit-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.recent-edit-row:hover .recent-edit-dismiss {
+  opacity: 1;
+}
+
+.recent-edit-dismiss:hover {
+  color: var(--danger);
 }

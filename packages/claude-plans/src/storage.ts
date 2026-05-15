@@ -23,6 +23,7 @@ import {
   PlanStatus,
   PlanWithArtifacts
 } from "./types";
+import { StructuredPlan, renderStructured } from "./renderer";
 
 export interface StorageOptions {
   rootDir?: string;
@@ -85,6 +86,7 @@ export interface PushPlanInput {
   title: string;
   content_md?: string;
   content_html?: string;
+  content_structured?: StructuredPlan;
   status?: PlanStatus;
   session_id?: string | null;
 }
@@ -95,14 +97,18 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
   var existing = readJson<ClaudePlan>(planPath(root, slug));
   var now = nowIso();
   var contentMd = input.content_md !== undefined ? input.content_md : "";
-  var hashSource = input.content_html !== undefined ? input.content_html : contentMd;
+  var resolvedHtml = input.content_html;
+  if (!resolvedHtml && input.content_structured) {
+    resolvedHtml = renderStructured(input.content_structured);
+  }
+  var hashSource = resolvedHtml !== undefined ? resolvedHtml : contentMd;
 
   var plan: ClaudePlan = {
     slug: slug,
     title: input.title,
     status: input.status || (existing ? existing.status : "DRAFT"),
     content_md: contentMd,
-    content_html: input.content_html,
+    content_html: resolvedHtml,
     content_hash: sha256(hashSource),
     created_at: existing ? existing.created_at : now,
     updated_at: now,
