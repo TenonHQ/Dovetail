@@ -83,7 +83,8 @@ function artifactPath(root: string, planSlug: string, slug: string): string {
 export interface PushPlanInput {
   slug?: string;
   title: string;
-  content_md: string;
+  content_md?: string;
+  content_html?: string;
   status?: PlanStatus;
   session_id?: string | null;
 }
@@ -93,19 +94,28 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
   var slug = slugify(input.slug || input.title);
   var existing = readJson<ClaudePlan>(planPath(root, slug));
   var now = nowIso();
+  var contentMd = input.content_md !== undefined ? input.content_md : "";
+  var hashSource = input.content_html !== undefined ? input.content_html : contentMd;
 
   var plan: ClaudePlan = {
     slug: slug,
     title: input.title,
     status: input.status || (existing ? existing.status : "DRAFT"),
-    content_md: input.content_md,
-    content_hash: sha256(input.content_md),
+    content_md: contentMd,
+    content_html: input.content_html,
+    content_hash: sha256(hashSource),
     created_at: existing ? existing.created_at : now,
     updated_at: now,
     session_id: input.session_id === undefined ? (existing ? existing.session_id : null) : input.session_id
   };
 
   atomicWriteJson(planPath(root, slug), plan);
+
+  var focusPath = path.join(root, ".focus");
+  var focusTmp = focusPath + ".tmp." + process.pid + "." + crypto.randomBytes(4).toString("hex");
+  fs.writeFileSync(focusTmp, JSON.stringify({ slug: plan.slug, ts: plan.updated_at }));
+  fs.renameSync(focusTmp, focusPath);
+
   return plan;
 }
 

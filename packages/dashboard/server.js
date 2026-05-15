@@ -279,6 +279,7 @@ app.get("/api/recent-edits", recentEditsLimiter, async function (req, res) {
       }
 
       enriched.push({
+        sys_id: edit.sys_id,
         tableName: edit.tableName,
         name: edit.name,
         scope: edit.scope,
@@ -288,6 +289,28 @@ app.get("/api/recent-edits", recentEditsLimiter, async function (req, res) {
     }
 
     res.json({ edits: enriched });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/recent-edits/dismiss — remove one entry from the local recent edits file
+app.post("/api/recent-edits/dismiss", function (req, res) {
+  try {
+    var sys_id = req.body.sys_id;
+    var tableName = req.body.tableName;
+    if (!sys_id || !tableName) {
+      return res.status(400).json({ error: "sys_id and tableName required" });
+    }
+    var edits = [];
+    if (fs.existsSync(RECENT_EDITS_FILE)) {
+      edits = JSON.parse(fs.readFileSync(RECENT_EDITS_FILE, "utf8"));
+    }
+    var filtered = edits.filter(function (e) {
+      return !(e.sys_id === sys_id && e.tableName === tableName);
+    });
+    fs.writeFileSync(RECENT_EDITS_FILE, JSON.stringify(filtered, null, 2));
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -850,6 +873,9 @@ function classifyPath(filePath) {
   const rel = path.relative(CLAUDE_PLANS_DIR, filePath);
   if (!rel || rel.startsWith("..")) return null;
   const parts = rel.split(path.sep);
+  if (parts.length === 1 && parts[0] === ".focus") {
+    return { kind: "focus" };
+  }
   if (parts.length === 1 && parts[0].endsWith(".json")) {
     return { kind: "plan", slug: parts[0].slice(0, -5) };
   }
@@ -877,6 +903,13 @@ function broadcastClaudePlanEvent(event, data) {
 function handleWatcherChange(event, filePath) {
   const info = classifyPath(filePath);
   if (!info) return;
+  if (info.kind === "focus") {
+    const focus = safeReadJson(filePath);
+    if (focus && isValidSlug(focus.slug)) {
+      broadcastClaudePlanEvent("plan:focus", { slug: focus.slug });
+    }
+    return;
+  }
   if (info.kind === "plan") {
     if (event === "unlink") {
       broadcastClaudePlanEvent("plan:delete", { slug: info.slug });

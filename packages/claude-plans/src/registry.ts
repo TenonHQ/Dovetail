@@ -68,15 +68,19 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     {
       name: "push_plan",
       description:
-        "Create or update a plan. Markdown body shows in the dashboard's /claude-plans panel. Auto-slugs from title when slug is omitted. Status defaults to DRAFT.",
+        "Create or update a plan. Markdown body (content_md) or raw HTML (content_html, sanitized by DOMPurify in the browser) shows in the dashboard's /claude-plans panel. Auto-slugs from title when slug is omitted. Status defaults to DRAFT.",
       shape: pushPlanSchema.shape,
       handler: async function (args: any) {
         var parsed = pushPlanSchema.parse(args);
+        if (!parsed.content_md && !parsed.content_html) {
+          throw new Error("at least one of content_md or content_html must be provided");
+        }
         return pushPlan(
           {
             slug: parsed.slug,
             title: parsed.title,
             content_md: parsed.content_md,
+            content_html: parsed.content_html,
             status: parsed.status,
             session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id
           },

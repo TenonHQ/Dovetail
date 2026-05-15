@@ -10,6 +10,7 @@ export interface ClaudePlan {
   title: string;
   status: PlanStatus;
   content_md: string;
+  content_html?: string;
   content_hash: string;
   created_at: string;
   updated_at: string;
