@@ -106,6 +106,7 @@
       var li = document.createElement("li");
       li.className = "cp-list-item" + (plan.slug === state.selectedSlug ? " active" : "");
       li.tabIndex = 0;
+      li.dataset.slug = plan.slug;
       li.innerHTML =
         '<div class="cp-list-row">' +
         '  <span class="cp-list-title"></span>' +
@@ -142,7 +143,13 @@
     els.detailStamp.textContent = "updated " + fmtTime(plan.updated_at);
     els.artifactCount.textContent = String(artifacts.length);
 
-    renderMarkdown(plan.content_md, els.planPanel);
+    if (plan.content_html) {
+      els.planPanel.innerHTML = window.DOMPurify
+        ? window.DOMPurify.sanitize(plan.content_html)
+        : plan.content_html;
+    } else {
+      renderMarkdown(plan.content_md, els.planPanel);
+    }
 
     els.artifactsPanel.innerHTML = "";
     if (artifacts.length === 0) {
@@ -275,6 +282,16 @@
       try {
         var payload = JSON.parse(e.data);
         removeArtifact(payload.plan_slug, payload.slug);
+      } catch (_) {}
+    });
+    es.addEventListener("plan:focus", function (e) {
+      try {
+        var data = JSON.parse(e.data);
+        if (data.slug) {
+          selectPlan(data.slug);
+          var item = els.list.querySelector("[data-slug=\"" + data.slug + "\"]");
+          if (item) item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
       } catch (_) {}
     });
     es.onerror = function () { /* EventSource auto-reconnects */ };
