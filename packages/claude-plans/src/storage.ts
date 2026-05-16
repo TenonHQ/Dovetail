@@ -89,6 +89,9 @@ export interface PushPlanInput {
   content_structured?: StructuredPlan;
   status?: PlanStatus;
   session_id?: string | null;
+  pr_number?: number;
+  pr_url?: string;
+  pr_title?: string;
 }
 
 export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): ClaudePlan {
@@ -112,7 +115,10 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     content_hash: sha256(hashSource),
     created_at: existing ? existing.created_at : now,
     updated_at: now,
-    session_id: input.session_id === undefined ? (existing ? existing.session_id : null) : input.session_id
+    session_id: input.session_id === undefined ? (existing ? existing.session_id : null) : input.session_id,
+    pr_number: input.pr_number !== undefined ? input.pr_number : (existing ? existing.pr_number : undefined),
+    pr_url: input.pr_url !== undefined ? input.pr_url : (existing ? existing.pr_url : undefined),
+    pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined)
   };
 
   atomicWriteJson(planPath(root, slug), plan);

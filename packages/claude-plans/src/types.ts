@@ -15,6 +15,9 @@ export interface ClaudePlan {
   created_at: string;
   updated_at: string;
   session_id: string | null;
+  pr_number?: number;
+  pr_url?: string;
+  pr_title?: string;
 }
 
 export type ArtifactKind = "markdown" | "mermaid";

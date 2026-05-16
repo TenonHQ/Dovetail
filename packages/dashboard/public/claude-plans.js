@@ -122,6 +122,26 @@
       li.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectPlan(plan.slug); }
       });
+      var delBtn = document.createElement("button");
+      delBtn.className = "cp-list-delete";
+      delBtn.title = "Delete plan";
+      delBtn.textContent = "×";
+      delBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (!delBtn.dataset.confirm) {
+          delBtn.dataset.confirm = "1";
+          delBtn.textContent = "?";
+          setTimeout(function () {
+            delBtn.textContent = "×";
+            delete delBtn.dataset.confirm;
+          }, 2000);
+          return;
+        }
+        fetch("/api/claude-plans/" + encodeURIComponent(plan.slug), { method: "DELETE" })
+          .catch(function () {});
+        removePlan(plan.slug);
+      });
+      li.querySelector(".cp-list-row").appendChild(delBtn);
       els.list.appendChild(li);
     });
   }
@@ -142,6 +162,21 @@
     els.detailStatus.className = "cp-status-pill cp-status-" + plan.status;
     els.detailStamp.textContent = "updated " + fmtTime(plan.updated_at);
     els.artifactCount.textContent = String(artifacts.length);
+
+    var existingPrBadge = document.getElementById("cp-pr-badge");
+    if (existingPrBadge) existingPrBadge.remove();
+    if (plan.pr_url) {
+      var prBadge = document.createElement("a");
+      prBadge.id = "cp-pr-badge";
+      prBadge.className = "cp-pr-badge";
+      prBadge.href = plan.pr_url;
+      prBadge.target = "_blank";
+      prBadge.rel = "noopener noreferrer";
+      prBadge.textContent = plan.pr_title
+        ? "PR #" + plan.pr_number + " — " + plan.pr_title
+        : "PR #" + (plan.pr_number || "");
+      els.detailStamp.insertAdjacentElement("afterend", prBadge);
+    }
 
     if (plan.content_html) {
       els.planPanel.innerHTML = window.DOMPurify

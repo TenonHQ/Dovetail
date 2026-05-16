@@ -559,3 +559,85 @@
   padding: 0;
   font-size: inherit;
 }
+
+/* ─── Copy buttons ─────────────────────────────────────────────────────────── */
+
+.cp-c-copy-wrap {
+  position: relative;
+}
+
+.cp-copy-btn-group {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.cp-c-copy-wrap:hover .cp-copy-btn-group {
+  opacity: 1;
+}
+
+.cp-copy-btn {
+  font-size: 10px;
+  font-family: inherit;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--wood-light);
+  color: var(--text-muted);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.cp-copy-btn:hover {
+  background: var(--wood-medium);
+  color: var(--text);
+}
+
+.cp-copy-btn--copied {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* Artifact card copy group — inline in header, always visible */
+.cp-copy-btn-group--artifact {
+  position: static;
+  opacity: 1;
+  margin-left: auto;
+}
+
+/* ─── Delete button on sidebar items ──────────────────────────────────────── */
+.cp-list-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s, color 0.15s;
+  border-radius: 3px;
+}
+.cp-list-item:hover .cp-list-delete { opacity: 1; }
+.cp-list-delete:hover { color: #c0392b; }
+
+/* ─── PR link badge in plan detail header ─────────────────────────────────── */
+.cp-pr-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #eaf0fb;
+  color: #0969da;
+  text-decoration: none;
+  border: 1px solid #b6d0f7;
+  white-space: nowrap;
+}
+.cp-pr-badge:hover { background: #d1e3fb; }

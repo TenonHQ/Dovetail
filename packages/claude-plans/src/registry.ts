@@ -13,7 +13,8 @@ import {
   getPlanSchema,
   listRecentPlansSchema,
   pushArtifactSchema,
-  pushDiagramSchema
+  pushDiagramSchema,
+  deletePlanSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -21,6 +22,7 @@ import {
   getPlan,
   listPlans,
   pushArtifact,
+  deletePlan,
   StorageOptions
 } from "./storage";
 
@@ -30,7 +32,8 @@ export var TOOL_NAMES = [
   "get_plan",
   "list_recent_plans",
   "push_artifact",
-  "push_diagram"
+  "push_diagram",
+  "delete_plan"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -119,7 +122,10 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             content_html: parsed.content_html,
             content_structured: parsed.content_structured as any,
             status: parsed.status,
-            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id
+            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id,
+            pr_number: parsed.pr_number,
+            pr_url: parsed.pr_url,
+            pr_title: parsed.pr_title
           },
           storageOpts
         );
@@ -185,6 +191,16 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           },
           storageOpts
         );
+      }
+    },
+    {
+      name: "delete_plan",
+      description: "Permanently delete a plan and all its artifacts from local storage.",
+      shape: deletePlanSchema.shape,
+      handler: async function (args: any) {
+        var parsed = deletePlanSchema.parse(args);
+        var deleted = deletePlan(parsed.slug, storageOpts);
+        return { deleted: deleted, slug: parsed.slug };
       }
     }
   ];

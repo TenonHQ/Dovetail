@@ -1004,6 +1004,22 @@ app.get("/api/claude-plans/:slug", function (req, res) {
   }
 });
 
+app.delete("/api/claude-plans/:slug", function (req, res) {
+  try {
+    var slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    var planFile = planFilePath(slug);
+    if (!fs.existsSync(planFile)) return res.status(404).json({ error: "plan not found" });
+    fs.unlinkSync(planFile);
+    var artifactsDir = path.join(CLAUDE_PLANS_DIR, slug);
+    if (fs.existsSync(artifactsDir)) fs.rmSync(artifactsDir, { recursive: true, force: true });
+    // Chokidar watcher detects the unlink and broadcasts plan:delete SSE to all clients
+    res.json({ deleted: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Only start the server when run directly (not when require()-d).
 // Callers like dashboardCommand.ts and allScopesCommands.ts use
 // spawn("node", [serverPath]) which sets require.main === module.

@@ -19,7 +19,14 @@ export var pushPlanSchema = z.object({
   content_html: z.string().optional(),
   content_structured: structuredPlanSchema.optional(),
   status: planStatus.optional(),
-  session_id: z.string().nullable().optional()
+  session_id: z.string().nullable().optional(),
+  pr_number: z.number().int().positive().optional(),
+  pr_url: z.string().url().optional(),
+  pr_title: z.string().max(200).optional()
+});
+
+export var deletePlanSchema = z.object({
+  slug: z.string().min(1).max(64)
 });
 
 export var updatePlanStatusSchema = z.object({
