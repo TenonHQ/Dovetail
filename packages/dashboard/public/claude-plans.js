@@ -66,6 +66,18 @@
     setTimeout(function () { el.remove(); }, 4000);
   }
 
+  function showToast(msg) {
+    var el = document.createElement("div");
+    el.className = "cp-toast";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function () { el.classList.add("cp-toast--visible"); }, 10);
+    setTimeout(function () {
+      el.classList.remove("cp-toast--visible");
+      setTimeout(function () { el.remove(); }, 300);
+    }, 2200);
+  }
+
   function renderMarkdown(md, target) {
     if (!window.marked || !window.DOMPurify) {
       target.textContent = md;
@@ -272,6 +284,28 @@
         : "PR #" + (plan.pr_number || "");
       els.detailStamp.insertAdjacentElement("afterend", prBadge);
     }
+
+    var existingResumeBtn = document.getElementById("cp-resume-btn");
+    if (existingResumeBtn) existingResumeBtn.remove();
+    var resumeBtn = document.createElement("button");
+    resumeBtn.id = "cp-resume-btn";
+    resumeBtn.className = "cp-resume-btn";
+    resumeBtn.textContent = "Resume";
+    resumeBtn.title = "Copy /resume command to clipboard";
+    resumeBtn.addEventListener("click", function () {
+      var cmd = "/resume " + plan.slug;
+      var finish = function () { showToast("Copied! Paste into Claude."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(finish).catch(function () {
+          fallbackCopy(cmd);
+          finish();
+        });
+      } else {
+        fallbackCopy(cmd);
+        finish();
+      }
+    });
+    els.detailStatus.insertAdjacentElement("afterend", resumeBtn);
 
     if (plan.content_html) {
       els.planPanel.innerHTML = window.DOMPurify
