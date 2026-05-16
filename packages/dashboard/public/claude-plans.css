@@ -641,3 +641,49 @@
   white-space: nowrap;
 }
 .cp-pr-badge:hover { background: rgba(100,140,190,0.25); color: var(--text); }
+
+/* ─── Resume button in plan detail header ──────────────────────────────────── */
+.cp-resume-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(74, 140, 92, 0.15);
+  color: #92d3a4;
+  border: 1px solid rgba(74, 140, 92, 0.4);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.cp-resume-btn:hover {
+  background: rgba(74, 140, 92, 0.28);
+  color: var(--text);
+}
+
+/* ─── Toast notification ────────────────────────────────────────────────────── */
+.cp-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--card-bg);
+  border: 1px solid rgba(74, 140, 92, 0.5);
+  border-left: 3px solid #4a8c5c;
+  color: #92d3a4;
+  padding: 9px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+.cp-toast--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
