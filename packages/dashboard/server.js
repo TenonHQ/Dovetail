@@ -23,6 +23,11 @@ const recentEditsLimiter = RateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
 });
+// Rate limiter for claude-plans destructive operations
+const claudePlansLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+});
 const SN_PASSWORD = process.env.SN_PASSWORD || "";
 const BASE_URL = `https://${SN_INSTANCE}`;
 
@@ -1004,16 +1009,19 @@ app.get("/api/claude-plans/:slug", function (req, res) {
   }
 });
 
-app.delete("/api/claude-plans/:slug", function (req, res) {
+app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
   try {
     var slug = req.params.slug;
     if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
-    var planFile = planFilePath(slug);
+    var baseDir = path.resolve(CLAUDE_PLANS_DIR);
+    var planFile = path.resolve(baseDir, slug + ".json");
+    if (!planFile.startsWith(baseDir + path.sep)) return res.status(400).json({ error: "invalid slug" });
     if (!fs.existsSync(planFile)) return res.status(404).json({ error: "plan not found" });
     fs.unlinkSync(planFile);
-    var artifactsDir = path.join(CLAUDE_PLANS_DIR, slug);
-    if (fs.existsSync(artifactsDir)) fs.rmSync(artifactsDir, { recursive: true, force: true });
-    // Chokidar watcher detects the unlink and broadcasts plan:delete SSE to all clients
+    var artifactsDir = path.resolve(baseDir, slug);
+    if (artifactsDir.startsWith(baseDir + path.sep) && fs.existsSync(artifactsDir)) {
+      fs.rmSync(artifactsDir, { recursive: true, force: true });
+    }
     res.json({ deleted: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

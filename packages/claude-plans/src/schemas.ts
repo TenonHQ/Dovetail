@@ -9,7 +9,7 @@ var planStatus = z.enum(["DRAFT", "APPROVED", "EXITED"]);
 var artifactKind = z.enum(["markdown", "mermaid"]);
 
 var structuredPlanSchema = z.object({
-  sections: z.array(z.record(z.any()))
+  sections: z.array(z.any())
 });
 
 export var pushPlanSchema = z.object({

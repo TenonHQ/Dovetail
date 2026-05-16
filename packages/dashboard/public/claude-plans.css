@@ -634,10 +634,10 @@
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
-  background: #eaf0fb;
-  color: #0969da;
+  background: rgba(100,140,190,0.15);
+  color: #9bbfe0;
   text-decoration: none;
-  border: 1px solid #b6d0f7;
+  border: 1px solid rgba(100,140,190,0.4);
   white-space: nowrap;
 }
-.cp-pr-badge:hover { background: #d1e3fb; }
+.cp-pr-badge:hover { background: rgba(100,140,190,0.25); color: var(--text); }

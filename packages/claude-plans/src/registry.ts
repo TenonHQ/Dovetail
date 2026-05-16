@@ -120,7 +120,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             title: parsed.title,
             content_md: parsed.content_md,
             content_html: parsed.content_html,
-            content_structured: parsed.content_structured as any,
+            content_structured: parsed.content_structured,
             status: parsed.status,
             session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id,
             pr_number: parsed.pr_number,

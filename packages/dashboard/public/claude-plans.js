@@ -58,6 +58,14 @@
     return d.toLocaleString();
   }
 
+  function showError(msg) {
+    var el = document.createElement("div");
+    el.style.cssText = "position:fixed;bottom:16px;right:16px;background:var(--danger);color:#fff;padding:8px 14px;border-radius:4px;font-size:13px;z-index:9999";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+
   function renderMarkdown(md, target) {
     if (!window.marked || !window.DOMPurify) {
       target.textContent = md;
@@ -138,8 +146,15 @@
           return;
         }
         fetch("/api/claude-plans/" + encodeURIComponent(plan.slug), { method: "DELETE" })
-          .catch(function () {});
-        removePlan(plan.slug);
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            removePlan(plan.slug);
+          })
+          .catch(function () {
+            delBtn.textContent = "×";
+            delete delBtn.dataset.confirm;
+            showError("Failed to delete plan. Try again.");
+          });
       });
       li.querySelector(".cp-list-row").appendChild(delBtn);
       els.list.appendChild(li);
