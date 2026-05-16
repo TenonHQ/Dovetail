@@ -99,6 +99,84 @@
     }
   }
 
+  /* ─── Copy helpers ─────────────────────────────────────────────────────────── */
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (_) {}
+    ta.remove();
+  }
+
+  function makeCopyBtn(label, getText) {
+    var btn = document.createElement("button");
+    btn.className = "cp-copy-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var text = getText();
+      var flash = function () {
+        btn.textContent = "Copied!";
+        btn.classList.add("cp-copy-btn--copied");
+        setTimeout(function () {
+          btn.textContent = label;
+          btn.classList.remove("cp-copy-btn--copied");
+        }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(flash).catch(function () {
+          fallbackCopy(text);
+          flash();
+        });
+      } else {
+        fallbackCopy(text);
+        flash();
+      }
+    });
+    return btn;
+  }
+
+  function addTabsCopyAll(plan, artifacts) {
+    var existing = document.getElementById("cp-tabs-copy-all");
+    if (existing) existing.remove();
+
+    var btn = makeCopyBtn("Copy All", function () {
+      if (state.activeTab === "artifacts") {
+        return artifacts.map(function (a) {
+          return "# " + a.title + "\n\n" + a.content;
+        }).join("\n\n---\n\n");
+      }
+      return plan.content_md && plan.content_md.trim()
+        ? plan.content_md
+        : els.planPanel.innerText.trim();
+    });
+    btn.id = "cp-tabs-copy-all";
+    btn.style.marginLeft = "auto";
+    var tabsEl = document.querySelector(".cp-tabs");
+    if (tabsEl) tabsEl.appendChild(btn);
+  }
+
+  function addPlanSectionCopyBtns() {
+    var structured = els.planPanel.querySelector(".cp-structured");
+    if (!structured) return;
+    var children = Array.from(structured.children);
+    children.forEach(function (child) {
+      child.classList.add("cp-c-copy-wrap");
+      var group = document.createElement("div");
+      group.className = "cp-copy-btn-group";
+      var btn = makeCopyBtn("Copy", (function (el) {
+        return function () { return el.innerText.trim(); };
+      })(child));
+      group.appendChild(btn);
+      child.appendChild(group);
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────── */
+
   function renderRail() {
     var plans = sortedPlans();
     els.count.textContent = String(plans.length);
@@ -165,6 +243,8 @@
     if (!state.selectedSlug || !state.plans.has(state.selectedSlug)) {
       els.detailEmpty.style.display = "block";
       els.detailBody.hidden = true;
+      var orphan = document.getElementById("cp-tabs-copy-all");
+      if (orphan) orphan.remove();
       return;
     }
     var plan = state.plans.get(state.selectedSlug);
@@ -201,6 +281,9 @@
       renderMarkdown(plan.content_md, els.planPanel);
     }
 
+    addPlanSectionCopyBtns();
+    addTabsCopyAll(plan, artifacts);
+
     els.artifactsPanel.innerHTML = "";
     if (artifacts.length === 0) {
       var empty = document.createElement("div");
@@ -222,6 +305,14 @@
         kind.textContent = artifact.kind;
         head.appendChild(title);
         head.appendChild(kind);
+
+        var copyGroup = document.createElement("div");
+        copyGroup.className = "cp-copy-btn-group cp-copy-btn-group--artifact";
+        copyGroup.appendChild(makeCopyBtn("Copy", (function (content) {
+          return function () { return content; };
+        })(artifact.content)));
+        head.appendChild(copyGroup);
+
         card.appendChild(head);
 
         var body = document.createElement("div");
