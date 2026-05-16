@@ -105,7 +105,7 @@
 .cp-detail-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .cp-detail-header h2 { font-size: 20px; margin: 0; }
 .cp-stamp { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-.cp-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.cp-tabs { display: flex; gap: 0; align-items: center; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .cp-tab {
   background: transparent;
   border: none;
@@ -148,8 +148,8 @@
 }
 .cp-artifact-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 12px;
 }
 .cp-artifact-title { font-weight: 600; font-size: 14px; }
