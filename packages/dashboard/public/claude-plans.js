@@ -58,6 +58,14 @@
     return d.toLocaleString();
   }
 
+  function showError(msg) {
+    var el = document.createElement("div");
+    el.style.cssText = "position:fixed;bottom:16px;right:16px;background:var(--danger);color:#fff;padding:8px 14px;border-radius:4px;font-size:13px;z-index:9999";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+
   function renderMarkdown(md, target) {
     if (!window.marked || !window.DOMPurify) {
       target.textContent = md;
@@ -122,6 +130,33 @@
       li.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectPlan(plan.slug); }
       });
+      var delBtn = document.createElement("button");
+      delBtn.className = "cp-list-delete";
+      delBtn.title = "Delete plan";
+      delBtn.textContent = "×";
+      delBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (!delBtn.dataset.confirm) {
+          delBtn.dataset.confirm = "1";
+          delBtn.textContent = "?";
+          setTimeout(function () {
+            delBtn.textContent = "×";
+            delete delBtn.dataset.confirm;
+          }, 2000);
+          return;
+        }
+        fetch("/api/claude-plans/" + encodeURIComponent(plan.slug), { method: "DELETE" })
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            removePlan(plan.slug);
+          })
+          .catch(function () {
+            delBtn.textContent = "×";
+            delete delBtn.dataset.confirm;
+            showError("Failed to delete plan. Try again.");
+          });
+      });
+      li.querySelector(".cp-list-row").appendChild(delBtn);
       els.list.appendChild(li);
     });
   }
@@ -142,6 +177,21 @@
     els.detailStatus.className = "cp-status-pill cp-status-" + plan.status;
     els.detailStamp.textContent = "updated " + fmtTime(plan.updated_at);
     els.artifactCount.textContent = String(artifacts.length);
+
+    var existingPrBadge = document.getElementById("cp-pr-badge");
+    if (existingPrBadge) existingPrBadge.remove();
+    if (plan.pr_url) {
+      var prBadge = document.createElement("a");
+      prBadge.id = "cp-pr-badge";
+      prBadge.className = "cp-pr-badge";
+      prBadge.href = plan.pr_url;
+      prBadge.target = "_blank";
+      prBadge.rel = "noopener noreferrer";
+      prBadge.textContent = plan.pr_title
+        ? "PR #" + plan.pr_number + " — " + plan.pr_title
+        : "PR #" + (plan.pr_number || "");
+      els.detailStamp.insertAdjacentElement("afterend", prBadge);
+    }
 
     if (plan.content_html) {
       els.planPanel.innerHTML = window.DOMPurify

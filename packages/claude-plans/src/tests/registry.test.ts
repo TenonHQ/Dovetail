@@ -15,10 +15,27 @@ function descByName(deps: any, name: string) {
 }
 
 describe("registry", function () {
-  it("exposes exactly the 6 tools in TOOL_NAMES", function () {
-    expect(TOOL_NAMES.length).toBe(6);
+  it("exposes exactly the 7 tools in TOOL_NAMES", function () {
+    expect(TOOL_NAMES.length).toBe(7);
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
+  });
+
+  it("delete_plan removes an existing plan", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "to-del", content_md: "x" });
+    var del = descByName(deps, "delete_plan");
+    var res = await del.handler({ slug: "to-del" });
+    expect(res.deleted).toBe(true);
+    expect(fs.existsSync(path.join(root, "to-del.json"))).toBe(false);
+  });
+
+  it("delete_plan returns deleted:false for a missing slug", async function () {
+    var root = mkTmp();
+    var del = descByName({ storage: { rootDir: root } }, "delete_plan");
+    var res = await del.handler({ slug: "no-such-plan" });
+    expect(res.deleted).toBe(false);
   });
 
   it("push_plan persists via storage and returns the plan", async function () {

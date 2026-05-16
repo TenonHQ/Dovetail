@@ -138,6 +138,22 @@ describe("renderStructured", () => {
     expect(html).not.toContain("cp-c-step-line-filled");
   });
 
+  it("marks connector filled when right step is error (error is active, not pending)", () => {
+    var plan: StructuredPlan = {
+      sections: [
+        {
+          type: "steps",
+          steps: [
+            { label: "DEV", status: "done" },
+            { label: "TEST", status: "error" }
+          ]
+        }
+      ]
+    };
+    var html = renderStructured(plan);
+    expect(html).toContain("cp-c-step-line-filled");
+  });
+
   it("renders metrics grid", () => {
     var plan: StructuredPlan = {
       sections: [
