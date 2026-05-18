@@ -256,4 +256,113 @@ describe("renderStructured", () => {
     expect(html).toContain("cp-c-checklist");
     expect(html).toContain("cp-c-metrics");
   });
+
+  it("renders tags with color classes and falls back to sage", () => {
+    var plan: StructuredPlan = {
+      sections: [
+        {
+          type: "tags",
+          title: "Labels",
+          items: [
+            { label: "backend", color: "blue" },
+            { label: "uncolored" },
+            { label: "bad", color: "chartreuse" as any }
+          ]
+        }
+      ]
+    };
+    var html = renderStructured(plan);
+    expect(html).toContain("cp-c-tag-list");
+    expect(html).toContain("cp-c-tag-blue");
+    expect(html).toContain("backend");
+    // both the uncolored and the invalid-colored tag fall back to sage
+    expect((html.match(/cp-c-tag-sage/g) || []).length).toBe(2);
+  });
+
+  it("renders timeline events with status classes and optional fields", () => {
+    var plan: StructuredPlan = {
+      sections: [
+        {
+          type: "timeline",
+          title: "History",
+          events: [
+            { label: "Kickoff", time: "Mon", status: "done" },
+            { label: "Build", note: "in progress", status: "active" },
+            { label: "Ship" }
+          ]
+        }
+      ]
+    };
+    var html = renderStructured(plan);
+    expect(html).toContain("cp-c-timeline");
+    expect(html).toContain("cp-c-tl-done");
+    expect(html).toContain("cp-c-tl-active");
+    expect(html).toContain("cp-c-tl-pending");
+    expect(html).toContain("Kickoff");
+    expect(html).toContain("in progress");
+  });
+
+  it("renders progress bars with clamped percentage width", () => {
+    var plan: StructuredPlan = {
+      sections: [
+        {
+          type: "progress",
+          items: [
+            { label: "Half", value: 5, max: 10 },
+            { label: "Over", value: 200, max: 100, variant: "success" },
+            { label: "Default max", value: 25 }
+          ]
+        }
+      ]
+    };
+    var html = renderStructured(plan);
+    expect(html).toContain("cp-c-progress-track");
+    expect(html).toContain("width:50%");
+    expect(html).toContain("width:100%"); // clamped from 200%
+    expect(html).toContain("width:25%"); // default max 100
+    expect(html).toContain("cp-c-progress-success");
+  });
+
+  it("renders people with derived initials and avatar color", () => {
+    var plan: StructuredPlan = {
+      sections: [
+        {
+          type: "people",
+          items: [
+            { name: "Daniel Cudney", sublabel: "CTO", color: "emerald" },
+            { name: "Trevor", color: "weird" as any }
+          ]
+        }
+      ]
+    };
+    var html = renderStructured(plan);
+    expect(html).toContain("cp-c-person");
+    expect(html).toContain("cp-c-avatar-emerald");
+    expect(html).toContain(">DC<"); // initials from two-word name
+    expect(html).toContain(">T<"); // initials from single name
+    expect(html).toContain("cp-c-avatar-earthy"); // invalid color falls back
+  });
+
+  it("renders quote with optional cite", () => {
+    var plan: StructuredPlan = {
+      sections: [
+        { type: "quote", text: "Measure twice.", cite: "The Joinery" },
+        { type: "quote", text: "No cite here" }
+      ]
+    };
+    var html = renderStructured(plan);
+    expect(html).toContain("cp-c-quote");
+    expect(html).toContain("Measure twice.");
+    expect(html).toContain("cp-c-quote-cite");
+    expect(html).toContain("The Joinery");
+  });
+
+  it("escapes HTML in new section types", () => {
+    var plan: StructuredPlan = {
+      sections: [{ type: "quote", text: "<img src=x onerror=alert(1)>" }]
+    };
+    var html = renderStructured(plan);
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img");
+  });
 });

@@ -11,6 +11,26 @@
 export type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
 export type CalloutVariant = "info" | "warning" | "danger" | "success";
 export type StepStatus = "done" | "active" | "pending" | "error";
+export type TagColor =
+  | "green"
+  | "blue"
+  | "cyan"
+  | "sage"
+  | "warm"
+  | "yellow"
+  | "purple"
+  | "orange"
+  | "red"
+  | "teal";
+export type AvatarColor =
+  | "blue"
+  | "emerald"
+  | "deep-emerald"
+  | "neon"
+  | "orange"
+  | "purple"
+  | "pink"
+  | "earthy";
 
 export interface HeaderSection {
   type: "header";
@@ -97,6 +117,61 @@ export interface CodeSection {
   content: string;
 }
 
+export interface TagItem {
+  label: string;
+  color?: TagColor;
+}
+
+export interface TagsSection {
+  type: "tags";
+  title?: string;
+  items: TagItem[];
+}
+
+export interface TimelineEvent {
+  label: string;
+  time?: string;
+  note?: string;
+  status?: StepStatus;
+}
+
+export interface TimelineSection {
+  type: "timeline";
+  title?: string;
+  events: TimelineEvent[];
+}
+
+export interface ProgressItem {
+  label: string;
+  value: number;
+  max?: number;
+  variant?: BadgeVariant;
+}
+
+export interface ProgressSection {
+  type: "progress";
+  title?: string;
+  items: ProgressItem[];
+}
+
+export interface PersonItem {
+  name: string;
+  sublabel?: string;
+  color?: AvatarColor;
+}
+
+export interface PeopleSection {
+  type: "people";
+  title?: string;
+  items: PersonItem[];
+}
+
+export interface QuoteSection {
+  type: "quote";
+  text: string;
+  cite?: string;
+}
+
 export type StructuredSection =
   | HeaderSection
   | MetaSection
@@ -107,7 +182,12 @@ export type StructuredSection =
   | SectionDivider
   | TableSection
   | TextSection
-  | CodeSection;
+  | CodeSection
+  | TagsSection
+  | TimelineSection
+  | ProgressSection
+  | PeopleSection
+  | QuoteSection;
 
 export interface StructuredPlan {
   sections: StructuredSection[];
@@ -270,6 +350,121 @@ function renderCode(s: CodeSection): string {
   return out;
 }
 
+var TAG_COLORS: Record<string, boolean> = {
+  green: true,
+  blue: true,
+  cyan: true,
+  sage: true,
+  warm: true,
+  yellow: true,
+  purple: true,
+  orange: true,
+  red: true,
+  teal: true
+};
+
+var AVATAR_COLORS: Record<string, boolean> = {
+  blue: true,
+  emerald: true,
+  "deep-emerald": true,
+  neon: true,
+  orange: true,
+  purple: true,
+  pink: true,
+  earthy: true
+};
+
+function initials(name: string): string {
+  var parts = String(name).trim().split(/\s+/);
+  var first = parts[0] ? parts[0].charAt(0) : "";
+  var second = parts.length > 1 ? parts[parts.length - 1].charAt(0) : "";
+  return (first + second).toUpperCase() || "?";
+}
+
+function renderTags(s: TagsSection): string {
+  var out = '<div class="cp-c-tags">';
+  if (s.title) out += '<div class="cp-c-label">' + esc(s.title) + "</div>";
+  out += '<div class="cp-c-tag-list">';
+  for (var i = 0; i < s.items.length; i++) {
+    var item = s.items[i];
+    var color = item.color && TAG_COLORS[item.color] ? item.color : "sage";
+    out += '<span class="cp-c-tag cp-c-tag-' + color + '">' + esc(item.label) + "</span>";
+  }
+  out += "</div></div>";
+  return out;
+}
+
+function renderTimeline(s: TimelineSection): string {
+  var out = '<div class="cp-c-timeline-wrap">';
+  if (s.title) out += '<div class="cp-c-label">' + esc(s.title) + "</div>";
+  out += '<div class="cp-c-timeline">';
+  for (var i = 0; i < s.events.length; i++) {
+    var ev = s.events[i];
+    var status = ev.status || "pending";
+    out += '<div class="cp-c-tl-item cp-c-tl-' + esc(status) + '">';
+    out += '<div class="cp-c-tl-rail"><div class="cp-c-tl-dot"></div><div class="cp-c-tl-line"></div></div>';
+    out += '<div class="cp-c-tl-body">';
+    out += '<div class="cp-c-tl-head"><span class="cp-c-tl-label">' + esc(ev.label) + "</span>";
+    if (ev.time) out += '<span class="cp-c-tl-time">' + esc(ev.time) + "</span>";
+    out += "</div>";
+    if (ev.note) out += '<div class="cp-c-tl-note">' + esc(ev.note) + "</div>";
+    out += "</div></div>";
+  }
+  out += "</div></div>";
+  return out;
+}
+
+function renderProgress(s: ProgressSection): string {
+  var out = '<div class="cp-c-progress-wrap">';
+  if (s.title) out += '<div class="cp-c-label">' + esc(s.title) + "</div>";
+  for (var i = 0; i < s.items.length; i++) {
+    var item = s.items[i];
+    var max = typeof item.max === "number" && item.max > 0 ? item.max : 100;
+    var pct = Math.max(0, Math.min(100, Math.round((Number(item.value) / max) * 100)));
+    var variantCls = item.variant ? " cp-c-progress-" + esc(item.variant) : "";
+    out += '<div class="cp-c-progress' + variantCls + '">';
+    out += '<div class="cp-c-progress-head">';
+    out += '<span class="cp-c-progress-label">' + esc(item.label) + "</span>";
+    out += '<span class="cp-c-progress-value">' + pct + "%</span>";
+    out += "</div>";
+    out +=
+      '<div class="cp-c-progress-track"><div class="cp-c-progress-fill" style="width:' +
+      pct +
+      '%"></div></div>';
+    out += "</div>";
+  }
+  out += "</div>";
+  return out;
+}
+
+function renderPeople(s: PeopleSection): string {
+  var out = '<div class="cp-c-people-wrap">';
+  if (s.title) out += '<div class="cp-c-label">' + esc(s.title) + "</div>";
+  out += '<div class="cp-c-people">';
+  for (var i = 0; i < s.items.length; i++) {
+    var person = s.items[i];
+    var color = person.color && AVATAR_COLORS[person.color] ? person.color : "earthy";
+    out += '<div class="cp-c-person">';
+    out +=
+      '<span class="cp-c-avatar cp-c-avatar-' + color + '">' + esc(initials(person.name)) + "</span>";
+    out += '<span class="cp-c-person-text">';
+    out += '<span class="cp-c-person-name">' + esc(person.name) + "</span>";
+    if (person.sublabel)
+      out += '<span class="cp-c-person-sub">' + esc(person.sublabel) + "</span>";
+    out += "</span></div>";
+  }
+  out += "</div></div>";
+  return out;
+}
+
+function renderQuote(s: QuoteSection): string {
+  var out = '<blockquote class="cp-c-quote">';
+  out += '<div class="cp-c-quote-text">' + esc(s.text).replace(/\n/g, "<br>") + "</div>";
+  if (s.cite) out += '<cite class="cp-c-quote-cite">' + esc(s.cite) + "</cite>";
+  out += "</blockquote>";
+  return out;
+}
+
 export function renderStructured(plan: StructuredPlan): string {
   if (!plan || !Array.isArray(plan.sections)) return "";
   var parts: string[] = ['<div class="cp-structured">'];
@@ -306,6 +501,21 @@ export function renderStructured(plan: StructuredPlan): string {
         break;
       case "code":
         html = renderCode(s);
+        break;
+      case "tags":
+        html = renderTags(s);
+        break;
+      case "timeline":
+        html = renderTimeline(s);
+        break;
+      case "progress":
+        html = renderProgress(s);
+        break;
+      case "people":
+        html = renderPeople(s);
+        break;
+      case "quote":
+        html = renderQuote(s);
         break;
       default:
         break;

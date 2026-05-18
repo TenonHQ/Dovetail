@@ -1,0 +1,162 @@
+/* ============================================================================
+   Tenon design tokens — shared by the Update Set dashboard and Claude Plans.
+   Distilled from the Tenon Design System (Sandpaper Figma file).
+   Light theme: paper-white grounds, deep-emerald text, neon accent.
+   ============================================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..700;1,14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  /* ===== Primary · Neon (yellow-green) ================================== */
+  --neon-50: #f0fcce;
+  --neon-100: #e0f897;
+  --neon-300: #ccf352;
+  --neon-500: #b9e13b;
+  --neon-700: #a1c62c;
+  --neon-900: #628200;
+
+  /* ===== Secondary · Emerald ============================================ */
+  --emerald-50: #32b57f;
+  --emerald-300: #098d57;
+  --emerald-500: #00663c;
+  --emerald-700: #025432;
+  --emerald-900: #013f25;
+
+  /* ===== Earthy neutral (woodgrain) ===================================== */
+  --earth-50: #fcfbf9;
+  --earth-100: #fbf8f3;
+  --earth-300: #f0ebe1;
+  --earth-500: #dcd4c0;
+  --earth-700: #bba27f;
+  --earth-900: #584121;
+
+  /* ===== Neutral · cool green-grays ===================================== */
+  --neutral-25: #fffefd;
+  --neutral-50: #f5f9f5;
+  --neutral-100: #ecf3ef;
+  --neutral-200: #d2dad5;
+  --neutral-300: #9caaa1;
+  --neutral-400: #6a8173;
+  --neutral-500: #506458;
+  --neutral-600: #3b5445;
+  --neutral-700: #24402f;
+  --neutral-800: #162f20;
+  --neutral-900: #072d18;
+
+  /* ===== Tertiary (tags, decoration) ==================================== */
+  --orange-100: #fe853b;
+  --orange-300: #f16b19;
+  --blue-100: #a5e4ff;
+  --blue-300: #76d6ff;
+  --purple-100: #99a4ff;
+  --purple-300: #7482ff;
+  --pink-300: #fb61fe;
+
+  /* ===== Status ========================================================= */
+  --success-300: #62dc44;
+  --success-500: #55c23a;
+  --success-700: #35991c;
+  --warning-300: #f4dc00;
+  --warning-700: #beac02;
+  --error-300: #f43e3e;
+  --error-500: #d92b2b;
+  --error-700: #b22727;
+
+  /* ===== Semantic aliases =============================================== */
+  --bg: var(--neutral-25);
+  --bg-subtle: var(--neutral-50);
+  --bg-muted: var(--neutral-100);
+  --bg-paper: var(--earth-50);
+  --bg-oak: var(--earth-300);
+  --bg-deep: var(--neutral-900);
+  --bg-overlay: rgba(80, 100, 88, 0.6);
+
+  --surface: var(--neutral-25);
+  --surface-raised: #ffffff;
+
+  --fg: var(--neutral-900);
+  --fg-muted: var(--neutral-400);
+  --fg-subtle: var(--neutral-300);
+  --fg-on-dark: var(--neutral-25);
+  --fg-on-neon: var(--emerald-500);
+
+  --accent: var(--neon-300);
+  --accent-hover: var(--neon-500);
+  --accent-press: var(--neon-700);
+  --accent-fg: var(--emerald-500);
+
+  --brand: var(--emerald-500);
+  --brand-deep: var(--neutral-900);
+
+  --success: var(--success-700);
+  --warning: var(--warning-700);
+  --danger: var(--error-500);
+  --danger-hover: var(--error-300);
+  --info: var(--emerald-300);
+
+  --border: var(--earth-300);
+  --border-strong: var(--neutral-200);
+  --border-subtle: var(--neutral-100);
+  --border-focus: var(--neon-500);
+
+  --shadow-1: 0 1px 2px rgba(7, 45, 24, 0.06);
+  --shadow-2: 0 4px 12px rgba(7, 45, 24, 0.08);
+  --shadow-3: 0 10px 34px rgba(0, 0, 0, 0.14);
+  --shadow-pop: 0 12px 40px rgba(7, 45, 24, 0.18);
+
+  /* ===== Radii ========================================================== */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* ===== Spacing (4px grid) ============================================= */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ===== Typography ===================================================== */
+  --font-sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Courier New", ui-monospace, monospace;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ===== Motion ========================================================= */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+
+  /* ===== Tag color pairs (bg / fg) ====================================== */
+  --tag-green-bg: #dafad2;  --tag-green-fg: #156800;
+  --tag-blue-bg: #dee0fc;   --tag-blue-fg: #000b6c;
+  --tag-cyan-bg: #e4f5fd;   --tag-cyan-fg: #015072;
+  --tag-sage-bg: #ecf3ef;   --tag-sage-fg: #3b5445;
+  --tag-warm-bg: #f0ebe1;   --tag-warm-fg: #584121;
+  --tag-yellow-bg: #fdf8c8; --tag-yellow-fg: #685e00;
+  --tag-purple-bg: #fed9ff; --tag-purple-fg: #650067;
+  --tag-orange-bg: #fedac4; --tag-orange-fg: #672700;
+  --tag-red-bg: #ffe3e3;    --tag-red-fg: #8a0404;
+  --tag-teal-bg: #98d9bf;   --tag-teal-fg: #013f25;
+
+  /* ===== Avatar color pairs (circle bg / initials) ====================== */
+  --av-blue-bg: #76d6ff;         --av-blue-fg: #fbf8f3;
+  --av-emerald-bg: #32b57f;      --av-emerald-fg: #fbf8f3;
+  --av-deep-emerald-bg: #00663c; --av-deep-emerald-fg: #fbf8f3;
+  --av-neon-bg: #ccf352;         --av-neon-fg: #628200;
+  --av-orange-bg: #f16b19;       --av-orange-fg: #fbf8f3;
+  --av-purple-bg: #7482ff;       --av-purple-fg: #fbf8f3;
+  --av-pink-bg: #fb61fe;         --av-pink-fg: #fbf8f3;
+  --av-earthy-bg: #dcd4c0;       --av-earthy-fg: #987e59;
+}
