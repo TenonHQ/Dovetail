@@ -73,7 +73,7 @@ npx dove clickup             # ClickUp task management (subcommands: tasks, task
 
 ### Core Components
 
-Dovetail is a Lerna monorepo with 19 packages (all published under `@tenonhq/dovetail-*`):
+Dovetail is a Lerna monorepo with 20 packages (all published under `@tenonhq/dovetail-*`):
 
 - **dovetail-core** — CLI + core synchronization logic (the `dove` binary)
 - **dovetail-types** — TypeScript type definitions
@@ -94,6 +94,7 @@ Dovetail is a Lerna monorepo with 19 packages (all published under `@tenonhq/dov
 - **dovetail-servicenow** — ServiceNow platform helpers (dictionary, choices, update-set-aware writes)
 - **dovetail-sawmill** — Sawmill REST client (update-set retrieve/preview/commit across instances)
 - **dovetail-mcp** — MCP server exposing read-only ClickUp / Gmail / Calendar / ServiceNow tools
+- **dovetail-claude-plans** — MCP server + CLI for Claude Code plans surfaced in the dashboard
 
 ### How It Works
 
@@ -106,7 +107,7 @@ Dovetail is a Lerna monorepo with 19 packages (all published under `@tenonhq/dov
 
 ```
 Dovetail/
-├── packages/                          # Lerna packages (19 packages)
+├── packages/                          # Lerna packages (20 packages)
 │   ├── core/                          # CLI + core sync logic
 │   ├── types/                         # TypeScript definitions
 │   ├── babel-plugin/                  # Babel plugin
@@ -125,15 +126,42 @@ Dovetail/
 │   ├── schema/                        # ServiceNow schema fetcher
 │   ├── servicenow/                    # ServiceNow platform helpers
 │   ├── sawmill/                       # Sawmill update-set retrieve/preview/commit client
-│   └── mcp/                           # MCP server for read-only integrations
+│   ├── mcp/                           # MCP server for read-only integrations
+│   └── claude-plans/                  # Claude Code plans MCP + dashboard
 ├── docs/                              # QA documentation
-├── skills/                            # Claude Code skills for Dovetail workflows
-├── Scripts/                           # Version bump scripts
+├── Scripts/                           # Release pipeline + version bump scripts
 ├── CHANGELOG.md                       # Release history
 ├── tsconfig.json                      # TypeScript configuration
 ├── lerna.json                         # Lerna configuration
 ├── package.json                       # Root package
 └── README.md                          # Main documentation
+```
+
+## Releasing
+
+Packages publish to npm **automatically** — there is no manual `npm publish`
+step and no separate version-bump PR.
+
+- **Trigger** — every merge to `main` that touches `packages/**` runs the
+  `.github/workflows/publish.yml` workflow.
+- **What ships** — only the packages whose files changed in that merge, built
+  and published in dependency order.
+- **Gate** — the whole monorepo must build (`tsc`) and pass its test suites
+  first; any failure publishes nothing.
+- **Versioning** — patch-bumped automatically. The published version is
+  `max(package.json version, npm-latest + 1 patch)`, so two racing merges can
+  never collide. For a minor/major release, edit the package's `version` in
+  your PR and CI will honor it.
+- **After publish** — CI commits the `postpublish` version bumps back to `main`
+  as a `chore(release): … [skip ci]` commit and cuts a git tag + GitHub
+  Release per package.
+
+Orchestration lives in `Scripts/` — see [`Scripts/PUBLISHING.md`](Scripts/PUBLISHING.md).
+To preview a merge without shipping, run the **Publish packages** workflow
+manually (`dry_run` defaults to on) or locally:
+
+```bash
+node Scripts/publish-on-merge.js --dry-run
 ```
 
 ## Config Architecture
