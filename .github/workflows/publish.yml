@@ -1,0 +1,70 @@
+name: Publish packages
+
+# Publishes changed @tenonhq/dovetail-* packages to npm on every merge to main.
+#
+# Flow: build all packages -> test all packages -> publish the packages that
+# changed in the merge -> commit the version bumps back to main -> tag + cut a
+# GitHub Release. Orchestration lives in Scripts/publish-on-merge.js.
+#
+# The release commit is tagged [skip ci] and pushed with GITHUB_TOKEN, so it
+# never re-triggers this workflow.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — detect and report, but do not publish"
+        type: boolean
+        default: true
+
+# Serialize publish runs so two quick merges never race on the registry.
+concurrency:
+  group: dovetail-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Belt-and-braces: skip the workflow's own release commits. The [skip ci]
+    # tag in the commit message already prevents the trigger.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    permissions:
+      contents: write # push the release commit, create tags + Releases
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the merge can be diffed
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: node Scripts/run-workspaces.js prepack
+
+      - name: Test all packages
+        run: node Scripts/run-workspaces.js test
+
+      - name: Publish changed packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" != "true" ] && [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is not set — cannot publish. Add it with: gh secret set NPM_TOKEN -R TenonHQ/Dovetail"
+            exit 1
+          fi
+          args=(--base="${{ github.event.before }}" --head="${{ github.sha }}")
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          node Scripts/publish-on-merge.js "${args[@]}"
