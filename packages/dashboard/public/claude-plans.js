@@ -60,7 +60,7 @@
 
   function showError(msg) {
     var el = document.createElement("div");
-    el.style.cssText = "position:fixed;bottom:16px;right:16px;background:var(--danger);color:#fff;padding:8px 14px;border-radius:4px;font-size:13px;z-index:9999";
+    el.style.cssText = "position:fixed;bottom:16px;right:16px;background:var(--surface-raised);color:var(--fg);border:1px solid var(--border);border-left:3px solid var(--danger);box-shadow:var(--shadow-2);padding:10px 16px;border-radius:var(--radius-md);font-size:13px;z-index:9999";
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(function () { el.remove(); }, 4000);

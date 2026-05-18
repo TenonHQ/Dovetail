@@ -578,8 +578,9 @@ function renderTaskList() {
 
       var priorityHtml = "";
       if (task.priority) {
-        var colors = { urgent: "#f50057", high: "#ff7043", normal: "#ffab40", low: "#29b6f6" };
-        var color = colors[task.priority] || "#888";
+        // Tenon tertiary + status palette (see tokens.css)
+        var colors = { urgent: "#d92b2b", high: "#f16b19", normal: "#f4dc00", low: "#76d6ff" };
+        var color = colors[task.priority] || "#9caaa1";
         priorityHtml = '<span class="task-priority-dot" style="background:' + color + '"></span>';
       }
 

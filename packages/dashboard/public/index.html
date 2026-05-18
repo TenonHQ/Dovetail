@@ -3,18 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sincronia - Update Set Dashboard</title>
+  <title>Dovetail — Update Sets</title>
+  <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="header-left">
       <button class="sidebar-toggle" id="sidebar-toggle" title="ClickUp Tasks" style="display:none;">Tasks</button>
-      <h1><span>Sincronia</span> Update Set Dashboard</h1>
+      <svg class="brand-mark" viewBox="0 0 55 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M34.3254 13.7847H48.0563H54.9235V0H48.0563H34.3254H20.5946H6.8637H0V13.7847H6.8637H20.5946V27.5693H34.3254V13.7847Z" fill="#00663C"></path>
+        <path d="M54.9235 41.354V27.5693H48.0563H34.3254V41.354H20.5946V27.5693H6.8637H0V41.354V55.1387H20.5946H34.3254H54.9235V41.354Z" fill="#00663C"></path>
+      </svg>
+      <h1><span>Dovetail</span> Update Sets</h1>
     </div>
     <div class="header-right">
       <button class="btn-refresh" id="refresh-btn" title="Refresh scopes and update sets">Refresh</button>
-      <a class="btn-refresh" href="/claude-plans" title="Claude plans and diagrams pushed via MCP">Claude</a>
+      <a class="btn-refresh" href="/claude-plans" title="Claude plans and diagrams pushed via MCP">Claude Plans</a>
       <div class="active-task-chip" id="active-task-chip" style="display:none;"></div>
       <div class="instance-badge" id="instance-badge">Loading...</div>
     </div>

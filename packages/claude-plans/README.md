@@ -80,6 +80,11 @@ Pass a `{ sections: [...] }` object. The server renders it to HTML using the das
 | `table` | `headers: string[]`, `rows: string[][]` | `title` |
 | `text` | `content` | — |
 | `code` | `content` | `title`, `lang` |
+| `tags` | `items: [{label}]` | `title`, `items[].color` (`green\|blue\|cyan\|sage\|warm\|yellow\|purple\|orange\|red\|teal`) |
+| `timeline` | `events: [{label}]` | `title`, `events[].time`, `events[].note`, `events[].status` (`done\|active\|pending\|error`) |
+| `progress` | `items: [{label, value}]` | `title`, `items[].max` (default `100`), `items[].variant` (`success\|warning\|danger\|info`) |
+| `people` | `items: [{name}]` | `title`, `items[].sublabel`, `items[].color` (`blue\|emerald\|deep-emerald\|neon\|orange\|purple\|pink\|earthy`) |
+| `quote` | `text` | `cite` |
 
 ## CLI
 
