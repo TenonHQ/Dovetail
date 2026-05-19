@@ -160,3 +160,64 @@
   --av-pink-bg: #fb61fe;         --av-pink-fg: #fbf8f3;
   --av-earthy-bg: #dcd4c0;       --av-earthy-fg: #987e59;
 }
+
+/* ============================================================================
+   Dark theme — activated by <html data-theme="dark">.
+   Used by the Claude Plans page; safe to adopt dashboard-wide later.
+   Overrides the semantic aliases only — the raw color scales above are shared.
+   Brand emerald and neon accent are preserved; grounds invert to dark woodgrain.
+   ============================================================================ */
+[data-theme="dark"] {
+  --bg: #0d1410;
+  --bg-subtle: #121c16;
+  --bg-muted: #18241c;
+  --bg-paper: #121c16;
+  --bg-oak: #20302554;
+  --bg-deep: #060b08;
+  --bg-overlay: rgba(0, 0, 0, 0.66);
+
+  --surface: #121c16;
+  --surface-raised: #18241c;
+
+  --fg: #e9efe9;
+  --fg-muted: #8da095;
+  --fg-subtle: #5f7167;
+  --fg-on-dark: #e9efe9;
+  --fg-on-neon: var(--emerald-700);
+
+  --accent: var(--neon-300);
+  --accent-hover: var(--neon-500);
+  --accent-press: var(--neon-700);
+  --accent-fg: #0d1410;
+
+  --brand: var(--emerald-50);
+  --brand-deep: #e9efe9;
+
+  --success: var(--success-300);
+  --warning: var(--warning-300);
+  --danger: var(--error-300);
+  --danger-hover: var(--error-500);
+  --info: var(--blue-300);
+
+  --border: #26342b;
+  --border-strong: #344538;
+  --border-subtle: #1d2922;
+  --border-focus: var(--neon-500);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 10px 34px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.7);
+
+  /* ===== Tag color pairs — dark grounds, light ink ===================== */
+  --tag-green-bg: #14301c;  --tag-green-fg: #8fe39d;
+  --tag-blue-bg: #182040;   --tag-blue-fg: #aab4ff;
+  --tag-cyan-bg: #0e2c3a;   --tag-cyan-fg: #8fd9f5;
+  --tag-sage-bg: #1d2922;   --tag-sage-fg: #b6c6bc;
+  --tag-warm-bg: #2c2417;   --tag-warm-fg: #d8c4a2;
+  --tag-yellow-bg: #322d0c; --tag-yellow-fg: #e8d860;
+  --tag-purple-bg: #2a1633; --tag-purple-fg: #e29bf0;
+  --tag-orange-bg: #331c0c; --tag-orange-fg: #f0a878;
+  --tag-red-bg: #371616;    --tag-red-fg: #f08f8f;
+  --tag-teal-bg: #103027;   --tag-teal-fg: #6fd1ad;
+}

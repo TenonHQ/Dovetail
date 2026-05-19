@@ -7,9 +7,21 @@
 (function () {
   "use strict";
 
-  if (window.mermaid && typeof window.mermaid.initialize === "function") {
-    window.mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "strict" });
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   }
+
+  function initMermaid() {
+    if (window.mermaid && typeof window.mermaid.initialize === "function") {
+      window.mermaid.initialize({
+        startOnLoad: false,
+        theme: currentTheme() === "dark" ? "dark" : "default",
+        securityLevel: "strict"
+      });
+    }
+  }
+  initMermaid();
+
   if (window.marked && typeof window.marked.setOptions === "function") {
     window.marked.setOptions({ breaks: true, gfm: true });
   }
@@ -472,7 +484,32 @@
     es.onerror = function () { /* EventSource auto-reconnects */ };
   }
 
+  /* ─── Theme toggle ─────────────────────────────────────────────────────────── */
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("cp-theme", theme); } catch (_) {}
+    var btn = document.getElementById("cp-theme-toggle");
+    if (btn) {
+      btn.textContent = theme === "dark" ? "☀︎" : "☾";
+      btn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    }
+    initMermaid();
+  }
+
+  function setupTheme() {
+    applyTheme(currentTheme());
+    var btn = document.getElementById("cp-theme-toggle");
+    if (btn) {
+      btn.addEventListener("click", function () {
+        applyTheme(currentTheme() === "dark" ? "light" : "dark");
+        if (state.selectedSlug) renderDetail();
+      });
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    setupTheme();
     setActiveTab("plan");
     loadInitial().then(startStream);
   });

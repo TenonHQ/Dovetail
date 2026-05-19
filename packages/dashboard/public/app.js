@@ -1046,3 +1046,31 @@ document.getElementById("task-search").addEventListener("input", function (e) {
 
 // Render task toggles (My Tasks)
 renderTaskToggles();
+
+// --- Theme toggle ---
+
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  try {
+    localStorage.setItem("cp-theme", theme);
+  } catch (e) {}
+  var btn = document.getElementById("cp-theme-toggle");
+  if (btn) {
+    btn.textContent = theme === "dark" ? "☀︎" : "☾";
+    btn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  }
+}
+
+(function setupTheme() {
+  applyTheme(currentTheme());
+  var btn = document.getElementById("cp-theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      applyTheme(currentTheme() === "dark" ? "light" : "dark");
+    });
+  }
+})();
