@@ -34,6 +34,7 @@ jobs:
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     permissions:
       contents: write # push the release commit, create tags + Releases
+      id-token: write # OIDC token for npm Trusted Publishing
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,8 +44,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: "https://registry.npmjs.org"
+
+      # npm 11.5.1+ is required for OIDC / Trusted Publishing.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -62,8 +67,7 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
         run: |
           if [ "$DRY_RUN" != "true" ] && [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::NPM_TOKEN secret is not set — cannot publish. Add it with: gh secret set NPM_TOKEN -R TenonHQ/Dovetail"
-            exit 1
+            echo "::warning::NPM_TOKEN is not set — packages without a Trusted Publisher configured on npmjs.com will fail to publish."
           fi
           args=(--base="${{ github.event.before }}" --head="${{ github.sha }}")
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
