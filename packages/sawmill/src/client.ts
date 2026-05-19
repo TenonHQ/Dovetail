@@ -26,11 +26,20 @@ export class SawmillApiError extends Error {
   }
 }
 
-function buildBaseUrl(instance: string): string {
-  if (instance.indexOf("http://") === 0 || instance.indexOf("https://") === 0) {
-    return instance.replace(/\/+$/, "");
+// Accepts a full URL ("https://x.service-now.com"), a bare host
+// ("x.service-now.com"), or just an instance subdomain ("x"). Only the bare
+// subdomain gets ".service-now.com" appended — a value that already contains a
+// dot is treated as a complete host, so "x.service-now.com" is never doubled
+// into "x.service-now.com.service-now.com".
+export function buildBaseUrl(instance: string): string {
+  var trimmed = instance.replace(/\/+$/, "");
+  if (trimmed.indexOf("http://") === 0 || trimmed.indexOf("https://") === 0) {
+    return trimmed;
   }
-  return "https://" + instance + ".service-now.com";
+  if (trimmed.indexOf(".") !== -1) {
+    return "https://" + trimmed;
+  }
+  return "https://" + trimmed + ".service-now.com";
 }
 
 function createClient(config: SawmillApiConfig): AxiosInstance {
