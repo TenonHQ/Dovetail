@@ -104,8 +104,8 @@ gh secret set NPM_TOKEN -R TenonHQ/Dovetail
    `publish.yml`.
 3. The next publish of that package authenticates via OIDC automatically.
 
-Trusted Publishing needs npm 11.5.1+ and Node 22.14+ — the workflow upgrades
-npm and runs on Node 22 to satisfy this.
+Trusted Publishing needs npm 11.5.1+ — the workflow runs on Node 24, whose
+bundled npm satisfies this.
 
 ## Troubleshooting
 
