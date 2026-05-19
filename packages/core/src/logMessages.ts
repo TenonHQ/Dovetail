@@ -1,5 +1,6 @@
 import { Sinc } from "@tenonhq/dovetail-types";
 import { logger } from "./Logger";
+import { fileLogger } from "./FileLogger";
 import chalk from "chalk";
 
 export const log = console.log;
@@ -21,17 +22,23 @@ export function logFilePush(
   const label = chalk.bold.blue;
   const timestamp = new Date().toLocaleTimeString();
 
+  const fileLabel =
+    context.tableName + "/" + context.name + " (" + context.targetField + ")";
+
   if (success) {
     logger.info(
-      chalk.green("Pushed") + " " + context.tableName + "/" + context.name +
-      " (" + context.targetField + ") to " + instance + " at " + timestamp,
+      chalk.green("Pushed") + " " + fileLabel + " to " + instance +
+      " at " + timestamp,
     );
+    // Persist every push to the session log file (file-only, no console echo).
+    // The log file rotates every 2h (see FileLogger) so it never grows huge.
+    fileLogger.debug("Pushed " + fileLabel + " to " + instance + " at " + timestamp);
   } else {
-    logger.error(
-      "Failed to push " + context.tableName + "/" + context.name +
-      " (" + context.targetField + ") to " + instance,
-    );
+    logger.error("Failed to push " + fileLabel + " to " + instance);
     logger.error(message);
+    fileLogger.debug(
+      "Failed to push " + fileLabel + " to " + instance + ": " + message,
+    );
   }
 }
 
