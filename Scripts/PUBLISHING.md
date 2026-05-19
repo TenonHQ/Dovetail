@@ -76,19 +76,41 @@ node Scripts/publish-on-merge.js --base=<sha> --head=<sha> --dry-run
 Or run the **Publish packages** workflow from the Actions tab
 (`workflow_dispatch`) — its `dry_run` input defaults to `true`.
 
-## Setup
+## Authentication
 
-The workflow needs one repository secret: **`NPM_TOKEN`** — an npm token with
-publish rights to the `@tenonhq` scope (a granular access token, or a classic
-automation token; both bypass 2FA).
+The workflow authenticates to npm two ways, tried in order:
+
+1. **Trusted Publishing (OIDC)** — preferred. If a package has a Trusted
+   Publisher configured on npmjs.com pointing at this repo's `publish.yml`, the
+   workflow publishes it with a short-lived OIDC token — no stored credential —
+   and npm attaches a provenance attestation automatically.
+2. **`NPM_TOKEN` secret** — fallback. A package without a Trusted Publisher yet
+   is published with this token.
+
+This hybrid lets packages move to Trusted Publishing one at a time. Once every
+package has a Trusted Publisher, delete the `NPM_TOKEN` secret.
 
 ```bash
+# Fallback token — needed until every package is on Trusted Publishing
 gh secret set NPM_TOKEN -R TenonHQ/Dovetail
 ```
 
+### Moving a package to Trusted Publishing
+
+1. Ensure the package's `package.json` has a `repository` field whose URL
+   matches this repo exactly — provenance generation requires it.
+2. On npmjs.com, open the package's **Settings → Trusted Publisher**, choose
+   **GitHub Actions**, and enter org `TenonHQ`, repo `Dovetail`, workflow
+   `publish.yml`.
+3. The next publish of that package authenticates via OIDC automatically.
+
+Trusted Publishing needs npm 11.5.1+ and Node 22.14+ — the workflow upgrades
+npm and runs on Node 22 to satisfy this.
+
 ## Troubleshooting
 
-- **`NPM_TOKEN secret is not set`** — add the secret (see Setup).
+- **`NPM_TOKEN is not set` warning** — only affects packages without a Trusted
+  Publisher yet; add the fallback token or finish the Trusted Publishing migration.
 - **A publish run is red** — open the failed run in the Actions tab. Build or
   test failures block all publishing by design; fix and merge again.
 - **A package didn't publish** — it only publishes if its files changed in the
