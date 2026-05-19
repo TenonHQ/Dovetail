@@ -136,6 +136,10 @@ export interface ServiceNowClient {
     }) => Promise<{ sys_id: string; [k: string]: any }>;
     /** GET /api/cadso/dovetail/currentUpdateSet?scope=... (legacy: /api/cadso/claude/currentUpdateSet). */
     currentUpdateSet: (scope?: string) => Promise<{ sys_id: string; name: string }>;
+    /** GET /api/cadso/dovetail/changeUpdateSet?sysId=... — pins the REST session's active update set. */
+    changeUpdateSet: (params: { sysId: string }) => Promise<{ [k: string]: any }>;
+    /** POST /api/cadso/dovetail/deleteRecord — body { table, sys_id }. Returns the deleted record. */
+    deleteRecord: (params: { table: string; sys_id: string }) => Promise<{ [k: string]: any }>;
   };
 }
 
@@ -394,6 +398,26 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
           null,
           scope ? { scope: scope } : null,
           "claude.currentUpdateSet",
+        );
+        return data.result || data;
+      },
+      changeUpdateSet: async function (params) {
+        var data = await dovetailRequest<{ result: any }>(
+          "GET",
+          "changeUpdateSet",
+          null,
+          { sysId: params.sysId },
+          "claude.changeUpdateSet",
+        );
+        return data.result || data;
+      },
+      deleteRecord: async function (params) {
+        var data = await dovetailRequest<{ result: any }>(
+          "POST",
+          "deleteRecord",
+          { table: params.table, sys_id: params.sys_id },
+          null,
+          "claude.deleteRecord(" + params.table + ")",
         );
         return data.result || data;
       }

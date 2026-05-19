@@ -1,0 +1,65 @@
+/**
+ * Zod input schemas for the dovetail-servicenow MCP tools. Schemas live in their
+ * own file so registry.ts stays focused on wiring.
+ */
+
+import { z } from "zod";
+
+export var createViewSchema = z.object({
+  name: z.string().min(1),
+  title: z.string().optional(),
+  updateSetSysId: z.string().min(1),
+  scope: z.string().optional(),
+  dryRun: z.boolean().optional()
+});
+
+export var setListLayoutSchema = z.object({
+  table: z.string().min(1),
+  view: z.string().optional(),
+  columns: z.array(z.string().min(1)).min(1),
+  parent: z.string().optional(),
+  updateSetSysId: z.string().min(1),
+  scope: z.string().optional(),
+  prune: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});
+
+export var formSectionSchema = z.object({
+  caption: z.string().optional(),
+  fields: z.array(z.string().min(1))
+});
+
+export var setFormLayoutSchema = z.object({
+  table: z.string().min(1),
+  view: z.string().optional(),
+  sections: z.array(formSectionSchema).min(1),
+  updateSetSysId: z.string().min(1),
+  scope: z.string().optional(),
+  prune: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});
+
+export var setRelatedListsSchema = z.object({
+  table: z.string().min(1),
+  view: z.string().optional(),
+  relatedLists: z.array(z.string().min(1)).min(1),
+  updateSetSysId: z.string().min(1),
+  scope: z.string().optional(),
+  prune: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});
+
+export var choiceValueSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+  sequence: z.number().optional(),
+  language: z.string().optional()
+});
+
+export var addChoicesToFieldSchema = z.object({
+  table: z.string().min(1),
+  column: z.string().min(1),
+  choices: z.array(choiceValueSchema).min(1),
+  updateSetSysId: z.string().min(1),
+  choiceType: z.union([z.literal(0), z.literal(1), z.literal(3)]).nullable().optional()
+});

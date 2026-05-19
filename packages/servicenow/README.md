@@ -110,9 +110,110 @@ console.log(result.choices);
 // ]
 ```
 
+## Form, list & view layouts
+
+The same query-to-diff, update-set-captured pattern now covers ServiceNow form
+and list layouts. Four declarative, idempotent functions reconcile the `sys_ui_*`
+tables — you describe the layout you want, the function writes only the delta.
+
+| Function | What it sets | ServiceNow tables |
+|----------|--------------|-------------------|
+| `createView` | a named custom view | `sys_ui_view` |
+| `setListLayout` | the columns of a list | `sys_ui_list`, `sys_ui_list_element` |
+| `setFormLayout` | the sections + fields of a form | `sys_ui_form`, `sys_ui_form_section`, `sys_ui_section`, `sys_ui_element` |
+| `setRelatedLists` | which related lists appear on a form | `sys_ui_related_list`, `sys_ui_related_list_entry` |
+
+All four are **idempotent** (re-running reports every record `unchanged`),
+**update-set-captured** (every create / update / delete lands in the update set
+you pass — deletes pin the session update set first), and support **`dryRun`**
+(plan the writes without performing them) and **`prune`** (default `true` —
+delete records absent from your spec; pass `false` to only add / reorder).
+
+An empty or omitted `view` targets the **Default view**. A named `view` that
+does not exist yet is created automatically.
+
+### CLI
+
+```bash
+# Create a custom view
+npx dove-sn create-view --name sales_support --title "Sales Support" \
+  --update-set 0083c3bb33d003507b18bc534d5c7b6d
+
+# Set a list layout (inline columns, or --from-json)
+npx dove-sn set-list-layout \
+  --table x_cadso_automate_audience \
+  --columns "number,name,state" \
+  --update-set 0083c3bb33d003507b18bc534d5c7b6d \
+  --dry-run
+
+# Set a form layout (sections are nested — pass a JSON spec)
+npx dove-sn set-form-layout --from-json ./form.json
+
+# Set the related lists shown on a form
+npx dove-sn set-related-lists \
+  --table x_cadso_automate_audience \
+  --related-lists "x_cadso_automate_audience_member.audience" \
+  --update-set 0083c3bb33d003507b18bc534d5c7b6d
+```
+
+`set-form-layout` JSON payload shape:
+
+```json
+{
+  "table": "x_cadso_automate_audience",
+  "view": "",
+  "updateSetSysId": "0083c3bb33d003507b18bc534d5c7b6d",
+  "prune": true,
+  "sections": [
+    { "fields": ["name", "active", "description"] },
+    { "caption": "Meta Data", "fields": ["created_by", "updated_on"] }
+  ]
+}
+```
+
+The first section is the **primary section** — omit its `caption`.
+
+### Programmatic
+
+```ts
+import { createClient, setFormLayout, formatLayoutResult } from "@tenonhq/dovetail-servicenow";
+
+var client = createClient({});
+var result = await setFormLayout(client, {
+  table: "x_cadso_automate_audience",
+  view: "",
+  updateSetSysId: "0083c3bb33d003507b18bc534d5c7b6d",
+  sections: [
+    { fields: ["name", "active"] },
+    { caption: "Meta Data", fields: ["created_by"] }
+  ]
+});
+console.log(formatLayoutResult("form layout", result));
+```
+
+## MCP server
+
+`dove-sn mcp` runs a self-contained MCP stdio server exposing the write tools to
+Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
+`set_related_lists`, and `add_choices_to_field`. It reads ServiceNow credentials
+from the same env vars as the CLI.
+
+```bash
+npx dove-sn mcp --smoke   # list the registered tools and exit
+npx dove-sn mcp           # run the stdio server (wire into .mcp.json)
+```
+
+`.mcp.json` entry:
+
+```json
+{ "mcpServers": { "dovetail-servicenow": { "command": "npx", "args": ["dove-sn", "mcp"] } } }
+```
+
+This server is separate from `@tenonhq/dovetail-mcp` (the read-only cross-system
+aggregator) — `dovetail-servicenow`'s server is the ServiceNow **write** surface.
+
 ## Roadmap
 
-Same package will grow to cover the rest of the `sinch-dlr-manual-steps`
-patterns: indexes (`sys_db_object_ix`), table properties (`accessible_from`),
-`sys_trigger` creation, `sys_property` creation. Pattern stays identical —
-query to diff, write through the Dovetail REST API, report per-row actions.
+The same query-to-diff pattern will continue across the rest of the
+`sinch-dlr-manual-steps` work: indexes (`sys_db_object_ix`), table properties
+(`accessible_from`), `sys_trigger` and `sys_property` creation.

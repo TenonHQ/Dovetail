@@ -65,6 +65,8 @@ function makeClient(scripted: Array<{ match: (table: string, query: string) => b
           return { sys_id: p.record_sys_id };
         },
         currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
+        changeUpdateSet: async function () { return {}; },
+        deleteRecord: async function () { return {}; },
       },
     },
   };
@@ -256,6 +258,8 @@ describe("runBuildFlow — write failure", function () {
           createRecord: async function () { throw new Error("ACL violation on sys_hub_flow"); },
           pushWithUpdateSet: async function (p: any) { return { sys_id: p.record_sys_id }; },
           currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
+          changeUpdateSet: async function () { return {}; },
+          deleteRecord: async function () { return {}; },
         },
       } as ServiceNowClient,
     };
