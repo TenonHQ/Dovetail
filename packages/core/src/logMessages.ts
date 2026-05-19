@@ -31,7 +31,7 @@ export function logFilePush(
       " at " + timestamp,
     );
     // Persist every push to the session log file (file-only, no console echo).
-    // The log file rotates every 2h (see FileLogger) so it never grows huge.
+    // The log file rotates every 200 writes (see FileLogger) so it never grows huge.
     fileLogger.debug("Pushed " + fileLabel + " to " + instance + " at " + timestamp);
   } else {
     logger.error("Failed to push " + fileLabel + " to " + instance);
