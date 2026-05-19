@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dovetail — Update Sets</title>
+  <script>
+    /* Apply the saved theme before first paint to avoid a flash of light. */
+    (function () {
+      try {
+        var t = localStorage.getItem("cp-theme");
+        if (t === "dark" || t === "light") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -20,6 +31,8 @@
     <div class="header-right">
       <button class="btn-refresh" id="refresh-btn" title="Refresh scopes and update sets">Refresh</button>
       <a class="btn-refresh" href="/claude-plans" title="Claude plans and diagrams pushed via MCP">Claude Plans</a>
+      <button class="cp-theme-toggle" id="cp-theme-toggle" type="button"
+        aria-label="Toggle dark mode" title="Toggle dark mode"></button>
       <div class="active-task-chip" id="active-task-chip" style="display:none;"></div>
       <div class="instance-badge" id="instance-badge">Loading...</div>
     </div>

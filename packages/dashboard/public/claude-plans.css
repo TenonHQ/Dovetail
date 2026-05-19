@@ -961,3 +961,41 @@
   opacity: 1;
   transform: translateY(0);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Dark theme overrides.
+   The page already flows through the semantic tokens, so only the semantic
+   color chips that hardcode light pastels need explicit dark variants here.
+   The .cp-theme-toggle button itself is styled in styles.css (shared).
+   ════════════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .cp-status-DRAFT    { background: #322d0c; color: #e8d860; border-color: #f4dc0033; }
+[data-theme="dark"] .cp-status-APPROVED { background: #14301c; color: #8fe39d; border-color: #62dc4433; }
+
+[data-theme="dark"] .cp-c-badge-success { background: #14301c; color: #8fe39d; border-color: #62dc4433; }
+[data-theme="dark"] .cp-c-badge-warning { background: #322d0c; color: #e8d860; border-color: #f4dc0033; }
+[data-theme="dark"] .cp-c-badge-danger  { background: #371616; color: #f08f8f; border-color: #f4393933; }
+[data-theme="dark"] .cp-c-badge-info    { background: #0e2c3a; color: #8fd9f5; border-color: #76d6ff33; }
+
+[data-theme="dark"] .cp-c-callout-info    { background: #0e2c3a55; border-color: #76d6ff33; }
+[data-theme="dark"] .cp-c-callout-success { background: #14301c55; border-color: #62dc4433; }
+[data-theme="dark"] .cp-c-callout-warning { background: #322d0c55; border-color: #f4dc0033; }
+[data-theme="dark"] .cp-c-callout-danger  { background: #37161655; border-color: #f4393933; }
+[data-theme="dark"] .cp-c-callout-info    .cp-c-callout-icon { color: #8fd9f5; }
+[data-theme="dark"] .cp-c-callout-success .cp-c-callout-icon { color: #8fe39d; }
+[data-theme="dark"] .cp-c-callout-warning .cp-c-callout-icon { color: #e8d860; }
+[data-theme="dark"] .cp-c-callout-danger  .cp-c-callout-icon { color: #f08f8f; }
+
+[data-theme="dark"] .cp-mermaid-error {
+  background: #37161655;
+  border-color: #f4393933;
+}
+
+[data-theme="dark"] .cp-pr-badge {
+  background: #0e2c3a;
+  color: #8fd9f5;
+  border-color: #76d6ff33;
+}
+[data-theme="dark"] .cp-pr-badge:hover {
+  background: #14384a;
+  color: #b6e8ff;
+}

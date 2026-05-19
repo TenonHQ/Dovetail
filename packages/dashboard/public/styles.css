@@ -887,3 +887,31 @@ header h1 span {
 .recent-edit-dismiss:hover {
   color: var(--danger);
 }
+
+/* ── Theme toggle button (header) — shared by dashboard + Claude Plans ──── */
+.cp-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  background: var(--surface-raised);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+.cp-theme-toggle:hover {
+  background: var(--bg-subtle);
+  color: var(--fg);
+}
+.cp-theme-toggle:focus-visible {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(50, 181, 127, 0.18);
+}
