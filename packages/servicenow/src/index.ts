@@ -17,6 +17,12 @@ export { addChoicesToField } from "./choices";
 
 export { formatAddChoicesResult } from "./formatter";
 
+export { createView } from "./layout/views";
+export { setListLayout } from "./layout/listLayout";
+export { setFormLayout } from "./layout/formLayout";
+export { setRelatedLists } from "./layout/relatedLists";
+export { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
+
 export { sincPlugin } from "./plugin";
 
 export {
@@ -58,5 +64,14 @@ export type {
   AddChoicesResult,
   ChoiceActionResult,
   DictionaryRecord,
-  UpdateSetRecord
+  UpdateSetRecord,
+  LayoutAction,
+  LayoutRecordResult,
+  LayoutResult,
+  CreateViewParams,
+  CreateViewResult,
+  FormSectionSpec,
+  SetFormLayoutParams,
+  SetListLayoutParams,
+  SetRelatedListsParams
 } from "./types";

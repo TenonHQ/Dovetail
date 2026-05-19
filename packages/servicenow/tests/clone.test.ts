@@ -31,6 +31,8 @@ function makeClient(scripted: Array<{ match: (table: string, query: string) => b
       },
       pushWithUpdateSet: async function (p: any) { return { sys_id: p.record_sys_id }; },
       currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
+      changeUpdateSet: async function () { return {}; },
+      deleteRecord: async function () { return {}; },
     },
   };
   return { client: client, cap: cap };

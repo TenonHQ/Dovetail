@@ -1,57 +1,5 @@
 import { addChoicesToField } from "../src/choices";
-import type { ServiceNowClient } from "../src/client";
-
-type QueryFn = (table: string, query?: string, limit?: number) => Promise<Array<any>>;
-
-function makeClient(overrides: { query?: QueryFn } = {}): {
-  client: ServiceNowClient;
-  calls: {
-    tableQuery: Array<{ table: string; query: string }>;
-    createRecord: Array<any>;
-    pushWithUpdateSet: Array<any>;
-  };
-} {
-  var calls = {
-    tableQuery: [] as Array<{ table: string; query: string }>,
-    createRecord: [] as Array<any>,
-    pushWithUpdateSet: [] as Array<any>
-  };
-  var queryImpl: QueryFn = overrides.query || (async function () { return []; });
-  var queryFn = async function <T = any>(
-    table: string,
-    query: string,
-    limitOrOptions?: number | { limit?: number; fields?: string[] }
-  ): Promise<Array<T>> {
-    calls.tableQuery.push({ table: table, query: query });
-    var limit = typeof limitOrOptions === "number"
-      ? limitOrOptions
-      : (limitOrOptions && limitOrOptions.limit);
-    return (await queryImpl(table, query, limit)) as Array<T>;
-  };
-  var client: ServiceNowClient = {
-    table: {
-      query: queryFn as ServiceNowClient["table"]["query"]
-    },
-    buildAgent: {
-      runQuery: async function () { return [] as any; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; }
-    },
-    claude: {
-      createRecord: async function (params) {
-        calls.createRecord.push(params);
-        return { sys_id: "new_" + calls.createRecord.length };
-      },
-      pushWithUpdateSet: async function (params) {
-        calls.pushWithUpdateSet.push(params);
-        return { sys_id: params.record_sys_id };
-      },
-      currentUpdateSet: async function () {
-        return { sys_id: "cur", name: "cur" };
-      }
-    }
-  };
-  return { client: client, calls: calls };
-}
+import { makeMockClient as makeClient } from "./mockClient";
 
 describe("addChoicesToField", function () {
   var dictRow = {

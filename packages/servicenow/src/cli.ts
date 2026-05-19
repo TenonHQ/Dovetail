@@ -26,9 +26,22 @@ import * as fs from "fs";
 import { createClient } from "./client";
 import { addChoicesToField } from "./choices";
 import { formatAddChoicesResult } from "./formatter";
+import { createView } from "./layout/views";
+import { setListLayout } from "./layout/listLayout";
+import { setFormLayout } from "./layout/formLayout";
+import { setRelatedLists } from "./layout/relatedLists";
+import { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
+import { runStdio, runSmoke } from "./mcp/server";
 import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
 import { formatBuildFlowResult } from "./flowDesigner-formatter";
-import type { AddChoicesParams, ChoiceValue } from "./types";
+import type {
+  AddChoicesParams,
+  ChoiceValue,
+  CreateViewParams,
+  SetListLayoutParams,
+  SetFormLayoutParams,
+  SetRelatedListsParams
+} from "./types";
 
 interface ParsedArgs {
   command: string;
@@ -145,13 +158,131 @@ async function runBuildFlowCmd(flags: Record<string, string>): Promise<number> {
   return result.exitCode;
 }
 
+/** Split a comma-separated CLI value into a trimmed, non-empty list. */
+function splitList(raw: string): Array<string> {
+  return raw
+    .split(",")
+    .map(function (v) { return v.trim(); })
+    .filter(function (v) { return v !== ""; });
+}
+
+async function runCreateView(flags: Record<string, string>): Promise<void> {
+  var params: CreateViewParams = {
+    name: flags.name,
+    updateSetSysId: flags["update-set"] || flags.updateSetSysId
+  };
+  if (!params.name || !params.updateSetSysId) {
+    throw new Error("create-view: --name and --update-set are required");
+  }
+  if (flags.title) { params.title = flags.title; }
+  if (flags.scope) { params.scope = flags.scope; }
+  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  var result = await createView(createClient({}), params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  process.stdout.write(formatCreateViewResult(result) + "\n");
+}
+
+async function runSetListLayout(flags: Record<string, string>): Promise<void> {
+  var params: SetListLayoutParams;
+  if (flags["from-json"]) {
+    params = JSON.parse(fs.readFileSync(flags["from-json"], "utf8")) as SetListLayoutParams;
+  } else {
+    var table = flags.table;
+    var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
+    var columns = flags.columns;
+    if (!table || !updateSetSysId || !columns) {
+      throw new Error("set-list-layout: --table, --update-set and --columns are required (or use --from-json)");
+    }
+    params = { table: table, updateSetSysId: updateSetSysId, columns: splitList(columns) };
+    if (flags.view) { params.view = flags.view; }
+    if (flags.scope) { params.scope = flags.scope; }
+    if (flags.parent) { params.parent = flags.parent; }
+    if (flags.prune === "false") { params.prune = false; }
+  }
+  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  var result = await setListLayout(createClient({}), params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  process.stdout.write(formatLayoutResult("list layout", result) + "\n");
+}
+
+async function runSetFormLayout(flags: Record<string, string>): Promise<void> {
+  if (!flags["from-json"]) {
+    throw new Error("set-form-layout: --from-json <path> is required (sections are nested — pass a JSON spec)");
+  }
+  var params = JSON.parse(fs.readFileSync(flags["from-json"], "utf8")) as SetFormLayoutParams;
+  if (flags["update-set"]) { params.updateSetSysId = flags["update-set"]; }
+  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  var result = await setFormLayout(createClient({}), params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  process.stdout.write(formatLayoutResult("form layout", result) + "\n");
+}
+
+async function runSetRelatedLists(flags: Record<string, string>): Promise<void> {
+  var params: SetRelatedListsParams;
+  if (flags["from-json"]) {
+    params = JSON.parse(fs.readFileSync(flags["from-json"], "utf8")) as SetRelatedListsParams;
+  } else {
+    var table = flags.table;
+    var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
+    var relatedLists = flags["related-lists"];
+    if (!table || !updateSetSysId || !relatedLists) {
+      throw new Error("set-related-lists: --table, --update-set and --related-lists are required (or use --from-json)");
+    }
+    params = { table: table, updateSetSysId: updateSetSysId, relatedLists: splitList(relatedLists) };
+    if (flags.view) { params.view = flags.view; }
+    if (flags.scope) { params.scope = flags.scope; }
+    if (flags.prune === "false") { params.prune = false; }
+  }
+  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  var result = await setRelatedLists(createClient({}), params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  process.stdout.write(formatLayoutResult("related lists", result) + "\n");
+}
+
+/**
+ * dove-sn mcp — run the MCP stdio server. With --smoke, list the registered
+ * tools and exit. Otherwise the process stays alive until the transport closes.
+ */
+async function runMcp(flags: Record<string, string>): Promise<number> {
+  if (flags.smoke === "true") {
+    await runSmoke();
+    return 0;
+  }
+  await runStdio();
+  await new Promise(function () { /* keep the MCP server alive */ });
+  return 0;
+}
+
 function printHelp(): void {
   process.stdout.write(
-    "sinc-sn — ServiceNow helpers\n\n" +
+    "dove-sn — ServiceNow platform helpers\n\n" +
     "Commands:\n" +
-    "  add-choices   Upsert sys_choice rows for a table.column\n" +
-    "  build-flow    Author Custom Action Types and Subflows from a JSON spec\n" +
-    "                (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n"
+    "  add-choices        Upsert sys_choice rows for a table.column\n" +
+    "  create-view        Create a custom view (sys_ui_view)\n" +
+    "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
+    "  set-list-layout    Set the columns of a list layout\n" +
+    "                     (--from-json <path>  OR  --table <t> --columns a,b,c --update-set <sys_id>\n" +
+    "                      [--view <v>] [--parent <t>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
+    "  set-form-layout    Set the sections + fields of a form layout\n" +
+    "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--json])\n" +
+    "  set-related-lists  Set which related lists appear on a form\n" +
+    "                     (--from-json <path>  OR  --table <t> --related-lists a,b --update-set <sys_id>\n" +
+    "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
+    "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
+    "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
+    "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n"
   );
 }
 
@@ -163,6 +294,25 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "build-flow") {
     return await runBuildFlowCmd(parsed.flags);
+  }
+  if (parsed.command === "create-view") {
+    await runCreateView(parsed.flags);
+    return 0;
+  }
+  if (parsed.command === "set-list-layout") {
+    await runSetListLayout(parsed.flags);
+    return 0;
+  }
+  if (parsed.command === "set-form-layout") {
+    await runSetFormLayout(parsed.flags);
+    return 0;
+  }
+  if (parsed.command === "set-related-lists") {
+    await runSetRelatedLists(parsed.flags);
+    return 0;
+  }
+  if (parsed.command === "mcp") {
+    return await runMcp(parsed.flags);
   }
   if (!parsed.command || parsed.command === "help" || parsed.flags.help === "true") {
     printHelp();

@@ -35,6 +35,8 @@ function makeClient(scripted: Array<{ match: (call: RunQueryCall) => boolean; ro
       createRecord: async function () { return { sys_id: "x" }; },
       pushWithUpdateSet: async function (p) { return { sys_id: p.record_sys_id }; },
       currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
+      changeUpdateSet: async function () { return {}; },
+      deleteRecord: async function () { return {}; },
     },
   };
   return { client: client, calls: calls };
