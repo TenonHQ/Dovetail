@@ -267,6 +267,8 @@ ServiceNow platform helpers, layered on top of the Dovetail Scripted REST API:
 
 - **`addChoicesToField`** — upserts `sys_choice` + `sys_dictionary` rows. Update-set-aware (pins writes to a target update set), idempotent.
 - **`buildFlow` CLI (`dove-sn` binary, Phase 1)** — orchestrator for Custom Action Type + Subflow authoring. Validates specs → clones templates → verifies artifacts → triggers publication. `createBranch` is currently `NotImplemented`. Exit codes: `0` (done), `2` (needs UI publish), `3-5` (escalations). See `packages/servicenow/README.md`.
+- **Form / list / view layouts** — `createView`, `setListLayout`, `setFormLayout`, `setRelatedLists` declaratively reconcile the `sys_ui_*` tables (forms, sections, fields, list columns, related lists). Each is idempotent, update-set-captured, and supports `dryRun` + `prune`. Available as library functions and `dove-sn` CLI commands.
+- **MCP server** — `dove-sn mcp` runs a self-contained MCP stdio server exposing the layout tools + `add_choices_to_field` to Claude Code / agents. Distinct from `@tenonhq/dovetail-mcp`: that package is the read-only cross-system aggregator; this server is the ServiceNow **write** surface.
 
 ### `@tenonhq/dovetail-sawmill`
 
