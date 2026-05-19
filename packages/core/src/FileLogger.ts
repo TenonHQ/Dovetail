@@ -3,10 +3,16 @@ import * as path from "path";
 import { format } from "winston";
 import chalk from "chalk";
 
+// Roll over to a fresh log file once the current one has had this many writes.
+// Long-running sessions (e.g. `dove watch`) would otherwise grow a single
+// debug log unbounded; capping at 200 writes per file keeps each one small.
+const ROTATION_WRITE_LIMIT = 200;
+
 class FileLogger {
   private logFilePath: string;
   private logStream: fs.WriteStream | null = null;
   private initialized: boolean = false;
+  private writeCount: number = 0;
 
   constructor() {
     // Initialize on first use
@@ -21,22 +27,23 @@ class FileLogger {
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const logFileName = `dovetail-debug-${timestamp}.log`;
-    
+
     // Create log file in the current working directory (ServiceNow folder)
     this.logFilePath = path.join(process.cwd(), logFileName);
-    
+
     try {
       // Create or append to the log file
       this.logStream = fs.createWriteStream(this.logFilePath, { flags: 'a' });
       this.initialized = true;
-      
-      // Write header to log file
+      this.writeCount = 0;
+
+      // Write header to log file — once, at the top of each (rotated) file
       this.writeToFile(`\n${"=".repeat(80)}`);
       this.writeToFile(`Dovetail Debug Log - Started at ${new Date().toISOString()}`);
       this.writeToFile(`Log file: ${this.logFilePath}`);
       this.writeToFile(`Working directory: ${process.cwd()}`);
       this.writeToFile(`${"=".repeat(80)}\n`);
-      
+
       // Also log to console
       console.log(chalk.cyan(`📝 Debug logging enabled: ${this.logFilePath}`));
     } catch (error) {
@@ -45,16 +52,42 @@ class FileLogger {
   }
 
   /**
+   * Close the current log file and start a new one once it has reached
+   * ROTATION_WRITE_LIMIT writes. Keeps any single debug log from growing huge
+   * during long watch sessions.
+   */
+  private rotateIfNeeded() {
+    if (!this.initialized) return;
+    if (this.writeCount < ROTATION_WRITE_LIMIT) return;
+
+    if (this.logStream && this.logStream.writable) {
+      const timestamp = new Date().toISOString();
+      this.logStream.write(`[${timestamp}] ${"=".repeat(80)}\n`);
+      this.logStream.write(`[${timestamp}] Log rotated after ${ROTATION_WRITE_LIMIT} writes — continues in a new file\n`);
+      this.logStream.write(`[${timestamp}] ${"=".repeat(80)}\n`);
+    }
+    if (this.logStream) {
+      this.logStream.end();
+      this.logStream = null;
+    }
+    this.initialized = false;
+    this.initialize();
+  }
+
+  /**
    * Write a message to the log file
    */
   private writeToFile(message: string) {
     if (!this.initialized) {
       this.initialize();
+    } else {
+      this.rotateIfNeeded();
     }
-    
+
     if (this.logStream && this.logStream.writable) {
       const timestamp = new Date().toISOString();
       this.logStream.write(`[${timestamp}] ${message}\n`);
+      this.writeCount++;
     }
   }
 
