@@ -74,7 +74,9 @@ node Scripts/publish-on-merge.js --base=<sha> --head=<sha> --dry-run
 ```
 
 Or run the **Publish packages** workflow from the Actions tab
-(`workflow_dispatch`) — its `dry_run` input defaults to `true`.
+(`workflow_dispatch`) — its `dry_run` input defaults to `true`. The optional
+`base` input sets the diff base, so a missed publish can be replayed for an
+explicit commit range.
 
 ## Authentication
 

@@ -20,6 +20,10 @@ on:
         description: "Dry run — detect and report, but do not publish"
         type: boolean
         default: true
+      base:
+        description: "Diff base — commit/ref to detect changes from (default: previous commit)"
+        type: string
+        default: ""
 
 # Serialize publish runs so two quick merges never race on the registry.
 concurrency:
@@ -62,10 +66,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          INPUT_BASE: ${{ inputs.base }}
         run: |
           if [ "$DRY_RUN" != "true" ] && [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "::warning::NPM_TOKEN is not set — packages without a Trusted Publisher configured on npmjs.com will fail to publish."
           fi
-          args=(--base="${{ github.event.before }}" --head="${{ github.sha }}")
+          # A manual run may pass an explicit diff base; a push uses the prior commit.
+          base="${{ github.event.before }}"
+          if [ -n "$INPUT_BASE" ]; then base="$INPUT_BASE"; fi
+          args=(--base="$base" --head="${{ github.sha }}")
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           node Scripts/publish-on-merge.js "${args[@]}"
