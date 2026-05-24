@@ -266,6 +266,25 @@
   border-radius: var(--radius-md);
   white-space: pre-wrap;
 }
+.cp-mermaid-fallback {
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.cp-mermaid-fallback-note {
+  color: var(--error-700);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.cp-mermaid-fallback pre {
+  margin: 0;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    cp-c-* Structured Component Library
