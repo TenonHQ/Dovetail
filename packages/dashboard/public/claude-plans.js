@@ -1,7 +1,8 @@
 /* /claude-plans page logic.
  * - Fetches initial state from REST.
  * - Subscribes to /api/claude-plans/stream (SSE) for live updates.
- * - Renders markdown via marked + DOMPurify, Mermaid via mermaid.run().
+ * - Renders markdown via marked + DOMPurify, Mermaid via mermaid.parse()/render()
+ *   with a graceful raw-source fallback when a diagram fails to parse.
  */
 
 (function () {
@@ -16,7 +17,10 @@
       window.mermaid.initialize({
         startOnLoad: false,
         theme: currentTheme() === "dark" ? "dark" : "default",
-        securityLevel: "strict"
+        securityLevel: "strict",
+        // Never inject mermaid's "Syntax error in text" bomb SVG into the page.
+        // Bad sources are handled by renderMermaid's graceful fallback instead.
+        suppressErrorRendering: true
       });
     }
   }
@@ -99,27 +103,62 @@
     target.innerHTML = window.DOMPurify.sanitize(html);
   }
 
+  // Strip a wrapping markdown code fence and normalize whitespace/line endings.
+  // LLM-authored sources often arrive fenced (```mermaid … ```) or with CRLF/BOM,
+  // which the parser rejects on line 1.
+  function preprocessMermaid(src) {
+    var s = src == null ? "" : String(src);
+    s = s.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
+    s = s.replace(/^\s*```[^\n]*\n/, "").replace(/\n```\s*$/, "");
+    return s.trim();
+  }
+
+  // Graceful fallback: show the raw source instead of mermaid's "Syntax error"
+  // bomb so one bad diagram never poisons the page.
+  function renderMermaidFallback(source, target) {
+    target.classList.remove("cp-mermaid");
+    target.classList.add("cp-mermaid-fallback");
+    target.textContent = "";
+    var note = document.createElement("div");
+    note.className = "cp-mermaid-fallback-note";
+    note.textContent = "⚠ Diagram failed to render — showing source";
+    var pre = document.createElement("pre");
+    var code = document.createElement("code");
+    code.textContent = source;
+    pre.appendChild(code);
+    target.appendChild(note);
+    target.appendChild(pre);
+  }
+
   function renderMermaid(source, target) {
+    target.classList.remove("cp-mermaid-fallback", "cp-mermaid-error");
     target.classList.add("cp-mermaid");
     target.textContent = "";
     if (!window.mermaid || typeof window.mermaid.render !== "function") {
-      target.textContent = source;
+      renderMermaidFallback(source, target);
       return;
     }
+    var clean = preprocessMermaid(source);
     var id = "mmd-" + Math.random().toString(36).slice(2, 10);
-    try {
-      window.mermaid.render(id, source).then(
+    var doRender = function () {
+      window.mermaid.render(id, clean).then(
         function (out) { target.innerHTML = out.svg; },
-        function (err) {
-          target.classList.remove("cp-mermaid");
-          target.classList.add("cp-mermaid-error");
-          target.textContent = "mermaid error: " + (err && err.message ? err.message : String(err));
-        }
+        function () { renderMermaidFallback(source, target); }
       );
+    };
+    try {
+      // Validate before rendering. suppressErrors makes parse resolve false
+      // (instead of throwing) on bad source, so we can fall back cleanly.
+      if (typeof window.mermaid.parse === "function") {
+        window.mermaid.parse(clean, { suppressErrors: true }).then(
+          function (ok) { if (ok) { doRender(); } else { renderMermaidFallback(source, target); } },
+          function () { renderMermaidFallback(source, target); }
+        );
+      } else {
+        doRender();
+      }
     } catch (err) {
-      target.classList.remove("cp-mermaid");
-      target.classList.add("cp-mermaid-error");
-      target.textContent = "mermaid error: " + err.message;
+      renderMermaidFallback(source, target);
     }
   }
 

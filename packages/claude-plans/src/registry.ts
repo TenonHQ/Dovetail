@@ -51,12 +51,56 @@ interface ToolDescriptor {
 
 var MERMAID_HEADERS = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|c4Context)\b/;
 
-function validateMermaid(source: string): void {
-  if (!MERMAID_HEADERS.test(source)) {
+// Sequence-diagram arrow tokens: -> --> ->> -->> -x --x -) --)
+var SEQ_ARROW = /(--?>>?|--?[)x])/;
+
+// Strip a wrapping markdown code fence and normalize line endings/BOM/whitespace.
+// LLM-authored sources frequently arrive fenced (```mermaid … ```) or with CRLF,
+// which makes Mermaid fail on line 1.
+function normalizeMermaid(source: string): string {
+  var s = source == null ? "" : String(source);
+  s = s.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
+  s = s.replace(/^\s*```[^\n]*\n/, "").replace(/\n```\s*$/, "");
+  return s.trim();
+}
+
+// In a sequenceDiagram, ';' is a statement separator — a ';' inside message or
+// note text silently splits the line and breaks the parser ("Syntax error in
+// text"). Reject it with an actionable message. Scoped to sequenceDiagram only,
+// since ';' is legal in flowchart/classDef statements.
+function lintSequenceSemicolons(source: string): void {
+  if (!/^\s*sequenceDiagram\b/.test(source)) return;
+  var lines = source.split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var colon = line.indexOf(":");
+    if (colon === -1) continue;
+    var head = line.slice(0, colon);
+    var text = line.slice(colon + 1);
+    if (text.indexOf(";") === -1) continue;
+    var isMessage = SEQ_ARROW.test(head);
+    var isNote = /^\s*[Nn]ote\b/.test(head);
+    if (isMessage || isNote) {
+      throw new Error(
+        "mermaid sequenceDiagram line " + (i + 1) + " contains ';' in its text (\"" +
+        text.trim() + "\"). Mermaid treats ';' as a statement separator, which breaks " +
+        "the diagram — replace ';' with ',' or rephrase."
+      );
+    }
+  }
+}
+
+// Validate and normalize a mermaid source. Returns the cleaned source to store
+// so the dashboard renders exactly what was validated.
+function validateMermaid(source: string): string {
+  var normalized = normalizeMermaid(source);
+  if (!MERMAID_HEADERS.test(normalized)) {
     throw new Error(
       "mermaid_source does not start with a recognized diagram header (graph, flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, journey, gitGraph, mindmap, timeline, quadrantChart, requirementDiagram, c4Context)"
     );
   }
+  lintSequenceSemicolons(normalized);
+  return normalized;
 }
 
 function sessionIdFromEnv(): string | null {
@@ -169,7 +213,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: pushArtifactSchema.shape,
       handler: async function (args: any) {
         var parsed = pushArtifactSchema.parse(args);
-        if (parsed.kind === "mermaid") validateMermaid(parsed.content);
+        if (parsed.kind === "mermaid") parsed.content = validateMermaid(parsed.content);
         return pushArtifact(parsed, storageOpts);
       }
     },
@@ -180,14 +224,14 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: pushDiagramSchema.shape,
       handler: async function (args: any) {
         var parsed = pushDiagramSchema.parse(args);
-        validateMermaid(parsed.mermaid_source);
+        var source = validateMermaid(parsed.mermaid_source);
         return pushArtifact(
           {
             plan_slug: parsed.plan_slug,
             slug: parsed.slug,
             kind: "mermaid",
             title: parsed.title,
-            content: parsed.mermaid_source
+            content: source
           },
           storageOpts
         );

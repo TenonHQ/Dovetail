@@ -74,6 +74,61 @@ describe("registry", function () {
     expect(res.slug).toBe("flow");
   });
 
+  it("push_diagram rejects a sequenceDiagram with ';' in message text", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "p", content_md: "x" });
+    var res = await descByName(deps, "push_diagram").handler({
+      plan_slug: "p",
+      title: "seq",
+      mermaid_source: "sequenceDiagram\n    A->>B: restore transform; return PNG"
+    }).catch(function (e: Error) { return e; });
+    expect(res).toBeInstanceOf(Error);
+    expect((res as Error).message).toMatch(/statement separator/);
+    expect((res as Error).message).toMatch(/line 2/);
+  });
+
+  it("push_diagram rejects a ';' inside a sequenceDiagram Note", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "p", content_md: "x" });
+    var res = await descByName(deps, "push_diagram").handler({
+      plan_slug: "p",
+      title: "seq-note",
+      mermaid_source: "sequenceDiagram\n    Note over A,B: best-effort; unaffected"
+    }).catch(function (e: Error) { return e; });
+    expect(res).toBeInstanceOf(Error);
+    expect((res as Error).message).toMatch(/statement separator/);
+  });
+
+  it("push_diagram accepts a clean sequenceDiagram (no semicolons)", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "p", content_md: "x" });
+    var res = await descByName(deps, "push_diagram").handler({
+      plan_slug: "p",
+      title: "seq-ok",
+      mermaid_source: "sequenceDiagram\n    A->>B: restore transform, return PNG"
+    });
+    expect(res.kind).toBe("mermaid");
+  });
+
+  it("push_diagram strips a wrapping markdown code fence before storing", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "p", content_md: "x" });
+    var res = await descByName(deps, "push_diagram").handler({
+      plan_slug: "p",
+      title: "fenced",
+      mermaid_source: "```mermaid\nflowchart TD\n    A-->B\n```"
+    });
+    expect(res.kind).toBe("mermaid");
+    var stored = JSON.parse(
+      fs.readFileSync(path.join(root, "p", "artifacts", "fenced.json"), "utf8")
+    );
+    expect(stored.content).toBe("flowchart TD\n    A-->B");
+  });
+
   it("update_plan_status enforces the state machine via the handler", async function () {
     var root = mkTmp();
     var deps = { storage: { rootDir: root } };
