@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-gmail",
-  "version": "0.0.8",
+  "version": "0.0.9",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Gmail API client for Dovetail — email management, digest formatting, inbox operations",
   "main": "./dist/index.js",
   "scripts": {

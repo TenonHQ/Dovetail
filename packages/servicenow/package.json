@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-servicenow",
-  "version": "0.0.4",
+  "version": "0.0.5",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "ServiceNow platform helpers for Dovetail — dictionary, choices, update-set-aware writes via the Dovetail Scripted REST API",
   "main": "./dist/index.js",
   "bin": {

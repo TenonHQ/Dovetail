@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-sass-plugin",
-  "version": "0.0.8",
+  "version": "0.0.9",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "SASS plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {

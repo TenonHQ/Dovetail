@@ -116,8 +116,8 @@ This change is scoped to one function and improves diagnostics for **every** Sin
 ### Step 2 — Rebuild the package
 
 ```bash
-cd Craftsman/Sincronia
-npx lerna run build --scope=@tenonhq/dovetail-core
+cd Craftsman/Dovetail
+npm run prepack -w @tenonhq/dovetail-core
 ```
 
 Confirm `npx dove` in `ServiceNow/` resolves to the local build:

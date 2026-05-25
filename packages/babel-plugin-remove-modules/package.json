@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-babel-plugin-remove-modules",
-  "version": "0.0.7",
+  "version": "0.0.8",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Babel plugin that removes imports and exports from code",
   "main": "./dist/index.js",
   "scripts": {

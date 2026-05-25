@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-core",
-  "version": "0.0.88",
+  "version": "0.0.89",
   "description": "Next-gen file syncer",
   "license": "GPL-3.0",
   "main": "./dist/index.js",
@@ -18,7 +18,7 @@
     "url": "https://github.com/tenonhq/dovetail.git"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22"
   },
   "devDependencies": {
     "@tenonhq/dovetail-types": "^0.0.17",

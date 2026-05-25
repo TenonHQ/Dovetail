@@ -11,8 +11,8 @@ Dovetail is a powerful development tool that enables modern ServiceNow developme
 ### Installation and Setup
 
 ```bash
-# Node.js v20 LTS required
-nvm use 20
+# Node.js v22 LTS required
+nvm use 22
 
 # Create project and install as dev dependency
 mkdir my-dovetail-project && cd my-dovetail-project
@@ -73,7 +73,7 @@ npx dove clickup             # ClickUp task management (subcommands: tasks, task
 
 ### Core Components
 
-Dovetail is a Lerna monorepo with 20 packages (all published under `@tenonhq/dovetail-*`):
+Dovetail is an npm-workspaces monorepo with 20 packages (all published under `@tenonhq/dovetail-*`):
 
 - **dovetail-core** — CLI + core synchronization logic (the `dove` binary)
 - **dovetail-types** — TypeScript type definitions
@@ -107,7 +107,7 @@ Dovetail is a Lerna monorepo with 20 packages (all published under `@tenonhq/dov
 
 ```
 Dovetail/
-├── packages/                          # Lerna packages (20 packages)
+├── packages/                          # npm workspace packages (20 packages)
 │   ├── core/                          # CLI + core sync logic
 │   ├── types/                         # TypeScript definitions
 │   ├── babel-plugin/                  # Babel plugin
@@ -132,8 +132,7 @@ Dovetail/
 ├── Scripts/                           # Release pipeline + version bump scripts
 ├── CHANGELOG.md                       # Release history
 ├── tsconfig.json                      # TypeScript configuration
-├── lerna.json                         # Lerna configuration
-├── package.json                       # Root package
+├── package.json                       # Root package (npm workspaces)
 └── README.md                          # Main documentation
 ```
 
@@ -394,7 +393,7 @@ npx dove refresh --scope x_cadso_core
    - Use `npx dove diff` to investigate
 
 3. **Build Errors**
-   - Verify Node.js version (20 LTS)
+   - Verify Node.js version (22 LTS)
    - Check plugin configurations
    - Review TypeScript settings
 
@@ -411,13 +410,13 @@ The comprehensive Dovetail design document lives at [`docs/dovetail-platform-spe
 - **What we built** — Detailed breakdown of all 19 packages, APIs, and usage
 - **What we intend to build** — Automated deployment pipeline, ATF test execution, app certification prep, cross-environment code movement
 - **Design principles** — Package pattern, read+write with gates, npm-first distribution
-- **Technical debt** — Lerna upgrade, Node 22, test coverage, typing gaps
+- **Technical debt** — test coverage, typing gaps (Lerna removed + Node 22 done in Phase 0)
 
 Read this before making architectural decisions or adding new packages.
 
 ## Notes
 
-- **Version Requirement**: Node.js v20 LTS required
+- **Version Requirement**: Node.js v22 LTS required
 - **Instance Access**: Requires admin or developer role
 - **Manifest Files**: Critical for tracking synchronization
 - **Async Nature**: All operations are asynchronous
