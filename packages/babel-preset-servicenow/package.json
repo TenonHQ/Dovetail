@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-babel-preset-servicenow",
-  "version": "0.0.7",
+  "version": "0.0.8",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "ServiceNow Sanitizer Plugin",
   "main": "./dist/index.js",
   "scripts": {

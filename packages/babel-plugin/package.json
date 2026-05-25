@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-babel-plugin",
-  "version": "0.0.7",
+  "version": "0.0.8",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Babel Plugin for Dovetail",
   "main": "./dist/index.js",
   "scripts": {

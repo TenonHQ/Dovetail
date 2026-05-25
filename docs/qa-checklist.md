@@ -104,7 +104,7 @@ AI agents have been working on the Sincronia project (`/Users/dman89/Documents/T
 | 9.2 | Does the root `package.json` have a real `test` script (not placeholder)? | Read root `package.json` test script |
 | 9.3 | Does core have a `prepack` script that runs `tsc`? | `grep '"prepack"' packages/core/package.json` |
 | 9.4 | Is the `sinc` binary entry point defined? | `grep '"bin"' packages/core/package.json` |
-| 9.5 | Does `lerna.json` version match expected scheme? | Read `lerna.json` |
+| 9.5 | Does the root `package.json` declare `workspaces: ["packages/*"]`? | Read root `package.json` |
 
 ### 10. Runtime Safety
 

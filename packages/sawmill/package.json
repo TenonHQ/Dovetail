@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-sawmill",
-  "version": "0.0.4",
+  "version": "0.0.5",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Sawmill REST client for Dovetail — ServiceNow update set retrieve/preview/commit across Tenon instances",
   "main": "./dist/index.js",
   "scripts": {

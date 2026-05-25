@@ -1,6 +1,9 @@
 {
   "name": "@tenonhq/dovetail-google-calendar",
-  "version": "0.0.8",
+  "version": "0.0.9",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Google Calendar API client for Dovetail — event management and agenda formatting",
   "main": "./dist/index.js",
   "scripts": {

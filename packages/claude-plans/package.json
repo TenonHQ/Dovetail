@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-claude-plans",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "MCP server + CLI for Claude Code plans and visual artifacts surfaced in the Dovetail dashboard.",
   "main": "./dist/index.js",
   "bin": {
@@ -26,7 +26,7 @@
     "typescript": "^5.2.2"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22"
   },
   "files": [
     "dist"

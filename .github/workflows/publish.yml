@@ -48,9 +48,13 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          # Node 24 bundles npm 11.5.1+, required for OIDC / Trusted Publishing.
-          node-version: 24
+          node-version: 22
           registry-url: "https://registry.npmjs.org"
+
+      # Node 22 LTS ships npm 10.x; npm >= 11.5.1 is required for OIDC /
+      # Trusted Publishing. Upgrade in place rather than tracking a newer Node.
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install -g npm@^11.5.1
 
       - name: Install dependencies
         run: npm ci
