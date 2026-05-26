@@ -36,7 +36,8 @@
     prompts: new Map(),     // slug -> Map<promptSlug, prompt>
     selectedSlug: null,
     activeTab: "plan",
-    query: ""               // lowercased search query; "" means show all
+    query: "",              // lowercased search query; "" means show all
+    topicFilter: null       // active topic label, null = no topic filter
   };
 
   var els = {
@@ -58,8 +59,23 @@
     planPanel: document.getElementById("cp-tab-plan"),
     artifactsPanel: document.getElementById("cp-tab-artifacts"),
     promptsPanel: document.getElementById("cp-tab-prompts"),
-    tabs: document.querySelectorAll(".cp-tab")
+    tabs: document.querySelectorAll(".cp-tab"),
+    topics: document.getElementById("cp-topics"),
+    topicsCloud: document.getElementById("cp-topics-cloud"),
+    topicsCount: document.getElementById("cp-topics-count"),
+    topicsEmpty: document.getElementById("cp-topics-empty"),
+    topicsClear: document.getElementById("cp-topics-clear")
   };
+
+  function planMatchesTopic(plan, topic) {
+    if (!topic) return true;
+    var cats = plan.categories;
+    if (!cats || !cats.length) return false;
+    for (var i = 0; i < cats.length; i++) {
+      if (cats[i] === topic) return true;
+    }
+    return false;
+  }
 
   // True when plan matches q across title, slug, status, plan markdown/html,
   // pr title, and every artifact title + content. Lets you find a plan by any
@@ -96,9 +112,121 @@
 
   function sortedPlans() {
     var q = state.query;
+    var topic = state.topicFilter;
     var all = allPlansSorted();
-    if (!q) return all;
-    return all.filter(function (p) { return planMatchesQuery(p, q); });
+    if (!q && !topic) return all;
+    return all.filter(function (p) {
+      return planMatchesQuery(p, q) && planMatchesTopic(p, topic);
+    });
+  }
+
+  /* ─── Topics aggregation + render ──────────────────────────────────────────
+   * Counts topic occurrences across all plans (not just filtered ones) so the
+   * cloud reflects the full corpus. Click a chip to filter the rail by that
+   * topic; click the active chip again to clear.
+   *
+   * Counts are computed client-side from plan.categories arrays — no new
+   * server endpoint or SSE event. The existing plan:upsert stream rerenders
+   * the cloud automatically because renderRail() now also calls renderTopics().
+   */
+  function aggregateTopics() {
+    var counts = new Map();
+    state.plans.forEach(function (plan) {
+      var cats = plan.categories;
+      if (!cats || !cats.length) return;
+      for (var i = 0; i < cats.length; i++) {
+        var label = cats[i];
+        counts.set(label, (counts.get(label) || 0) + 1);
+      }
+    });
+    var rows = [];
+    counts.forEach(function (count, label) {
+      rows.push({ label: label, count: count });
+    });
+    rows.sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label);
+    });
+    return rows;
+  }
+
+  // sqrt compression keeps a 30-count topic from dwarfing a 2-count one.
+  function topicFontSize(count, max) {
+    if (max <= 1) return 14;
+    var ratio = Math.sqrt(count) / Math.sqrt(max);
+    return Math.round(12 + ratio * 12);
+  }
+
+  function renderTopics() {
+    if (!els.topicsCloud) return;
+    var rows = aggregateTopics();
+    if (els.topicsCount) els.topicsCount.textContent = String(rows.length);
+    if (els.topicsClear) els.topicsClear.hidden = !state.topicFilter;
+    if (rows.length === 0) {
+      els.topicsCloud.innerHTML = "";
+      if (els.topicsEmpty) {
+        els.topicsCloud.appendChild(els.topicsEmpty);
+        els.topicsEmpty.style.display = "inline";
+      }
+      return;
+    }
+    if (els.topicsEmpty) els.topicsEmpty.style.display = "none";
+    els.topicsCloud.innerHTML = "";
+    var max = rows[0].count;
+    rows.forEach(function (row) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      var isActive = state.topicFilter === row.label;
+      chip.className = "cp-topic-chip" + (isActive ? " cp-topic-chip--active" : "");
+      chip.style.fontSize = topicFontSize(row.count, max) + "px";
+      chip.setAttribute("aria-pressed", isActive ? "true" : "false");
+      chip.title = row.count + " plan" + (row.count === 1 ? "" : "s");
+      var labelEl = document.createElement("span");
+      labelEl.className = "cp-topic-chip-label";
+      labelEl.textContent = row.label;
+      var countEl = document.createElement("span");
+      countEl.className = "cp-topic-chip-count";
+      countEl.textContent = String(row.count);
+      chip.appendChild(labelEl);
+      chip.appendChild(countEl);
+      chip.addEventListener("click", function () {
+        applyTopicFilter(state.topicFilter === row.label ? null : row.label);
+      });
+      els.topicsCloud.appendChild(chip);
+    });
+  }
+
+  function applyTopicFilter(label) {
+    state.topicFilter = label;
+    renderTopics();
+    renderRail();
+    if (label) {
+      var visible = sortedPlans();
+      var stillVisible = state.selectedSlug &&
+        visible.some(function (p) { return p.slug === state.selectedSlug; });
+      if (!stillVisible && visible.length > 0) selectPlan(visible[0].slug);
+    }
+  }
+
+  function setupTopics() {
+    if (els.topicsClear) {
+      els.topicsClear.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        applyTopicFilter(null);
+      });
+    }
+    if (els.topics) {
+      try {
+        var stored = localStorage.getItem("cp-topics-collapsed");
+        if (stored === "1") els.topics.open = false;
+      } catch (_) {}
+      els.topics.addEventListener("toggle", function () {
+        try {
+          localStorage.setItem("cp-topics-collapsed", els.topics.open ? "0" : "1");
+        } catch (_) {}
+      });
+    }
   }
 
   function sortedArtifacts(slug) {
@@ -296,9 +424,10 @@
   /* ─────────────────────────────────────────────────────────────────────────── */
 
   function renderRail() {
+    renderTopics();
     var plans = sortedPlans();
     var totalPlans = state.plans.size;
-    var isFiltering = !!state.query;
+    var isFiltering = !!state.query || !!state.topicFilter;
     els.count.textContent = isFiltering
       ? plans.length + " / " + totalPlans
       : String(totalPlans);
@@ -307,7 +436,12 @@
       if (isFiltering && totalPlans > 0) {
         els.railEmpty.style.display = "none";
         els.railNoMatch.hidden = false;
-        if (els.railNoMatchQ) els.railNoMatchQ.textContent = '"' + state.query + '"';
+        if (els.railNoMatchQ) {
+          var pieces = [];
+          if (state.query) pieces.push('"' + state.query + '"');
+          if (state.topicFilter) pieces.push("topic “" + state.topicFilter + "”");
+          els.railNoMatchQ.textContent = pieces.join(" + ");
+        }
       } else {
         els.railEmpty.style.display = "block";
         els.railNoMatch.hidden = true;
@@ -800,6 +934,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     setupTheme();
     setupSearch();
+    setupTopics();
     setActiveTab("plan");
     loadInitial().then(startStream);
   });

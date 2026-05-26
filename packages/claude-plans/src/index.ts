@@ -12,6 +12,7 @@ export { TOOL_NAMES };
 export type { ToolName, RegistryDeps };
 export * from "./types";
 export * as storage from "./storage";
+export * as categories from "./categories";
 
 export interface CreateServerOptions {
   registryDeps?: RegistryDeps;
