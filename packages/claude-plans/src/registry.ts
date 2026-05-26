@@ -182,7 +182,8 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             pr_number: parsed.pr_number,
             pr_url: parsed.pr_url,
             pr_title: parsed.pr_title,
-            linked_artifacts: parsed.linked_artifacts
+            linked_artifacts: parsed.linked_artifacts,
+            categories: parsed.categories
           },
           storageOpts
         );
