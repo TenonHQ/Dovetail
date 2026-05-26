@@ -311,6 +311,47 @@
   border-radius: var(--radius-pill);
   letter-spacing: 0.07em;
 }
+
+/* ── Prompt cards (Prompt tab) ──────────────────────────────────────────── */
+.cp-prompt-card .cp-prompt-score {
+  background: var(--accent-bg, var(--bg-muted));
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.cp-prompt-source {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.cp-prompt-source summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+.cp-prompt-source pre,
+.cp-prompt-body {
+  background: var(--bg-paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+.cp-prompt-body code,
+.cp-prompt-source pre code {
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--fg);
+}
 .cp-mermaid {
   background: var(--bg-paper);
   border: 1px solid var(--border);

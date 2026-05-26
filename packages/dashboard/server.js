@@ -830,6 +830,10 @@ function artifactsDirFor(slug) {
   return path.join(CLAUDE_PLANS_DIR, slug, "artifacts");
 }
 
+function promptsDirFor(slug) {
+  return path.join(CLAUDE_PLANS_DIR, slug, "prompts");
+}
+
 function safeReadJson(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -872,6 +876,23 @@ function listClaudeArtifacts(slug) {
   return artifacts;
 }
 
+function listClaudePrompts(slug) {
+  if (!isValidSlug(slug)) return [];
+  const dir = promptsDirFor(slug);
+  if (!fs.existsSync(dir)) return [];
+  const entries = fs.readdirSync(dir);
+  const prompts = [];
+  for (let i = 0; i < entries.length; i++) {
+    if (!entries[i].endsWith(".json")) continue;
+    const p = safeReadJson(path.join(dir, entries[i]));
+    if (p) prompts.push(p);
+  }
+  prompts.sort(function (a, b) {
+    return (a.created_at || "").localeCompare(b.created_at || "");
+  });
+  return prompts;
+}
+
 // Parse a watcher path like "<root>/<slug>.json" or
 // "<root>/<slug>/artifacts/<artifact-slug>.json" into { kind, slug, artifactSlug }.
 function classifyPath(filePath) {
@@ -886,6 +907,9 @@ function classifyPath(filePath) {
   }
   if (parts.length === 3 && parts[1] === "artifacts" && parts[2].endsWith(".json")) {
     return { kind: "artifact", slug: parts[0], artifactSlug: parts[2].slice(0, -5) };
+  }
+  if (parts.length === 3 && parts[1] === "prompts" && parts[2].endsWith(".json")) {
+    return { kind: "prompt", slug: parts[0], promptSlug: parts[2].slice(0, -5) };
   }
   return null;
 }
@@ -934,6 +958,18 @@ function handleWatcherChange(event, filePath) {
     }
     const artifact = safeReadJson(filePath);
     if (artifact) broadcastClaudePlanEvent("artifact:upsert", { artifact: artifact });
+    return;
+  }
+  if (info.kind === "prompt") {
+    if (event === "unlink") {
+      broadcastClaudePlanEvent("prompt:delete", {
+        plan_slug: info.slug,
+        slug: info.promptSlug
+      });
+      return;
+    }
+    const prompt = safeReadJson(filePath);
+    if (prompt) broadcastClaudePlanEvent("prompt:upsert", { prompt: prompt });
   }
 }
 
@@ -1003,7 +1039,11 @@ app.get("/api/claude-plans/:slug", function (req, res) {
     if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
     const plan = safeReadJson(planFilePath(slug));
     if (!plan) return res.status(404).json({ error: "plan not found" });
-    res.json({ plan: plan, artifacts: listClaudeArtifacts(slug) });
+    res.json({
+      plan: plan,
+      artifacts: listClaudeArtifacts(slug),
+      prompts: listClaudePrompts(slug)
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
