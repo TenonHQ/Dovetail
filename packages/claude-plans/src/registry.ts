@@ -335,7 +335,8 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         "Inputs:\n" +
         "  plan_slug (required) — the plan that owns the question.\n" +
         "  question_id (required, matches /^q_[0-9a-f]{8}$/) — the id returned by push_question.\n" +
-        "  answer (required, non-empty) — the answer text.\n" +
+        "  answer (required, non-empty) — free-text answer; not validated against the\n" +
+        "    question's options[] (operators may answer off-menu).\n" +
         "  answered_by (optional) — who answered ('daniel', 'claude', agent name).",
       shape: recordAnswerSchema.shape,
       handler: async function (args: any) {

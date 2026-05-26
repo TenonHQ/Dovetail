@@ -485,9 +485,10 @@ export interface GetAnswersResult {
   questions: PlanQuestion[];
 }
 
-// Random generator is exposed for tests that need to force id collisions.
-// Default delegates to crypto.randomBytes for cryptographically-uniform ids.
-export var __idGenerator: () => string = function () {
+// Module-private generator. Tests force id collisions via __setIdGenerator.
+// Kept un-exported so external callers can't take a stale live-binding reference
+// and miss updates from the setter; the setter is the only public hook.
+var __idGenerator: () => string = function () {
   return "q_" + crypto.randomBytes(4).toString("hex");
 };
 
@@ -511,6 +512,10 @@ function loadPlan(root: string, slug: string): ClaudePlan {
   return plan;
 }
 
+// NOTE: load-mutate-write is not concurrency-safe. Two simultaneous pushQuestion
+// calls on the same plan can both read the same `existing` array; the second
+// atomic rename wins and silently drops the first question. Expected concurrency
+// is one Claude session per plan, so this is documented rather than locked.
 export function pushQuestion(input: PushQuestionInput, options: StorageOptions = {}): PlanQuestion {
   var root = storageRoot(options);
   var plan = loadPlan(root, input.plan_slug);
