@@ -138,6 +138,15 @@ Dovetail/
 
 ## Releasing
 
+> **⚠ All PRs in this repo MUST be opened as DRAFT.**
+> Merging to `main` auto-publishes changed packages to npm immediately
+> (see Trigger below). A non-draft PR can be merged before review is complete
+> — and once a bad version is on npm, it cannot be unpublished cleanly.
+> Open every PR as **Draft**. Only convert to *Ready for review* after the
+> work is complete and signed off; merge from there.
+> This applies even for docs-only or non-`packages/**` changes — the rule is
+> uniform so reviewers never have to guess whether a PR is safe to merge.
+
 Packages publish to npm **automatically** — there is no manual `npm publish`
 step and no separate version-bump PR.
 
