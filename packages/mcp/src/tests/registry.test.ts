@@ -26,8 +26,8 @@ function makeFullDeps(): RegistryDeps {
 }
 
 describe("registry — TOOL_NAMES", function () {
-  it("exposes exactly 12 tool names", function () {
-    expect(TOOL_NAMES.length).toBe(12);
+  it("exposes exactly 16 tool names", function () {
+    expect(TOOL_NAMES.length).toBe(16);
   });
 
   it("has unique names", function () {
@@ -39,12 +39,16 @@ describe("registry — TOOL_NAMES", function () {
     }
   });
 
-  it("matches the documented Phase 1 surface", function () {
+  it("matches the documented tool surface (Phase 1 reads + Phase 2 gated ClickUp writes)", function () {
     var expected = [
       "clickup_list_tasks",
       "clickup_get_task",
       "clickup_search_tasks",
       "clickup_get_team_sync",
+      "clickup_update_task",
+      "clickup_set_custom_field",
+      "clickup_create_task",
+      "clickup_link_tasks",
       "gmail_get_unread",
       "gmail_get_starred",
       "gmail_search",
@@ -62,7 +66,7 @@ describe("registry — descriptors", function () {
   it("produces a descriptor per tool with a description and shape", function () {
     var deps = makeFullDeps();
     var descs = buildDescriptorsForTests(deps);
-    expect(descs.length).toBe(12);
+    expect(descs.length).toBe(16);
     for (var i = 0; i < descs.length; i++) {
       var d = descs[i];
       expect(typeof d.description).toBe("string");

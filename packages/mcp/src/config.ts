@@ -28,6 +28,8 @@ export interface SincMcpConfig {
   clickup?: ClickUpConfig;
   google?: GoogleConfig;
   servicenowSafety: ServiceNowSafetyConfig;
+  // Phase-2 master gate. When false, all write tools refuse. Set via SINC_MCP_WRITES_ENABLE=1.
+  writesEnabled: boolean;
 }
 
 export interface ConfigLoadResult {
@@ -69,7 +71,8 @@ export function loadConfig(): ConfigLoadResult {
     config: {
       clickup: clickup,
       google: google,
-      servicenowSafety: loadServiceNowSafety()
+      servicenowSafety: loadServiceNowSafety(),
+      writesEnabled: process.env.SINC_MCP_WRITES_ENABLE === "1"
     },
     missing: { clickup: clickupMissing, google: googleMissing }
   };

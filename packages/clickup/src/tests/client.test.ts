@@ -31,6 +31,9 @@ import {
   updateTask,
   updateTaskStatus,
   deleteTask,
+  setCustomField,
+  linkTask,
+  normalizeChecklistMarkdown,
   addComment,
   getTeams,
   getSpaces,
@@ -124,7 +127,7 @@ describe("getTask", function () {
 
     var result = await getTask({ client: mockAxiosInstance as any, taskId: "abc123" });
     expect(result).toEqual(mockTask);
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/abc123");
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/abc123", {});
   });
 
   it("throws on 404 with task context", async function () {
@@ -315,7 +318,8 @@ describe("updateTask", function () {
 
     expect(mockAxiosInstance.put).toHaveBeenCalledWith(
       "/api/v2/task/t1",
-      { name: "Updated Name" }
+      { name: "Updated Name" },
+      {}
     );
     var sentBody = mockAxiosInstance.put.mock.calls[0][1];
     expect(sentBody).not.toHaveProperty("description");
@@ -339,7 +343,8 @@ describe("updateTaskStatus", function () {
 
     expect(mockAxiosInstance.put).toHaveBeenCalledWith(
       "/api/v2/task/t1",
-      { status: "done" }
+      { status: "done" },
+      {}
     );
   });
 });
@@ -506,6 +511,203 @@ describe("getListTasks", function () {
   });
 });
 
+describe("getTask (custom IDs)", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+  });
+
+  it("passes custom_task_ids and team_id when customTaskIds is set", async function () {
+    mockAxiosInstance.get.mockResolvedValue({ data: makeClickUpTask({ id: "x" }) });
+
+    await getTask({
+      client: mockAxiosInstance as any,
+      taskId: "DEV-225",
+      customTaskIds: true,
+      teamId: "team9",
+    });
+
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/DEV-225", {
+      params: { custom_task_ids: true, team_id: "team9" },
+    });
+  });
+});
+
+describe("createTask (markdown + custom fields)", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+  });
+
+  it("sends normalized markdown_content instead of description", async function () {
+    mockAxiosInstance.post.mockResolvedValue({ data: makeClickUpTask() });
+
+    await createTask({
+      client: mockAxiosInstance as any,
+      listId: "list1",
+      name: "Task",
+      markdownContent: "- [ ] A   - [ ] B",
+    });
+
+    var body = mockAxiosInstance.post.mock.calls[0][1];
+    expect(body.markdown_content).toBe("- [ ] A\n- [ ] B");
+    expect(body).not.toHaveProperty("description");
+  });
+
+  it("sends custom_fields when provided", async function () {
+    mockAxiosInstance.post.mockResolvedValue({ data: makeClickUpTask() });
+
+    await createTask({
+      client: mockAxiosInstance as any,
+      listId: "list1",
+      name: "Task",
+      customFields: [{ id: "f1", value: "v1" }],
+    });
+
+    var body = mockAxiosInstance.post.mock.calls[0][1];
+    expect(body.custom_fields).toEqual([{ id: "f1", value: "v1" }]);
+  });
+});
+
+describe("updateTask (markdown + custom IDs)", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+  });
+
+  it("sends normalized markdown_content and the custom-ID query", async function () {
+    mockAxiosInstance.put.mockResolvedValue({ data: makeClickUpTask() });
+
+    await updateTask({
+      client: mockAxiosInstance as any,
+      taskId: "DEV-224",
+      markdownContent: "intro\n- [ ] A   - [x] B",
+      customTaskIds: true,
+      teamId: "team9",
+    });
+
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith(
+      "/api/v2/task/DEV-224",
+      { markdown_content: "intro\n- [ ] A\n- [x] B" },
+      { params: { custom_task_ids: true, team_id: "team9" } }
+    );
+  });
+});
+
+describe("setCustomField", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+  });
+
+  it("POSTs the value to the field endpoint", async function () {
+    mockAxiosInstance.post.mockResolvedValue({ data: {} });
+
+    await setCustomField({
+      client: mockAxiosInstance as any,
+      taskId: "t1",
+      fieldId: "f1",
+      value: "hello",
+    });
+
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      "/api/v2/task/t1/field/f1",
+      { value: "hello" },
+      {}
+    );
+  });
+
+  it("supports the users add/rem value shape and custom-ID query", async function () {
+    mockAxiosInstance.post.mockResolvedValue({ data: {} });
+
+    await setCustomField({
+      client: mockAxiosInstance as any,
+      taskId: "DEV-225",
+      fieldId: "f1",
+      value: { add: [1], rem: [] },
+      customTaskIds: true,
+      teamId: "team9",
+    });
+
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      "/api/v2/task/DEV-225/field/f1",
+      { value: { add: [1], rem: [] } },
+      { params: { custom_task_ids: true, team_id: "team9" } }
+    );
+  });
+
+  it("throws on 404 with field context", async function () {
+    mockAxiosInstance.post.mockRejectedValue(makeAxiosError(404));
+
+    await expect(
+      setCustomField({
+        client: mockAxiosInstance as any,
+        taskId: "t1",
+        fieldId: "f1",
+        value: "x",
+      })
+    ).rejects.toThrow("not found");
+  });
+});
+
+describe("linkTask", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+  });
+
+  it("POSTs to the link endpoint", async function () {
+    mockAxiosInstance.post.mockResolvedValue({ data: {} });
+
+    await linkTask({
+      client: mockAxiosInstance as any,
+      taskId: "t1",
+      linksTo: "t2",
+    });
+
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      "/api/v2/task/t1/link/t2",
+      {},
+      {}
+    );
+  });
+
+  it("includes the custom-ID query for both IDs", async function () {
+    mockAxiosInstance.post.mockResolvedValue({ data: {} });
+
+    await linkTask({
+      client: mockAxiosInstance as any,
+      taskId: "DEV-226",
+      linksTo: "DEV-365",
+      customTaskIds: true,
+      teamId: "team9",
+    });
+
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      "/api/v2/task/DEV-226/link/DEV-365",
+      {},
+      { params: { custom_task_ids: true, team_id: "team9" } }
+    );
+  });
+});
+
+describe("normalizeChecklistMarkdown", function () {
+  it("splits an inline checkbox run onto separate lines", function () {
+    expect(normalizeChecklistMarkdown("- [ ] A   - [ ] B   - [x] C")).toBe(
+      "- [ ] A\n- [ ] B\n- [x] C"
+    );
+  });
+
+  it("leaves a single-checkbox line untouched", function () {
+    expect(normalizeChecklistMarkdown("- [ ] only one")).toBe("- [ ] only one");
+  });
+
+  it("is idempotent on already-split content", function () {
+    var already = "- [ ] A\n- [x] B";
+    expect(normalizeChecklistMarkdown(already)).toBe(already);
+  });
+
+  it("does not touch non-checkbox lines", function () {
+    var md = "## Title\n\nSome prose with - dashes - inline.";
+    expect(normalizeChecklistMarkdown(md)).toBe(md);
+  });
+});
+
 describe("createClickUpApi", function () {
   beforeEach(function () {
     jest.clearAllMocks();
@@ -522,6 +724,8 @@ describe("createClickUpApi", function () {
     expect(typeof api.updateTask).toBe("function");
     expect(typeof api.updateTaskStatus).toBe("function");
     expect(typeof api.deleteTask).toBe("function");
+    expect(typeof api.setCustomField).toBe("function");
+    expect(typeof api.linkTask).toBe("function");
     expect(typeof api.addComment).toBe("function");
     expect(typeof api.getTeams).toBe("function");
     expect(typeof api.getSpaces).toBe("function");
@@ -537,7 +741,7 @@ describe("createClickUpApi", function () {
     var api = createClickUpApi({ token: "test" });
     var result = await api.getTask({ taskId: "delegated" });
 
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/delegated");
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/delegated", {});
     expect(result.id).toBe("delegated");
   });
 

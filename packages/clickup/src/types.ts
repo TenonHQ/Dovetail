@@ -150,6 +150,15 @@ export interface ParsedIdentifier {
 
 export interface GetTaskParams {
   taskId: string;
+  // When true, taskId is treated as a custom ID (e.g. "DEV-225") and teamId is required.
+  customTaskIds?: boolean;
+  teamId?: string;
+}
+
+// A custom-field value to set inline on task creation or via setCustomField.
+export interface ClickUpCustomFieldValue {
+  id: string;
+  value: unknown;
 }
 
 export interface ListMyTasksParams {
@@ -161,18 +170,44 @@ export interface CreateTaskParams {
   listId: string;
   name: string;
   description?: string;
+  // Rendered markdown body. Inline checkbox runs are normalized to one per line.
+  markdownContent?: string;
   assignees?: number[];
   status?: string;
   priority?: number;
+  // Custom fields to set inline at creation, e.g. [{ id, value }].
+  customFields?: ClickUpCustomFieldValue[];
 }
 
 export interface UpdateTaskParams {
   taskId: string;
   name?: string;
   description?: string;
+  // Rendered markdown body. Inline checkbox runs are normalized to one per line.
+  markdownContent?: string;
   status?: string;
   assignees?: number[];
   priority?: number;
+  // When true, taskId is treated as a custom ID (e.g. "DEV-225") and teamId is required.
+  customTaskIds?: boolean;
+  teamId?: string;
+}
+
+export interface SetCustomFieldParams {
+  taskId: string;
+  fieldId: string;
+  value: unknown;
+  // When true, taskId is treated as a custom ID (e.g. "DEV-225") and teamId is required.
+  customTaskIds?: boolean;
+  teamId?: string;
+}
+
+export interface LinkTaskParams {
+  taskId: string;
+  linksTo: string;
+  // When true, both task IDs are treated as custom IDs and teamId is required.
+  customTaskIds?: boolean;
+  teamId?: string;
 }
 
 export interface UpdateTaskStatusParams {

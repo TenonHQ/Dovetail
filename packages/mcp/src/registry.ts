@@ -18,7 +18,11 @@ import {
   clickupListTasksSchema,
   clickupGetTaskSchema,
   clickupSearchTasksSchema,
-  clickupGetTeamSyncSchema
+  clickupGetTeamSyncSchema,
+  clickupUpdateTaskSchema,
+  clickupSetCustomFieldSchema,
+  clickupCreateTaskSchema,
+  clickupLinkTasksSchema
 } from "./schemas/clickup";
 import {
   gmailGetUnreadSchema,
@@ -41,6 +45,12 @@ import {
 } from "./tools/clickup";
 import type { ClickUpDeps } from "./tools/clickup";
 import {
+  clickupUpdateTask,
+  clickupSetCustomField,
+  clickupCreateTask,
+  clickupLinkTasks
+} from "./tools/clickup-write";
+import {
   gmailGetUnread,
   gmailGetStarred,
   gmailSearch,
@@ -61,6 +71,10 @@ export var TOOL_NAMES = [
   "clickup_get_task",
   "clickup_search_tasks",
   "clickup_get_team_sync",
+  "clickup_update_task",
+  "clickup_set_custom_field",
+  "clickup_create_task",
+  "clickup_link_tasks",
   "gmail_get_unread",
   "gmail_get_starred",
   "gmail_search",
@@ -123,6 +137,38 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       shape: clickupGetTeamSyncSchema.shape,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupGetTeamSync(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_update_task",
+      description: "Gated write: update a ClickUp task (name, markdownContent, status, priority). Requires SINC_MCP_WRITES_ENABLE=1; returns a dry-run preview unless confirm:true. Use customTaskIds:true + teamId to target a custom ID like DEV-225.",
+      shape: clickupUpdateTaskSchema.shape,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupUpdateTask(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_set_custom_field",
+      description: "Gated write: set one custom-field value on a task (POST /task/{id}/field/{fieldId}). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true. value shape: string for text/url, option id for drop_down, { add:[], rem:[] } for users.",
+      shape: clickupSetCustomFieldSchema.shape,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupSetCustomField(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_create_task",
+      description: "Gated write: create a ClickUp task in a list (markdownContent, status, priority, assignees, customFields). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true.",
+      shape: clickupCreateTaskSchema.shape,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupCreateTask(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_link_tasks",
+      description: "Gated write: link two ClickUp tasks (POST /task/{id}/link/{linksTo}). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true. Use customTaskIds:true + teamId for custom IDs.",
+      shape: clickupLinkTasksSchema.shape,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupLinkTasks(args, deps.clickup as ClickUpDeps);
       })
     },
     {

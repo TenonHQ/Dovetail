@@ -1,8 +1,10 @@
 # @tenonhq/dovetail-mcp
 
-MCP server exposing **read-only** ClickUp / Gmail / Google Calendar / ServiceNow
-tools backed by the existing Dovetail integration packages. Phase 1 — write
-operations are deliberately out of scope (see PRD).
+MCP server exposing read tools for ClickUp / Gmail / Google Calendar / ServiceNow
+plus **gated Phase-2 ClickUp writes**, backed by the existing Dovetail
+integration packages. Gmail / Calendar / ServiceNow remain read-only. ClickUp
+writes are double-gated: the `SINC_MCP_WRITES_ENABLE=1` master switch **and** a
+per-call `confirm:true` (dry-run preview otherwise).
 
 ## Install
 
@@ -32,16 +34,18 @@ clear "not configured" error.
 | `SINC_MCP_SN_TABLE_OVERRIDE`| Allow specific denied tables (comma-separated) |
 | `SINC_MCP_TELEMETRY_DISABLE`| `1`/`true` to skip telemetry writes |
 | `SINC_MCP_TELEMETRY_PATH`   | Override `~/.dovetail-mcp/telemetry.jsonl` |
+| `SINC_MCP_WRITES_ENABLE`    | `1` to enable the gated ClickUp write tools (off by default) |
 
 > **OAuth scope warning:** Dovetail's existing Google refresh tokens are
 > issued with **write-capable** scopes (`gmail.modify`, `calendar`).
-> dovetail-mcp enforces read-only at the handler level (we never import the
-> upstream write functions and ESLint blocks new such imports), but the token
-> itself can write Gmail/Calendar. Re-running `dovetail-google-auth` setup
+> dovetail-mcp never imports Gmail/Calendar write functions (ESLint + the static
+> scan block them), so it cannot write Gmail/Calendar even though the token
+> could. (ClickUp writes are the one allowed write surface — see below.)
+> Re-running `dovetail-google-auth` setup
 > with `gmail.readonly` + `calendar.readonly` scopes is recommended for
 > defence-in-depth and is tracked separately.
 
-## Tools (12)
+## Tools (16)
 
 | Tool                            | Purpose                                        |
 |---------------------------------|------------------------------------------------|
@@ -49,6 +53,10 @@ clear "not configured" error.
 | `clickup_get_task`              | Fetch a single task by ID                      |
 | `clickup_search_tasks`          | Substring search across team tasks             |
 | `clickup_get_team_sync`         | 7-stage pipeline JSON (Blocked → Ready for Release) |
+| `clickup_update_task` 🔒        | **Gated write** — update name/markdown/status/priority |
+| `clickup_set_custom_field` 🔒   | **Gated write** — set one custom-field value   |
+| `clickup_create_task` 🔒        | **Gated write** — create a task in a list      |
+| `clickup_link_tasks` 🔒         | **Gated write** — link two tasks               |
 | `gmail_get_unread`              | Unread inbox emails                            |
 | `gmail_get_starred`             | Starred emails                                 |
 | `gmail_search`                  | Gmail query syntax                             |
@@ -61,6 +69,11 @@ clear "not configured" error.
 ServiceNow deny-list (default): `sys_user_password`, `sys_user_token`,
 `sys_credential`, `sys_secret`, `sys_user_grmember`, `sys_audit`. Override
 per-table with `SINC_MCP_SN_TABLE_OVERRIDE=table_a,table_b`.
+
+🔒 **Gated writes (Phase 2).** The four ClickUp write tools are inert unless
+`SINC_MCP_WRITES_ENABLE=1` is set; even then each call returns a dry-run preview
+unless `confirm:true` is passed. Target a custom ID (e.g. `DEV-225`) with
+`customTaskIds:true` + `teamId`. Gmail, Calendar, and ServiceNow stay read-only.
 
 ## Run
 
@@ -141,19 +154,27 @@ Every tool call appends one JSON line to `~/.dovetail-mcp/telemetry.jsonl`
 Disable with `SINC_MCP_TELEMETRY_DISABLE=1`. Override the path with
 `SINC_MCP_TELEMETRY_PATH=/tmp/foo.jsonl`. Rotate manually for v1.
 
-## Read-only enforcement
+## Write-surface enforcement
 
-Three layers:
+Writes are confined to **one declared module** — `src/tools/clickup-write.ts` —
+which may use only the ClickUp write functions. Every other tool module stays
+read-only. Three layers enforce this:
 
-1. **Imports.** Tool modules import only the read functions from each upstream
-   Dovetail package; write functions are never imported.
-2. **ESLint** (`.eslintrc.json` `no-restricted-imports`) blocks import of any
-   write function from `dovetail-clickup` / `dovetail-gmail` /
-   `dovetail-google-calendar` / `dovetail-servicenow`.
+1. **Imports.** Read tool modules import only read functions; the write module
+   imports only `createTask` / `updateTask` / `setCustomField` / `linkTask`.
+2. **ESLint** (`.eslintrc.json` `no-restricted-imports`) blocks write imports
+   from `dovetail-clickup` / `dovetail-gmail` / `dovetail-google-calendar` /
+   `dovetail-servicenow`, with a scoped `overrides` entry that permits the
+   ClickUp writes **only** in `clickup-write.ts` (Gmail/Calendar/SN still banned
+   even there).
 3. **Static scan test** (`src/tests/readonly-imports.test.ts`) reads every
-   `src/tools/*.ts` and asserts no occurrence of forbidden symbols, including
-   `client.claude.*` (the ServiceNow write namespace, which can't be blocked
-   at the import level since it's a property access).
+   `src/tools/*.ts` and asserts no forbidden write symbol appears — including
+   `client.claude.*` (the ServiceNow write namespace). The lone exception is the
+   declared write module's ClickUp allowlist (`WRITE_MODULE_ALLOW`); a new file
+   cannot opt itself in.
+
+Writes are additionally gated at runtime by `SINC_MCP_WRITES_ENABLE=1` and a
+per-call `confirm:true` (see above).
 
 ## Troubleshooting
 

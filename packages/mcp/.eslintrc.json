@@ -45,6 +45,39 @@
       "rules": {
         "no-restricted-imports": "off"
       }
+    },
+    {
+      "comment": "Phase-2 declared ClickUp write module: ClickUp writes allowed; Gmail/Calendar/ServiceNow writes still banned.",
+      "files": ["src/tools/clickup-write.ts"],
+      "rules": {
+        "no-restricted-imports": ["error", {
+          "paths": [
+            {
+              "name": "@tenonhq/dovetail-gmail",
+              "importNames": [
+                "archiveEmail",
+                "labelEmail",
+                "markAsRead",
+                "markAsUnread",
+                "moveToTrash",
+                "starEmail",
+                "unstarEmail"
+              ],
+              "message": "dovetail-mcp write module is ClickUp-only; Gmail writes are forbidden."
+            },
+            {
+              "name": "@tenonhq/dovetail-google-calendar",
+              "importNames": ["createEvent", "updateEvent", "deleteEvent"],
+              "message": "dovetail-mcp write module is ClickUp-only; Calendar writes are forbidden."
+            },
+            {
+              "name": "@tenonhq/dovetail-servicenow",
+              "importNames": ["addChoicesToField"],
+              "message": "dovetail-mcp write module is ClickUp-only; ServiceNow writes are forbidden."
+            }
+          ]
+        }]
+      }
     }
   ]
 }
