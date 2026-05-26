@@ -8,9 +8,11 @@ import {
   getPlan,
   listArtifacts,
   listPlans,
+  listPrompts,
   parsePromptCycleContent,
   pushArtifact,
   pushPlan,
+  pushPrompt,
   slugify,
   updatePlanStatus
 } from "../storage";
@@ -253,6 +255,101 @@ describe("prompt-cycle artifact kind", function () {
   });
 });
 
+describe("prompts", function () {
+  it("rejects pushPrompt when plan does not exist", function () {
+    var root = mkTmp();
+    expect(function () {
+      pushPrompt(
+        { plan_slug: "ghost", title: "x", content: "<prompt><done>Done</done></prompt>" },
+        { rootDir: root }
+      );
+    }).toThrow(/plan not found/);
+  });
+
+  it("writes a prompt under <plan>/prompts/<slug>.json with full shape", function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    var p = pushPrompt(
+      {
+        plan_slug: "host",
+        title: "Rewrite v1",
+        content: "<prompt><done>Done = green</done></prompt>",
+        source_draft: "make it better",
+        score_before: 17,
+        score_after: 92
+      },
+      { rootDir: root }
+    );
+    expect(p.slug).toBe("rewrite-v1");
+    expect(p.score_before).toBe(17);
+    expect(p.score_after).toBe(92);
+    expect(p.source_draft).toBe("make it better");
+
+    var diskPath = path.join(root, "host", "prompts", "rewrite-v1.json");
+    expect(fs.existsSync(diskPath)).toBe(true);
+    var ondisk = JSON.parse(fs.readFileSync(diskPath, "utf8"));
+    expect(ondisk.title).toBe("Rewrite v1");
+    expect(ondisk.content).toMatch(/Done = green/);
+  });
+
+  it("slugifies title when slug omitted and preserves created_at on update", async function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    var p1 = pushPrompt(
+      { plan_slug: "host", title: "My Rewrite!", content: "v1" },
+      { rootDir: root }
+    );
+    expect(p1.slug).toBe("my-rewrite");
+    await new Promise(function (r) { setTimeout(r, 10); });
+    var p2 = pushPrompt(
+      { plan_slug: "host", slug: "my-rewrite", title: "My Rewrite!", content: "v2" },
+      { rootDir: root }
+    );
+    expect(p2.created_at).toBe(p1.created_at);
+    expect(p2.updated_at > p1.updated_at).toBe(true);
+    expect(p2.content).toBe("v2");
+  });
+
+  it("listPrompts returns empty when prompts/ dir does not exist", function () {
+    var root = mkTmp();
+    pushPlan({ title: "empty", content_md: "x" }, { rootDir: root });
+    expect(listPrompts("empty", { rootDir: root })).toEqual([]);
+  });
+
+  it("listPrompts sorts by created_at ascending", async function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    pushPrompt({ plan_slug: "host", title: "first", content: "1" }, { rootDir: root });
+    await new Promise(function (r) { setTimeout(r, 10); });
+    pushPrompt({ plan_slug: "host", title: "second", content: "2" }, { rootDir: root });
+    var list = listPrompts("host", { rootDir: root });
+    expect(list.map(function (p) { return p.slug; })).toEqual(["first", "second"]);
+  });
+
+  it("getPlan returns prompts alongside artifacts", function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    pushArtifact(
+      { plan_slug: "host", kind: "markdown", title: "doc", content: "hi" },
+      { rootDir: root }
+    );
+    pushPrompt({ plan_slug: "host", title: "p1", content: "<prompt/>" }, { rootDir: root });
+    var got = getPlan("host", { rootDir: root });
+    expect(got && got.artifacts.length).toBe(1);
+    expect(got && got.prompts.length).toBe(1);
+    expect(got && got.prompts[0].slug).toBe("p1");
+  });
+
+  it("deletePlan also removes the prompts/ subdir", function () {
+    var root = mkTmp();
+    pushPlan({ title: "z", content_md: "x" }, { rootDir: root });
+    pushPrompt({ plan_slug: "z", title: "p", content: "<prompt/>" }, { rootDir: root });
+    expect(fs.existsSync(path.join(root, "z", "prompts"))).toBe(true);
+    expect(deletePlan("z", { rootDir: root })).toBe(true);
+    expect(fs.existsSync(path.join(root, "z"))).toBe(false);
+  });
+});
+
 describe("buildHandoffBundle", function () {
   it("includes plan content + linked plans section + artifacts and hoists the rewritten prompt", function () {
     var root = mkTmp();
@@ -323,6 +420,56 @@ describe("buildHandoffBundle", function () {
     var bundle = buildHandoffBundle("no-cycle-here", { rootDir: root });
     expect(bundle.ready_to_paste_prompt).toBeNull();
     expect(bundle.markdown).not.toMatch(/READY-TO-PASTE PROMPT/);
+  });
+
+  it("hoists the newest prompt to READY-TO-PASTE when no prompt-cycle artifact exists", async function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "X" }, { rootDir: root });
+    pushPrompt(
+      {
+        plan_slug: "host",
+        title: "early",
+        content: "<prompt><done>Done = old</done></prompt>",
+        score_before: 30,
+        score_after: 70
+      },
+      { rootDir: root }
+    );
+    await new Promise(function (r) { setTimeout(r, 10); });
+    pushPrompt(
+      {
+        plan_slug: "host",
+        title: "latest",
+        content: "<prompt><done>Done = ship the rewrite</done></prompt>",
+        score_before: 30,
+        score_after: 95
+      },
+      { rootDir: root }
+    );
+    var bundle = buildHandoffBundle("host", { rootDir: root });
+    expect(bundle.markdown).toMatch(/## Prompts/);
+    expect(bundle.markdown).toMatch(/Lint:\*\* 30 → 95%/);
+    expect(bundle.ready_to_paste_prompt).toMatch(/Done = ship the rewrite/);
+  });
+
+  it("prefers a prompt-cycle artifact's rewrite over a separate prompt for the hoist", function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "X" }, { rootDir: root });
+    pushArtifact(
+      {
+        plan_slug: "host",
+        kind: "prompt-cycle",
+        title: "cycle",
+        content: validCycle({ rewritten_prompt: "<prompt><done>Done = from cycle</done></prompt>" })
+      },
+      { rootDir: root }
+    );
+    pushPrompt(
+      { plan_slug: "host", title: "p", content: "<prompt><done>Done = from prompt</done></prompt>" },
+      { rootDir: root }
+    );
+    var bundle = buildHandoffBundle("host", { rootDir: root });
+    expect(bundle.ready_to_paste_prompt).toMatch(/Done = from cycle/);
   });
 
   it("throws when the plan is missing", function () {

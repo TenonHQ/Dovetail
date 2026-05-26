@@ -33,6 +33,7 @@
   var state = {
     plans: new Map(),       // slug -> plan
     artifacts: new Map(),   // slug -> Map<artifactSlug, artifact>
+    prompts: new Map(),     // slug -> Map<promptSlug, prompt>
     selectedSlug: null,
     activeTab: "plan",
     query: ""               // lowercased search query; "" means show all
@@ -53,8 +54,10 @@
     detailStatus: document.getElementById("cp-detail-status"),
     detailStamp: document.getElementById("cp-detail-stamp"),
     artifactCount: document.getElementById("cp-artifact-count"),
+    promptCount: document.getElementById("cp-prompt-count"),
     planPanel: document.getElementById("cp-tab-plan"),
     artifactsPanel: document.getElementById("cp-tab-artifacts"),
+    promptsPanel: document.getElementById("cp-tab-prompts"),
     tabs: document.querySelectorAll(".cp-tab")
   };
 
@@ -100,6 +103,14 @@
 
   function sortedArtifacts(slug) {
     var map = state.artifacts.get(slug);
+    if (!map) return [];
+    return Array.from(map.values()).sort(function (a, b) {
+      return (a.created_at || "").localeCompare(b.created_at || "");
+    });
+  }
+
+  function sortedPrompts(slug) {
+    var map = state.prompts.get(slug);
     if (!map) return [];
     return Array.from(map.values()).sort(function (a, b) {
       return (a.created_at || "").localeCompare(b.created_at || "");
@@ -241,7 +252,7 @@
     return btn;
   }
 
-  function addTabsCopyAll(plan, artifacts) {
+  function addTabsCopyAll(plan, artifacts, prompts) {
     var existing = document.getElementById("cp-tabs-copy-all");
     if (existing) existing.remove();
 
@@ -249,6 +260,11 @@
       if (state.activeTab === "artifacts") {
         return artifacts.map(function (a) {
           return "# " + a.title + "\n\n" + a.content;
+        }).join("\n\n---\n\n");
+      }
+      if (state.activeTab === "prompts") {
+        return prompts.map(function (p) {
+          return "# " + p.title + "\n\n" + p.content;
         }).join("\n\n---\n\n");
       }
       return plan.content_md && plan.content_md.trim()
@@ -363,6 +379,7 @@
     }
     var plan = state.plans.get(state.selectedSlug);
     var artifacts = sortedArtifacts(state.selectedSlug);
+    var prompts = sortedPrompts(state.selectedSlug);
 
     els.detailEmpty.style.display = "none";
     els.detailBody.hidden = false;
@@ -371,6 +388,7 @@
     els.detailStatus.className = "cp-status-pill cp-status-" + plan.status;
     els.detailStamp.textContent = "updated " + fmtTime(plan.updated_at);
     els.artifactCount.textContent = String(artifacts.length);
+    if (els.promptCount) els.promptCount.textContent = String(prompts.length);
 
     var existingPrBadge = document.getElementById("cp-pr-badge");
     if (existingPrBadge) existingPrBadge.remove();
@@ -409,6 +427,28 @@
     });
     els.detailStatus.insertAdjacentElement("afterend", resumeBtn);
 
+    var existingPromptBtn = document.getElementById("cp-gen-prompt-btn");
+    if (existingPromptBtn) existingPromptBtn.remove();
+    var genPromptBtn = document.createElement("button");
+    genPromptBtn.id = "cp-gen-prompt-btn";
+    genPromptBtn.className = "cp-resume-btn";
+    genPromptBtn.textContent = "Generate Prompt";
+    genPromptBtn.title = "Copy /improve-prompt --from-plan <slug> to clipboard";
+    genPromptBtn.addEventListener("click", function () {
+      var cmd = "/improve-prompt --from-plan " + plan.slug;
+      var finish = function () { showToast("Copied — paste into Claude Code."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(finish).catch(function () {
+          fallbackCopy(cmd);
+          finish();
+        });
+      } else {
+        fallbackCopy(cmd);
+        finish();
+      }
+    });
+    resumeBtn.insertAdjacentElement("afterend", genPromptBtn);
+
     if (plan.content_html) {
       els.planPanel.innerHTML = window.DOMPurify
         ? window.DOMPurify.sanitize(plan.content_html)
@@ -418,7 +458,7 @@
     }
 
     addPlanSectionCopyBtns();
-    addTabsCopyAll(plan, artifacts);
+    addTabsCopyAll(plan, artifacts, prompts);
 
     els.artifactsPanel.innerHTML = "";
     if (artifacts.length === 0) {
@@ -458,6 +498,69 @@
         els.artifactsPanel.appendChild(card);
       });
     }
+
+    els.promptsPanel.innerHTML = "";
+    if (prompts.length === 0) {
+      var emptyPrompts = document.createElement("div");
+      emptyPrompts.className = "cp-detail-empty";
+      emptyPrompts.style.padding = "40px 0";
+      emptyPrompts.textContent = 'No prompts yet. Click "Generate Prompt" above to seed one, or push from /improve-prompt --push.';
+      els.promptsPanel.appendChild(emptyPrompts);
+    } else {
+      prompts.forEach(function (prompt) {
+        var card = document.createElement("div");
+        card.className = "cp-artifact-card cp-prompt-card";
+        var head = document.createElement("div");
+        head.className = "cp-artifact-head";
+        var title = document.createElement("span");
+        title.className = "cp-artifact-title";
+        title.textContent = prompt.title;
+        head.appendChild(title);
+
+        if (typeof prompt.score_before === "number" && typeof prompt.score_after === "number") {
+          var scorePill = document.createElement("span");
+          scorePill.className = "cp-kind-pill cp-prompt-score";
+          scorePill.textContent = prompt.score_before + " → " + prompt.score_after + "%";
+          head.appendChild(scorePill);
+        } else if (typeof prompt.score_after === "number") {
+          var scorePillOnly = document.createElement("span");
+          scorePillOnly.className = "cp-kind-pill cp-prompt-score";
+          scorePillOnly.textContent = prompt.score_after + "%";
+          head.appendChild(scorePillOnly);
+        }
+
+        var copyGroup = document.createElement("div");
+        copyGroup.className = "cp-copy-btn-group cp-copy-btn-group--artifact";
+        copyGroup.appendChild(makeCopyBtn("Copy", (function (content) {
+          return function () { return content; };
+        })(prompt.content)));
+        head.appendChild(copyGroup);
+
+        card.appendChild(head);
+
+        if (prompt.source_draft) {
+          var details = document.createElement("details");
+          details.className = "cp-prompt-source";
+          var summary = document.createElement("summary");
+          summary.textContent = "Original draft";
+          details.appendChild(summary);
+          var pre = document.createElement("pre");
+          var code = document.createElement("code");
+          code.textContent = prompt.source_draft;
+          pre.appendChild(code);
+          details.appendChild(pre);
+          card.appendChild(details);
+        }
+
+        var body = document.createElement("pre");
+        body.className = "cp-prompt-body";
+        var bodyCode = document.createElement("code");
+        bodyCode.textContent = prompt.content;
+        body.appendChild(bodyCode);
+        card.appendChild(body);
+        els.promptsPanel.appendChild(card);
+      });
+    }
   }
 
   function setActiveTab(tab) {
@@ -467,6 +570,7 @@
     });
     els.planPanel.hidden = tab !== "plan";
     els.artifactsPanel.hidden = tab !== "artifacts";
+    if (els.promptsPanel) els.promptsPanel.hidden = tab !== "prompts";
   }
 
   function selectPlan(slug) {
@@ -551,6 +655,7 @@
   function removePlan(slug) {
     state.plans.delete(slug);
     state.artifacts.delete(slug);
+    state.prompts.delete(slug);
     if (state.selectedSlug === slug) state.selectedSlug = null;
     renderRail();
     renderDetail();
@@ -575,6 +680,23 @@
     if (state.selectedSlug === planSlug) renderDetail();
   }
 
+  function upsertPrompt(prompt) {
+    var bucket = state.prompts.get(prompt.plan_slug);
+    if (!bucket) {
+      bucket = new Map();
+      state.prompts.set(prompt.plan_slug, bucket);
+    }
+    bucket.set(prompt.slug, prompt);
+    if (state.selectedSlug === prompt.plan_slug) renderDetail();
+  }
+
+  function removePrompt(planSlug, slug) {
+    var bucket = state.prompts.get(planSlug);
+    if (!bucket) return;
+    bucket.delete(slug);
+    if (state.selectedSlug === planSlug) renderDetail();
+  }
+
   async function loadInitial() {
     try {
       var res = await fetch("/api/claude-plans");
@@ -586,7 +708,7 @@
     } catch (err) {
       console.warn("[claude-plans] failed to load initial state:", err);
     }
-    // Preload artifacts for visible plans
+    // Preload artifacts + prompts for visible plans
     var slugs = Array.from(state.plans.keys());
     await Promise.all(slugs.map(function (slug) {
       return fetch("/api/claude-plans/" + encodeURIComponent(slug))
@@ -596,6 +718,11 @@
             var bucket = new Map();
             data.artifacts.forEach(function (a) { bucket.set(a.slug, a); });
             state.artifacts.set(slug, bucket);
+          }
+          if (data && Array.isArray(data.prompts)) {
+            var pBucket = new Map();
+            data.prompts.forEach(function (p) { pBucket.set(p.slug, p); });
+            state.prompts.set(slug, pBucket);
           }
         })
         .catch(function () { /* ignore */ });
@@ -622,6 +749,15 @@
       try {
         var payload = JSON.parse(e.data);
         removeArtifact(payload.plan_slug, payload.slug);
+      } catch (_) {}
+    });
+    es.addEventListener("prompt:upsert", function (e) {
+      try { upsertPrompt(JSON.parse(e.data).prompt); } catch (_) {}
+    });
+    es.addEventListener("prompt:delete", function (e) {
+      try {
+        var payload = JSON.parse(e.data);
+        removePrompt(payload.plan_slug, payload.slug);
       } catch (_) {}
     });
     es.addEventListener("plan:focus", function (e) {
