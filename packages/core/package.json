@@ -37,7 +37,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@tenonhq/dovetail-clickup": "^0.0.7",
+    "@tenonhq/dovetail-clickup": "^0.0.10",
     "@tenonhq/dovetail-schema": "^0.0.5",
     "axios": "^1.5.1",
     "axios-cookiejar-support": "^4.0.7",
