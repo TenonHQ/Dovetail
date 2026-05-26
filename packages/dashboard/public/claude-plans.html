@@ -42,9 +42,31 @@
         <span class="cp-rail-title">Plans</span>
         <span class="cp-count" id="cp-count">0</span>
       </div>
+      <div class="cp-search">
+        <input
+          type="search"
+          class="cp-search-input"
+          id="cp-search-input"
+          placeholder="Search plans…  (press / to focus)"
+          aria-label="Search plans by title, slug, status, or content"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button
+          type="button"
+          class="cp-search-clear"
+          id="cp-search-clear"
+          aria-label="Clear search"
+          title="Clear (Esc)"
+          hidden
+        >×</button>
+      </div>
       <div class="cp-rail-empty" id="cp-rail-empty">
         Waiting for plans. Run <code>push_plan</code> from a Claude Code
         session to populate this list.
+      </div>
+      <div class="cp-rail-no-match" id="cp-rail-no-match" hidden>
+        No plans match <span class="cp-rail-no-match-q" id="cp-rail-no-match-q"></span>.
       </div>
       <ul class="cp-list" id="cp-list"></ul>
     </aside>
