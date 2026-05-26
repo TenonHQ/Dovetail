@@ -42,7 +42,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TenonHQ/Dovetail.git"
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/mcp"
   },
   "bugs": {
     "url": "https://github.com/TenonHQ/Dovetail/issues"

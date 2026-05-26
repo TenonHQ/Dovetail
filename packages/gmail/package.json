@@ -38,7 +38,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenonhq/dovetail.git"
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/gmail"
   },
   "bugs": {
     "url": "https://github.com/tenonhq/dovetail/issues"

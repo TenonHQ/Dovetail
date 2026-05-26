@@ -15,7 +15,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/TenonHQ/Dovetail.git"
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/core"
   },
   "engines": {
     "node": ">=22"
