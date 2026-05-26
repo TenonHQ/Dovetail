@@ -34,7 +34,8 @@
     plans: new Map(),       // slug -> plan
     artifacts: new Map(),   // slug -> Map<artifactSlug, artifact>
     selectedSlug: null,
-    activeTab: "plan"
+    activeTab: "plan",
+    query: ""               // lowercased search query; "" means show all
   };
 
   var els = {
@@ -42,6 +43,10 @@
     list: document.getElementById("cp-list"),
     count: document.getElementById("cp-count"),
     railEmpty: document.getElementById("cp-rail-empty"),
+    railNoMatch: document.getElementById("cp-rail-no-match"),
+    railNoMatchQ: document.getElementById("cp-rail-no-match-q"),
+    searchInput: document.getElementById("cp-search-input"),
+    searchClear: document.getElementById("cp-search-clear"),
     detailEmpty: document.getElementById("cp-detail-empty"),
     detailBody: document.getElementById("cp-detail-body"),
     detailTitle: document.getElementById("cp-detail-title"),
@@ -53,10 +58,44 @@
     tabs: document.querySelectorAll(".cp-tab")
   };
 
-  function sortedPlans() {
+  // True when plan matches q across title, slug, status, plan markdown/html,
+  // pr title, and every artifact title + content. Lets you find a plan by any
+  // snippet that appears anywhere in or attached to it.
+  function planMatchesQuery(plan, q) {
+    if (!q) return true;
+    var haystacks = [
+      plan.title,
+      plan.slug,
+      plan.status,
+      plan.pr_title,
+      plan.content_md,
+      plan.content_html
+    ];
+    var bucket = state.artifacts.get(plan.slug);
+    if (bucket) {
+      bucket.forEach(function (a) {
+        haystacks.push(a.title);
+        haystacks.push(a.content);
+      });
+    }
+    for (var i = 0; i < haystacks.length; i++) {
+      var h = haystacks[i];
+      if (h && String(h).toLowerCase().indexOf(q) !== -1) return true;
+    }
+    return false;
+  }
+
+  function allPlansSorted() {
     return Array.from(state.plans.values()).sort(function (a, b) {
       return (b.updated_at || "").localeCompare(a.updated_at || "");
     });
+  }
+
+  function sortedPlans() {
+    var q = state.query;
+    var all = allPlansSorted();
+    if (!q) return all;
+    return all.filter(function (p) { return planMatchesQuery(p, q); });
   }
 
   function sortedArtifacts(slug) {
@@ -242,13 +281,25 @@
 
   function renderRail() {
     var plans = sortedPlans();
-    els.count.textContent = String(plans.length);
+    var totalPlans = state.plans.size;
+    var isFiltering = !!state.query;
+    els.count.textContent = isFiltering
+      ? plans.length + " / " + totalPlans
+      : String(totalPlans);
     if (plans.length === 0) {
-      els.railEmpty.style.display = "block";
       els.list.innerHTML = "";
+      if (isFiltering && totalPlans > 0) {
+        els.railEmpty.style.display = "none";
+        els.railNoMatch.hidden = false;
+        if (els.railNoMatchQ) els.railNoMatchQ.textContent = '"' + state.query + '"';
+      } else {
+        els.railEmpty.style.display = "block";
+        els.railNoMatch.hidden = true;
+      }
       return;
     }
     els.railEmpty.style.display = "none";
+    els.railNoMatch.hidden = true;
     els.list.innerHTML = "";
     plans.forEach(function (plan) {
       var artifactCount = (state.artifacts.get(plan.slug) || new Map()).size;
@@ -428,6 +479,69 @@
     btn.addEventListener("click", function () { setActiveTab(btn.dataset.tab); });
   });
 
+  /* ─── Search ───────────────────────────────────────────────────────────────
+   * Filter the rail by title/slug/status/content (plan + artifacts).
+   * 120ms debounce keeps typing snappy even with hundreds of plans.
+   *
+   * Selection rule: when filtering narrows the rail, only auto-select a new
+   * plan if the currently selected one is filtered out — picking the first
+   * visible match. Don't yank the user off a plan they're already reading.
+   */
+  var searchDebounce = null;
+  function applyQuery(raw) {
+    var q = (raw == null ? "" : String(raw)).trim().toLowerCase();
+    state.query = q;
+    if (els.searchClear) els.searchClear.hidden = q.length === 0;
+    renderRail();
+    if (q) {
+      var visible = sortedPlans();
+      var stillVisible = state.selectedSlug &&
+        visible.some(function (p) { return p.slug === state.selectedSlug; });
+      if (!stillVisible && visible.length > 0) {
+        selectPlan(visible[0].slug);
+      }
+    }
+  }
+
+  function setupSearch() {
+    if (els.searchInput) {
+      els.searchInput.addEventListener("input", function (e) {
+        var v = e.target.value;
+        if (searchDebounce) clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(function () { applyQuery(v); }, 120);
+      });
+      els.searchInput.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          els.searchInput.value = "";
+          applyQuery("");
+          els.searchInput.blur();
+        }
+      });
+    }
+    if (els.searchClear) {
+      els.searchClear.addEventListener("click", function () {
+        if (els.searchInput) els.searchInput.value = "";
+        applyQuery("");
+        if (els.searchInput) els.searchInput.focus();
+      });
+    }
+    // Press "/" anywhere (except in another input) to focus the search box.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      var t = e.target;
+      var tag = t && t.tagName;
+      var isEditable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        (t && t.isContentEditable);
+      if (isEditable) return;
+      e.preventDefault();
+      if (els.searchInput) {
+        els.searchInput.focus();
+        els.searchInput.select();
+      }
+    });
+  }
+
   function upsertPlan(plan) {
     state.plans.set(plan.slug, plan);
     renderRail();
@@ -549,6 +663,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     setupTheme();
+    setupSearch();
     setActiveTab("plan");
     loadInitial().then(startStream);
   });
