@@ -23,5 +23,10 @@
   "license": "ISC",
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/dashboard"
   }
 }

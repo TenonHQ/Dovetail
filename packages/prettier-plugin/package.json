@@ -26,7 +26,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenonhq/dovetail.git"
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/prettier-plugin"
   },
   "bugs": {
     "url": "https://github.com/tenonhq/dovetail/issues"

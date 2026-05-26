@@ -13,7 +13,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tenonhq/dovetail.git"
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/babel-preset-servicenow"
   },
   "author": "",
   "license": "GPL-3.0",
