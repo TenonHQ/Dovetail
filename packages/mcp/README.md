@@ -2,9 +2,14 @@
 
 MCP server exposing read tools for ClickUp / Gmail / Google Calendar / ServiceNow
 plus **gated Phase-2 ClickUp writes**, backed by the existing Dovetail
-integration packages. Gmail / Calendar / ServiceNow remain read-only. ClickUp
-writes are double-gated: the `SINC_MCP_WRITES_ENABLE=1` master switch **and** a
-per-call `confirm:true` (dry-run preview otherwise).
+integration packages. Gmail / Calendar / ServiceNow remain read-only.
+
+ClickUp writes are gated by the **operator-controlled** `SINC_MCP_WRITES_ENABLE=1`
+env flag — off by default, the server cannot write at all. When the flag is on,
+each write call also requires `confirm:true`; without it the tool returns a
+dry-run preview. `confirm:true` is a preview/speed-bump (the calling agent can
+set it itself), not a human-in-the-loop checkpoint — the env flag is the real
+boundary.
 
 ## Install
 
@@ -71,9 +76,12 @@ ServiceNow deny-list (default): `sys_user_password`, `sys_user_token`,
 per-table with `SINC_MCP_SN_TABLE_OVERRIDE=table_a,table_b`.
 
 🔒 **Gated writes (Phase 2).** The four ClickUp write tools are inert unless
-`SINC_MCP_WRITES_ENABLE=1` is set; even then each call returns a dry-run preview
-unless `confirm:true` is passed. Target a custom ID (e.g. `DEV-225`) with
-`customTaskIds:true` + `teamId`. Gmail, Calendar, and ServiceNow stay read-only.
+`SINC_MCP_WRITES_ENABLE=1` is set — that's the operator-controlled gate. When
+on, calls return a dry-run preview unless `confirm:true` is passed; the
+`confirm` flag is a preview affordance, not a human checkpoint (the calling
+agent can set it itself). Target a custom ID (e.g. `DEV-225`) with
+`customTaskIds:true` + `teamId`. Gmail, Calendar, and ServiceNow stay
+read-only.
 
 ## Run
 
@@ -173,8 +181,10 @@ read-only. Three layers enforce this:
    declared write module's ClickUp allowlist (`WRITE_MODULE_ALLOW`); a new file
    cannot opt itself in.
 
-Writes are additionally gated at runtime by `SINC_MCP_WRITES_ENABLE=1` and a
-per-call `confirm:true` (see above).
+At runtime, writes are gated by the operator-controlled `SINC_MCP_WRITES_ENABLE=1`
+flag (see "Gated writes" above). A per-call `confirm:true` switches the tool
+from preview to apply; it is *not* a human checkpoint — the calling agent can
+satisfy it itself, so it functions as a preview affordance, not a second factor.
 
 ## Troubleshooting
 

@@ -47,11 +47,19 @@
       }
     },
     {
-      "comment": "Phase-2 declared ClickUp write module: ClickUp writes allowed; Gmail/Calendar/ServiceNow writes still banned.",
       "files": ["src/tools/clickup-write.ts"],
       "rules": {
         "no-restricted-imports": ["error", {
           "paths": [
+            {
+              "name": "@tenonhq/dovetail-clickup",
+              "importNames": [
+                "updateTaskStatus",
+                "deleteTask",
+                "addComment"
+              ],
+              "message": "dovetail-mcp write module allows only createTask/updateTask/setCustomField/linkTask. Destructive ClickUp verbs stay out — wire a new MCP tool explicitly and update the override + WRITE_MODULE_ALLOW together."
+            },
             {
               "name": "@tenonhq/dovetail-gmail",
               "importNames": [
