@@ -33,6 +33,20 @@ export interface ClaudePlan {
   pr_url?: string;
   pr_title?: string;
   linked_artifacts?: LinkedArtifact[];
+  questions?: PlanQuestion[];
+}
+
+export interface PlanQuestion {
+  id: string;
+  question: string;
+  header?: string;
+  options?: string[];
+  stage?: string;
+  asked_by?: string;
+  asked_at: string;
+  answer?: string;
+  answered_by?: string;
+  answered_at?: string;
 }
 
 export type ArtifactKind = "markdown" | "mermaid" | "prompt-cycle";

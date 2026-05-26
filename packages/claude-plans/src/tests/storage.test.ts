@@ -355,3 +355,165 @@ describe("atomic writes", function () {
     expect(got && got.plan.content_md.indexOf("iteration ")).toBe(0);
   });
 });
+
+// ---- v2: Q&A on plan records -----------------------------------------------
+
+import {
+  pushQuestion,
+  recordAnswer,
+  getAnswers,
+  __setIdGenerator
+} from "../storage";
+
+function writeV1PlanFixture(root: string, slug: string): any {
+  // Hand-written v1 record (no `questions` key) to prove backward-compat.
+  var v1 = {
+    slug: slug,
+    title: "v1 plan",
+    status: "DRAFT",
+    content_md: "# v1",
+    content_hash: "deadbeef",
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+    session_id: null
+  };
+  fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify(v1, null, 2));
+  return v1;
+}
+
+describe("plan questions (v2)", function () {
+  it("v1 record (no questions field) loads via getPlan and getAnswers without mutation", function () {
+    var root = mkTmp();
+    var slug = "v1-record";
+    var v1 = writeV1PlanFixture(root, slug);
+    var diskBefore = fs.readFileSync(path.join(root, slug + ".json"), "utf8");
+
+    var got = getPlan(slug, { rootDir: root });
+    expect(got).not.toBeNull();
+    expect(got && got.plan.questions).toBeUndefined();
+
+    var listed = getAnswers({ plan_slug: slug }, { rootDir: root });
+    expect(listed.questions).toEqual([]);
+    expect(listed.plan_slug).toBe(slug);
+
+    // Disk untouched after reads.
+    var diskAfter = fs.readFileSync(path.join(root, slug + ".json"), "utf8");
+    expect(diskAfter).toBe(diskBefore);
+    expect(JSON.parse(diskAfter)).toEqual(v1);
+  });
+
+  it("v1 + push_question preserves every v1 field byte-for-byte", function () {
+    var root = mkTmp();
+    var slug = "v1-then-question";
+    var v1 = writeV1PlanFixture(root, slug);
+
+    var q = pushQuestion(
+      { plan_slug: slug, question: "Add field?" },
+      { rootDir: root }
+    );
+
+    var afterRaw = fs.readFileSync(path.join(root, slug + ".json"), "utf8");
+    var after = JSON.parse(afterRaw);
+    expect(after.questions.length).toBe(1);
+    expect(after.questions[0].id).toBe(q.id);
+
+    // All original v1 fields preserved (updated_at is the only one we bump).
+    var keys = Object.keys(v1);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k === "updated_at") continue;
+      expect((after as any)[k]).toEqual((v1 as any)[k]);
+    }
+    expect(after.updated_at).not.toBe(v1.updated_at);
+  });
+
+  it("record_answer overwrites with last-write-wins semantics", function () {
+    var root = mkTmp();
+    pushPlan({ title: "answers", content_md: "x" }, { rootDir: root });
+    var q = pushQuestion(
+      { plan_slug: "answers", question: "Final answer?" },
+      { rootDir: root }
+    );
+    var first = recordAnswer(
+      { plan_slug: "answers", question_id: q.id, answer: "first" },
+      { rootDir: root }
+    );
+    expect(first.answer).toBe("first");
+
+    var second = recordAnswer(
+      { plan_slug: "answers", question_id: q.id, answer: "second", answered_by: "daniel" },
+      { rootDir: root }
+    );
+    expect(second.answer).toBe("second");
+    expect(second.answered_by).toBe("daniel");
+
+    var listed = getAnswers({ plan_slug: "answers" }, { rootDir: root });
+    expect(listed.questions.length).toBe(1);
+    expect(listed.questions[0].answer).toBe("second");
+  });
+
+  it("getAnswers filters: stage-only, answered-only, unanswered-only, combined", function () {
+    var root = mkTmp();
+    pushPlan({ title: "filters", content_md: "x" }, { rootDir: root });
+    var q1 = pushQuestion({ plan_slug: "filters", question: "r1?", stage: "research" }, { rootDir: root });
+    var q2 = pushQuestion({ plan_slug: "filters", question: "r2?", stage: "research" }, { rootDir: root });
+    pushQuestion({ plan_slug: "filters", question: "p1?", stage: "plan" }, { rootDir: root });
+    recordAnswer({ plan_slug: "filters", question_id: q1.id, answer: "yes" }, { rootDir: root });
+
+    expect(getAnswers({ plan_slug: "filters" }, { rootDir: root }).questions.length).toBe(3);
+    expect(getAnswers({ plan_slug: "filters", stage: "research" }, { rootDir: root }).questions.length).toBe(2);
+    expect(getAnswers({ plan_slug: "filters", answered: true }, { rootDir: root }).questions.length).toBe(1);
+    expect(getAnswers({ plan_slug: "filters", answered: false }, { rootDir: root }).questions.length).toBe(2);
+
+    // Combined: research + unanswered = q2.
+    var combined = getAnswers(
+      { plan_slug: "filters", stage: "research", answered: false },
+      { rootDir: root }
+    );
+    expect(combined.questions.length).toBe(1);
+    expect(combined.questions[0].id).toBe(q2.id);
+  });
+
+  it("pushQuestion retries on id collision and errors after 5 attempts", function () {
+    var root = mkTmp();
+    pushPlan({ title: "collide", content_md: "x" }, { rootDir: root });
+    // First push uses the default generator to seat one known id.
+    var seated = pushQuestion({ plan_slug: "collide", question: "Q1?" }, { rootDir: root });
+
+    // Force the generator to always return the seated id — every retry collides.
+    var restore = __setIdGenerator(function () { return seated.id; });
+    try {
+      var threw: Error | null = null;
+      try {
+        pushQuestion({ plan_slug: "collide", question: "Q2?" }, { rootDir: root });
+      } catch (e) {
+        threw = e as Error;
+      }
+      expect(threw).not.toBeNull();
+      expect((threw as Error).message).toMatch(/unique question id/);
+    } finally {
+      __setIdGenerator(restore);
+    }
+  });
+
+  it("two sequential pushQuestion calls both persist", function () {
+    var root = mkTmp();
+    pushPlan({ title: "seq", content_md: "x" }, { rootDir: root });
+    var a = pushQuestion({ plan_slug: "seq", question: "a?" }, { rootDir: root });
+    var b = pushQuestion({ plan_slug: "seq", question: "b?" }, { rootDir: root });
+    var listed = getAnswers({ plan_slug: "seq" }, { rootDir: root });
+    expect(listed.questions.map(function (q) { return q.id; })).toEqual([a.id, b.id]);
+  });
+
+  it("pushQuestion errors when the plan does not exist", function () {
+    var root = mkTmp();
+    var threw: Error | null = null;
+    try {
+      pushQuestion({ plan_slug: "no-such-plan", question: "?" }, { rootDir: root });
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw).not.toBeNull();
+    expect((threw as Error).message).toMatch(/plan not found/);
+  });
+});

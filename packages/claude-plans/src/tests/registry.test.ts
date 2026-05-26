@@ -15,11 +15,14 @@ function descByName(deps: any, name: string) {
 }
 
 describe("registry", function () {
-  it("exposes exactly the 8 tools in TOOL_NAMES", function () {
-    expect(TOOL_NAMES.length).toBe(8);
+  it("exposes exactly the 11 tools in TOOL_NAMES", function () {
+    expect(TOOL_NAMES.length).toBe(11);
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
     expect((TOOL_NAMES as readonly string[]).indexOf("get_handoff_bundle")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("push_question")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("record_answer")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("get_answers")).toBeGreaterThan(-1);
   });
 
   it("delete_plan removes an existing plan", async function () {
@@ -235,5 +238,102 @@ describe("registry", function () {
     await descByName(deps, "push_plan").handler({ title: "beta", content_md: "2" });
     var list = await descByName(deps, "list_recent_plans").handler({});
     expect(list.plans[0].slug).toBe("beta");
+  });
+
+  it("push_question / record_answer / get_answers round-trip via handlers", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "qa-plan", content_md: "x" });
+
+    var pushed = await descByName(deps, "push_question").handler({
+      plan_slug: "qa-plan",
+      question: "Pick the storage shape?",
+      header: "Storage",
+      options: ["nested", "split"],
+      stage: "plan",
+      asked_by: "idea-shaper"
+    });
+    expect(pushed.id).toMatch(/^q_[0-9a-f]{8}$/);
+    expect(pushed.question).toBe("Pick the storage shape?");
+    expect(pushed.stage).toBe("plan");
+
+    var answered = await descByName(deps, "record_answer").handler({
+      plan_slug: "qa-plan",
+      question_id: pushed.id,
+      answer: "nested",
+      answered_by: "daniel"
+    });
+    expect(answered.answer).toBe("nested");
+    expect(answered.answered_by).toBe("daniel");
+    expect(typeof answered.answered_at).toBe("string");
+
+    var listed = await descByName(deps, "get_answers").handler({ plan_slug: "qa-plan" });
+    expect(listed.plan_slug).toBe("qa-plan");
+    expect(listed.questions.length).toBe(1);
+    expect(listed.questions[0].id).toBe(pushed.id);
+    expect(listed.questions[0].answer).toBe("nested");
+  });
+
+  it("get_answers filters by answered and by stage", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "qa-filter", content_md: "x" });
+    var q1 = await descByName(deps, "push_question").handler({
+      plan_slug: "qa-filter", question: "stage1?", stage: "research"
+    });
+    await descByName(deps, "push_question").handler({
+      plan_slug: "qa-filter", question: "stage2?", stage: "plan"
+    });
+    await descByName(deps, "record_answer").handler({
+      plan_slug: "qa-filter", question_id: q1.id, answer: "yes"
+    });
+
+    var answered = await descByName(deps, "get_answers").handler({
+      plan_slug: "qa-filter", answered: true
+    });
+    expect(answered.questions.length).toBe(1);
+    expect(answered.questions[0].stage).toBe("research");
+
+    var unanswered = await descByName(deps, "get_answers").handler({
+      plan_slug: "qa-filter", answered: false
+    });
+    expect(unanswered.questions.length).toBe(1);
+    expect(unanswered.questions[0].stage).toBe("plan");
+
+    var byStage = await descByName(deps, "get_answers").handler({
+      plan_slug: "qa-filter", stage: "plan"
+    });
+    expect(byStage.questions.length).toBe(1);
+    expect(byStage.questions[0].question).toBe("stage2?");
+  });
+
+  it("push_question errors when the plan does not exist", async function () {
+    var root = mkTmp();
+    var res = await descByName({ storage: { rootDir: root } }, "push_question").handler({
+      plan_slug: "missing", question: "Q?"
+    }).catch(function (e: Error) { return e; });
+    expect(res).toBeInstanceOf(Error);
+    expect((res as Error).message).toMatch(/plan not found/);
+  });
+
+  it("record_answer rejects an id that doesn't match q_<8-hex>", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "rej", content_md: "x" });
+    var res = await descByName(deps, "record_answer").handler({
+      plan_slug: "rej", question_id: "not-a-real-id", answer: "x"
+    }).catch(function (e: Error) { return e; });
+    expect(res).toBeInstanceOf(Error);
+  });
+
+  it("record_answer errors when the question id is unknown", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "qa-miss", content_md: "x" });
+    var res = await descByName(deps, "record_answer").handler({
+      plan_slug: "qa-miss", question_id: "q_00000000", answer: "x"
+    }).catch(function (e: Error) { return e; });
+    expect(res).toBeInstanceOf(Error);
+    expect((res as Error).message).toMatch(/question not found/);
   });
 });

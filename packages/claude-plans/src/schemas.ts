@@ -105,3 +105,27 @@ export var getHandoffBundleSchema = z.object({
     .array(z.enum(["markdown", "mermaid", "prompt-cycle"]))
     .optional()
 });
+
+export var QUESTION_ID_PATTERN = /^q_[0-9a-f]{8}$/;
+
+export var pushQuestionSchema = z.object({
+  plan_slug: z.string().min(1).max(64),
+  question: z.string().min(1).max(2000),
+  header: z.string().min(1).max(24).optional(),
+  options: z.array(z.string().min(1).max(120)).max(8).optional(),
+  stage: z.string().min(1).max(32).optional(),
+  asked_by: z.string().min(1).max(64).optional()
+});
+
+export var recordAnswerSchema = z.object({
+  plan_slug: z.string().min(1).max(64),
+  question_id: z.string().regex(QUESTION_ID_PATTERN, "question_id must match q_<8-hex>"),
+  answer: z.string().min(1),
+  answered_by: z.string().min(1).max(64).optional()
+});
+
+export var getAnswersSchema = z.object({
+  plan_slug: z.string().min(1).max(64),
+  answered: z.boolean().optional(),
+  stage: z.string().min(1).max(32).optional()
+});
