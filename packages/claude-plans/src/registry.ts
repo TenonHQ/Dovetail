@@ -15,7 +15,10 @@ import {
   pushArtifactSchema,
   pushDiagramSchema,
   deletePlanSchema,
-  getHandoffBundleSchema
+  getHandoffBundleSchema,
+  pushQuestionSchema,
+  recordAnswerSchema,
+  getAnswersSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -25,6 +28,9 @@ import {
   pushArtifact,
   deletePlan,
   buildHandoffBundle,
+  pushQuestion,
+  recordAnswer,
+  getAnswers,
   StorageOptions
 } from "./storage";
 
@@ -36,7 +42,10 @@ export var TOOL_NAMES = [
   "push_artifact",
   "push_diagram",
   "delete_plan",
-  "get_handoff_bundle"
+  "get_handoff_bundle",
+  "push_question",
+  "record_answer",
+  "get_answers"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -280,6 +289,92 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           follow_links: parsed.follow_links,
           include_artifact_kinds: parsed.include_artifact_kinds
         });
+      }
+    },
+    {
+      name: "push_question",
+      description:
+        "Park a question on an existing plan so it can be answered by the operator (dashboard) " +
+        "or another Claude session. Returns the new PlanQuestion with an assigned id (format: " +
+        "q_<8-hex>). The id is required to call record_answer later.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan that owns this question.\n" +
+        "  question (required) — the question text.\n" +
+        "  header (optional, <=24 chars) — short chip label, mirrors AskUserQuestion.\n" +
+        "  options (optional, up to 8) — suggested answers.\n" +
+        "  stage (optional, free-form, <=32 chars) — pipeline stage that raised it\n" +
+        "    (e.g. 'research', 'plan', 'tests'). No enum — free text for v2.\n" +
+        "  asked_by (optional) — agent or session label (e.g. 'idea-shaper').\n\n" +
+        "Notes: appends to the plan's questions list (creating it if absent). Last-write-wins " +
+        "atomic write of the plan record; dashboard watcher picks up the change on save.",
+      shape: pushQuestionSchema.shape,
+      handler: async function (args: any) {
+        var parsed = pushQuestionSchema.parse(args);
+        var resolvedAskedBy = parsed.asked_by !== undefined
+          ? parsed.asked_by
+          : (process.env.CLAUDE_CODE_SESSION_ID || undefined);
+        return pushQuestion(
+          {
+            plan_slug: parsed.plan_slug,
+            question: parsed.question,
+            header: parsed.header,
+            options: parsed.options,
+            stage: parsed.stage,
+            asked_by: resolvedAskedBy
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "record_answer",
+      description:
+        "Record (or overwrite) an answer to a question on a plan. The question must already " +
+        "exist on the plan — call push_question first if it does not. Returns the updated " +
+        "PlanQuestion. Last-write-wins; previous answer (if any) is replaced.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan that owns the question.\n" +
+        "  question_id (required, matches /^q_[0-9a-f]{8}$/) — the id returned by push_question.\n" +
+        "  answer (required, non-empty) — free-text answer; not validated against the\n" +
+        "    question's options[] (operators may answer off-menu).\n" +
+        "  answered_by (optional) — who answered ('daniel', 'claude', agent name).",
+      shape: recordAnswerSchema.shape,
+      handler: async function (args: any) {
+        var parsed = recordAnswerSchema.parse(args);
+        return recordAnswer(
+          {
+            plan_slug: parsed.plan_slug,
+            question_id: parsed.question_id,
+            answer: parsed.answer,
+            answered_by: parsed.answered_by
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "get_answers",
+      description:
+        "List Q&A entries for a plan with optional filters. Returns the full PlanQuestion list " +
+        "(each entry has the question, the answer if recorded, and metadata). Empty list if the " +
+        "plan has no questions or is a v1 record.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan to read.\n" +
+        "  answered (optional boolean) — true: only items with an answer; false: only unanswered;\n" +
+        "    absent: both.\n" +
+        "  stage (optional) — exact-match filter on the question's stage tag.\n\n" +
+        "Output: { plan_slug, questions: PlanQuestion[] }. Questions are returned in insertion order.",
+      shape: getAnswersSchema.shape,
+      handler: async function (args: any) {
+        var parsed = getAnswersSchema.parse(args);
+        return getAnswers(
+          {
+            plan_slug: parsed.plan_slug,
+            answered: parsed.answered,
+            stage: parsed.stage
+          },
+          storageOpts
+        );
       }
     }
   ];

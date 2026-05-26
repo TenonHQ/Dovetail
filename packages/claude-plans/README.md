@@ -22,8 +22,42 @@ The CTO repo's `.mcp.json` already wires this in via `npx -y @tenonhq/dovetail-c
 | `update_plan_status` | DRAFT → APPROVED → EXITED |
 | `get_plan` | Returns plan + nested artifacts |
 | `list_recent_plans` | Newest first, status filter optional |
-| `push_artifact` | Generic artifact (`kind: "markdown" \| "mermaid"`) |
+| `push_artifact` | Generic artifact (`kind: "markdown" \| "mermaid" \| "prompt-cycle"`) |
 | `push_diagram` | Convenience wrapper around `push_artifact` for Mermaid sources |
+| `delete_plan` | Permanently remove a plan and all its artifacts |
+| `get_handoff_bundle` | Compose a paste-ready resume payload from a plan + its artifacts |
+| `push_question` | (v2) Park a question on a plan so it can be answered later |
+| `record_answer` | (v2) Answer a previously-pushed question by id |
+| `get_answers` | (v2) Read the plan's Q&A list, with optional `answered` / `stage` filters |
+
+### v2 Q&A on plans (additive)
+
+Plans can carry an optional `questions: PlanQuestion[]` field. Each `PlanQuestion` has:
+
+```ts
+{
+  id: string;            // server-assigned, format q_<8-hex>
+  question: string;
+  header?: string;       // short chip label, mirrors AskUserQuestion
+  options?: string[];    // suggested answers
+  stage?: string;        // free-form pipeline stage tag, e.g. "research", "plan", "tests"
+  asked_by?: string;     // agent / session label
+  asked_at: string;      // ISO-8601
+  answer?: string;       // absent until record_answer is called
+  answered_by?: string;
+  answered_at?: string;
+}
+```
+
+Round-trip:
+
+```
+push_question  →  PlanQuestion { id: "q_4a3f9c12", ... }
+record_answer  →  PlanQuestion { id, answer, answered_at, ... }
+get_answers    →  { plan_slug, questions: PlanQuestion[] }
+```
+
+v1 plan records (no `questions` field) round-trip through every v1 tool unchanged; `get_answers` returns an empty list against them, and `push_question` initializes the array on first call.
 
 ## Content formats
 

@@ -21,6 +21,7 @@ import {
   ClaudeArtifact,
   ClaudePlan,
   LinkedArtifact,
+  PlanQuestion,
   PlanStatus,
   PlanWithArtifacts,
   PromptCyclePayload
@@ -453,4 +454,123 @@ function safeParsePromptCycle(content: string): PromptCyclePayload | null {
   } catch (e) {
     return null;
   }
+}
+
+// ---- v2: Q&A on plan records -----------------------------------------------
+
+export interface PushQuestionInput {
+  plan_slug: string;
+  question: string;
+  header?: string;
+  options?: string[];
+  stage?: string;
+  asked_by?: string;
+}
+
+export interface RecordAnswerInput {
+  plan_slug: string;
+  question_id: string;
+  answer: string;
+  answered_by?: string;
+}
+
+export interface GetAnswersInput {
+  plan_slug: string;
+  answered?: boolean;
+  stage?: string;
+}
+
+export interface GetAnswersResult {
+  plan_slug: string;
+  questions: PlanQuestion[];
+}
+
+// Module-private generator. Tests force id collisions via __setIdGenerator.
+// Kept un-exported so external callers can't take a stale live-binding reference
+// and miss updates from the setter; the setter is the only public hook.
+var __idGenerator: () => string = function () {
+  return "q_" + crypto.randomBytes(4).toString("hex");
+};
+
+export function __setIdGenerator(fn: () => string): () => string {
+  var prev = __idGenerator;
+  __idGenerator = fn;
+  return prev;
+}
+
+function generateQuestionId(taken: PlanQuestion[]): string {
+  for (var attempt = 0; attempt < 5; attempt++) {
+    var candidate = __idGenerator();
+    if (!taken.some(function (q) { return q.id === candidate; })) return candidate;
+  }
+  throw new Error("failed to generate unique question id after 5 attempts");
+}
+
+function loadPlan(root: string, slug: string): ClaudePlan {
+  var plan = readJson<ClaudePlan>(planPath(root, slug));
+  if (!plan) throw new Error("plan not found: " + slug);
+  return plan;
+}
+
+// NOTE: load-mutate-write is not concurrency-safe. Two simultaneous pushQuestion
+// calls on the same plan can both read the same `existing` array; the second
+// atomic rename wins and silently drops the first question. Expected concurrency
+// is one Claude session per plan, so this is documented rather than locked.
+export function pushQuestion(input: PushQuestionInput, options: StorageOptions = {}): PlanQuestion {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var existing = plan.questions || [];
+  var question: PlanQuestion = {
+    id: generateQuestionId(existing),
+    question: input.question,
+    asked_at: nowIso()
+  };
+  if (input.header !== undefined) question.header = input.header;
+  if (input.options !== undefined) question.options = input.options;
+  if (input.stage !== undefined) question.stage = input.stage;
+  if (input.asked_by !== undefined) question.asked_by = input.asked_by;
+
+  plan.questions = existing.concat([question]);
+  plan.updated_at = nowIso();
+  atomicWriteJson(planPath(root, plan.slug), plan);
+  return question;
+}
+
+export function recordAnswer(input: RecordAnswerInput, options: StorageOptions = {}): PlanQuestion {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var questions = plan.questions || [];
+  var idx = -1;
+  for (var i = 0; i < questions.length; i++) {
+    if (questions[i].id === input.question_id) { idx = i; break; }
+  }
+  if (idx === -1) {
+    throw new Error("question not found: " + input.question_id + " on plan " + input.plan_slug);
+  }
+  var prev = questions[idx];
+  var updated: PlanQuestion = Object.assign({}, prev, {
+    answer: input.answer,
+    answered_at: nowIso()
+  });
+  if (input.answered_by !== undefined) updated.answered_by = input.answered_by;
+  questions[idx] = updated;
+  plan.questions = questions;
+  plan.updated_at = nowIso();
+  atomicWriteJson(planPath(root, plan.slug), plan);
+  return updated;
+}
+
+export function getAnswers(input: GetAnswersInput, options: StorageOptions = {}): GetAnswersResult {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var questions = (plan.questions || []).slice();
+  if (input.stage !== undefined) {
+    questions = questions.filter(function (q) { return q.stage === input.stage; });
+  }
+  if (input.answered === true) {
+    questions = questions.filter(function (q) { return typeof q.answer === "string"; });
+  } else if (input.answered === false) {
+    questions = questions.filter(function (q) { return typeof q.answer !== "string"; });
+  }
+  return { plan_slug: plan.slug, questions: questions };
 }
