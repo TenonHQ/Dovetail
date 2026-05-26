@@ -44,47 +44,6 @@ describe("slugify", function () {
   });
 });
 
-describe("categories on push", function () {
-  it("auto-extracts categories from title + content when caller omits them", function () {
-    var root = mkTmp();
-    var p = pushPlan(
-      {
-        title: "Mortise Journey refactor",
-        content_md: "Hooks into the ServiceNow update set."
-      },
-      { rootDir: root }
-    );
-    expect(p.categories).toBeDefined();
-    expect(p.categories).toEqual(expect.arrayContaining(["Mortise", "Journey", "ServiceNow"]));
-  });
-
-  it("honors caller-provided categories override and skips auto-extraction", function () {
-    var root = mkTmp();
-    var p = pushPlan(
-      {
-        title: "Mortise Journey refactor",
-        content_md: "ServiceNow update set",
-        categories: ["custom-tag-one", "custom-tag-two"]
-      },
-      { rootDir: root }
-    );
-    expect(p.categories).toEqual(["custom-tag-one", "custom-tag-two"]);
-  });
-
-  it("accepts an explicit empty categories array (caller wants none)", function () {
-    var root = mkTmp();
-    var p = pushPlan(
-      {
-        title: "ServiceNow work",
-        content_md: "ServiceNow ServiceNow",
-        categories: []
-      },
-      { rootDir: root }
-    );
-    expect(p.categories).toEqual([]);
-  });
-});
-
 describe("plan CRUD", function () {
   it("round-trips a plan with auto-slug, content_hash, and timestamps", function () {
     var root = mkTmp();

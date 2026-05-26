@@ -34,7 +34,6 @@ export interface ClaudePlan {
   pr_title?: string;
   linked_artifacts?: LinkedArtifact[];
   questions?: PlanQuestion[];
-  categories?: string[];
 }
 
 export interface PlanQuestion {

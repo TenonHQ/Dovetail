@@ -38,8 +38,7 @@ export var pushPlanSchema = z.object({
   pr_number: z.number().int().positive().optional(),
   pr_url: z.string().url().optional(),
   pr_title: z.string().max(200).optional(),
-  linked_artifacts: z.array(planLinkSchema).max(10).optional(),
-  categories: z.array(z.string().min(1).max(40)).max(12).optional()
+  linked_artifacts: z.array(planLinkSchema).max(10).optional()
 });
 
 var lintReportSchema = z.object({

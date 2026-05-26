@@ -127,35 +127,10 @@ dove-claude-plans list                # all plans, newest first
 dove-claude-plans list --status DRAFT
 dove-claude-plans exit <slug>         # flip to EXITED
 dove-claude-plans exit-stale          # flip every DRAFT to EXITED (used by Claude Stop hook)
-dove-claude-plans recategorize [--dry] # re-extract topic categories on every plan (one-shot bootstrap)
 dove-claude-plans where               # print storage root
 dove-claude-plans mcp                 # stdio MCP server (used by .mcp.json)
 dove-claude-plans mcp --smoke         # list registered tools and exit (CI verification)
 ```
-
-## Topic categories (Topics cloud)
-
-Every `push_plan` call extracts a short list of topical labels
-(`ServiceNow`, `Mortise`, `Mailgun`, `Tooling`, …) from the plan's
-title + content via [`src/categories.ts`](./src/categories.ts) and persists
-them on the plan record as `categories: string[]`. Zero external deps —
-extraction is curated Tenon vocabulary first, frequency-fallback for novel
-topics.
-
-The Dovetail dashboard reads `categories` on each plan to render the
-**Topics** cloud at the top of `/claude-plans`. Counts auto-recompute
-client-side whenever a plan upserts via the existing SSE stream — no manual
-rebuild required.
-
-For the first run after installing this version, bootstrap categories on
-existing plans:
-
-```bash
-npx dove-claude-plans recategorize        # write
-npx dove-claude-plans recategorize --dry  # preview only
-```
-
-Callers can override auto-extraction by passing `categories` to `push_plan`.
 
 ## Storage layout
 
