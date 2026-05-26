@@ -706,6 +706,20 @@ describe("normalizeChecklistMarkdown", function () {
     var md = "## Title\n\nSome prose with - dashes - inline.";
     expect(normalizeChecklistMarkdown(md)).toBe(md);
   });
+
+  it("preserves leading indentation and reapplies it to split-out lines", function () {
+    // Two-space indent (nested checklist). Old behavior stripped the indent and
+    // injected a leading "\n" — fix preserves the indent on every line.
+    expect(normalizeChecklistMarkdown("  - [ ] A   - [ ] B")).toBe(
+      "  - [ ] A\n  - [ ] B"
+    );
+  });
+
+  it("preserves tab indentation", function () {
+    expect(normalizeChecklistMarkdown("\t- [ ] A   - [x] B")).toBe(
+      "\t- [ ] A\n\t- [x] B"
+    );
+  });
 });
 
 describe("createClickUpApi", function () {

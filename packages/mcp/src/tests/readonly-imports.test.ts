@@ -37,15 +37,16 @@ var FORBIDDEN_SYMBOLS = [
 ];
 
 // The ONE declared Phase-2 write module and the exact write symbols it may use.
-// It still may NOT use Gmail/Calendar/ServiceNow write symbols — only these.
+// Least privilege: only the four verbs wired as MCP tools — destructive verbs
+// (deleteTask, updateTaskStatus, addComment) stay banned even here. Gmail /
+// Calendar / ServiceNow write symbols are likewise NOT permitted. Adding a new
+// verb means: (1) appending it here, (2) updating the ESLint override in
+// .eslintrc.json, and (3) wiring it as an MCP tool — all visible in one diff.
 // Any other tool file referencing a forbidden symbol is still a violation.
 var WRITE_MODULE_ALLOW: Record<string, string[]> = {
   "clickup-write.ts": [
     "createTask",
     "updateTask",
-    "updateTaskStatus",
-    "deleteTask",
-    "addComment",
     "setCustomField",
     "linkTask"
   ]

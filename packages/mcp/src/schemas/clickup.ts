@@ -28,7 +28,10 @@ export type ClickupGetTeamSyncInput = z.infer<typeof clickupGetTeamSyncSchema>;
 // --- Phase-2 gated write schemas ---
 // Every write carries an optional confirm flag. Without confirm:true the tool
 // returns a dry-run preview; with it, the write executes. customTaskIds:true
-// treats taskId as a custom ID (e.g. "DEV-225") and requires teamId.
+// treats taskId as a custom ID (e.g. "DEV-225") and requires teamId — that
+// cross-field rule is enforced in clickup-write.ts (it can't live on the
+// schema because the MCP SDK consumes .shape, which a ZodEffects from
+// .refine() doesn't expose).
 
 export var clickupUpdateTaskSchema = z.object({
   taskId: z.string().min(1),

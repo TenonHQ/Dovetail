@@ -101,7 +101,9 @@ function buildIdQuery(params: {
 /**
  * @description Splits inline checkbox runs onto separate lines. ClickUp renders
  *   only the FIRST checkbox on a line, so "- [ ] A   - [ ] B" collapses the rest
- *   into plain text. Idempotent; lines with 0-1 checkboxes are returned as-is.
+ *   into plain text. Leading indentation is preserved and reapplied to every
+ *   split-out line, so nested checklists keep their hierarchy. Idempotent;
+ *   lines with 0-1 checkboxes are returned as-is.
  * @param markdown - Markdown body that may contain inline checkbox runs.
  * @returns Markdown with one checkbox per line.
  */
@@ -113,7 +115,13 @@ export function normalizeChecklistMarkdown(markdown: string): string {
       if (!boxes || boxes.length < 2) {
         return line;
       }
-      return line.replace(/\s+(- \[[ xX]\])/g, "\n$1");
+      // Preserve leading indentation. Split only on whitespace BETWEEN checkboxes,
+      // and reapply the same indent to each subsequent line so nested checklists
+      // keep their hierarchy.
+      var leadingMatch = line.match(/^([ \t]*)/);
+      var indent = leadingMatch ? leadingMatch[1] : "";
+      var rest = line.slice(indent.length);
+      return indent + rest.replace(/\s+(- \[[ xX]\])/g, "\n" + indent + "$1");
     })
     .join("\n");
 }

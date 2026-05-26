@@ -17,7 +17,7 @@
   "license": "GPL-3.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@tenonhq/dovetail-clickup": "^0.0.7",
+    "@tenonhq/dovetail-clickup": "^0.0.9",
     "@tenonhq/dovetail-gmail": "^0.0.7",
     "@tenonhq/dovetail-google-auth": "^0.0.9",
     "@tenonhq/dovetail-google-calendar": "^0.0.7",

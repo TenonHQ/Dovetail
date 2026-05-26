@@ -58,6 +58,73 @@ describe("clickup write dry-run (no confirm)", function () {
     expect(res.action).toBe("update_task");
     expect(client.put).not.toHaveBeenCalled();
   });
+
+  it("create_task dry-run echoes the full payload (parity with update/link/setField)", async function () {
+    var client = makeClient();
+    var deps = makeDeps(true, client);
+
+    var res = await clickupCreateTask(
+      {
+        listId: "list1",
+        name: "Task",
+        markdownContent: "- [ ] A",
+        status: "open",
+        priority: 3,
+        assignees: [42],
+        customFields: [{ id: "f1", value: "v1" }]
+      } as any,
+      deps
+    );
+
+    expect(res.dryRun).toBe(true);
+    expect(res.action).toBe("create_task");
+    expect(res.listId).toBe("list1");
+    expect(res.name).toBe("Task");
+    expect(res.fields).toEqual({
+      markdownContent: "- [ ] A",
+      status: "open",
+      priority: 3,
+      assignees: [42],
+      customFields: [{ id: "f1", value: "v1" }]
+    });
+    expect(client.post).not.toHaveBeenCalled();
+  });
+});
+
+describe("clickup write customTaskIds guard", function () {
+  it("rejects customTaskIds:true without teamId on every task-id write — even dry-run", async function () {
+    var client = makeClient();
+    var deps = makeDeps(true, client);
+
+    await expect(
+      clickupUpdateTask({ taskId: "DEV-225", customTaskIds: true } as any, deps)
+    ).rejects.toThrow("teamId is required");
+    await expect(
+      clickupSetCustomField(
+        { taskId: "DEV-225", fieldId: "f", value: "v", customTaskIds: true } as any,
+        deps
+      )
+    ).rejects.toThrow("teamId is required");
+    await expect(
+      clickupLinkTasks(
+        { taskId: "DEV-225", linksTo: "DEV-300", customTaskIds: true } as any,
+        deps
+      )
+    ).rejects.toThrow("teamId is required");
+
+    // No HTTP attempted on any of the three.
+    expect(client.put).not.toHaveBeenCalled();
+    expect(client.post).not.toHaveBeenCalled();
+  });
+
+  it("accepts customTaskIds:true when teamId is present", async function () {
+    var deps = makeDeps(true, makeClient());
+    var res = await clickupUpdateTask(
+      { taskId: "DEV-225", customTaskIds: true, teamId: "team9" } as any,
+      deps
+    );
+    expect(res.dryRun).toBe(true);
+  });
 });
 
 describe("clickup write execute (confirm:true)", function () {
