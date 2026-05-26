@@ -1,8 +1,9 @@
 /**
  * @tenonhq/dovetail-mcp
  *
- * MCP server exposing read-only tools for ClickUp, Gmail, Google Calendar,
- * and ServiceNow, backed by the existing Dovetail integration packages.
+ * MCP server exposing read tools for ClickUp, Gmail, Google Calendar, and
+ * ServiceNow, plus gated Phase-2 ClickUp write tools, backed by the existing
+ * Dovetail integration packages.
  *
  * Library exports here are consumed by tests and by alternate hosts
  * (e.g. an HTTP transport in the future). The bin entry lives in server.ts.
@@ -55,7 +56,10 @@ export function buildDepsFromEnv(): RegistryDeps {
   };
 
   if (loaded.config.clickup) {
-    deps.clickup = { config: loaded.config.clickup };
+    deps.clickup = {
+      config: loaded.config.clickup,
+      writesEnabled: loaded.config.writesEnabled
+    };
   }
   if (loaded.config.google) {
     deps.gmail = { config: loaded.config.google };

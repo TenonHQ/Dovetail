@@ -25,9 +25,11 @@ import { buildTeamSyncJson, TeamSyncJson } from "./teamsync";
 export interface ClickUpDeps {
   config: ClickUpConfig;
   clientFactory?: (config: ClickUpConfig) => AxiosInstance;
+  // Phase-2 master gate (mirrors SincMcpConfig.writesEnabled). Read tools ignore it.
+  writesEnabled?: boolean;
 }
 
-function resolveClient(deps: ClickUpDeps): AxiosInstance {
+export function resolveClient(deps: ClickUpDeps): AxiosInstance {
   var factory = deps.clientFactory || (function (cfg) {
     return createClient({ token: cfg.token });
   });

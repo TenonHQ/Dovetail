@@ -1,7 +1,9 @@
 /**
- * Static guarantee that no tool module imports or references a write API.
- * Reads each src/tools/*.ts file and asserts no occurrence of forbidden
- * symbols. Cheap: regex over file text, no AST, no compile.
+ * Static guarantee on the write surface. Reads each src/tools/*.ts file and
+ * asserts no occurrence of forbidden write symbols — EXCEPT the one declared
+ * Phase-2 write module (clickup-write.ts), which may use the specific ClickUp
+ * write symbols listed in WRITE_MODULE_ALLOW and nothing else forbidden.
+ * Every other tool module stays fully read-only. Cheap: regex over file text.
  */
 
 import * as fs from "fs";
@@ -25,12 +27,29 @@ var FORBIDDEN_SYMBOLS = [
   "updateTaskStatus",
   "deleteTask",
   "addComment",
+  "setCustomField",
+  "linkTask",
   "addChoicesToField",
   "pushWithUpdateSet",
   "createRecord",
   ".claude.",
   "client.claude"
 ];
+
+// The ONE declared Phase-2 write module and the exact write symbols it may use.
+// It still may NOT use Gmail/Calendar/ServiceNow write symbols — only these.
+// Any other tool file referencing a forbidden symbol is still a violation.
+var WRITE_MODULE_ALLOW: Record<string, string[]> = {
+  "clickup-write.ts": [
+    "createTask",
+    "updateTask",
+    "updateTaskStatus",
+    "deleteTask",
+    "addComment",
+    "setCustomField",
+    "linkTask"
+  ]
+};
 
 function listToolFiles(): string[] {
   var entries = fs.readdirSync(TOOLS_DIR);
@@ -50,10 +69,12 @@ describe("read-only import guarantee", function () {
     expect(files.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("no tool file references a forbidden write symbol", function () {
+  it("no tool file references a forbidden write symbol (except the declared write module)", function () {
     var violations: string[] = [];
     for (var i = 0; i < files.length; i++) {
       var file = files[i];
+      var base = path.basename(file);
+      var allowed = WRITE_MODULE_ALLOW[base] || [];
       var content = fs.readFileSync(file, "utf8");
       // Strip block comments and line comments — descriptive prose can
       // legitimately mention forbidden symbol names without actually using them.
@@ -61,8 +82,11 @@ describe("read-only import guarantee", function () {
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/(^|\s)\/\/[^\n]*/g, "$1");
       for (var s = 0; s < FORBIDDEN_SYMBOLS.length; s++) {
+        if (allowed.indexOf(FORBIDDEN_SYMBOLS[s]) !== -1) {
+          continue;
+        }
         if (stripped.indexOf(FORBIDDEN_SYMBOLS[s]) !== -1) {
-          violations.push(path.basename(file) + " references " + FORBIDDEN_SYMBOLS[s]);
+          violations.push(base + " references " + FORBIDDEN_SYMBOLS[s]);
         }
       }
     }
@@ -70,5 +94,12 @@ describe("read-only import guarantee", function () {
       throw new Error("Read-only violations: " + violations.join("; "));
     }
     expect(violations).toEqual([]);
+  });
+
+  it("every declared write module exists as a tool file", function () {
+    var basenames = files.map(function (f) { return path.basename(f); });
+    Object.keys(WRITE_MODULE_ALLOW).forEach(function (mod) {
+      expect(basenames).toContain(mod);
+    });
   });
 });

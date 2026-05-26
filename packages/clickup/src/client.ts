@@ -18,6 +18,8 @@ import {
   UpdateTaskParams,
   UpdateTaskStatusParams,
   DeleteTaskParams,
+  SetCustomFieldParams,
+  LinkTaskParams,
   AddCommentParams,
   GetSpacesParams,
   GetFoldersParams,
@@ -76,6 +78,46 @@ function handleApiError(error: unknown, context: string): never {
   throw error;
 }
 
+// --- Helpers ---
+
+/**
+ * @description Builds the axios request config for custom-ID task lookups.
+ *   ClickUp endpoints accept a task's custom ID (e.g. "DEV-225") only when
+ *   "custom_task_ids=true&team_id=<id>" is supplied. Returns an empty config
+ *   when custom IDs are not in use.
+ * @param params - Object with optional customTaskIds flag and teamId.
+ * @returns Axios config object (possibly empty).
+ */
+function buildIdQuery(params: {
+  customTaskIds?: boolean;
+  teamId?: string;
+}): { params?: Record<string, unknown> } {
+  if (params.customTaskIds) {
+    return { params: { custom_task_ids: true, team_id: params.teamId } };
+  }
+  return {};
+}
+
+/**
+ * @description Splits inline checkbox runs onto separate lines. ClickUp renders
+ *   only the FIRST checkbox on a line, so "- [ ] A   - [ ] B" collapses the rest
+ *   into plain text. Idempotent; lines with 0-1 checkboxes are returned as-is.
+ * @param markdown - Markdown body that may contain inline checkbox runs.
+ * @returns Markdown with one checkbox per line.
+ */
+export function normalizeChecklistMarkdown(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map(function (line) {
+      var boxes = line.match(/- \[[ xX]\]/g);
+      if (!boxes || boxes.length < 2) {
+        return line;
+      }
+      return line.replace(/\s+(- \[[ xX]\])/g, "\n$1");
+    })
+    .join("\n");
+}
+
 // --- User ---
 
 /**
@@ -104,10 +146,13 @@ export async function getAuthorizedUser(params: {
 export async function getTask(params: {
   client: AxiosInstance;
   taskId: string;
+  customTaskIds?: boolean;
+  teamId?: string;
 }): Promise<ClickUpTask> {
   try {
     var response = await params.client.get(
-      "/api/v2/task/" + params.taskId
+      "/api/v2/task/" + params.taskId,
+      buildIdQuery(params)
     );
     return response.data;
   } catch (error) {
@@ -181,15 +226,19 @@ export async function createTask(params: {
   listId: string;
   name: string;
   description?: string;
+  markdownContent?: string;
   assignees?: number[];
   status?: string;
   priority?: number;
+  customFields?: Array<{ id: string; value: unknown }>;
 }): Promise<ClickUpTask> {
   try {
     var body: Record<string, unknown> = {
       name: params.name,
     };
-    if (params.description !== undefined) {
+    if (params.markdownContent !== undefined) {
+      body.markdown_content = normalizeChecklistMarkdown(params.markdownContent);
+    } else if (params.description !== undefined) {
       body.description = params.description;
     }
     if (params.assignees !== undefined) {
@@ -200,6 +249,9 @@ export async function createTask(params: {
     }
     if (params.priority !== undefined) {
       body.priority = params.priority;
+    }
+    if (params.customFields !== undefined) {
+      body.custom_fields = params.customFields;
     }
 
     var response = await params.client.post(
@@ -222,16 +274,21 @@ export async function updateTask(params: {
   taskId: string;
   name?: string;
   description?: string;
+  markdownContent?: string;
   status?: string;
   assignees?: number[];
   priority?: number;
+  customTaskIds?: boolean;
+  teamId?: string;
 }): Promise<ClickUpTask> {
   try {
     var body: Record<string, unknown> = {};
     if (params.name !== undefined) {
       body.name = params.name;
     }
-    if (params.description !== undefined) {
+    if (params.markdownContent !== undefined) {
+      body.markdown_content = normalizeChecklistMarkdown(params.markdownContent);
+    } else if (params.description !== undefined) {
       body.description = params.description;
     }
     if (params.status !== undefined) {
@@ -246,7 +303,8 @@ export async function updateTask(params: {
 
     var response = await params.client.put(
       "/api/v2/task/" + params.taskId,
-      body
+      body,
+      buildIdQuery(params)
     );
     return response.data;
   } catch (error) {
@@ -283,6 +341,61 @@ export async function deleteTask(params: {
     await params.client.delete("/api/v2/task/" + params.taskId);
   } catch (error) {
     return handleApiError(error, "deleting task '" + params.taskId + "'");
+  }
+}
+
+// --- Custom Fields & Links ---
+
+/**
+ * @description Sets a single custom-field value on a task. Value shape depends on
+ *   the field type: string for text/url, the option id for drop_down, and
+ *   { add: number[], rem: number[] } for users fields.
+ * @param params - Object with client, taskId, fieldId, value, and optional custom-ID resolution.
+ */
+export async function setCustomField(params: {
+  client: AxiosInstance;
+  taskId: string;
+  fieldId: string;
+  value: unknown;
+  customTaskIds?: boolean;
+  teamId?: string;
+}): Promise<void> {
+  try {
+    await params.client.post(
+      "/api/v2/task/" + params.taskId + "/field/" + params.fieldId,
+      { value: params.value },
+      buildIdQuery(params)
+    );
+  } catch (error) {
+    return handleApiError(
+      error,
+      "setting custom field '" + params.fieldId + "' on task '" + params.taskId + "'"
+    );
+  }
+}
+
+/**
+ * @description Creates a link between two tasks (the ClickUp "linked tasks" relation).
+ * @param params - Object with client, taskId, linksTo, and optional custom-ID resolution.
+ */
+export async function linkTask(params: {
+  client: AxiosInstance;
+  taskId: string;
+  linksTo: string;
+  customTaskIds?: boolean;
+  teamId?: string;
+}): Promise<void> {
+  try {
+    await params.client.post(
+      "/api/v2/task/" + params.taskId + "/link/" + params.linksTo,
+      {},
+      buildIdQuery(params)
+    );
+  } catch (error) {
+    return handleApiError(
+      error,
+      "linking task '" + params.taskId + "' to '" + params.linksTo + "'"
+    );
   }
 }
 
@@ -666,6 +779,8 @@ export interface ClickUpApi {
   updateTask(params: UpdateTaskParams): Promise<ClickUpTask>;
   updateTaskStatus(params: UpdateTaskStatusParams): Promise<ClickUpTask>;
   deleteTask(params: DeleteTaskParams): Promise<void>;
+  setCustomField(params: SetCustomFieldParams): Promise<void>;
+  linkTask(params: LinkTaskParams): Promise<void>;
   addComment(params: AddCommentParams): Promise<ClickUpComment>;
   getTeams(): Promise<ClickUpTeam[]>;
   getSpaces(params: GetSpacesParams): Promise<ClickUpSpace[]>;
@@ -689,7 +804,12 @@ export function createClickUpApi(config: ClickUpClientConfig): ClickUpApi {
       return getAuthorizedUser({ client: client });
     },
     getTask: function (params: GetTaskParams) {
-      return getTask({ client: client, taskId: params.taskId });
+      return getTask({
+        client: client,
+        taskId: params.taskId,
+        customTaskIds: params.customTaskIds,
+        teamId: params.teamId,
+      });
     },
     listMyTasks: function (params: ListMyTasksParams) {
       return listMyTasks({
@@ -704,9 +824,11 @@ export function createClickUpApi(config: ClickUpClientConfig): ClickUpApi {
         listId: params.listId,
         name: params.name,
         description: params.description,
+        markdownContent: params.markdownContent,
         assignees: params.assignees,
         status: params.status,
         priority: params.priority,
+        customFields: params.customFields,
       });
     },
     updateTask: function (params: UpdateTaskParams) {
@@ -715,9 +837,12 @@ export function createClickUpApi(config: ClickUpClientConfig): ClickUpApi {
         taskId: params.taskId,
         name: params.name,
         description: params.description,
+        markdownContent: params.markdownContent,
         status: params.status,
         assignees: params.assignees,
         priority: params.priority,
+        customTaskIds: params.customTaskIds,
+        teamId: params.teamId,
       });
     },
     updateTaskStatus: function (params: UpdateTaskStatusParams) {
@@ -729,6 +854,25 @@ export function createClickUpApi(config: ClickUpClientConfig): ClickUpApi {
     },
     deleteTask: function (params: DeleteTaskParams) {
       return deleteTask({ client: client, taskId: params.taskId });
+    },
+    setCustomField: function (params: SetCustomFieldParams) {
+      return setCustomField({
+        client: client,
+        taskId: params.taskId,
+        fieldId: params.fieldId,
+        value: params.value,
+        customTaskIds: params.customTaskIds,
+        teamId: params.teamId,
+      });
+    },
+    linkTask: function (params: LinkTaskParams) {
+      return linkTask({
+        client: client,
+        taskId: params.taskId,
+        linksTo: params.linksTo,
+        customTaskIds: params.customTaskIds,
+        teamId: params.teamId,
+      });
     },
     addComment: function (params: AddCommentParams) {
       return addComment({
