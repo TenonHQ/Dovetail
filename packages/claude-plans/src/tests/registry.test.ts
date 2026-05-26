@@ -15,10 +15,11 @@ function descByName(deps: any, name: string) {
 }
 
 describe("registry", function () {
-  it("exposes exactly the 7 tools in TOOL_NAMES", function () {
-    expect(TOOL_NAMES.length).toBe(7);
+  it("exposes exactly the 8 tools in TOOL_NAMES", function () {
+    expect(TOOL_NAMES.length).toBe(8);
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
+    expect((TOOL_NAMES as readonly string[]).indexOf("get_handoff_bundle")).toBeGreaterThan(-1);
   });
 
   it("delete_plan removes an existing plan", async function () {
@@ -145,6 +146,85 @@ describe("registry", function () {
     var get = descByName({ storage: { rootDir: root } }, "get_plan");
     var err = await get.handler({ slug: "nope" }).catch(function (e: Error) { return e; });
     expect(err).toBeInstanceOf(Error);
+  });
+
+  it("push_artifact accepts a prompt-cycle JSON payload via the handler", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "host", content_md: "x" });
+    var res = await descByName(deps, "push_artifact").handler({
+      plan_slug: "host",
+      slug: "cycle",
+      kind: "prompt-cycle",
+      title: "cycle",
+      content: JSON.stringify({
+        schema_version: 1,
+        original_draft: "go",
+        lint_before: { score: 50, missing: ["done"], antipatterns: [], ceremony: [] },
+        open_questions: [{ question: "Q", options: ["a", "b"], answer: "a" }],
+        rewritten_prompt: "<prompt><done>Done = ok</done></prompt>",
+        lint_after: { score: 100, missing: [], ceremony: ["ultrathink"] }
+      })
+    });
+    expect(res.kind).toBe("prompt-cycle");
+  });
+
+  it("push_artifact rejects an invalid prompt-cycle payload via the handler", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "host", content_md: "x" });
+    var res = await descByName(deps, "push_artifact").handler({
+      plan_slug: "host",
+      kind: "prompt-cycle",
+      title: "bad",
+      content: "not-json"
+    }).catch(function (e: Error) { return e; });
+    expect(res).toBeInstanceOf(Error);
+    expect((res as Error).message).toMatch(/not valid JSON/);
+  });
+
+  it("push_plan stores linked_artifacts via the handler", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    var res = await descByName(deps, "push_plan").handler({
+      title: "linker",
+      content_md: "x",
+      linked_artifacts: [{ plan_slug: "target", relation: "improves" }]
+    });
+    expect(res.linked_artifacts[0].plan_slug).toBe("target");
+  });
+
+  it("get_handoff_bundle returns markdown for an existing plan", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "handed", content_md: "# body" });
+    var res = await descByName(deps, "get_handoff_bundle").handler({ slug: "handed" });
+    expect(res.slug).toBe("handed");
+    expect(res.markdown).toMatch(/# Handoff: handed/);
+    expect(res.ready_to_paste_prompt).toBeNull();
+  });
+
+  it("get_handoff_bundle hoists a prompt-cycle's rewritten prompt", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "h", content_md: "x" });
+    await descByName(deps, "push_artifact").handler({
+      plan_slug: "h",
+      slug: "c",
+      kind: "prompt-cycle",
+      title: "c",
+      content: JSON.stringify({
+        schema_version: 1,
+        original_draft: "go",
+        lint_before: { score: 50, missing: ["done"] },
+        open_questions: [],
+        rewritten_prompt: "<prompt><done>Done = ship</done></prompt>",
+        lint_after: { score: 100, missing: [] }
+      })
+    });
+    var res = await descByName(deps, "get_handoff_bundle").handler({ slug: "h" });
+    expect(res.ready_to_paste_prompt).toMatch(/Done = ship/);
+    expect(res.markdown).toMatch(/READY-TO-PASTE PROMPT/);
   });
 
   it("list_recent_plans returns newest first", async function () {

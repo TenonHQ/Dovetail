@@ -20,10 +20,13 @@ import {
   ArtifactKind,
   ClaudeArtifact,
   ClaudePlan,
+  LinkedArtifact,
   PlanStatus,
-  PlanWithArtifacts
+  PlanWithArtifacts,
+  PromptCyclePayload
 } from "./types";
 import { StructuredPlan, renderStructured } from "./renderer";
+import { promptCyclePayloadSchema } from "./schemas";
 
 export interface StorageOptions {
   rootDir?: string;
@@ -92,6 +95,7 @@ export interface PushPlanInput {
   pr_number?: number;
   pr_url?: string;
   pr_title?: string;
+  linked_artifacts?: LinkedArtifact[];
 }
 
 export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): ClaudePlan {
@@ -106,6 +110,13 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
   }
   var hashSource = resolvedHtml !== undefined ? resolvedHtml : contentMd;
 
+  var resolvedLinks: LinkedArtifact[] | undefined;
+  if (input.linked_artifacts !== undefined) {
+    resolvedLinks = input.linked_artifacts;
+  } else if (existing && existing.linked_artifacts) {
+    resolvedLinks = existing.linked_artifacts;
+  }
+
   var plan: ClaudePlan = {
     slug: slug,
     title: input.title,
@@ -118,7 +129,8 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     session_id: input.session_id === undefined ? (existing ? existing.session_id : null) : input.session_id,
     pr_number: input.pr_number !== undefined ? input.pr_number : (existing ? existing.pr_number : undefined),
     pr_url: input.pr_url !== undefined ? input.pr_url : (existing ? existing.pr_url : undefined),
-    pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined)
+    pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined),
+    linked_artifacts: resolvedLinks
   };
 
   atomicWriteJson(planPath(root, slug), plan);
@@ -208,6 +220,8 @@ export function pushArtifact(input: PushArtifactInput, options: StorageOptions =
   var planExists = fs.existsSync(planPath(root, input.plan_slug));
   if (!planExists) throw new Error("plan not found: " + input.plan_slug);
 
+  if (input.kind === "prompt-cycle") validatePromptCycleContent(input.content);
+
   var slug = slugify(input.slug || input.title);
   var existing = readJson<ClaudeArtifact>(artifactPath(root, input.plan_slug, slug));
   var now = nowIso();
@@ -224,6 +238,25 @@ export function pushArtifact(input: PushArtifactInput, options: StorageOptions =
   return artifact;
 }
 
+export function parsePromptCycleContent(content: string): PromptCyclePayload {
+  var raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch (err) {
+    var msg = err instanceof Error ? err.message : String(err);
+    throw new Error("prompt-cycle content is not valid JSON: " + msg);
+  }
+  var parsed = promptCyclePayloadSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error("prompt-cycle payload failed validation: " + parsed.error.message);
+  }
+  return parsed.data as PromptCyclePayload;
+}
+
+function validatePromptCycleContent(content: string): void {
+  parsePromptCycleContent(content);
+}
+
 export function deletePlan(slug: string, options: StorageOptions = {}): boolean {
   var root = storageRoot(options);
   var file = planPath(root, slug);
@@ -232,4 +265,192 @@ export function deletePlan(slug: string, options: StorageOptions = {}): boolean 
   var dir = path.join(root, slug);
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   return true;
+}
+
+export interface HandoffBundleOptions extends StorageOptions {
+  follow_links?: boolean;
+  include_artifact_kinds?: ArtifactKind[];
+}
+
+export interface HandoffBundleResult {
+  slug: string;
+  markdown: string;
+  ready_to_paste_prompt: string | null;
+}
+
+export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}): HandoffBundleResult {
+  var record = getPlan(slug, { rootDir: opts.rootDir });
+  if (!record) throw new Error("plan not found: " + slug);
+
+  var include = opts.include_artifact_kinds;
+  var followLinks = opts.follow_links === true;
+
+  var hoist: string | null = null;
+  var parts: string[] = [];
+
+  parts.push("# Handoff: " + record.plan.title);
+  parts.push("");
+  var headerBits: string[] = [];
+  headerBits.push("**Slug:** `" + record.plan.slug + "`");
+  headerBits.push("**Status:** " + record.plan.status);
+  headerBits.push("**Updated:** " + record.plan.updated_at);
+  headerBits.push("**PR:** " + (record.plan.pr_url || "—"));
+  headerBits.push("**Prior session:** " + (record.plan.session_id || "—"));
+  parts.push("> " + headerBits.join(" · "));
+  parts.push("");
+
+  parts.push("## Plan content");
+  parts.push("");
+  parts.push(record.plan.content_md && record.plan.content_md.length > 0
+    ? record.plan.content_md
+    : "_(no markdown content — see dashboard for structured layout)_");
+  parts.push("");
+
+  var links = record.plan.linked_artifacts || [];
+  if (links.length > 0) {
+    parts.push("## Linked plans");
+    parts.push("");
+    for (var li = 0; li < links.length; li++) {
+      var link = links[li];
+      var line = "- **" + link.relation + " →** `" + link.plan_slug + "`";
+      if (link.artifact_slug) line += " (artifact: `" + link.artifact_slug + "`)";
+      if (link.note) line += " — " + link.note;
+      parts.push(line);
+    }
+    parts.push("");
+  }
+
+  var renderedArtifacts = renderArtifactsSection(record.artifacts, include);
+  if (renderedArtifacts.body.length > 0) {
+    parts.push("## Artifacts");
+    parts.push("");
+    parts.push(renderedArtifacts.body);
+    parts.push("");
+  }
+  if (renderedArtifacts.hoist) hoist = renderedArtifacts.hoist;
+
+  if (followLinks && links.length > 0) {
+    var followable = links.filter(function (l) {
+      return l.relation === "built-from" || l.relation === "improves";
+    });
+    for (var fi = 0; fi < followable.length; fi++) {
+      var linkedSlug = followable[fi].plan_slug;
+      var linked = getPlan(linkedSlug, { rootDir: opts.rootDir });
+      if (!linked) {
+        parts.push("## Linked plan (missing): " + linkedSlug);
+        parts.push("");
+        continue;
+      }
+      parts.push("---");
+      parts.push("");
+      parts.push("## Linked plan: " + linked.plan.title + " (`" + linked.plan.slug + "`)");
+      parts.push("");
+      parts.push("> Relation: **" + followable[fi].relation + "**" + (followable[fi].note ? " — " + followable[fi].note : ""));
+      parts.push("");
+      if (linked.plan.content_md && linked.plan.content_md.length > 0) {
+        parts.push(linked.plan.content_md);
+        parts.push("");
+      }
+      var nested = renderArtifactsSection(linked.artifacts, include);
+      if (nested.body.length > 0) {
+        parts.push("### Linked plan artifacts");
+        parts.push("");
+        parts.push(nested.body);
+        parts.push("");
+      }
+      if (!hoist && nested.hoist) hoist = nested.hoist;
+    }
+  }
+
+  if (hoist) {
+    parts.push("---");
+    parts.push("");
+    parts.push("# 🎯 READY-TO-PASTE PROMPT");
+    parts.push("");
+    parts.push("Copy the block below into a fresh session:");
+    parts.push("");
+    parts.push("```xml");
+    parts.push(hoist);
+    parts.push("```");
+    parts.push("");
+  }
+
+  return {
+    slug: record.plan.slug,
+    markdown: parts.join("\n"),
+    ready_to_paste_prompt: hoist
+  };
+}
+
+interface ArtifactSection {
+  body: string;
+  hoist: string | null;
+}
+
+function renderArtifactsSection(artifacts: ClaudeArtifact[], include?: ArtifactKind[]): ArtifactSection {
+  var lines: string[] = [];
+  var hoist: string | null = null;
+  for (var i = 0; i < artifacts.length; i++) {
+    var a = artifacts[i];
+    if (include && include.indexOf(a.kind) === -1) continue;
+    lines.push("### " + a.title + " _(" + a.kind + ")_");
+    lines.push("");
+    if (a.kind === "mermaid") {
+      lines.push("```mermaid");
+      lines.push(a.content);
+      lines.push("```");
+    } else if (a.kind === "prompt-cycle") {
+      var pc = safeParsePromptCycle(a.content);
+      if (pc) {
+        lines.push("**Lint:** " + pc.lint_before.score + " → " + pc.lint_after.score + "%");
+        lines.push("");
+        if (pc.source_plan_slug) {
+          lines.push("**Source plan:** `" + pc.source_plan_slug + "`");
+          lines.push("");
+        }
+        lines.push("<details><summary>Original draft</summary>");
+        lines.push("");
+        lines.push("```");
+        lines.push(pc.original_draft);
+        lines.push("```");
+        lines.push("");
+        lines.push("</details>");
+        lines.push("");
+        if (pc.open_questions.length > 0) {
+          lines.push("<details><summary>Open questions (" + pc.open_questions.length + ")</summary>");
+          lines.push("");
+          for (var qi = 0; qi < pc.open_questions.length; qi++) {
+            var q = pc.open_questions[qi];
+            lines.push("- **Q:** " + q.question);
+            lines.push("  - **A:** " + q.answer);
+          }
+          lines.push("");
+          lines.push("</details>");
+          lines.push("");
+        }
+        lines.push("**Rewritten prompt:**");
+        lines.push("");
+        lines.push("```xml");
+        lines.push(pc.rewritten_prompt);
+        lines.push("```");
+        if (!hoist) hoist = pc.rewritten_prompt;
+      } else {
+        lines.push("```json");
+        lines.push(a.content);
+        lines.push("```");
+      }
+    } else {
+      lines.push(a.content);
+    }
+    lines.push("");
+  }
+  return { body: lines.join("\n").replace(/\n+$/, ""), hoist: hoist };
+}
+
+function safeParsePromptCycle(content: string): PromptCyclePayload | null {
+  try {
+    return parsePromptCycleContent(content);
+  } catch (e) {
+    return null;
+  }
 }

@@ -3,15 +3,32 @@ import * as os from "os";
 import * as path from "path";
 
 import {
+  buildHandoffBundle,
   deletePlan,
   getPlan,
   listArtifacts,
   listPlans,
+  parsePromptCycleContent,
   pushArtifact,
   pushPlan,
   slugify,
   updatePlanStatus
 } from "../storage";
+
+function validCycle(overrides: any = {}): string {
+  var payload = Object.assign(
+    {
+      schema_version: 1,
+      original_draft: "draft text",
+      lint_before: { score: 50, missing: ["done"], antipatterns: [], ceremony: [] },
+      open_questions: [{ question: "Q1", options: ["a", "b"], answer: "a" }],
+      rewritten_prompt: "<prompt><done>Done = it works</done></prompt>",
+      lint_after: { score: 100, missing: [], ceremony: ["ultrathink"] }
+    },
+    overrides
+  );
+  return JSON.stringify(payload);
+}
 
 function mkTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "claude-plans-test-"));
@@ -131,6 +148,188 @@ describe("artifacts", function () {
     expect(deletePlan("z", { rootDir: root })).toBe(true);
     expect(getPlan("z", { rootDir: root })).toBeNull();
     expect(fs.existsSync(path.join(root, "z"))).toBe(false);
+  });
+});
+
+describe("linked_artifacts on plans", function () {
+  it("persists linked_artifacts when provided", function () {
+    var root = mkTmp();
+    var p = pushPlan(
+      {
+        title: "child",
+        content_md: "x",
+        linked_artifacts: [
+          { plan_slug: "parent", relation: "improves", note: "n" }
+        ]
+      },
+      { rootDir: root }
+    );
+    expect(p.linked_artifacts).toEqual([
+      { plan_slug: "parent", relation: "improves", note: "n" }
+    ]);
+    var got = getPlan("child", { rootDir: root });
+    expect(got && got.plan.linked_artifacts && got.plan.linked_artifacts[0].relation).toBe("improves");
+  });
+
+  it("preserves prior links on subsequent push without the field", function () {
+    var root = mkTmp();
+    pushPlan(
+      {
+        title: "child",
+        content_md: "v1",
+        linked_artifacts: [{ plan_slug: "parent", relation: "built-from" }]
+      },
+      { rootDir: root }
+    );
+    var updated = pushPlan({ title: "child", content_md: "v2" }, { rootDir: root });
+    expect(updated.linked_artifacts && updated.linked_artifacts[0].plan_slug).toBe("parent");
+  });
+
+  it("clears prior links when caller passes an empty array explicitly", function () {
+    var root = mkTmp();
+    pushPlan(
+      {
+        title: "child",
+        content_md: "v1",
+        linked_artifacts: [{ plan_slug: "parent", relation: "built-from" }]
+      },
+      { rootDir: root }
+    );
+    var cleared = pushPlan(
+      { title: "child", content_md: "v2", linked_artifacts: [] },
+      { rootDir: root }
+    );
+    expect(cleared.linked_artifacts).toEqual([]);
+  });
+});
+
+describe("prompt-cycle artifact kind", function () {
+  it("accepts a valid prompt-cycle payload and round-trips it", function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    var a = pushArtifact(
+      {
+        plan_slug: "host",
+        slug: "cycle",
+        kind: "prompt-cycle",
+        title: "improve cycle",
+        content: validCycle()
+      },
+      { rootDir: root }
+    );
+    expect(a.kind).toBe("prompt-cycle");
+    var got = getPlan("host", { rootDir: root });
+    expect(got && got.artifacts[0].kind).toBe("prompt-cycle");
+    var parsed = parsePromptCycleContent(got!.artifacts[0].content);
+    expect(parsed.lint_after.score).toBe(100);
+    expect(parsed.open_questions[0].answer).toBe("a");
+  });
+
+  it("rejects malformed JSON", function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    expect(function () {
+      pushArtifact(
+        { plan_slug: "host", kind: "prompt-cycle", title: "bad", content: "{not json" },
+        { rootDir: root }
+      );
+    }).toThrow(/not valid JSON/);
+  });
+
+  it("rejects payload missing required fields", function () {
+    var root = mkTmp();
+    pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
+    expect(function () {
+      pushArtifact(
+        {
+          plan_slug: "host",
+          kind: "prompt-cycle",
+          title: "bad",
+          content: JSON.stringify({ schema_version: 1, original_draft: "x" })
+        },
+        { rootDir: root }
+      );
+    }).toThrow(/failed validation/);
+  });
+});
+
+describe("buildHandoffBundle", function () {
+  it("includes plan content + linked plans section + artifacts and hoists the rewritten prompt", function () {
+    var root = mkTmp();
+    pushPlan(
+      { title: "parent plan", content_md: "# parent body" },
+      { rootDir: root }
+    );
+    pushPlan(
+      {
+        title: "child plan",
+        content_md: "# child body",
+        linked_artifacts: [
+          { plan_slug: "parent-plan", relation: "improves", note: "drives this" }
+        ]
+      },
+      { rootDir: root }
+    );
+    pushArtifact(
+      {
+        plan_slug: "child-plan",
+        slug: "cycle",
+        kind: "prompt-cycle",
+        title: "the cycle",
+        content: validCycle({
+          rewritten_prompt: "<prompt><done>Done = ship it</done></prompt>",
+          source_plan_slug: "parent-plan"
+        })
+      },
+      { rootDir: root }
+    );
+
+    var bundle = buildHandoffBundle("child-plan", { rootDir: root, follow_links: true });
+    expect(bundle.slug).toBe("child-plan");
+    expect(bundle.markdown).toMatch(/# Handoff: child plan/);
+    expect(bundle.markdown).toMatch(/# child body/);
+    expect(bundle.markdown).toMatch(/## Linked plans/);
+    expect(bundle.markdown).toMatch(/improves →/);
+    expect(bundle.markdown).toMatch(/## Linked plan: parent plan/);
+    expect(bundle.markdown).toMatch(/# parent body/);
+    expect(bundle.markdown).toMatch(/READY-TO-PASTE PROMPT/);
+    expect(bundle.markdown).toMatch(/Done = ship it/);
+    expect(bundle.ready_to_paste_prompt).toMatch(/Done = ship it/);
+  });
+
+  it("skips linked-plan expansion when follow_links is false", function () {
+    var root = mkTmp();
+    pushPlan({ title: "parent plan", content_md: "P" }, { rootDir: root });
+    pushPlan(
+      {
+        title: "child plan",
+        content_md: "C",
+        linked_artifacts: [{ plan_slug: "parent-plan", relation: "improves" }]
+      },
+      { rootDir: root }
+    );
+    var bundle = buildHandoffBundle("child-plan", { rootDir: root });
+    expect(bundle.markdown).toMatch(/## Linked plans/);
+    expect(bundle.markdown).not.toMatch(/## Linked plan: parent plan/);
+  });
+
+  it("omits the hoist when no prompt-cycle artifact is present", function () {
+    var root = mkTmp();
+    pushPlan({ title: "no cycle here", content_md: "X" }, { rootDir: root });
+    pushArtifact(
+      { plan_slug: "no-cycle-here", kind: "markdown", title: "doc", content: "hello" },
+      { rootDir: root }
+    );
+    var bundle = buildHandoffBundle("no-cycle-here", { rootDir: root });
+    expect(bundle.ready_to_paste_prompt).toBeNull();
+    expect(bundle.markdown).not.toMatch(/READY-TO-PASTE PROMPT/);
+  });
+
+  it("throws when the plan is missing", function () {
+    var root = mkTmp();
+    expect(function () {
+      buildHandoffBundle("ghost", { rootDir: root });
+    }).toThrow(/plan not found/);
   });
 });
 

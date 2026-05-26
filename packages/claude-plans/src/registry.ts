@@ -14,7 +14,8 @@ import {
   listRecentPlansSchema,
   pushArtifactSchema,
   pushDiagramSchema,
-  deletePlanSchema
+  deletePlanSchema,
+  getHandoffBundleSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -23,6 +24,7 @@ import {
   listPlans,
   pushArtifact,
   deletePlan,
+  buildHandoffBundle,
   StorageOptions
 } from "./storage";
 
@@ -33,7 +35,8 @@ export var TOOL_NAMES = [
   "list_recent_plans",
   "push_artifact",
   "push_diagram",
-  "delete_plan"
+  "delete_plan",
+  "get_handoff_bundle"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -169,7 +172,8 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id,
             pr_number: parsed.pr_number,
             pr_url: parsed.pr_url,
-            pr_title: parsed.pr_title
+            pr_title: parsed.pr_title,
+            linked_artifacts: parsed.linked_artifacts
           },
           storageOpts
         );
@@ -209,7 +213,14 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     {
       name: "push_artifact",
       description:
-        "Attach an artifact (markdown or mermaid) to an existing plan. The dashboard renders artifacts under the plan's Artifacts tab.",
+        "Attach an artifact to an existing plan. Kind is one of:\n" +
+        "  markdown — raw Markdown content.\n" +
+        "  mermaid — a Mermaid diagram source (must start with a recognized header).\n" +
+        "  prompt-cycle — a JSON-stringified PromptCyclePayload capturing an /improve-prompt run:\n" +
+        "    { schema_version:1, original_draft, lint_before:{score,missing,antipatterns?,ceremony?},\n" +
+        "      open_questions:[{question,header?,options,answer}], rewritten_prompt,\n" +
+        "      lint_after:{score,missing,ceremony?}, source_plan_slug? }\n" +
+        "The dashboard renders artifacts under the plan's Artifacts tab.",
       shape: pushArtifactSchema.shape,
       handler: async function (args: any) {
         var parsed = pushArtifactSchema.parse(args);
@@ -245,6 +256,30 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var parsed = deletePlanSchema.parse(args);
         var deleted = deletePlan(parsed.slug, storageOpts);
         return { deleted: deleted, slug: parsed.slug };
+      }
+    },
+    {
+      name: "get_handoff_bundle",
+      description:
+        "Compose a single paste-ready Markdown payload for resuming a plan in a fresh Claude session. " +
+        "Combines the plan content, its artifacts (markdown / mermaid / prompt-cycle), and optional " +
+        "linked-plan expansion. When the plan (or a followed linked plan) carries a prompt-cycle " +
+        "artifact, its rewritten_prompt is hoisted to a final '🎯 READY-TO-PASTE PROMPT' section so " +
+        "the receiving session can copy it without scrolling.\n\n" +
+        "Inputs:\n" +
+        "  slug (required) — the plan slug to bundle.\n" +
+        "  follow_links (optional, default false) — when true, inline-expands linked plans with relation\n" +
+        "    'built-from' or 'improves' (1 level deep, no recursion).\n" +
+        "  include_artifact_kinds (optional) — restrict which kinds appear in the bundle.\n\n" +
+        "Output: { slug, markdown, ready_to_paste_prompt }.",
+      shape: getHandoffBundleSchema.shape,
+      handler: async function (args: any) {
+        var parsed = getHandoffBundleSchema.parse(args || {});
+        return buildHandoffBundle(parsed.slug, {
+          rootDir: storageOpts.rootDir,
+          follow_links: parsed.follow_links,
+          include_artifact_kinds: parsed.include_artifact_kinds
+        });
       }
     }
   ];

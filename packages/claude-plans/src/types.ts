@@ -5,6 +5,20 @@
 
 export type PlanStatus = "DRAFT" | "APPROVED" | "EXITED";
 
+export type LinkRelation =
+  | "built-from"
+  | "improves"
+  | "supersedes"
+  | "depends-on"
+  | "see-also";
+
+export interface LinkedArtifact {
+  plan_slug: string;
+  artifact_slug?: string;
+  relation: LinkRelation;
+  note?: string;
+}
+
 export interface ClaudePlan {
   slug: string;
   title: string;
@@ -18,9 +32,10 @@ export interface ClaudePlan {
   pr_number?: number;
   pr_url?: string;
   pr_title?: string;
+  linked_artifacts?: LinkedArtifact[];
 }
 
-export type ArtifactKind = "markdown" | "mermaid";
+export type ArtifactKind = "markdown" | "mermaid" | "prompt-cycle";
 
 export { StructuredPlan, StructuredSection } from "./renderer";
 
@@ -32,6 +47,30 @@ export interface ClaudeArtifact {
   content: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface PromptCycleLintReport {
+  score: number;
+  missing: string[];
+  antipatterns?: string[];
+  ceremony?: string[];
+}
+
+export interface PromptCycleOpenQuestion {
+  question: string;
+  header?: string;
+  options: string[];
+  answer: string;
+}
+
+export interface PromptCyclePayload {
+  schema_version: 1;
+  original_draft: string;
+  lint_before: PromptCycleLintReport;
+  open_questions: PromptCycleOpenQuestion[];
+  rewritten_prompt: string;
+  lint_after: PromptCycleLintReport;
+  source_plan_slug?: string;
 }
 
 export interface PlanWithArtifacts {
