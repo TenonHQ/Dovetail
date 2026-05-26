@@ -29,6 +29,7 @@ import {
 } from "./types";
 import { StructuredPlan, renderStructured } from "./renderer";
 import { promptCyclePayloadSchema } from "./schemas";
+import { extractCategories } from "./categories";
 
 export interface StorageOptions {
   rootDir?: string;
@@ -106,6 +107,13 @@ export interface PushPlanInput {
   pr_url?: string;
   pr_title?: string;
   linked_artifacts?: LinkedArtifact[];
+  /**
+   * Optional caller-provided category overrides. When supplied, replaces any
+   * auto-extracted categories. When omitted, categories are derived from
+   * title + content via extractCategories() so the dashboard topic cloud
+   * updates on every push without a manual rebuild.
+   */
+  categories?: string[];
 }
 
 export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): ClaudePlan {
@@ -127,6 +135,17 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     resolvedLinks = existing.linked_artifacts;
   }
 
+  var resolvedCategories: string[];
+  if (input.categories !== undefined) {
+    resolvedCategories = input.categories;
+  } else {
+    resolvedCategories = extractCategories({
+      title: input.title,
+      content_md: contentMd,
+      content_html: resolvedHtml
+    });
+  }
+
   var plan: ClaudePlan = {
     slug: slug,
     title: input.title,
@@ -140,7 +159,8 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     pr_number: input.pr_number !== undefined ? input.pr_number : (existing ? existing.pr_number : undefined),
     pr_url: input.pr_url !== undefined ? input.pr_url : (existing ? existing.pr_url : undefined),
     pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined),
-    linked_artifacts: resolvedLinks
+    linked_artifacts: resolvedLinks,
+    categories: resolvedCategories
   };
 
   atomicWriteJson(planPath(root, slug), plan);
