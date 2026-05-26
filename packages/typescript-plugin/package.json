@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-typescript-plugin",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "engines": {
     "node": ">=22"
   },
