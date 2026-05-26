@@ -878,7 +878,9 @@ function listClaudeArtifacts(slug) {
 
 function listClaudePrompts(slug) {
   if (!isValidSlug(slug)) return [];
-  const dir = promptsDirFor(slug);
+  const baseDir = path.resolve(CLAUDE_PLANS_DIR);
+  const dir = path.resolve(promptsDirFor(slug));
+  if (!dir.startsWith(baseDir + path.sep)) return [];
   if (!fs.existsSync(dir)) return [];
   const entries = fs.readdirSync(dir);
   const prompts = [];
