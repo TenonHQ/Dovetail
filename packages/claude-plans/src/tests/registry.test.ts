@@ -15,14 +15,15 @@ function descByName(deps: any, name: string) {
 }
 
 describe("registry", function () {
-  it("exposes exactly the 11 tools in TOOL_NAMES", function () {
-    expect(TOOL_NAMES.length).toBe(11);
+  it("exposes exactly the 12 tools in TOOL_NAMES", function () {
+    expect(TOOL_NAMES.length).toBe(12);
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
     expect((TOOL_NAMES as readonly string[]).indexOf("get_handoff_bundle")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("push_question")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("record_answer")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("get_answers")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("push_prompt")).toBeGreaterThan(-1);
   });
 
   it("delete_plan removes an existing plan", async function () {
@@ -170,6 +171,52 @@ describe("registry", function () {
       })
     });
     expect(res.kind).toBe("prompt-cycle");
+  });
+
+  it("push_prompt persists a prompt with scores via the handler", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "host", content_md: "x" });
+    var res = await descByName(deps, "push_prompt").handler({
+      plan_slug: "host",
+      title: "Rewrite v1",
+      content: "<prompt><done>Done = green</done></prompt>",
+      source_draft: "make it better",
+      score_before: 17,
+      score_after: 92
+    });
+    expect(res.slug).toBe("rewrite-v1");
+    expect(res.score_before).toBe(17);
+    expect(res.score_after).toBe(92);
+    var diskPath = path.join(root, "host", "prompts", "rewrite-v1.json");
+    expect(fs.existsSync(diskPath)).toBe(true);
+  });
+
+  it("push_prompt rejects missing plan_slug via Zod", async function () {
+    var root = mkTmp();
+    var desc = descByName({ storage: { rootDir: root } }, "push_prompt");
+    var err = await desc.handler({ title: "x", content: "y" }).catch(function (e: Error) { return e; });
+    expect(err).toBeInstanceOf(Error);
+  });
+
+  it("push_prompt rejects score_after > 100 via Zod", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_plan").handler({ title: "host", content_md: "x" });
+    var err = await descByName(deps, "push_prompt")
+      .handler({ plan_slug: "host", title: "t", content: "c", score_after: 150 })
+      .catch(function (e: Error) { return e; });
+    expect(err).toBeInstanceOf(Error);
+  });
+
+  it("push_prompt throws when plan does not exist", async function () {
+    var root = mkTmp();
+    var desc = descByName({ storage: { rootDir: root } }, "push_prompt");
+    var err = await desc
+      .handler({ plan_slug: "ghost", title: "x", content: "y" })
+      .catch(function (e: Error) { return e; });
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/plan not found/);
   });
 
   it("push_artifact rejects an invalid prompt-cycle payload via the handler", async function () {

@@ -99,6 +99,16 @@ export var pushDiagramSchema = z.object({
   mermaid_source: z.string().min(1)
 });
 
+export var pushPromptSchema = z.object({
+  plan_slug: z.string().min(1).max(64),
+  slug: z.string().min(1).max(64).optional(),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1),
+  source_draft: z.string().optional(),
+  score_before: z.number().int().min(0).max(100).optional(),
+  score_after: z.number().int().min(0).max(100).optional()
+});
+
 export var getHandoffBundleSchema = z.object({
   slug: z.string().min(1).max(64),
   follow_links: z.boolean().optional().default(false),

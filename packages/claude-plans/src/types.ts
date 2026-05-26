@@ -64,6 +64,18 @@ export interface ClaudeArtifact {
   updated_at: string;
 }
 
+export interface ClaudePrompt {
+  slug: string;
+  plan_slug: string;
+  title: string;
+  content: string;
+  source_draft?: string;
+  score_before?: number;
+  score_after?: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PromptCycleLintReport {
   score: number;
   missing: string[];
@@ -91,6 +103,7 @@ export interface PromptCyclePayload {
 export interface PlanWithArtifacts {
   plan: ClaudePlan;
   artifacts: ClaudeArtifact[];
+  prompts: ClaudePrompt[];
 }
 
 export var ALLOWED_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {

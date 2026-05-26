@@ -20,6 +20,7 @@ import {
   ArtifactKind,
   ClaudeArtifact,
   ClaudePlan,
+  ClaudePrompt,
   LinkedArtifact,
   PlanQuestion,
   PlanStatus,
@@ -84,6 +85,14 @@ function artifactDir(root: string, planSlug: string): string {
 
 function artifactPath(root: string, planSlug: string, slug: string): string {
   return path.join(artifactDir(root, planSlug), slug + ".json");
+}
+
+function promptDir(root: string, planSlug: string): string {
+  return path.join(root, planSlug, "prompts");
+}
+
+function promptPath(root: string, planSlug: string, slug: string): string {
+  return path.join(promptDir(root, planSlug), slug + ".json");
 }
 
 export interface PushPlanInput {
@@ -183,7 +192,11 @@ export function getPlan(slug: string, options: StorageOptions = {}): PlanWithArt
   var root = storageRoot(options);
   var plan = readJson<ClaudePlan>(planPath(root, slug));
   if (!plan) return null;
-  return { plan: plan, artifacts: listArtifacts(slug, options) };
+  return {
+    plan: plan,
+    artifacts: listArtifacts(slug, options),
+    prompts: listPrompts(slug, options)
+  };
 }
 
 export interface ListOptions extends StorageOptions {
@@ -228,6 +241,23 @@ export function listArtifacts(planSlug: string, options: StorageOptions = {}): C
   return artifacts;
 }
 
+export function listPrompts(planSlug: string, options: StorageOptions = {}): ClaudePrompt[] {
+  var root = storageRoot(options);
+  var dir = promptDir(root, planSlug);
+  if (!fs.existsSync(dir)) return [];
+  var entries = fs.readdirSync(dir);
+  var prompts: ClaudePrompt[] = [];
+  for (var i = 0; i < entries.length; i++) {
+    if (!entries[i].endsWith(".json")) continue;
+    var p = readJson<ClaudePrompt>(path.join(dir, entries[i]));
+    if (p) prompts.push(p);
+  }
+  prompts.sort(function (a, b) {
+    return a.created_at.localeCompare(b.created_at);
+  });
+  return prompts;
+}
+
 export interface PushArtifactInput {
   plan_slug: string;
   slug?: string;
@@ -257,6 +287,39 @@ export function pushArtifact(input: PushArtifactInput, options: StorageOptions =
   };
   atomicWriteJson(artifactPath(root, input.plan_slug, slug), artifact);
   return artifact;
+}
+
+export interface PushPromptInput {
+  plan_slug: string;
+  slug?: string;
+  title: string;
+  content: string;
+  source_draft?: string;
+  score_before?: number;
+  score_after?: number;
+}
+
+export function pushPrompt(input: PushPromptInput, options: StorageOptions = {}): ClaudePrompt {
+  var root = storageRoot(options);
+  var planExists = fs.existsSync(planPath(root, input.plan_slug));
+  if (!planExists) throw new Error("plan not found: " + input.plan_slug);
+
+  var slug = slugify(input.slug || input.title);
+  var existing = readJson<ClaudePrompt>(promptPath(root, input.plan_slug, slug));
+  var now = nowIso();
+  var prompt: ClaudePrompt = {
+    slug: slug,
+    plan_slug: input.plan_slug,
+    title: input.title,
+    content: input.content,
+    source_draft: input.source_draft,
+    score_before: input.score_before,
+    score_after: input.score_after,
+    created_at: existing ? existing.created_at : now,
+    updated_at: now
+  };
+  atomicWriteJson(promptPath(root, input.plan_slug, slug), prompt);
+  return prompt;
 }
 
 export function parsePromptCycleContent(content: string): PromptCyclePayload {
@@ -350,6 +413,15 @@ export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}
   }
   if (renderedArtifacts.hoist) hoist = renderedArtifacts.hoist;
 
+  var renderedPrompts = renderPromptsSection(record.prompts);
+  if (renderedPrompts.body.length > 0) {
+    parts.push("## Prompts");
+    parts.push("");
+    parts.push(renderedPrompts.body);
+    parts.push("");
+  }
+  if (!hoist && renderedPrompts.hoist) hoist = renderedPrompts.hoist;
+
   if (followLinks && links.length > 0) {
     var followable = links.filter(function (l) {
       return l.relation === "built-from" || l.relation === "improves";
@@ -380,6 +452,15 @@ export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}
         parts.push("");
       }
       if (!hoist && nested.hoist) hoist = nested.hoist;
+
+      var nestedPrompts = renderPromptsSection(linked.prompts);
+      if (nestedPrompts.body.length > 0) {
+        parts.push("### Linked plan prompts");
+        parts.push("");
+        parts.push(nestedPrompts.body);
+        parts.push("");
+      }
+      if (!hoist && nestedPrompts.hoist) hoist = nestedPrompts.hoist;
     }
   }
 
@@ -474,6 +555,48 @@ function safeParsePromptCycle(content: string): PromptCyclePayload | null {
   } catch (e) {
     return null;
   }
+}
+
+// Render the Prompts section for the handoff bundle. The newest prompt by
+// created_at becomes the hoist candidate; the caller decides whether a
+// prompt-cycle artifact already supplied one.
+function renderPromptsSection(prompts: ClaudePrompt[]): ArtifactSection {
+  var lines: string[] = [];
+  var hoist: string | null = null;
+  var newest: ClaudePrompt | null = null;
+  for (var i = 0; i < prompts.length; i++) {
+    var p = prompts[i];
+    lines.push("### " + p.title + " _(prompt)_");
+    lines.push("");
+    if (typeof p.score_before === "number" && typeof p.score_after === "number") {
+      lines.push("**Lint:** " + p.score_before + " → " + p.score_after + "%");
+      lines.push("");
+    } else if (typeof p.score_after === "number") {
+      lines.push("**Lint:** " + p.score_after + "%");
+      lines.push("");
+    }
+    if (p.source_draft) {
+      lines.push("<details><summary>Original draft</summary>");
+      lines.push("");
+      lines.push("```");
+      lines.push(p.source_draft);
+      lines.push("```");
+      lines.push("");
+      lines.push("</details>");
+      lines.push("");
+    }
+    lines.push("**Rewritten prompt:**");
+    lines.push("");
+    lines.push("```xml");
+    lines.push(p.content);
+    lines.push("```");
+    lines.push("");
+    if (!newest || p.created_at.localeCompare(newest.created_at) > 0) {
+      newest = p;
+    }
+  }
+  if (newest) hoist = newest.content;
+  return { body: lines.join("\n").replace(/\n+$/, ""), hoist: hoist };
 }
 
 // ---- v2: Q&A on plan records -----------------------------------------------

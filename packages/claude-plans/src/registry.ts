@@ -14,6 +14,7 @@ import {
   listRecentPlansSchema,
   pushArtifactSchema,
   pushDiagramSchema,
+  pushPromptSchema,
   deletePlanSchema,
   getHandoffBundleSchema,
   pushQuestionSchema,
@@ -26,6 +27,7 @@ import {
   getPlan,
   listPlans,
   pushArtifact,
+  pushPrompt,
   deletePlan,
   buildHandoffBundle,
   pushQuestion,
@@ -41,6 +43,7 @@ export var TOOL_NAMES = [
   "list_recent_plans",
   "push_artifact",
   "push_diagram",
+  "push_prompt",
   "delete_plan",
   "get_handoff_bundle",
   "push_question",
@@ -256,6 +259,28 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           },
           storageOpts
         );
+      }
+    },
+    {
+      name: "push_prompt",
+      description:
+        "Attach a rewritten prompt to an existing plan. Surfaces on the dashboard's Prompt tab " +
+        "alongside the plan that motivated it, and the newest prompt is hoisted into the " +
+        "'READY-TO-PASTE PROMPT' section of get_handoff_bundle when no prompt-cycle artifact " +
+        "already supplies one. Use this from /improve-prompt --push to persist a rewrite + " +
+        "before/after lint scores so the next session can pick it up.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — slug of the plan to attach to.\n" +
+        "  title (required) — short label shown on the Prompt tab card.\n" +
+        "  content (required) — the rewritten prompt body (XML scaffold or markdown).\n" +
+        "  slug — optional explicit slug; auto-derived from title otherwise.\n" +
+        "  source_draft — the original draft before rewrite (rendered in <details>).\n" +
+        "  score_before / score_after — Turn-0 lint scores (0-100), shown as a badge.\n\n" +
+        "Stored at <root>/<plan-slug>/prompts/<prompt-slug>.json. Dashboard updates live via SSE.",
+      shape: pushPromptSchema.shape,
+      handler: async function (args: any) {
+        var parsed = pushPromptSchema.parse(args);
+        return pushPrompt(parsed, storageOpts);
       }
     },
     {
