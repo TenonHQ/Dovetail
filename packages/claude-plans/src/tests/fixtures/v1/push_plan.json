@@ -2,19 +2,20 @@
   "tool": "push_plan",
   "request": {
     "title": "Sample plan for v1 contract",
-    "content_md": "# Hello\n\nThis is the v1 contract fixture body."
+    "content_md": "# Hello\n\nThis is the v1 contract fixture body.",
+    "categories": []
   },
   "response": {
     "slug": "sample-plan-for-v1-contract",
     "title": "Sample plan for v1 contract",
     "status": "DRAFT",
     "content_md": "# Hello\n\nThis is the v1 contract fixture body.",
-    "content_html": null,
     "content_hash": "<sha256 of content_md, recomputed at test time>",
     "created_at": "2026-05-26T12:00:00.000Z",
     "updated_at": "2026-05-26T12:00:00.000Z",
     "session_id": null,
-    "categories": []
+    "categories": [],
+    "schema_version": 2
   },
   "notes": "Plain content_md, no PR fields, no linked_artifacts. Locks the default-DRAFT, default-null session_id, and category-extraction default. Consumer: dashboard list view + /resume skill."
 }

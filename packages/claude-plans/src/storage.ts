@@ -21,6 +21,7 @@ import {
   ClaudeArtifact,
   ClaudePlan,
   ClaudePrompt,
+  CURRENT_SCHEMA_VERSION,
   LinkedArtifact,
   PlanQuestion,
   PlanStatus,
@@ -74,6 +75,26 @@ function readJson<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
   var raw = fs.readFileSync(filePath, "utf8");
   return JSON.parse(raw) as T;
+}
+
+/**
+ * Normalize a freshly-read plan record to the current schema in memory.
+ * Idempotent — running it on an already-v2 record is a no-op. Does NOT
+ * write to disk; the upgrade materializes when the next pushPlan /
+ * updatePlanStatus / pushQuestion / recordAnswer touches the record.
+ *
+ * Phases C and D extend this helper to default new fields (stage,
+ * stage_history, dispatch_token, dispatch_log) so consumers can always
+ * count on their presence at read time.
+ */
+export function migrateV1OnLoad(plan: ClaudePlan): ClaudePlan {
+  if (plan.schema_version === CURRENT_SCHEMA_VERSION) return plan;
+  return Object.assign({}, plan, { schema_version: CURRENT_SCHEMA_VERSION });
+}
+
+function readPlan(filePath: string): ClaudePlan | null {
+  var plan = readJson<ClaudePlan>(filePath);
+  return plan ? migrateV1OnLoad(plan) : null;
 }
 
 function planPath(root: string, slug: string): string {
@@ -130,7 +151,7 @@ export interface PushPlanInput {
 export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): ClaudePlan {
   var root = storageRoot(options);
   var slug = slugify(input.slug || input.title);
-  var existing = readJson<ClaudePlan>(planPath(root, slug));
+  var existing = readPlan(planPath(root, slug));
   var now = nowIso();
   var contentMd = input.content_md !== undefined ? input.content_md : "";
   var resolvedHtml = input.content_html;
@@ -171,8 +192,10 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     pr_url: input.pr_url !== undefined ? input.pr_url : (existing ? existing.pr_url : undefined),
     pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined),
     linked_artifacts: resolvedLinks,
-    categories: resolvedCategories
+    categories: resolvedCategories,
+    schema_version: CURRENT_SCHEMA_VERSION
   };
+  if (existing && existing.questions) plan.questions = existing.questions;
 
   atomicWriteJson(planPath(root, slug), plan);
 
@@ -186,7 +209,7 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
 
 export function updatePlanStatus(slug: string, to: PlanStatus, options: StorageOptions = {}): ClaudePlan {
   var root = storageRoot(options);
-  var existing = readJson<ClaudePlan>(planPath(root, slug));
+  var existing = readPlan(planPath(root, slug));
   if (!existing) throw new Error("plan not found: " + slug);
 
   var allowed = ALLOWED_TRANSITIONS[existing.status];
@@ -194,14 +217,18 @@ export function updatePlanStatus(slug: string, to: PlanStatus, options: StorageO
     throw new Error("invalid transition: " + existing.status + " -> " + to);
   }
 
-  var next: ClaudePlan = Object.assign({}, existing, { status: to, updated_at: nowIso() });
+  var next: ClaudePlan = Object.assign({}, existing, {
+    status: to,
+    updated_at: nowIso(),
+    schema_version: CURRENT_SCHEMA_VERSION
+  });
   atomicWriteJson(planPath(root, slug), next);
   return next;
 }
 
 export function getPlan(slug: string, options: StorageOptions = {}): PlanWithArtifacts | null {
   var root = storageRoot(options);
-  var plan = readJson<ClaudePlan>(planPath(root, slug));
+  var plan = readPlan(planPath(root, slug));
   if (!plan) return null;
   return {
     plan: plan,
@@ -223,7 +250,7 @@ export function listPlans(options: ListOptions = {}): ClaudePlan[] {
   for (var i = 0; i < entries.length; i++) {
     var name = entries[i];
     if (!name.endsWith(".json")) continue;
-    var plan = readJson<ClaudePlan>(path.join(root, name));
+    var plan = readPlan(path.join(root, name));
     if (!plan) continue;
     if (options.status && plan.status !== options.status) continue;
     plans.push(plan);
@@ -661,7 +688,7 @@ function generateQuestionId(taken: PlanQuestion[]): string {
 }
 
 function loadPlan(root: string, slug: string): ClaudePlan {
-  var plan = readJson<ClaudePlan>(planPath(root, slug));
+  var plan = readPlan(planPath(root, slug));
   if (!plan) throw new Error("plan not found: " + slug);
   return plan;
 }
@@ -686,6 +713,7 @@ export function pushQuestion(input: PushQuestionInput, options: StorageOptions =
 
   plan.questions = existing.concat([question]);
   plan.updated_at = nowIso();
+  plan.schema_version = CURRENT_SCHEMA_VERSION;
   atomicWriteJson(planPath(root, plan.slug), plan);
   return question;
 }
@@ -710,6 +738,7 @@ export function recordAnswer(input: RecordAnswerInput, options: StorageOptions =
   questions[idx] = updated;
   plan.questions = questions;
   plan.updated_at = nowIso();
+  plan.schema_version = CURRENT_SCHEMA_VERSION;
   atomicWriteJson(planPath(root, plan.slug), plan);
   return updated;
 }
