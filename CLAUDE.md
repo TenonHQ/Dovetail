@@ -19,7 +19,7 @@ Full command reference: see `Essential Commands` further down, or `npx dove --he
 
 ## Releasing — Critical Rules
 
-> **All PRs in this repo MUST be opened as DRAFT.** Merge-to-`main` auto-publishes changed `packages/**` to npm immediately, and a bad version cannot be unpublished cleanly. Open every PR as Draft, convert to *Ready for review* only after sign-off, then merge. The rule applies uniformly (even docs-only) so reviewers never have to guess whether a PR is safe.
+> **All PRs in this repo MUST be opened as DRAFT, unless the user explicitly asks otherwise.** Merge-to-`main` auto-publishes changed `packages/**` to npm immediately, and a bad version cannot be unpublished cleanly. Open every PR as Draft, convert to *Ready for review* only after sign-off, then merge. The rule applies uniformly (even docs-only) so reviewers never have to guess whether a PR is safe. The only override is an explicit user instruction for a specific PR (e.g. "open it as ready", "automerge it") — never decide on your own that a change is "safe enough" to skip Draft.
 
 How publishing works:
 - **Trigger** — merge to `main` touching `packages/**` runs `.github/workflows/publish.yml`.
