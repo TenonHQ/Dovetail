@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-core",
-  "version": "0.0.92",
+  "version": "0.0.93",
   "description": "Next-gen file syncer",
   "license": "GPL-3.0",
   "main": "./dist/index.js",
