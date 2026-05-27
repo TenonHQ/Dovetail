@@ -21,7 +21,9 @@ import {
   recordAnswerSchema,
   getAnswersSchema,
   pushLintEventSchema,
-  getLintEventsSchema
+  getLintEventsSchema,
+  setStageSchema,
+  pullPlanSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -37,6 +39,8 @@ import {
   getAnswers,
   pushLintEvent,
   getLintEvents,
+  setStage,
+  loadPlanFull,
   StorageOptions
 } from "./storage";
 
@@ -54,7 +58,9 @@ export var TOOL_NAMES = [
   "record_answer",
   "get_answers",
   "push_lint_event",
-  "get_lint_events"
+  "get_lint_events",
+  "set_stage",
+  "pull_plan"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -472,6 +478,61 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           },
           storageOpts
         );
+      }
+    },
+    {
+      name: "set_stage",
+      description:
+        "Move a plan to a new pipeline stage. Validates the transition against the v2 state " +
+        "machine (claude-plans/src/state-machine.ts) and rejects illegal moves with " +
+        "IllegalTransitionError. On success, atomically writes the new stage + appends a " +
+        "StageTransition to stage_history + issues a one-time DispatchToken bound to the new " +
+        "stage with a 5-minute TTL.\n\n" +
+        "The returned token is the only way to call dispatch_stage in live mode. Each call to " +
+        "set_stage rotates the token — the previous outstanding token is overwritten and becomes " +
+        "effectively stale.\n\n" +
+        "Conflict rule (docs/v2-design.md §4): dashboard-sourced writes always accept; " +
+        "code-sourced writes are rejected with ConflictRejectedError if the last recorded " +
+        "transition was dashboard-sourced and falls within the 30-second grace window " +
+        "(DOVE_CLAUDE_PLANS_DASHBOARD_GRACE_MS to tune).\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan to move.\n" +
+        "  to (required) — target stage. One of: research, pre-stage-improve, planning,\n" +
+        "    post-plan-improve, test-first, code, per-step-review, architectural-review,\n" +
+        "    test-reality, documentation.\n" +
+        "  by (optional) — who initiated the move. Defaults to CLAUDE_CODE_SESSION_ID.\n" +
+        "  source (optional) — 'code' (default) or 'dashboard'. The conflict rule keys off this.\n\n" +
+        "Output: { plan_slug, stage, token: DispatchToken, history_length }.",
+      shape: setStageSchema.shape,
+      handler: async function (args: any) {
+        var parsed = setStageSchema.parse(args);
+        return setStage(
+          {
+            plan_slug: parsed.plan_slug,
+            to: parsed.to,
+            by: parsed.by,
+            source: parsed.source
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "pull_plan",
+      description:
+        "Single-read snapshot of a plan and all its v2 surface: artifacts, prompts, questions, " +
+        "current stage, full stage_history, and dispatch_log. The dashboard's plan-detail page " +
+        "uses this so it can render without making three round-trips.\n\n" +
+        "Returns 404-equivalent (PlanNotFoundError) when the slug does not exist.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan to read.\n\n" +
+        "Output: { plan, artifacts[], prompts[], questions[], stage, stage_history[], dispatch_log[] }.",
+      shape: pullPlanSchema.shape,
+      handler: async function (args: any) {
+        var parsed = pullPlanSchema.parse(args);
+        var result = loadPlanFull(parsed.plan_slug, storageOpts);
+        if (!result) throw new Error("plan not found: " + parsed.plan_slug);
+        return result;
       }
     }
   ];

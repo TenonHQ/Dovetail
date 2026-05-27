@@ -158,3 +158,31 @@ export var getLintEventsSchema = z.object({
   plan_slug: z.string().min(1).max(64).optional(),
   limit: z.number().int().positive().max(1000).optional()
 });
+
+// ---- v2 stage state machine (Phase C) ------------------------------------
+
+export var PIPELINE_STAGES = [
+  "research",
+  "pre-stage-improve",
+  "planning",
+  "post-plan-improve",
+  "test-first",
+  "code",
+  "per-step-review",
+  "architectural-review",
+  "test-reality",
+  "documentation"
+] as const;
+
+export var pipelineStageSchema = z.enum(PIPELINE_STAGES);
+
+export var setStageSchema = z.object({
+  plan_slug: z.string().min(1).max(64),
+  to: pipelineStageSchema,
+  by: z.string().min(1).max(64).optional(),
+  source: z.enum(["code", "dashboard"]).optional()
+});
+
+export var pullPlanSchema = z.object({
+  plan_slug: z.string().min(1).max(64)
+});

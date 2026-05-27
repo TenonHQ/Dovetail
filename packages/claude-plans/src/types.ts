@@ -51,6 +51,84 @@ export interface ClaudePlan {
    * include this field at value 2; the next write persists it to disk.
    */
   schema_version?: ClaudePlanSchemaVersion;
+  /**
+   * v2 pipeline state. Null on plans that haven't been moved through a
+   * stage yet. See state-machine.ts for the legal transition table.
+   */
+  stage?: PipelineStage | null;
+  /**
+   * Append-only history of stage moves on this plan. Empty when the plan
+   * was never staged. Phase D dispatch reads the latest entry to decide
+   * conflict resolution.
+   */
+  stage_history?: StageTransition[];
+  /**
+   * Current outstanding idempotency token issued by the most recent
+   * set_stage call. Consumed (exactly once) by dispatch_stage. Cleared
+   * to null when a new transition rotates it.
+   */
+  dispatch_token?: DispatchToken | null;
+  /**
+   * Append-only log of dispatch_stage calls (both dry-run and live).
+   * Filled in Phase D — kept optional here so the Phase C migration
+   * doesn't force a non-empty array on every read.
+   */
+  dispatch_log?: DispatchEvent[];
+}
+
+/**
+ * v2 pipeline stages from claude-plans/docs/v2-design.md §3.1. The
+ * brief's 13-agent pipeline collapses to these 10 surface states for
+ * the dashboard. Stages "test-first" and "test-reality" require the
+ * net-new agents from PR #160 — dispatch_stage raises
+ * MissingAgentError when targeting them before those agents land.
+ */
+export type PipelineStage =
+  | "research"
+  | "pre-stage-improve"
+  | "planning"
+  | "post-plan-improve"
+  | "test-first"
+  | "code"
+  | "per-step-review"
+  | "architectural-review"
+  | "test-reality"
+  | "documentation";
+
+export type StageTransitionSource = "code" | "dashboard";
+
+export interface StageTransition {
+  from: PipelineStage | null;
+  to: PipelineStage;
+  at: string;
+  by: string;
+  source: StageTransitionSource;
+}
+
+export interface DispatchToken {
+  /** Format: tok_<24-hex> (12 bytes of crypto.randomBytes). */
+  token: string;
+  issued_for_stage: PipelineStage;
+  issued_at: string;
+  expires_at: string;
+  /** Set when dispatch_stage consumes it. Absent until then. */
+  consumed_at?: string;
+}
+
+/**
+ * Dispatch event recorded for both dry-run and live calls. Phase C only
+ * defines the shape; Phase D appends to dispatch_log.
+ */
+export interface DispatchEvent {
+  at: string;
+  target_stage: PipelineStage;
+  mode: "dry-run" | "live";
+  by: string;
+  command?: string;
+  cwd?: string;
+  outcome: "ok" | "missing-agent" | "stale-token" | "no-token" | "spawn-error";
+  pid?: number;
+  error?: string;
 }
 
 export interface PlanQuestion {

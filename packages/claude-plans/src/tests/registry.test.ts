@@ -15,8 +15,8 @@ function descByName(deps: any, name: string) {
 }
 
 describe("registry", function () {
-  it("exposes exactly the 14 tools in TOOL_NAMES", function () {
-    expect(TOOL_NAMES.length).toBe(14);
+  it("exposes exactly the v1+v2 tool set", function () {
+    expect(TOOL_NAMES.length).toBe(16); // v1=12 + lint(2) + Phase C set_stage + pull_plan
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
     expect((TOOL_NAMES as readonly string[]).indexOf("get_handoff_bundle")).toBeGreaterThan(-1);
@@ -26,6 +26,8 @@ describe("registry", function () {
     expect((TOOL_NAMES as readonly string[]).indexOf("push_prompt")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("push_lint_event")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("get_lint_events")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("set_stage")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("pull_plan")).toBeGreaterThan(-1);
   });
 
   it("push_lint_event stores a global lint event (no plan required)", async function () {

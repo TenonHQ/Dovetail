@@ -1,5 +1,15 @@
 # Changelog — @tenonhq/dovetail-claude-plans
 
+## Unreleased — Phase C (state machine + set_stage + pull_plan)
+
+- New types: `PipelineStage` (10-stage enum), `StageTransition`, `DispatchToken`, `DispatchEvent`, `StageTransitionSource`. Added to `ClaudePlan` as optional fields (`stage`, `stage_history`, `dispatch_token`, `dispatch_log`).
+- New module `src/state-machine.ts`: `LEGAL_TRANSITIONS` table, `legalNextStages()`, `assertTransition()` raising `IllegalTransitionError`, `checkConflict()` raising `ConflictRejectedError`. Dashboard-wins conflict rule with 30s grace (configurable via `DOVE_CLAUDE_PLANS_DASHBOARD_GRACE_MS`).
+- New storage helper `setStage()` — validates, applies conflict resolution, atomically writes stage + appends `StageTransition`, issues a `DispatchToken` (5-min TTL, configurable via `DOVE_CLAUDE_PLANS_TOKEN_TTL_MS`).
+- New storage helper `loadPlanFull()` — single-read snapshot returning plan + artifacts + prompts + questions + stage + history + dispatch_log. Safe defaults for v1 records.
+- New MCP tools `set_stage` and `pull_plan` registered (14 tools total now).
+- `pushPlan` preserves stage state (`stage`, `stage_history`, `dispatch_token`, `dispatch_log`) across content updates — only `setStage` is allowed to mutate stage data.
+- 59 new tests: full legal-transition matrix coverage, 12 representative illegal transitions, full conflict-resolution coverage (dashboard-wins, grace window, override), `setStage` integration (token rotation, TTL override, illegal-transition no-write, pushPlan preservation), `loadPlanFull` (v1 default behavior, missing slug).
+
 ## Unreleased — Phase B (v2 schema_version + migration)
 
 - Add `schema_version` field to `ClaudePlan` (`1 | 2`, optional on the type — `CURRENT_SCHEMA_VERSION = 2`).
