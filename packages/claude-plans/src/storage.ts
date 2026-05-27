@@ -22,6 +22,7 @@ import {
   ClaudePlan,
   ClaudePrompt,
   CURRENT_SCHEMA_VERSION,
+  DispatchEvent,
   DispatchToken,
   LinkedArtifact,
   PipelineStage,
@@ -34,6 +35,16 @@ import {
   StageTransitionSource
 } from "./types";
 import { assertTransition, checkConflict } from "./state-machine";
+import {
+  SpawnFn,
+  productionSpawn,
+  resolveDispatchCommand,
+  assertAgentAvailable,
+  validateToken,
+  makeEvent,
+  NoTokenError,
+  StaleTokenError
+} from "./dispatch";
 import { StructuredPlan, renderStructured } from "./renderer";
 import { promptCyclePayloadSchema } from "./schemas";
 import { extractCategories } from "./categories";
@@ -956,5 +967,182 @@ export function loadPlanFull(slug: string, options: StorageOptions = {}): PullPl
     stage: plan.stage || null,
     stage_history: (plan.stage_history || []).slice(),
     dispatch_log: (plan.dispatch_log || []).slice()
+  };
+}
+
+// ---- v2: dispatch_stage (Phase D) ------------------------------------------
+
+export interface DispatchStageInput {
+  plan_slug: string;
+  target_stage: PipelineStage;
+  confirm?: boolean;
+  token?: string;
+  by?: string;
+}
+
+export interface DispatchStageResult {
+  mode: "dry-run" | "live";
+  plan_slug: string;
+  target_stage: PipelineStage;
+  command: string;
+  cwd: string;
+  pid?: number;
+  event: DispatchEvent;
+}
+
+export interface DispatchStageOptions extends StorageOptions {
+  /** Override the spawn primitive — used in tests. */
+  spawn?: SpawnFn;
+}
+
+/**
+ * Resolve + (optionally) spawn a Claude Code subprocess for a plan
+ * stage. See dispatch.ts for the safety model.
+ *
+ * Default mode is dry-run: appends a "dry-run" DispatchEvent and
+ * returns without spawning. Live mode (`confirm: true`) consumes the
+ * plan's outstanding dispatch_token atomically BEFORE the spawn — a
+ * crashed subprocess does not invalidate the single-use guarantee.
+ */
+export function dispatchStage(
+  input: DispatchStageInput,
+  options: DispatchStageOptions = {}
+): DispatchStageResult {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var by = input.by || process.env.CLAUDE_CODE_SESSION_ID || "unknown";
+  var spawnFn: SpawnFn = options.spawn || productionSpawn;
+
+  // Always do the missing-agent check before any I/O state change.
+  // Surfaces the gap immediately, never silently spawns.
+  assertAgentAvailable(input.target_stage);
+
+  var resolved = resolveDispatchCommand(plan, input.target_stage);
+  var liveRequested = input.confirm === true;
+
+  // ---- DRY-RUN path -------------------------------------------------------
+  if (!liveRequested) {
+    var nowDry = nowIso();
+    var event = makeEvent({
+      targetStage: input.target_stage,
+      mode: "dry-run",
+      by: by,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      outcome: "ok",
+      nowIso: nowDry
+    });
+    var nextDry: ClaudePlan = Object.assign({}, plan, {
+      dispatch_log: (plan.dispatch_log || []).concat([event]),
+      updated_at: nowDry,
+      schema_version: CURRENT_SCHEMA_VERSION
+    });
+    atomicWriteJson(planPath(root, plan.slug), nextDry);
+    return {
+      mode: "dry-run",
+      plan_slug: plan.slug,
+      target_stage: input.target_stage,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      event: event
+    };
+  }
+
+  // ---- LIVE path: validate token --------------------------------------
+  var check = validateToken(plan, input.token, input.target_stage, Date.now());
+  if (!check.ok) {
+    // Record the rejection in the log AND throw the typed error so the
+    // caller (dashboard) can branch. We deliberately persist the log
+    // entry — failed dispatches are operational signal.
+    var nowFail = nowIso();
+    // "no-token" covers both missing-arg and missing-stored-token. Other
+    // failure modes (mismatch, consumed, expired, wrong stage) are stale-token.
+    var isNoTokenCase =
+      check.reason === "token argument is required" ||
+      (typeof check.reason === "string" && check.reason.indexOf("no outstanding") !== -1);
+    var failOutcome: DispatchEvent["outcome"] = isNoTokenCase ? "no-token" : "stale-token";
+    var failEvent = makeEvent({
+      targetStage: input.target_stage,
+      mode: "live",
+      by: by,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      outcome: failOutcome,
+      error: check.reason,
+      nowIso: nowFail
+    });
+    var nextFail: ClaudePlan = Object.assign({}, plan, {
+      dispatch_log: (plan.dispatch_log || []).concat([failEvent]),
+      updated_at: nowFail,
+      schema_version: CURRENT_SCHEMA_VERSION
+    });
+    atomicWriteJson(planPath(root, plan.slug), nextFail);
+    if (failOutcome === "no-token") throw new NoTokenError(check.reason || "missing");
+    throw new StaleTokenError(check.reason || "invalid");
+  }
+
+  // ---- LIVE path: atomic consume BEFORE spawn -------------------------
+  var nowOk = nowIso();
+  var consumedToken = Object.assign({}, plan.dispatch_token, {
+    consumed_at: nowOk
+  });
+  // Pre-spawn write: token consumed, no spawn pid yet. If spawn throws,
+  // the token stays consumed (by design — we'd rather replay than risk
+  // a double-spawn).
+  var preSpawn: ClaudePlan = Object.assign({}, plan, {
+    dispatch_token: consumedToken,
+    updated_at: nowOk,
+    schema_version: CURRENT_SCHEMA_VERSION
+  });
+  atomicWriteJson(planPath(root, plan.slug), preSpawn);
+
+  // ---- LIVE path: spawn ------------------------------------------------
+  var spawned;
+  try {
+    spawned = spawnFn(resolved.argv, resolved.cwd);
+  } catch (e) {
+    var msg = e instanceof Error ? e.message : String(e);
+    var spawnFailEvent = makeEvent({
+      targetStage: input.target_stage,
+      mode: "live",
+      by: by,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      outcome: "spawn-error",
+      error: msg,
+      nowIso: nowIso()
+    });
+    var postFail: ClaudePlan = Object.assign({}, preSpawn, {
+      dispatch_log: (preSpawn.dispatch_log || []).concat([spawnFailEvent]),
+      updated_at: spawnFailEvent.at
+    });
+    atomicWriteJson(planPath(root, plan.slug), postFail);
+    throw e;
+  }
+
+  var liveEvent = makeEvent({
+    targetStage: input.target_stage,
+    mode: "live",
+    by: by,
+    command: resolved.command,
+    cwd: resolved.cwd,
+    outcome: "ok",
+    pid: spawned.pid,
+    nowIso: nowIso()
+  });
+  var post: ClaudePlan = Object.assign({}, preSpawn, {
+    dispatch_log: (preSpawn.dispatch_log || []).concat([liveEvent]),
+    updated_at: liveEvent.at
+  });
+  atomicWriteJson(planPath(root, plan.slug), post);
+
+  return {
+    mode: "live",
+    plan_slug: plan.slug,
+    target_stage: input.target_stage,
+    command: resolved.command,
+    cwd: resolved.cwd,
+    pid: spawned.pid,
+    event: liveEvent
   };
 }
