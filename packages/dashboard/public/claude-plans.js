@@ -545,9 +545,9 @@
     resumeBtn.id = "cp-resume-btn";
     resumeBtn.className = "cp-resume-btn";
     resumeBtn.textContent = "Resume";
-    resumeBtn.title = "Copy /resume command to clipboard";
+    resumeBtn.title = "Copy /resume-claude-plans command to clipboard";
     resumeBtn.addEventListener("click", function () {
-      var cmd = "/resume " + plan.slug;
+      var cmd = "/resume-claude-plans " + plan.slug;
       var finish = function () { showToast("Copied! Paste into Claude."); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(cmd).then(finish).catch(function () {
