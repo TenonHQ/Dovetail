@@ -9,6 +9,7 @@
     "postpublish": "npm run version:bump"
   },
   "dependencies": {
+    "@tenonhq/dovetail-claude-plans": "*",
     "axios": "^1.5.1",
     "axios-cookiejar-support": "^4.0.7",
     "chokidar": "^3.6.0",

@@ -1118,6 +1118,101 @@ app.get("/api/claude-plans/:slug", function (req, res) {
   }
 });
 
+// --- v2 bidirectional pipeline write routes (Phase E) ---
+// All three call into @tenonhq/dovetail-claude-plans' storage layer so
+// the state machine, conflict rule, and token lifecycle are enforced in
+// exactly one place. Errors surface their typed `code` and `name` to the
+// client so the dashboard can branch on them.
+const claudePlansLib = require("@tenonhq/dovetail-claude-plans/dist/storage");
+
+function sendTypedError(res, err) {
+  // ZodError (input validation) is a 400. Storage's typed errors expose
+  // a `code` (e.g. ILLEGAL_TRANSITION, MISSING_AGENT). Anything else is
+  // a 500 with the message.
+  if (err && err.name === "ZodError") {
+    return res.status(400).json({ error: "validation_failed", details: err.issues });
+  }
+  if (err && typeof err.code === "string") {
+    var status = 409;
+    if (err.code === "MISSING_AGENT") status = 424;
+    if (err.code === "NO_TOKEN") status = 400;
+    if (err.code === "STALE_TOKEN") status = 410;
+    if (err.code === "SPAWN_ERROR") status = 500;
+    return res.status(status).json({
+      error: err.code,
+      name: err.name,
+      message: err.message
+    });
+  }
+  if (err && /plan not found/.test(err.message || "")) {
+    return res.status(404).json({ error: "plan_not_found", message: err.message });
+  }
+  return res.status(500).json({ error: "internal", message: (err && err.message) || String(err) });
+}
+
+// POST /api/claude-plans/:slug/answers — record an answer to a question.
+// Body: { question_id, answer, answered_by? }
+app.post("/api/claude-plans/:slug/answers", claudePlansLimiter, express.json(), function (req, res) {
+  try {
+    var slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    var body = req.body || {};
+    var result = claudePlansLib.recordAnswer({
+      plan_slug: slug,
+      question_id: body.question_id,
+      answer: body.answer,
+      answered_by: body.answered_by || "dashboard"
+    });
+    res.json(result);
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// POST /api/claude-plans/:slug/stage — move the plan to a new stage.
+// Body: { to: PipelineStage, by? }
+// Source is forced to 'dashboard' so the conflict-resolution rule
+// (docs/v2-design.md §4) treats dashboard moves as authoritative.
+app.post("/api/claude-plans/:slug/stage", claudePlansLimiter, express.json(), function (req, res) {
+  try {
+    var slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    var body = req.body || {};
+    var result = claudePlansLib.setStage({
+      plan_slug: slug,
+      to: body.to,
+      by: body.by || "dashboard",
+      source: "dashboard"
+    });
+    res.json(result);
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// POST /api/claude-plans/:slug/dispatch — dry-run or live dispatch.
+// Body: { target_stage, confirm?, token?, by? }
+// The dashboard's flow is: POST without confirm (dry-run) → show
+// resolved command in the UI → POST with confirm:true + token from
+// set_stage response → live spawn.
+app.post("/api/claude-plans/:slug/dispatch", claudePlansLimiter, express.json(), function (req, res) {
+  try {
+    var slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    var body = req.body || {};
+    var result = claudePlansLib.dispatchStage({
+      plan_slug: slug,
+      target_stage: body.target_stage,
+      confirm: body.confirm === true,
+      token: body.token,
+      by: body.by || "dashboard"
+    });
+    res.json(result);
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
 app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
   try {
     var slug = req.params.slug;

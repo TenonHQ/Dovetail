@@ -60,6 +60,9 @@
     planPanel: document.getElementById("cp-tab-plan"),
     artifactsPanel: document.getElementById("cp-tab-artifacts"),
     promptsPanel: document.getElementById("cp-tab-prompts"),
+    questionsPanel: document.getElementById("cp-tab-questions"),
+    questionCount: document.getElementById("cp-question-count"),
+    stageMap: document.getElementById("cp-stage-map"),
     tabs: document.querySelectorAll(".cp-tab"),
     topics: document.getElementById("cp-topics"),
     topicsCloud: document.getElementById("cp-topics-cloud"),
@@ -592,6 +595,10 @@
       renderMarkdown(plan.content_md, els.planPanel);
     }
 
+    // v2 surfaces — Stage Map strip + Questions tab.
+    renderStageMap(plan);
+    renderQuestions(plan);
+
     addPlanSectionCopyBtns();
     addTabsCopyAll(plan, artifacts, prompts);
 
@@ -706,6 +713,275 @@
     els.planPanel.hidden = tab !== "plan";
     els.artifactsPanel.hidden = tab !== "artifacts";
     if (els.promptsPanel) els.promptsPanel.hidden = tab !== "prompts";
+    if (els.questionsPanel) els.questionsPanel.hidden = tab !== "questions";
+  }
+
+  /* ─── v2 bidirectional pipeline (Phase E) ──────────────────────────────────
+   * Stage Map, Questions tab, Dispatch dialog. Server enforces every safety
+   * rule (state machine, conflict resolution, dispatch token); the client
+   * just renders state and POSTs intents. The latest set_stage token is
+   * cached per-plan so the Dispatch button can hand it back to the live call
+   * without a round-trip.
+   * ─────────────────────────────────────────────────────────────────────── */
+
+  var PIPELINE_STAGES = [
+    "research",
+    "pre-stage-improve",
+    "planning",
+    "post-plan-improve",
+    "test-first",
+    "code",
+    "per-step-review",
+    "architectural-review",
+    "test-reality",
+    "documentation"
+  ];
+
+  // Stages whose driving agent isn't shipped yet (matches dispatch.ts).
+  // dispatch_stage will raise MissingAgentError for these; the UI greys
+  // them out and adds a ⚠ marker.
+  var STAGES_MISSING_AGENT = { "test-first": true, "test-reality": true };
+
+  // Per-plan cache of the most recent setStage response. The dispatch
+  // button reads token from here. Cleared on plan switch.
+  var stageTokenCache = {};
+
+  function v2ApiPath(slug, leaf) { return "/api/claude-plans/" + slug + "/" + leaf; }
+
+  function v2Post(slug, leaf, body) {
+    return fetch(v2ApiPath(slug, leaf), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (json) {
+        if (!r.ok) {
+          var err = new Error(json.message || json.error || ("HTTP " + r.status));
+          err.code = json.error;
+          err.name = json.name || "ServerError";
+          err.status = r.status;
+          err.payload = json;
+          throw err;
+        }
+        return json;
+      });
+    });
+  }
+
+  function renderStageMap(plan) {
+    var map = els.stageMap;
+    if (!map) return;
+    map.hidden = false;
+    map.innerHTML = "";
+    var current = plan.stage || null;
+    PIPELINE_STAGES.forEach(function (stage) {
+      var pill = document.createElement("button");
+      pill.className = "cp-stage";
+      if (stage === current) pill.classList.add("cp-stage--current");
+      if (STAGES_MISSING_AGENT[stage]) pill.classList.add("cp-stage--missing-agent");
+      pill.textContent = stage;
+      pill.title = STAGES_MISSING_AGENT[stage]
+        ? stage + " — agent not shipped yet (PR #160); dispatch will raise MissingAgentError"
+        : stage + " — click to move plan here";
+      pill.addEventListener("click", function () {
+        v2Post(plan.slug, "stage", { to: stage }).then(function (res) {
+          stageTokenCache[plan.slug] = res.token;
+          showToast("Stage → " + res.stage + " (token issued)");
+        }).catch(function (err) {
+          showToast(err.code === "ILLEGAL_TRANSITION"
+            ? "Illegal move: " + err.message
+            : "Stage move failed: " + err.message);
+        });
+      });
+      // Per-stage Dispatch button (Phase E §3).
+      var dispatchBtn = document.createElement("button");
+      dispatchBtn.className = "cp-stage-dispatch";
+      dispatchBtn.textContent = "▶";
+      dispatchBtn.title = "Dispatch a Claude Code session at " + stage;
+      dispatchBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openDispatchDialog(plan, stage);
+      });
+      pill.appendChild(dispatchBtn);
+      map.appendChild(pill);
+    });
+  }
+
+  function openDispatchDialog(plan, stage) {
+    // Step 1 — dry-run dispatch. Render the resolved command, then offer
+    // a "Confirm live" button that re-POSTs with confirm:true + the
+    // cached token for this plan.
+    v2Post(plan.slug, "dispatch", { target_stage: stage }).then(function (dryRun) {
+      var backdrop = document.createElement("div");
+      backdrop.className = "cp-dispatch-dialog";
+      var inner = document.createElement("div");
+      inner.className = "cp-dispatch-dialog-inner";
+      inner.innerHTML =
+        "<h3>Dispatch &rarr; " + stage + "</h3>" +
+        "<p>Dry-run resolved the following spawn. Confirm to launch a real Claude Code session.</p>" +
+        "<pre>" +
+          "<strong>command:</strong> " + escapeHtml(dryRun.command) + "\n" +
+          "<strong>cwd:</strong>     " + escapeHtml(dryRun.cwd) + "\n" +
+          "<strong>plan:</strong>    " + escapeHtml(dryRun.plan_slug) + "\n" +
+          "<strong>stage:</strong>   " + escapeHtml(dryRun.target_stage) +
+        "</pre>";
+      var errorEl = document.createElement("div");
+      errorEl.className = "cp-dispatch-error";
+      errorEl.hidden = true;
+      inner.appendChild(errorEl);
+
+      var actions = document.createElement("div");
+      actions.className = "cp-dispatch-dialog-actions";
+      var cancel = document.createElement("button");
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", function () { document.body.removeChild(backdrop); });
+      var confirm = document.createElement("button");
+      confirm.className = "cp-dispatch-confirm";
+      confirm.textContent = "Confirm live dispatch";
+      confirm.addEventListener("click", function () {
+        var token = stageTokenCache[plan.slug];
+        if (!token || !token.token) {
+          errorEl.hidden = false;
+          errorEl.textContent =
+            "No fresh dispatch token cached for this plan. Click the stage on the Stage Map first " +
+            "to mint one (tokens are 5-min, single-use, stage-bound).";
+          return;
+        }
+        if (token.issued_for_stage !== stage) {
+          errorEl.hidden = false;
+          errorEl.textContent =
+            "Cached token was issued for " + token.issued_for_stage +
+            ", not " + stage + ". Click " + stage + " on the Stage Map to issue a matching token.";
+          return;
+        }
+        confirm.disabled = true;
+        v2Post(plan.slug, "dispatch", {
+          target_stage: stage,
+          confirm: true,
+          token: token.token
+        }).then(function (live) {
+          document.body.removeChild(backdrop);
+          showToast("Live dispatch launched (pid=" + live.pid + ")");
+          delete stageTokenCache[plan.slug];
+        }).catch(function (err) {
+          confirm.disabled = false;
+          errorEl.hidden = false;
+          errorEl.textContent = (err.code || "Error") + ": " + err.message;
+        });
+      });
+      actions.appendChild(cancel);
+      actions.appendChild(confirm);
+      inner.appendChild(actions);
+      backdrop.appendChild(inner);
+      document.body.appendChild(backdrop);
+    }).catch(function (err) {
+      if (err.code === "MISSING_AGENT") {
+        showToast(stage + ": " + err.message);
+      } else {
+        showToast("Dispatch dry-run failed: " + err.message);
+      }
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function renderQuestions(plan) {
+    if (!els.questionsPanel) return;
+    var questions = plan.questions || [];
+    els.questionsPanel.innerHTML = "";
+    if (els.questionCount) els.questionCount.textContent = String(questions.length);
+    if (questions.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "cp-detail-empty";
+      empty.style.padding = "40px 0";
+      empty.textContent = "No questions yet. Call push_question from Claude (or /qa park).";
+      els.questionsPanel.appendChild(empty);
+      return;
+    }
+    questions.forEach(function (q) {
+      var card = document.createElement("div");
+      card.className = "cp-question" + (q.answer ? " cp-question--answered" : "");
+
+      var header = document.createElement("div");
+      header.className = "cp-question-header";
+      if (q.stage) {
+        var stageTag = document.createElement("span");
+        stageTag.className = "cp-question-stage";
+        stageTag.textContent = q.stage;
+        header.appendChild(stageTag);
+      }
+      if (q.asked_by) {
+        var by = document.createElement("span");
+        by.textContent = "asked by " + q.asked_by;
+        header.appendChild(by);
+      }
+      card.appendChild(header);
+
+      var qText = document.createElement("div");
+      qText.className = "cp-question-q";
+      qText.textContent = q.question;
+      card.appendChild(qText);
+
+      if (q.answer) {
+        var recorded = document.createElement("div");
+        recorded.className = "cp-question-recorded";
+        recorded.textContent = q.answer;
+        var meta = document.createElement("div");
+        meta.className = "cp-question-recorded-meta";
+        meta.textContent = "answered " +
+          (q.answered_by ? "by " + q.answered_by + " " : "") +
+          (q.answered_at ? "at " + fmtTime(q.answered_at) : "");
+        recorded.appendChild(meta);
+        card.appendChild(recorded);
+      } else {
+        if (q.options && q.options.length) {
+          var optsRow = document.createElement("div");
+          optsRow.className = "cp-question-options";
+          q.options.forEach(function (opt) {
+            var b = document.createElement("button");
+            b.className = "cp-question-option";
+            b.textContent = opt;
+            b.addEventListener("click", function () { submitAnswer(plan.slug, q.id, opt); });
+            optsRow.appendChild(b);
+          });
+          card.appendChild(optsRow);
+        }
+        var form = document.createElement("form");
+        form.className = "cp-question-answer-form";
+        var input = document.createElement("input");
+        input.className = "cp-question-answer-input";
+        input.placeholder = "Type an answer…";
+        input.required = true;
+        var submit = document.createElement("button");
+        submit.type = "submit";
+        submit.className = "cp-question-answer-submit";
+        submit.textContent = "Answer";
+        form.appendChild(input);
+        form.appendChild(submit);
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          if (!input.value.trim()) return;
+          submitAnswer(plan.slug, q.id, input.value.trim());
+        });
+        card.appendChild(form);
+      }
+
+      els.questionsPanel.appendChild(card);
+    });
+  }
+
+  function submitAnswer(slug, questionId, answer) {
+    v2Post(slug, "answers", { question_id: questionId, answer: answer }).then(function () {
+      showToast("Answer recorded.");
+      // SSE will fan out the plan upsert and re-render naturally.
+    }).catch(function (err) {
+      showToast("record_answer failed: " + err.message);
+    });
   }
 
   function selectPlan(slug) {
@@ -714,6 +990,12 @@
       var url = window.location.pathname + "?plan=" + encodeURIComponent(slug);
       window.history.replaceState(null, "", url);
     }
+    // Tokens are stage+plan bound — switching plans should not retain
+    // tokens from elsewhere (they'd be rejected on the server anyway,
+    // but better not to surface a stale token to the operator).
+    Object.keys(stageTokenCache).forEach(function (k) {
+      if (k !== slug) delete stageTokenCache[k];
+    });
     renderRail();
     renderDetail();
   }
