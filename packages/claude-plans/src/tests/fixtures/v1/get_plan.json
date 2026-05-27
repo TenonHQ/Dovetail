@@ -1,0 +1,30 @@
+{
+  "tool": "get_plan",
+  "seed": {
+    "tool": "push_plan",
+    "request": {
+      "title": "Plan for get",
+      "content_md": "body"
+    }
+  },
+  "request": {
+    "slug": "plan-for-get"
+  },
+  "response": {
+    "plan": {
+      "slug": "plan-for-get",
+      "title": "Plan for get",
+      "status": "DRAFT",
+      "content_md": "body",
+      "content_html": null,
+      "content_hash": "<sha256 of content_md, recomputed at test time>",
+      "created_at": "2026-05-26T12:00:00.000Z",
+      "updated_at": "2026-05-26T12:00:00.000Z",
+      "session_id": null,
+      "categories": []
+    },
+    "artifacts": [],
+    "prompts": []
+  },
+  "notes": "PlanWithArtifacts envelope. Locks the dashboard's primary read shape. Consumer: dashboard plan detail page, MCP /resume."
+}

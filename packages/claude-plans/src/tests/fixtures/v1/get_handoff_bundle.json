@@ -1,0 +1,14 @@
+{
+  "tool": "get_handoff_bundle",
+  "seed": {
+    "tool": "push_plan",
+    "request": { "title": "Plan for handoff", "content_md": "## body\n\nseed" }
+  },
+  "request": { "slug": "plan-for-handoff" },
+  "response": {
+    "slug": "plan-for-handoff",
+    "markdown": "# Handoff: Plan for handoff\n\n> **Slug:** `plan-for-handoff` · **Status:** DRAFT · **Updated:** 2026-05-26T12:00:00.000Z · **PR:** — · **Prior session:** —\n\n## Plan content\n\n## body\n\nseed\n",
+    "ready_to_paste_prompt": null
+  },
+  "notes": "Locks the markdown serializer header order and the null ready_to_paste_prompt when no prompt-cycle artifact is present. Consumer: /resume skill (parses this verbatim), CTO handoff workflow. Trailing newline is intentional."
+}

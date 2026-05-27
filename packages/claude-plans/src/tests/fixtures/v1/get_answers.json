@@ -1,0 +1,29 @@
+{
+  "tool": "get_answers",
+  "seed": [
+    { "tool": "push_plan", "request": { "title": "Plan for answers", "content_md": "seed" } },
+    { "tool": "push_question", "request": { "plan_slug": "plan-for-answers", "question": "Q1?", "stage": "research", "asked_by": "claude" } },
+    { "tool": "push_question", "request": { "plan_slug": "plan-for-answers", "question": "Q2?", "stage": "planning", "asked_by": "claude" } }
+  ],
+  "request": { "plan_slug": "plan-for-answers" },
+  "response": {
+    "plan_slug": "plan-for-answers",
+    "questions": [
+      {
+        "id": "q_<seeded id #1>",
+        "question": "Q1?",
+        "stage": "research",
+        "asked_by": "claude",
+        "asked_at": "2026-05-26T12:00:00.000Z"
+      },
+      {
+        "id": "q_<seeded id #2>",
+        "question": "Q2?",
+        "stage": "planning",
+        "asked_by": "claude",
+        "asked_at": "2026-05-26T12:00:00.000Z"
+      }
+    ]
+  },
+  "notes": "Locks the {plan_slug, questions: [...]} envelope and insertion-order preservation. Empty list for a v1 plan with no questions is a separate test case (not fixtured — covered in storage.test.ts). Consumer: dashboard Questions tab read."
+}

@@ -1,0 +1,25 @@
+{
+  "tool": "push_question",
+  "seed": {
+    "tool": "push_plan",
+    "request": { "title": "Plan for question", "content_md": "seed" }
+  },
+  "request": {
+    "plan_slug": "plan-for-question",
+    "question": "Which approach should we take?",
+    "header": "Approach",
+    "options": ["A", "B"],
+    "stage": "research",
+    "asked_by": "claude-session-abc"
+  },
+  "response": {
+    "id": "q_<8-hex, generated deterministically>",
+    "question": "Which approach should we take?",
+    "header": "Approach",
+    "options": ["A", "B"],
+    "stage": "research",
+    "asked_by": "claude-session-abc",
+    "asked_at": "2026-05-26T12:00:00.000Z"
+  },
+  "notes": "Locks the PlanQuestion shape returned by push_question. v2's schema_version stamp on the parent plan must NOT change this response. The id is server-assigned (q_<8-hex>); the test harness seeds crypto.randomBytes for determinism. Consumer: dashboard Questions tab (Phase E), AskUserQuestion bridge."
+}

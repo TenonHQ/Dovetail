@@ -1,0 +1,23 @@
+{
+  "tool": "record_answer",
+  "seed": [
+    { "tool": "push_plan", "request": { "title": "Plan for answer", "content_md": "seed" } },
+    { "tool": "push_question", "request": { "plan_slug": "plan-for-answer", "question": "Q?", "asked_by": "claude" } }
+  ],
+  "request": {
+    "plan_slug": "plan-for-answer",
+    "question_id": "q_<seeded id from push_question>",
+    "answer": "Option B",
+    "answered_by": "daniel"
+  },
+  "response": {
+    "id": "q_<seeded id from push_question>",
+    "question": "Q?",
+    "asked_by": "claude",
+    "asked_at": "2026-05-26T12:00:00.000Z",
+    "answer": "Option B",
+    "answered_by": "daniel",
+    "answered_at": "2026-05-26T12:00:00.000Z"
+  },
+  "notes": "Locks the in-place mutation shape of PlanQuestion (answer + answered_by + answered_at fields appear; id and question are preserved). Consumer: dashboard Questions tab (Phase E)."
+}
