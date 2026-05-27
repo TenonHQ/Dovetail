@@ -74,12 +74,53 @@ export function _resetDovetailApiFallback(): void {
 export function _isUsingLegacyClaudePath(): boolean {
   return _dovetailApiUseLegacyClaudePath;
 }
+// SN returns 400 with this body when a Scripted REST endpoint does not exist
+// at the requested URI. The /dovetail -> /claude fallback above only fires on
+// 404, so the same "endpoint missing" condition presents as an opaque 400 to
+// callers. Detect it and surface a clear hint.
+var _SN_MISSING_ENDPOINT_BODY = "Requested URI does not represent any resource";
+
+function _summarizeResponseBody(data: unknown): string {
+  if (data === undefined || data === null) return "";
+  try {
+    var asJson = typeof data === "string" ? data : JSON.stringify(data);
+    return asJson.length > 500 ? asJson.slice(0, 500) + "…" : asJson;
+  } catch (_) {
+    return String(data);
+  }
+}
+
+// Augment an axios error in place with a human-readable message describing
+// the attempted Dovetail REST call. Preserves .response/.code/.config so
+// existing callers and tests that inspect those fields keep working.
+function _enrichDovetailApiError(
+  e: unknown,
+  attemptedEndpoint: string,
+): unknown {
+  if (!axios.isAxiosError(e)) return e;
+  var status = e.response ? e.response.status : undefined;
+  var body = e.response ? _summarizeResponseBody(e.response.data) : "";
+  var missingEndpoint =
+    status === 400 && body.indexOf(_SN_MISSING_ENDPOINT_BODY) !== -1;
+  var hint = missingEndpoint
+    ? " — Scripted REST endpoint not found on this instance. Re-import the Dovetail Scripted REST API XML (see Dovetail/docs/dovetail-servicenow-migration.md)."
+    : "";
+  e.message =
+    "Dovetail REST call failed: " +
+    (status ? "HTTP " + status : "no response") +
+    " " + attemptedEndpoint +
+    (body ? " — " + body : "") +
+    hint;
+  return e;
+}
+
 export async function _callDovetailApi<T>(
   op: string,
   call: (endpoint: string) => Promise<AxiosResponse<T>>,
 ): Promise<AxiosResponse<T>> {
+  var endpoint = _dovetailEndpoint(op);
   try {
-    return await call(_dovetailEndpoint(op));
+    return await call(endpoint);
   } catch (e) {
     if (!_dovetailApiUseLegacyClaudePath && _getHttpStatus(e) === 404) {
       logger.warn(
@@ -88,9 +129,14 @@ export async function _callDovetailApi<T>(
           ". Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
       );
       _dovetailApiUseLegacyClaudePath = true;
-      return await call(_dovetailEndpoint(op));
+      var legacyEndpoint = _dovetailEndpoint(op);
+      try {
+        return await call(legacyEndpoint);
+      } catch (e2) {
+        throw _enrichDovetailApiError(e2, legacyEndpoint);
+      }
     }
-    throw e;
+    throw _enrichDovetailApiError(e, endpoint);
   }
 }
 
