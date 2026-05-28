@@ -194,9 +194,29 @@ const processTablesInManifest = async (
 };
 
 /**
- * Re-keys manifest records from sys_id to record.name (display value).
+ * Returns a filesystem-safe folder name for a record.
+ *
+ * Dovetail names each record's on-disk folder after the record's display name.
+ * Windows/NTFS forbids these characters in a path component — `< > : " | ? * \ /`
+ * — and forbids a trailing space or trailing dot. A folder whose name violates
+ * this cannot be checked out on Windows (`git clone` aborts with "invalid path"),
+ * even though macOS/Linux accept it. When the display name is unsafe we fall back
+ * to the record's sys_id, which is hex and safe on every OS. The true display name
+ * is unaffected here and is still carried by the server-provided metaData.json.
+ */
+export const toSafeFolderName = (record: SN.MetaRecord): string => {
+  var name = record.name || "";
+  var isUnsafe = /[<>:"|?*\\/]/.test(name) || /[ .]$/.test(name) || name === "";
+  return isUnsafe ? record.sys_id : name;
+};
+
+/**
+ * Re-keys manifest records from sys_id to a filesystem-safe folder name.
  * Some ServiceNow tables return records keyed by sys_id instead of display name.
- * This ensures consistent naming for directories and manifest lookups.
+ * This ensures consistent naming for directories and manifest lookups, and keeps
+ * the on-disk folder name (which every writer derives from `record.name`) equal to
+ * the manifest key that `dove push` looks records up by — so the key ≡ folder
+ * invariant holds even when an unsafe display name forces a sys_id fallback.
  */
 export const normalizeManifestKeys = (manifest: SN.AppManifest): SN.AppManifest => {
   var tables = manifest.tables || {};
@@ -209,11 +229,15 @@ export const normalizeManifestKeys = (manifest: SN.AppManifest): SN.AppManifest 
     for (var j = 0; j < recordKeys.length; j++) {
       var key = recordKeys[j];
       var record = records[key];
-      var displayKey = record.name || key;
-      // Handle duplicate display names by appending sys_id suffix
+      var displayKey = toSafeFolderName(record);
+      // Handle duplicate folder names by appending sys_id suffix
       if (normalized[displayKey]) {
         displayKey = displayKey + " (" + record.sys_id.substring(0, 8) + ")";
       }
+      // Keep record.name === manifest key so all writers (which build the folder
+      // path from record.name) and push (which looks up by folder name) agree.
+      // The real display name lives in the server-provided metaData.json snapshot.
+      record.name = displayKey;
       normalized[displayKey] = record;
     }
     tables[tableName].records = normalized;
@@ -226,6 +250,9 @@ export const processManifest = async (
   forceWrite = false,
   sourcePath?: string,
 ): Promise<void> => {
+  // Idempotent: guarantees filesystem-safe folder names + key ≡ record.name on
+  // every write path, including downloadCommand which does not normalize upstream.
+  normalizeManifestKeys(manifest);
   const tableCount = Object.keys(manifest.tables).length;
   fileLogger.debug("Processing manifest: " + (manifest.scope || "legacy") + " (" + tableCount + " tables)");
 
