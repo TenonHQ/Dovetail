@@ -31,6 +31,7 @@ export {
   cloneSubflow,
   cloneActionType,
   triggerPublication,
+  publishActionType,
   generateSysId,
   topoSort,
   executeWritePlan,
@@ -52,6 +53,8 @@ export type {
   CloneActionTypeResult,
   TriggerPublicationParams,
   TriggerPublicationResult,
+  PublishActionTypeParams,
+  PublishActionTypeResult,
   WriteOp,
   WriteOpResult
 } from "./flowDesigner";

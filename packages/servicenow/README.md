@@ -212,6 +212,53 @@ npx dove-sn mcp           # run the stdio server (wire into .mcp.json)
 This server is separate from `@tenonhq/dovetail-mcp` (the read-only cross-system
 aggregator) — `dovetail-servicenow`'s server is the ServiceNow **write** surface.
 
+## Publishing a Custom Action Type
+
+`publishActionType` compiles the `sys_hub_flow_snapshot` for a Custom Action Type
+— the step that makes it draggable in the Flow Designer palette. This replays the
+Designer's **Publish** button, which is a plain REST call that **works with basic
+auth** (no session cookie, CSRF token, or `sn_build_agent` role):
+
+```
+GET  /api/now/processflow/action/action_types/{sysId}?sysparm_transaction_scope={scope}
+       -> 200, the full action-type model EXCEPT `steps` (always returns null)
+POST /api/now/processflow/action/action_types/{sysId}/snapshot?sysparm_transaction_scope={scope}
+       body = the model with a `steps` array grafted in
+       -> 201 Created (compiles the snapshot; also persists step input values
+          back to sys_variable_value)
+```
+
+This is the **real** snapshot compiler and supersedes `triggerPublication` for
+action types — that function ships in degraded mode (it only sets
+`status="published"` and polls, because the snapshot trigger was unknown when it
+was written). `triggerPublication` is retained for back-compat and the subflow path.
+
+```ts
+import { createClient, publishActionType } from "@tenonhq/dovetail-servicenow";
+
+var client = createClient({});
+var result = await publishActionType({
+  client: client,
+  sysId: "60e6743e33814bd07b18bc534d5c7b9e",      // sys_hub_action_type_definition
+  scopeSysId: "cd61acbbc3c85a1085b196c4e40131bd",  // sysparm_transaction_scope
+  steps: require("./fixtures/my-action.steps.json") // see caveat below
+});
+// { status: "published", httpStatus: 201, snapshotSysId?: "..." }
+```
+
+### Steps-fixture caveat (required)
+
+The GET returns **`steps: null`** even for an already-published action — the
+Designer assembles `steps` client-side from the step records. So to publish you
+**must supply a `steps` fixture** via `params.steps`. Each step's `action` field
+is remapped to the target `sysId` automatically. If you omit `steps` and the
+fetched model has no usable `steps` array, `publishActionType` throws with a clear
+message. For a faithful clone, capture the source action's `steps` from a HAR of
+the Publish call and store it as a fixture beside your driver.
+
+Full recipe and the 6-record action-type graph:
+`docs/servicenow-flow-designer-headless-authoring.md` in the CTO repo.
+
 ## Roadmap
 
 The same query-to-diff pattern will continue across the rest of the

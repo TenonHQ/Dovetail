@@ -166,6 +166,10 @@ describe("executeWritePlan", function () {
           changeUpdateSet: async function () { return {}; },
           deleteRecord: async function () { return {}; },
         },
+        now: {
+          get: async function () { return {} as any; },
+          post: async function () { return {} as any; },
+        },
       },
     };
   }

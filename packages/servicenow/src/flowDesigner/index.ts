@@ -26,6 +26,9 @@ export type { CloneActionTypeParams, CloneActionTypeResult } from "./cloneAction
 export { triggerPublication } from "./triggerPublication";
 export type { TriggerPublicationParams, TriggerPublicationResult } from "./triggerPublication";
 
+export { publishActionType } from "./publishActionType";
+export type { PublishActionTypeParams, PublishActionTypeResult } from "./publishActionType";
+
 export {
   generateSysId,
   stripSystemFields,

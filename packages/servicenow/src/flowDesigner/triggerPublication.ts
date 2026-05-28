@@ -1,10 +1,18 @@
 /**
  * Best-effort publication trigger for a Subflow or Custom Action Type.
  *
- * Ships in DEGRADED MODE for Phase 1 — the deterministic field/value combo
- * that compels ServiceNow to compile sys_hub_flow_snapshot is the subject
- * of Phase 0's gating spike and is not yet known. Until that lands, this
- * function:
+ * DEPRECATED FOR ACTION TYPES — the real snapshot compiler is now known and
+ * shipped as `publishActionType` (see ./publishActionType.ts). That function
+ * replays the Flow Designer Publish call (GET model → graft `steps` → POST to
+ * /snapshot → 201) over basic auth and actually compiles sys_hub_flow_snapshot,
+ * which is what makes a Custom Action Type draggable in the palette. Prefer
+ * `publishActionType` for action types. `triggerPublication` is retained for
+ * back-compat and for the subflow path, which still uses the degraded trigger
+ * below.
+ *
+ * Ships in DEGRADED MODE — the deterministic field/value combo that compels
+ * ServiceNow to compile sys_hub_flow_snapshot was, when this was written, an
+ * unknown "Phase 0 spike". This function:
  *
  *   1. Sets `status="published"` on the parent record via pushWithUpdateSet
  *      (this is the most likely single-field trigger; harmless if it isn't).

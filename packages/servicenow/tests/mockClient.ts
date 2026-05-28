@@ -71,6 +71,10 @@ export function makeMockClient(overrides: { query?: QueryFn } = {}): MockClientC
         calls.deleteRecord.push(params);
         return { sys_id: params.sys_id };
       }
+    },
+    now: {
+      get: async function () { return {} as any; },
+      post: async function () { return {} as any; }
     }
   };
   return { client: client, calls: calls };

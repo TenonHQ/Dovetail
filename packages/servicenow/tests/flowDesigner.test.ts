@@ -38,6 +38,10 @@ function makeClient(scripted: Array<{ match: (call: RunQueryCall) => boolean; ro
       changeUpdateSet: async function () { return {}; },
       deleteRecord: async function () { return {}; },
     },
+    now: {
+      get: async function () { return {} as any; },
+      post: async function () { return {} as any; },
+    },
   };
   return { client: client, calls: calls };
 }
