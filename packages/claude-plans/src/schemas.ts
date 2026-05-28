@@ -140,3 +140,21 @@ export var getAnswersSchema = z.object({
   answered: z.boolean().optional(),
   stage: z.string().min(1).max(32).optional()
 });
+
+export var pushLintEventSchema = z.object({
+  score: z.number().int().min(0).max(100),
+  missing: z.array(z.string()).default([]),
+  antipatterns: z.array(z.string()).optional(),
+  ceremony: z.array(z.string()).optional(),
+  threshold: z.number().int().min(0).max(100).optional(),
+  prompt_excerpt: z.string().max(2000).optional(),
+  source: z.string().min(1).max(40).optional(),
+  session_id: z.string().min(1).max(128).nullable().optional(),
+  plan_slug: z.string().min(1).max(64).optional()
+});
+
+export var getLintEventsSchema = z.object({
+  session_id: z.string().min(1).max(128).optional(),
+  plan_slug: z.string().min(1).max(64).optional(),
+  limit: z.number().int().positive().max(1000).optional()
+});

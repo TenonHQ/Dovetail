@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dovetail — Prompt Lints</title>
+  <script>
+    /* Apply the saved theme before first paint to avoid a flash of light. */
+    (function () {
+      try {
+        var t = localStorage.getItem("cp-theme");
+        if (t === "dark" || t === "light") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="claude-plans.css" />
+  <link rel="stylesheet" href="prompt-lints.css" />
+</head>
+<body class="cp-body">
+  <header>
+    <div class="header-left">
+      <svg class="brand-mark" viewBox="0 0 55 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M34.3254 13.7847H48.0563H54.9235V0H48.0563H34.3254H20.5946H6.8637H0V13.7847H6.8637H20.5946V27.5693H34.3254V13.7847Z" fill="#00663C"></path>
+        <path d="M54.9235 41.354V27.5693H48.0563H34.3254V41.354H20.5946V27.5693H6.8637H0V41.354V55.1387H20.5946H34.3254H54.9235V41.354Z" fill="#00663C"></path>
+      </svg>
+      <h1><span>Dovetail</span> Prompt Lints</h1>
+    </div>
+    <div class="header-right">
+      <a class="cp-nav-link" href="/claude-plans">&larr; Claude Plans</a>
+      <button class="cp-theme-toggle" id="cp-theme-toggle" type="button"
+        aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <span class="cp-storage" id="cp-storage" title="storage root"></span>
+    </div>
+  </header>
+
+  <main class="pl-main">
+    <div class="pl-intro">
+      Turn-0 prompt-lint observations recorded by the <code>UserPromptSubmit</code> hook and
+      <code>push_lint_event</code>. Newest first. Updates live.
+    </div>
+    <div class="pl-summary" id="pl-summary"></div>
+    <div class="pl-empty" id="pl-empty">
+      No lint events yet. Low-scoring prompts will appear here as you work.
+    </div>
+    <table class="pl-table" id="pl-table" hidden>
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Score</th>
+          <th>Missing tags</th>
+          <th>Source</th>
+          <th>Prompt excerpt</th>
+        </tr>
+      </thead>
+      <tbody id="pl-tbody"></tbody>
+    </table>
+  </main>
+
+  <script src="prompt-lints.js"></script>
+</body>
+</html>

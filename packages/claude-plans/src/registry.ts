@@ -19,7 +19,9 @@ import {
   getHandoffBundleSchema,
   pushQuestionSchema,
   recordAnswerSchema,
-  getAnswersSchema
+  getAnswersSchema,
+  pushLintEventSchema,
+  getLintEventsSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -33,6 +35,8 @@ import {
   pushQuestion,
   recordAnswer,
   getAnswers,
+  pushLintEvent,
+  getLintEvents,
   StorageOptions
 } from "./storage";
 
@@ -48,7 +52,9 @@ export var TOOL_NAMES = [
   "get_handoff_bundle",
   "push_question",
   "record_answer",
-  "get_answers"
+  "get_answers",
+  "push_lint_event",
+  "get_lint_events"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -408,6 +414,61 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             plan_slug: parsed.plan_slug,
             answered: parsed.answered,
             stage: parsed.stage
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "push_lint_event",
+      description:
+        "Record a prompt-lint observation in the global lint-events store, surfaced on the " +
+        "dashboard's standalone Prompt Lints page at /prompt-lints. Unlike artifacts/prompts, " +
+        "lint events are NOT owned by a plan — they capture Turn-0 checklist scores for arbitrary " +
+        "prompts (typically emitted by the UserPromptSubmit hook). plan_slug/session_id are " +
+        "optional associations.\n\n" +
+        "Inputs:\n" +
+        "  score (required, 0-100) — Turn-0 checklist score.\n" +
+        "  missing (optional) — missing checklist tags, e.g. [\"<done>\",\"<target>\"].\n" +
+        "  antipatterns / ceremony (optional) — detected anti-patterns / ceremony words.\n" +
+        "  threshold (optional) — the cutoff that triggered recording.\n" +
+        "  prompt_excerpt (optional, <=2000 chars) — truncated prompt text for context.\n" +
+        "  source (optional) — emitter label, e.g. \"hook\".\n" +
+        "  session_id (optional) — Claude Code session id.\n" +
+        "  plan_slug (optional) — associate with a plan if one applies.\n\n" +
+        "Stored at <root>/_lint-events/<event-id>.json. Dashboard updates live via SSE.",
+      shape: pushLintEventSchema.shape,
+      handler: async function (args: any) {
+        var parsed = pushLintEventSchema.parse(args);
+        return pushLintEvent(
+          {
+            score: parsed.score,
+            missing: parsed.missing,
+            antipatterns: parsed.antipatterns,
+            ceremony: parsed.ceremony,
+            threshold: parsed.threshold,
+            prompt_excerpt: parsed.prompt_excerpt,
+            source: parsed.source,
+            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id,
+            plan_slug: parsed.plan_slug
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "get_lint_events",
+      description:
+        "List prompt-lint events from the global store, newest first. Optional filters: " +
+        "session_id, plan_slug, limit (default all). Output: { events: PromptLintEvent[] }.",
+      shape: getLintEventsSchema.shape,
+      handler: async function (args: any) {
+        var parsed = getLintEventsSchema.parse(args || {});
+        return getLintEvents(
+          {
+            session_id: parsed.session_id,
+            plan_slug: parsed.plan_slug,
+            limit: parsed.limit
           },
           storageOpts
         );
