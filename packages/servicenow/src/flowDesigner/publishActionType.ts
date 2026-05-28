@@ -124,11 +124,14 @@ export async function publishActionType(params: PublishActionTypeParams): Promis
   // request() throws on any non-2xx, so reaching here means a 2xx (201 in practice).
   var snapshotSysId: string | undefined;
   if (snapBody && typeof snapBody === "object") {
-    snapshotSysId = snapBody.latest_snapshot
-      || snapBody.master_snapshot
-      || snapBody.snapshot
-      || (snapBody.snapshot && snapBody.snapshot.sys_id)
-      || undefined;
+    // The snapshot ref is surfaced under different keys and as either a bare
+    // sys_id string or a record object — coerce whichever is present to a string.
+    var snap = snapBody.latest_snapshot || snapBody.master_snapshot || snapBody.snapshot;
+    if (snap && typeof snap === "object") {
+      snapshotSysId = typeof snap.sys_id === "string" ? snap.sys_id : undefined;
+    } else if (typeof snap === "string") {
+      snapshotSysId = snap;
+    }
   }
 
   return {

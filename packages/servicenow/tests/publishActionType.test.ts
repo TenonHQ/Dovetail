@@ -85,6 +85,17 @@ describe("publishActionType", function () {
     expect(steps[0].action).toBe("OLD_ACTION_SYSID");
   });
 
+  it("extracts snapshotSysId when the snapshot ref comes back as an object", async function () {
+    var ctx = mockClient({ postResponse: { snapshot: { sys_id: "snap-obj" } } });
+    var r = await publishActionType({
+      client: ctx.client,
+      sysId: SYS,
+      scopeSysId: SCOPE,
+      steps: [{ cid: "step-1", action: "OLD" }],
+    });
+    expect(r.snapshotSysId).toBe("snap-obj");
+  });
+
   it("falls back to the model's own steps when no caller steps are provided", async function () {
     var ctx = mockClient({
       getModel: {
