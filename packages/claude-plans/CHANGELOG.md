@@ -1,5 +1,25 @@
 # Changelog — @tenonhq/dovetail-claude-plans
 
+## v2 — bidirectional pipeline (PRs #100–#104)
+
+The v2 line turns the package from a write-only plan surface into a **bidirectional pipeline**: a plan now carries an explicit pipeline stage that both Claude Code and the dashboard can move, with a token-gated path to spawning the next session. Delivered across PRs #100–#104 (Phases A–D below), strictly additive over v1.
+
+**New plan fields** (all optional; defaulted on read so v1 records keep working): `schema_version` (`CURRENT_SCHEMA_VERSION = 2`), `stage`, `stage_history`, `dispatch_token`, `dispatch_log`.
+
+**New MCP tools (3), bringing the total to 17:**
+
+- `set_stage` — advance a plan through the 10-stage state machine. Validates the transition (`IllegalTransitionError`), applies the dashboard-wins conflict rule (`ConflictRejectedError`, 30s grace), atomically writes the new stage + appends a `StageTransition`, and issues a **one-time dispatch token** (5-min TTL) bound to the target stage. Each call rotates the token.
+- `pull_plan` — single-read snapshot returning `{ plan, artifacts[], prompts[], questions[], stage, stage_history[], dispatch_log[] }` so the dashboard's plan-detail page renders without multiple round-trips.
+- `dispatch_stage` — resolve and optionally spawn a Claude Code subprocess for a stage. **Dry-run by default** (logs a `dry-run` event, spawns nothing, does not consume the token); **live mode** requires `confirm: true` + a valid token, consumed **atomically before** the spawn. Gated stages (`test-first`, `test-reality`) raise `MissingAgentError` rather than no-op.
+
+**New modules:** `src/state-machine.ts` (legal-transition table, `assertTransition`, `checkConflict`) and `src/dispatch.ts` (error taxonomy, token validation, command resolution, injectable spawn).
+
+**New env vars:** `DOVE_CLAUDE_PLANS_TOKEN_TTL_MS`, `DOVE_CLAUDE_PLANS_DASHBOARD_GRACE_MS`, `DOVE_CLAUDE_PLANS_DISPATCH_CWD`.
+
+**Backward compatibility:** `migrateV1OnLoad()` normalizes v1 records on read (no disk write until next mutation); `src/tests/v1-contract.test.ts` replays every `src/tests/fixtures/v1/*.json` fixture through the live registry against a frozen clock to lock each v1 tool's response shape. Deep dive: [`docs/v2-implementation.md`](./docs/v2-implementation.md).
+
+---
+
 ## Unreleased — Phase D (dispatch_stage)
 
 - New module `src/dispatch.ts`:
