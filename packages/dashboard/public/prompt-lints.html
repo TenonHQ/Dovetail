@@ -42,15 +42,41 @@
       Turn-0 prompt-lint observations recorded by the <code>UserPromptSubmit</code> hook and
       <code>push_lint_event</code>. Newest first. Updates live.
     </div>
+    <div class="pl-filters" id="pl-filters">
+      <div class="pl-filter-group" role="group" aria-label="Status">
+        <button type="button" class="pl-seg pl-seg--active" data-status="all">All</button>
+        <button type="button" class="pl-seg" data-status="needs-improvement">Needs improvement</button>
+        <button type="button" class="pl-seg" data-status="good">Good</button>
+      </div>
+      <div class="pl-filter-group" role="group" aria-label="Score">
+        <button type="button" class="pl-chip" data-bucket="low">Low &lt;40</button>
+        <button type="button" class="pl-chip" data-bucket="mid">Mid 40&ndash;69</button>
+        <button type="button" class="pl-chip" data-bucket="high">High &ge;70</button>
+      </div>
+      <div class="pl-filter-group" id="pl-sources" role="group" aria-label="Source"></div>
+      <div class="pl-search">
+        <input
+          type="search"
+          class="pl-search-input"
+          id="pl-search-input"
+          placeholder="Search excerpt / tags&hellip;"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="pl-search-clear" id="pl-search-clear" aria-label="Clear search" hidden>&times;</button>
+      </div>
+    </div>
     <div class="pl-summary" id="pl-summary"></div>
     <div class="pl-empty" id="pl-empty">
       No lint events yet. Low-scoring prompts will appear here as you work.
     </div>
+    <div class="pl-no-match" id="pl-no-match" hidden>No events match the current filters.</div>
     <table class="pl-table" id="pl-table" hidden>
       <thead>
         <tr>
           <th>When</th>
           <th>Score</th>
+          <th>Status</th>
           <th>Missing tags</th>
           <th>Source</th>
           <th>Prompt excerpt</th>

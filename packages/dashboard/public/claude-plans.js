@@ -37,7 +37,9 @@
     selectedSlug: null,
     activeTab: "plan",
     query: "",              // lowercased search query; "" means show all
-    topicFilter: null       // active topic label, null = no topic filter
+    topicFilter: null,      // active topic label, null = no topic filter
+    prStatus: new Map(),    // pr_url -> { state, merged } (live from gh, lazy)
+    mergedOnly: false       // when true, show only plans with a merged PR
   };
 
   var els = {
@@ -68,8 +70,36 @@
     topicsCloud: document.getElementById("cp-topics-cloud"),
     topicsCount: document.getElementById("cp-topics-count"),
     topicsEmpty: document.getElementById("cp-topics-empty"),
-    topicsClear: document.getElementById("cp-topics-clear")
+    topicsClear: document.getElementById("cp-topics-clear"),
+    mergedToggle: document.getElementById("cp-merged-toggle")
   };
+
+  // Merged === true only when gh resolved the plan's PR as MERGED.
+  function planPrMerged(plan) {
+    if (!plan.pr_url) return false;
+    var st = state.prStatus.get(plan.pr_url);
+    return !!(st && st.merged);
+  }
+
+  function planMatchesPr(plan) {
+    if (!state.mergedOnly) return true;
+    return planPrMerged(plan);
+  }
+
+  // A small colored dot in the rail row reflecting the PR's merge state.
+  // Rendered only when the plan links a PR and gh has returned a status.
+  function prDotMarkup(plan) {
+    if (!plan.pr_url) return "";
+    var st = state.prStatus.get(plan.pr_url);
+    if (!st) return "";
+    var cls = "cp-pr-dot";
+    if (st.merged) cls += " cp-pr-dot--merged";
+    else if (st.state === "OPEN") cls += " cp-pr-dot--open";
+    else if (st.state === "CLOSED") cls += " cp-pr-dot--closed";
+    else cls += " cp-pr-dot--unknown";
+    var label = st.merged ? "merged" : (st.state || "unknown").toLowerCase();
+    return '<span class="' + cls + '" title="PR ' + label + '"></span>';
+  }
 
   function planMatchesTopic(plan, topic) {
     if (!topic) return true;
@@ -118,9 +148,9 @@
     var q = state.query;
     var topic = state.topicFilter;
     var all = allPlansSorted();
-    if (!q && !topic) return all;
+    if (!q && !topic && !state.mergedOnly) return all;
     return all.filter(function (p) {
-      return planMatchesQuery(p, q) && planMatchesTopic(p, topic);
+      return planMatchesQuery(p, q) && planMatchesTopic(p, topic) && planMatchesPr(p);
     });
   }
 
@@ -431,7 +461,7 @@
     renderTopics();
     var plans = sortedPlans();
     var totalPlans = state.plans.size;
-    var isFiltering = !!state.query || !!state.topicFilter;
+    var isFiltering = !!state.query || !!state.topicFilter || state.mergedOnly;
     els.count.textContent = isFiltering
       ? plans.length + " / " + totalPlans
       : String(totalPlans);
@@ -444,6 +474,7 @@
           var pieces = [];
           if (state.query) pieces.push('"' + state.query + '"');
           if (state.topicFilter) pieces.push("topic “" + state.topicFilter + "”");
+          if (state.mergedOnly) pieces.push("merged PRs only");
           els.railNoMatchQ.textContent = pieces.join(" + ");
         }
       } else {
@@ -464,6 +495,7 @@
       li.innerHTML =
         '<div class="cp-list-row">' +
         '  <span class="cp-list-title"></span>' +
+        prDotMarkup(plan) +
         '  <span class="cp-status-pill cp-status-' + plan.status + '">' + plan.status + '</span>' +
         '</div>' +
         '<div class="cp-list-meta">' +
@@ -1154,6 +1186,41 @@
       });
   }
 
+  var prStatusDebounce = null;
+
+  // Resolve live PR merge state from the server (which shells out to gh) and
+  // rerender so dots + the merged filter reflect reality. Best-effort: any
+  // failure leaves prStatus as-is and the toggle simply matches nothing.
+  function loadPrStatus() {
+    return fetch("/api/claude-plans/pr-status")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var statuses = data && data.statuses ? data.statuses : {};
+        Object.keys(statuses).forEach(function (url) {
+          state.prStatus.set(url, statuses[url]);
+        });
+        renderRail();
+      })
+      .catch(function (err) {
+        console.warn("[claude-plans] failed to load PR status:", err);
+      });
+  }
+
+  function schedulePrStatusRefresh() {
+    if (prStatusDebounce) clearTimeout(prStatusDebounce);
+    prStatusDebounce = setTimeout(loadPrStatus, 500);
+  }
+
+  function setupMergedToggle() {
+    if (!els.mergedToggle) return;
+    els.mergedToggle.addEventListener("click", function () {
+      state.mergedOnly = !state.mergedOnly;
+      els.mergedToggle.setAttribute("aria-pressed", state.mergedOnly ? "true" : "false");
+      els.mergedToggle.classList.toggle("cp-pr-toggle--active", state.mergedOnly);
+      renderRail();
+    });
+  }
+
   async function loadInitial() {
     try {
       var res = await fetch("/api/claude-plans");
@@ -1185,6 +1252,7 @@
         .catch(function () { /* ignore */ });
     }));
     renderRail();
+    loadPrStatus();
     if (!state.selectedSlug) {
       var paramSlug = new URLSearchParams(window.location.search).get("plan");
       var sorted = sortedPlans();
@@ -1198,7 +1266,10 @@
   function startStream() {
     var es = new EventSource("/api/claude-plans/stream");
     es.addEventListener("plan:upsert", function (e) {
-      try { upsertPlan(JSON.parse(e.data).plan); } catch (_) {}
+      try {
+        upsertPlan(JSON.parse(e.data).plan);
+        schedulePrStatusRefresh();
+      } catch (_) {}
     });
     es.addEventListener("plan:delete", function (e) {
       try { removePlan(JSON.parse(e.data).slug); } catch (_) {}
@@ -1262,6 +1333,7 @@
     setupTheme();
     setupSearch();
     setupTopics();
+    setupMergedToggle();
     setActiveTab("plan");
     loadLintsBadge();
     loadInitial().then(startStream);
