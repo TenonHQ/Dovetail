@@ -25,7 +25,8 @@ import {
   PlanQuestion,
   PlanStatus,
   PlanWithArtifacts,
-  PromptCyclePayload
+  PromptCyclePayload,
+  PromptLintEvent
 } from "./types";
 import { StructuredPlan, renderStructured } from "./renderer";
 import { promptCyclePayloadSchema } from "./schemas";
@@ -93,6 +94,16 @@ function promptDir(root: string, planSlug: string): string {
 
 function promptPath(root: string, planSlug: string, slug: string): string {
   return path.join(promptDir(root, planSlug), slug + ".json");
+}
+
+// Lint events are global (not nested under a plan). The leading underscore keeps
+// the directory out of listPlans(), which only reads top-level "*.json" files.
+function lintEventsDir(root: string): string {
+  return path.join(root, "_lint-events");
+}
+
+function lintEventPath(root: string, id: string): string {
+  return path.join(lintEventsDir(root), id + ".json");
 }
 
 export interface PushPlanInput {
@@ -716,4 +727,78 @@ export function getAnswers(input: GetAnswersInput, options: StorageOptions = {})
     questions = questions.filter(function (q) { return typeof q.answer !== "string"; });
   }
   return { plan_slug: plan.slug, questions: questions };
+}
+
+// ---- Prompt lint events (global, plan-independent) -------------------------
+
+export interface PushLintEventInput {
+  score: number;
+  missing?: string[];
+  antipatterns?: string[];
+  ceremony?: string[];
+  threshold?: number;
+  prompt_excerpt?: string;
+  source?: string;
+  session_id?: string | null;
+  plan_slug?: string;
+}
+
+export function pushLintEvent(input: PushLintEventInput, options: StorageOptions = {}): PromptLintEvent {
+  var root = storageRoot(options);
+  var id = "le_" + crypto.randomBytes(4).toString("hex");
+  var now = nowIso();
+  var event: PromptLintEvent = {
+    id: id,
+    timestamp: now,
+    score: input.score,
+    missing: input.missing || [],
+    created_at: now,
+    updated_at: now
+  };
+  if (input.threshold !== undefined) event.threshold = input.threshold;
+  if (input.antipatterns !== undefined) event.antipatterns = input.antipatterns;
+  if (input.ceremony !== undefined) event.ceremony = input.ceremony;
+  if (input.prompt_excerpt !== undefined) event.prompt_excerpt = input.prompt_excerpt;
+  if (input.source !== undefined) event.source = input.source;
+  if (input.session_id !== undefined) event.session_id = input.session_id;
+  if (input.plan_slug !== undefined) event.plan_slug = input.plan_slug;
+  atomicWriteJson(lintEventPath(root, id), event);
+  return event;
+}
+
+export interface ListLintEventsInput {
+  session_id?: string;
+  plan_slug?: string;
+  limit?: number;
+}
+
+export function listLintEvents(input: ListLintEventsInput = {}, options: StorageOptions = {}): PromptLintEvent[] {
+  var root = storageRoot(options);
+  var dir = lintEventsDir(root);
+  if (!fs.existsSync(dir)) return [];
+  var entries = fs.readdirSync(dir);
+  var events: PromptLintEvent[] = [];
+  for (var i = 0; i < entries.length; i++) {
+    if (!entries[i].endsWith(".json")) continue;
+    var e = readJson<PromptLintEvent>(path.join(dir, entries[i]));
+    if (!e) continue;
+    if (input.session_id !== undefined && e.session_id !== input.session_id) continue;
+    if (input.plan_slug !== undefined && e.plan_slug !== input.plan_slug) continue;
+    events.push(e);
+  }
+  events.sort(function (a, b) {
+    var c = (b.timestamp || "").localeCompare(a.timestamp || ""); // newest first
+    if (c !== 0) return c;
+    return (b.id || "").localeCompare(a.id || ""); // stable tiebreak on same-ms events
+  });
+  if (typeof input.limit === "number") events = events.slice(0, input.limit);
+  return events;
+}
+
+export interface GetLintEventsResult {
+  events: PromptLintEvent[];
+}
+
+export function getLintEvents(input: ListLintEventsInput = {}, options: StorageOptions = {}): GetLintEventsResult {
+  return { events: listLintEvents(input, options) };
 }

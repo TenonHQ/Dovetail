@@ -83,6 +83,29 @@ export interface PromptCycleLintReport {
   ceremony?: string[];
 }
 
+/**
+ * A single prompt-lint observation. Unlike plans/artifacts/prompts, lint events
+ * are NOT owned by a plan — most are emitted by the UserPromptSubmit hook for
+ * arbitrary prompts with no plan context. They live in a global store
+ * (<root>/_lint-events/) and surface on the dashboard's standalone Prompt Lints
+ * page. plan_slug and session_id are optional associations, not requirements.
+ */
+export interface PromptLintEvent {
+  id: string; // le_<8-hex>
+  timestamp: string; // ISO 8601 — when the lint was observed
+  score: number; // 0-100 Turn-0 checklist score
+  threshold?: number; // the cutoff that triggered recording (e.g. 50)
+  missing: string[]; // missing checklist tags, e.g. ["<done>","<target>"]
+  antipatterns?: string[];
+  ceremony?: string[];
+  prompt_excerpt?: string; // truncated prompt text for context
+  source?: string; // emitter, e.g. "hook" | "manual"
+  session_id?: string | null; // Claude Code session, when known
+  plan_slug?: string; // optional plan association
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PromptCycleOpenQuestion {
   question: string;
   header?: string;

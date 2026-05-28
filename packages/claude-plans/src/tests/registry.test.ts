@@ -15,8 +15,8 @@ function descByName(deps: any, name: string) {
 }
 
 describe("registry", function () {
-  it("exposes exactly the 12 tools in TOOL_NAMES", function () {
-    expect(TOOL_NAMES.length).toBe(12);
+  it("exposes exactly the 14 tools in TOOL_NAMES", function () {
+    expect(TOOL_NAMES.length).toBe(14);
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
     expect((TOOL_NAMES as readonly string[]).indexOf("get_handoff_bundle")).toBeGreaterThan(-1);
@@ -24,6 +24,35 @@ describe("registry", function () {
     expect((TOOL_NAMES as readonly string[]).indexOf("record_answer")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("get_answers")).toBeGreaterThan(-1);
     expect((TOOL_NAMES as readonly string[]).indexOf("push_prompt")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("push_lint_event")).toBeGreaterThan(-1);
+    expect((TOOL_NAMES as readonly string[]).indexOf("get_lint_events")).toBeGreaterThan(-1);
+  });
+
+  it("push_lint_event stores a global lint event (no plan required)", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    var res = await descByName(deps, "push_lint_event").handler({
+      score: 35,
+      missing: ["<done>", "<target>"],
+      antipatterns: ["vague verb"],
+      threshold: 50,
+      prompt_excerpt: "fix this thing",
+      source: "hook"
+    });
+    expect(res.id).toMatch(/^le_[0-9a-f]{8}$/);
+    expect(res.score).toBe(35);
+    expect(res.missing).toEqual(["<done>", "<target>"]);
+    expect(fs.existsSync(path.join(root, "_lint-events", res.id + ".json"))).toBe(true);
+  });
+
+  it("get_lint_events lists events with a limit", async function () {
+    var root = mkTmp();
+    var deps = { storage: { rootDir: root } };
+    await descByName(deps, "push_lint_event").handler({ score: 10, missing: [] });
+    await descByName(deps, "push_lint_event").handler({ score: 20, missing: [] });
+    await descByName(deps, "push_lint_event").handler({ score: 30, missing: [] });
+    var res = await descByName(deps, "get_lint_events").handler({ limit: 2 });
+    expect(res.events.length).toBe(2);
   });
 
   it("delete_plan removes an existing plan", async function () {

@@ -834,6 +834,12 @@ function promptsDirFor(slug) {
   return path.join(CLAUDE_PLANS_DIR, slug, "prompts");
 }
 
+// Prompt lint events are global (not nested under a plan). Stored by
+// @tenonhq/dovetail-claude-plans at <root>/_lint-events/<id>.json.
+function lintEventsDir() {
+  return path.join(CLAUDE_PLANS_DIR, "_lint-events");
+}
+
 function safeReadJson(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -895,14 +901,41 @@ function listClaudePrompts(slug) {
   return prompts;
 }
 
-// Parse a watcher path like "<root>/<slug>.json" or
-// "<root>/<slug>/artifacts/<artifact-slug>.json" into { kind, slug, artifactSlug }.
+function listClaudeLintEvents(filters) {
+  const dir = lintEventsDir();
+  if (!fs.existsSync(dir)) return [];
+  const f = filters || {};
+  const entries = fs.readdirSync(dir);
+  const events = [];
+  for (let i = 0; i < entries.length; i++) {
+    if (!entries[i].endsWith(".json")) continue;
+    const e = safeReadJson(path.join(dir, entries[i]));
+    if (!e) continue;
+    if (f.session_id !== undefined && e.session_id !== f.session_id) continue;
+    if (f.plan_slug !== undefined && e.plan_slug !== f.plan_slug) continue;
+    events.push(e);
+  }
+  events.sort(function (a, b) {
+    const c = (b.timestamp || "").localeCompare(a.timestamp || "");
+    if (c !== 0) return c;
+    return (b.id || "").localeCompare(a.id || "");
+  });
+  if (typeof f.limit === "number") return events.slice(0, f.limit);
+  return events;
+}
+
+// Parse a watcher path like "<root>/<slug>.json",
+// "<root>/<slug>/artifacts/<artifact-slug>.json", or
+// "<root>/_lint-events/<id>.json" into { kind, ... }.
 function classifyPath(filePath) {
   const rel = path.relative(CLAUDE_PLANS_DIR, filePath);
   if (!rel || rel.startsWith("..")) return null;
   const parts = rel.split(path.sep);
   if (parts.length === 1 && parts[0] === ".focus") {
     return { kind: "focus" };
+  }
+  if (parts.length === 2 && parts[0] === "_lint-events" && parts[1].endsWith(".json")) {
+    return { kind: "lint", id: parts[1].slice(0, -5) };
   }
   if (parts.length === 1 && parts[0].endsWith(".json")) {
     return { kind: "plan", slug: parts[0].slice(0, -5) };
@@ -972,6 +1005,15 @@ function handleWatcherChange(event, filePath) {
     }
     const prompt = safeReadJson(filePath);
     if (prompt) broadcastClaudePlanEvent("prompt:upsert", { prompt: prompt });
+    return;
+  }
+  if (info.kind === "lint") {
+    if (event === "unlink") {
+      broadcastClaudePlanEvent("lint:delete", { id: info.id });
+      return;
+    }
+    const lint = safeReadJson(filePath);
+    if (lint) broadcastClaudePlanEvent("lint:upsert", { lint: lint });
   }
 }
 
@@ -998,6 +1040,25 @@ function startClaudePlanWatcher() {
 
 app.get(["/claude-plans", "/claude-plans/:slug"], function (req, res) {
   res.sendFile(path.join(__dirname, "public", "claude-plans.html"));
+});
+
+app.get("/prompt-lints", function (req, res) {
+  res.sendFile(path.join(__dirname, "public", "prompt-lints.html"));
+});
+
+app.get("/api/prompt-lints", function (req, res) {
+  try {
+    const filters = {};
+    if (typeof req.query.session_id === "string") filters.session_id = req.query.session_id;
+    if (typeof req.query.plan_slug === "string") filters.plan_slug = req.query.plan_slug;
+    if (typeof req.query.limit === "string") {
+      const n = parseInt(req.query.limit, 10);
+      if (!isNaN(n) && n > 0) filters.limit = Math.min(n, 1000); // mirror getLintEventsSchema cap
+    }
+    res.json({ events: listClaudeLintEvents(filters), storage: CLAUDE_PLANS_DIR });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get("/api/claude-plans", function (req, res) {
