@@ -142,6 +142,128 @@ function unscoped(name) {
 }
 
 // ---------------------------------------------------------------------------
+// release manifest (downstream knowledge sync)
+// ---------------------------------------------------------------------------
+//
+// Emits a deterministic record of what shipped so downstream consumer repos
+// (CTO, ServiceNow, ...) can detect undocumented Dovetail releases via
+// `dove knowledge-diff`. Two outputs:
+//   - release-events/<event_id>.json      append-only repo history (source of truth)
+//   - packages/core/release-manifest.json aggregate window bundled into the
+//     dove-core tarball, so a fresh `npm install` carries recent release events.
+// NOTE: the aggregate is written AFTER publish, so it ships in the NEXT core
+// publish (a one-publish lag for core itself); the repo feed is always current.
+// Best-effort: a failure here never fails a publish whose packages shipped.
+
+const MANIFEST_WINDOW = 50;
+
+function semverBump(prev, version) {
+  if (!prev) return "initial";
+  const a = String(prev).split(".").map(Number);
+  const b = String(version).split(".").map(Number);
+  if ((b[0] || 0) !== (a[0] || 0)) return "major";
+  if ((b[1] || 0) !== (a[1] || 0)) return "minor";
+  return "patch";
+}
+
+function commitsForPackage(dirName, prevTag, fallbackBase, head) {
+  let from = "";
+  if (prevTag && captureSafe("git", ["rev-parse", "--verify", prevTag + "^{commit}"]) !== null) {
+    from = prevTag;
+  } else if (fallbackBase) {
+    from = fallbackBase;
+  }
+  const spec = from ? from + ".." + head : head;
+  const out = captureSafe("git", ["log", spec, "-n", "50", "--format=%H%x09%s", "--", "packages/" + dirName]);
+  if (!out) {
+    return [];
+  }
+  return out.split("\n").filter(Boolean).map(function (line) {
+    const tab = line.indexOf("\t");
+    const sha = tab >= 0 ? line.slice(0, tab) : line;
+    const subject = tab >= 0 ? line.slice(tab + 1) : "";
+    const prMatch = subject.match(/\(#(\d+)\)/) || subject.match(/#(\d+)/);
+    const commit = { sha: sha.slice(0, 9), subject: subject };
+    if (prMatch) {
+      commit.pr = parseInt(prMatch[1], 10);
+    }
+    return commit;
+  });
+}
+
+function buildReleaseEvents(published, range, headSha) {
+  const now = new Date().toISOString();
+  return published.map(function (p) {
+    const tag = unscoped(p.name) + "@" + p.version;
+    const prev = p.prevVersion ? p.prevVersion : null;
+    const prevTag = prev ? unscoped(p.name) + "@" + prev : "";
+    return {
+      $schema: "dovetail-release-event/v1",
+      event_id: tag,
+      package: p.name,
+      version: p.version,
+      prev_version: prev,
+      published_at: now,
+      git: { sha: headSha, tag: tag },
+      semver_bump: semverBump(prev, p.version),
+      commits: commitsForPackage(p.dirName, prevTag, range.base, headSha),
+      exports_delta: null,
+      narrative: null,
+    };
+  });
+}
+
+/** Write the per-event feed + refresh the bundled aggregate. Returns repo-relative paths written. */
+function emitReleaseManifest(published, range, headSha) {
+  const written = [];
+  try {
+    const events = buildReleaseEvents(published, range, headSha);
+    const feedDir = ws.REPO_ROOT + "/release-events";
+    if (!fs.existsSync(feedDir)) {
+      fs.mkdirSync(feedDir, { recursive: true });
+    }
+    for (let i = 0; i < events.length; i++) {
+      const rel = "release-events/" + events[i].event_id + ".json";
+      fs.writeFileSync(ws.REPO_ROOT + "/" + rel, JSON.stringify(events[i], null, 2) + "\n");
+      written.push(rel);
+    }
+    const aggRel = "packages/core/release-manifest.json";
+    const aggPath = ws.REPO_ROOT + "/" + aggRel;
+    let existingEvents = [];
+    if (fs.existsSync(aggPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(aggPath, "utf8"));
+        existingEvents = parsed && parsed.events ? parsed.events : [];
+      } catch (e) {
+        existingEvents = [];
+      }
+    }
+    const seen = {};
+    const merged = [];
+    const all = events.concat(existingEvents);
+    for (let i = 0; i < all.length; i++) {
+      const ev = all[i];
+      if (ev && ev.event_id && seen[ev.event_id] !== true) {
+        seen[ev.event_id] = true;
+        merged.push(ev);
+      }
+    }
+    const aggregate = {
+      $schema: "dovetail-manifest/v1",
+      generated_at: new Date().toISOString(),
+      events: merged.slice(0, MANIFEST_WINDOW),
+    };
+    fs.writeFileSync(aggPath, JSON.stringify(aggregate, null, 2) + "\n");
+    written.push(aggRel);
+    console.log("  emitted " + events.length + " release-event(s); refreshed " + aggRel);
+  } catch (err) {
+    console.warn("  release-manifest emit failed (non-fatal): " + (err && err.message ? err.message : err));
+    return [];
+  }
+  return written;
+}
+
+// ---------------------------------------------------------------------------
 // release commit + GitHub releases
 // ---------------------------------------------------------------------------
 
@@ -156,13 +278,18 @@ function releaseCommitMessage(published) {
 }
 
 /** Commit the version bumps + refreshed lockfile and push them to the branch. */
-function commitVersionBumps(published) {
+function commitVersionBumps(published, extraFiles) {
   console.log("\nRefreshing lockfile and committing version bumps...");
   run("npm", ["install", "--package-lock-only", "--no-audit", "--no-fund"]);
 
   const files = ["package-lock.json"];
   for (let i = 0; i < published.length; i++) {
     files.push("packages/" + published[i].dirName + "/package.json");
+  }
+  if (extraFiles) {
+    for (let i = 0; i < extraFiles.length; i++) {
+      files.push(extraFiles[i]);
+    }
   }
 
   const branch = process.env.GITHUB_REF_NAME
@@ -275,11 +402,12 @@ function main() {
   console.log("");
   for (let i = 0; i < toPublish.length; i++) {
     const pkg = toPublish[i];
+    const prevVersion = npmPublishedVersion(pkg.name);
     const version = resolvePublishVersion(pkg);
     console.log("▶ " + pkg.name + "  source=" + pkg.version + "  ->  publish " + version);
 
     if (args.dryRun) {
-      published.push({ name: pkg.name, dirName: pkg.dirName, version: version });
+      published.push({ name: pkg.name, dirName: pkg.dirName, version: version, prevVersion: prevVersion });
       continue;
     }
 
@@ -289,7 +417,7 @@ function main() {
     }
     try {
       run("npm", ["publish", "--access", "public"], { cwd: pkg.dir });
-      published.push({ name: pkg.name, dirName: pkg.dirName, version: version });
+      published.push({ name: pkg.name, dirName: pkg.dirName, version: version, prevVersion: prevVersion });
       console.log("  published " + pkg.name + "@" + version + "\n");
     } catch (err) {
       console.error("  FAILED to publish " + pkg.name + ": " + err.message + "\n");
@@ -302,8 +430,17 @@ function main() {
     for (let i = 0; i < published.length; i++) {
       console.log("  - " + published[i].name + "@" + published[i].version);
     }
+    const previewEvents = buildReleaseEvents(published, range, range.head);
+    console.log(
+      "[dry-run] would emit " + previewEvents.length + " release-event(s) -> release-events/ + refresh packages/core/release-manifest.json:",
+    );
+    for (let i = 0; i < previewEvents.length; i++) {
+      const ev = previewEvents[i];
+      console.log("  - " + ev.event_id + " (" + ev.semver_bump + ", " + ev.commits.length + " commit(s))");
+    }
   } else if (published.length > 0) {
-    commitVersionBumps(published);
+    const manifestFiles = emitReleaseManifest(published, range, range.head);
+    commitVersionBumps(published, manifestFiles);
     createReleases(published, range.head);
   }
 
