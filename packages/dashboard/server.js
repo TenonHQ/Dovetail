@@ -916,7 +916,9 @@ function listClaudeLintEvents(filters) {
     events.push(e);
   }
   events.sort(function (a, b) {
-    return (b.timestamp || "").localeCompare(a.timestamp || "");
+    const c = (b.timestamp || "").localeCompare(a.timestamp || "");
+    if (c !== 0) return c;
+    return (b.id || "").localeCompare(a.id || "");
   });
   if (typeof f.limit === "number") return events.slice(0, f.limit);
   return events;
@@ -1051,7 +1053,7 @@ app.get("/api/prompt-lints", function (req, res) {
     if (typeof req.query.plan_slug === "string") filters.plan_slug = req.query.plan_slug;
     if (typeof req.query.limit === "string") {
       const n = parseInt(req.query.limit, 10);
-      if (!isNaN(n) && n > 0) filters.limit = n;
+      if (!isNaN(n) && n > 0) filters.limit = Math.min(n, 1000); // mirror getLintEventsSchema cap
     }
     res.json({ events: listClaudeLintEvents(filters), storage: CLAUDE_PLANS_DIR });
   } catch (e) {

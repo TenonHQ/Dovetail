@@ -14,6 +14,10 @@
     storage: document.getElementById("cp-storage")
   };
 
+  // Bound the initial load — the global lint log is append-only and can grow
+  // large. Live SSE events keep the in-memory view current beyond this window.
+  var PAGE_LIMIT = 200;
+
   function fmtTime(iso) {
     if (!iso) return "—";
     var d = new Date(iso);
@@ -30,7 +34,9 @@
 
   function sorted() {
     return Array.from(events.values()).sort(function (a, b) {
-      return (b.timestamp || "").localeCompare(a.timestamp || "");
+      var c = (b.timestamp || "").localeCompare(a.timestamp || "");
+      if (c !== 0) return c;
+      return (b.id || "").localeCompare(a.id || "");
     });
   }
 
@@ -95,11 +101,13 @@
     for (var i = 0; i < list.length; i++) {
       els.tbody.appendChild(rowFor(list[i], list[i].id === newId));
     }
-    els.summary.textContent = list.length + (list.length === 1 ? " event" : " events");
+    els.summary.textContent =
+      list.length + (list.length === 1 ? " event" : " events") +
+      (list.length >= PAGE_LIMIT ? " (latest " + PAGE_LIMIT + ")" : "");
   }
 
   function loadInitial() {
-    return fetch("/api/prompt-lints")
+    return fetch("/api/prompt-lints?limit=" + PAGE_LIMIT)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         (data.events || []).forEach(function (e) {

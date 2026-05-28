@@ -787,7 +787,9 @@ export function listLintEvents(input: ListLintEventsInput = {}, options: Storage
     events.push(e);
   }
   events.sort(function (a, b) {
-    return (b.timestamp || "").localeCompare(a.timestamp || ""); // newest first
+    var c = (b.timestamp || "").localeCompare(a.timestamp || ""); // newest first
+    if (c !== 0) return c;
+    return (b.id || "").localeCompare(a.id || ""); // stable tiebreak on same-ms events
   });
   if (typeof input.limit === "number") events = events.slice(0, input.limit);
   return events;
