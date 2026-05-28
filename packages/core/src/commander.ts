@@ -37,6 +37,7 @@ import {
   clickupListsCommand,
 } from "./clickupCommands";
 import { loginCommand } from "./loginCommand";
+import { knowledgeDiffCommand } from "./knowledgeDiffCommand";
 import yargs from "yargs";
 export async function initCommands() {
   const sharedOptions = {
@@ -663,6 +664,48 @@ export async function initCommands() {
       },
       function () {
         /* subcommands handle execution */
+      },
+    )
+    .command(
+      ["knowledge-diff"],
+      "Report Dovetail releases this repo has not documented yet (stages pending events for /dovetail-features-sync)",
+      function (cmdArgs: TSFIXME) {
+        cmdArgs.options({
+          ...sharedOptions,
+          manifest: {
+            type: "string",
+            describe: "Path to the Dovetail release manifest (defaults to the bundled one)",
+          },
+          config: {
+            type: "string",
+            describe: "Path to the consumer knowledge-sync config.json",
+          },
+          ledger: {
+            type: "string",
+            describe: "Path to the documented-state ledger.json",
+          },
+          out: {
+            type: "string",
+            describe: "Directory to write pending release-event files",
+          },
+          json: {
+            type: "boolean",
+            default: false,
+            describe: "Print the diff as JSON instead of writing pending files",
+          },
+        });
+        return cmdArgs;
+      },
+      async function (args: TSFIXME) {
+        await knowledgeDiffCommand(
+          args as Sinc.SharedCmdArgs & {
+            manifest?: string;
+            config?: string;
+            ledger?: string;
+            out?: string;
+            json?: boolean;
+          },
+        );
       },
     )
     .help().argv;
