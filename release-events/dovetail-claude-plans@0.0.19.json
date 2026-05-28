@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-claude-plans@0.0.19",
+  "package": "@tenonhq/dovetail-claude-plans",
+  "version": "0.0.19",
+  "prev_version": "0.0.18",
+  "published_at": "2026-05-28T15:54:22.483Z",
+  "git": {
+    "sha": "0247ef6e75093c95359413725977df07bd5bff70",
+    "tag": "dovetail-claude-plans@0.0.19"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "0247ef6e7",
+      "subject": "feat(dashboard): Prompt Lints filters + merged-PR filter for Claude Plans (#116)",
+      "pr": 116
+    },
+    {
+      "sha": "5f14a3421",
+      "subject": "chore(release): @tenonhq/dovetail-claude-plans@0.0.18 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
