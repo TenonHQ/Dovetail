@@ -1,5 +1,32 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-05-28T00:00:00Z",
-  "events": []
+  "generated_at": "2026-05-28T08:23:44.079Z",
+  "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.93",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.93",
+      "prev_version": "0.0.92",
+      "published_at": "2026-05-28T08:23:44.072Z",
+      "git": {
+        "sha": "f2f4d29e5fbd6197fc501bc803a864ed605cd54a",
+        "tag": "dovetail-core@0.0.93"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "f2f4d29e5",
+          "subject": "feat: release manifest emit + dove knowledge-diff (downstream doc sync) (#114)",
+          "pr": 114
+        },
+        {
+          "sha": "16e4c0cc2",
+          "subject": "chore(release): @tenonhq/dovetail-core@0.0.92 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    }
+  ]
 }
