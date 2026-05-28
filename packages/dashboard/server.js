@@ -1038,14 +1038,8 @@ function startClaudePlanWatcher() {
   claudePlanWatcher.on("unlink", function (p) { handleWatcherChange("unlink", p); });
 }
 
-app.get("/claude-plans", function (req, res) {
+app.get(["/claude-plans", "/claude-plans/:slug"], function (req, res) {
   res.sendFile(path.join(__dirname, "public", "claude-plans.html"));
-});
-
-// Legacy path-segment deep links (/claude-plans/:slug) redirect to the
-// query-param form so relative assets resolve against /claude-plans.
-app.get("/claude-plans/:slug", function (req, res) {
-  res.redirect(301, "/claude-plans?plan=" + encodeURIComponent(req.params.slug));
 });
 
 app.get("/prompt-lints", function (req, res) {

@@ -42,7 +42,6 @@
 
   var els = {
     storage: document.getElementById("cp-storage"),
-    lintsBadge: document.getElementById("cp-lints-badge"),
     list: document.getElementById("cp-list"),
     count: document.getElementById("cp-count"),
     railEmpty: document.getElementById("cp-rail-empty"),
@@ -220,7 +219,7 @@
     if (els.topics) {
       try {
         var stored = localStorage.getItem("cp-topics-collapsed");
-        els.topics.open = stored === "0";
+        if (stored === "1") els.topics.open = false;
       } catch (_) {}
       els.topics.addEventListener("toggle", function () {
         try {
@@ -710,10 +709,6 @@
 
   function selectPlan(slug) {
     state.selectedSlug = slug;
-    if (window.history && window.history.replaceState) {
-      var url = window.location.pathname + "?plan=" + encodeURIComponent(slug);
-      window.history.replaceState(null, "", url);
-    }
     renderRail();
     renderDetail();
   }
@@ -836,42 +831,6 @@
     if (state.selectedSlug === planSlug) renderDetail();
   }
 
-  // A lint event "needs attention" if its score fell below the recording
-  // threshold (default 50 when no threshold is supplied) or it flagged any
-  // missing tags, antipatterns, or ceremony. The badge surfaces that count.
-  function lintNeedsAttention(e) {
-    if (!e) return false;
-    var threshold = typeof e.threshold === "number" ? e.threshold : 50;
-    if (typeof e.score === "number" && e.score < threshold) return true;
-    if (Array.isArray(e.missing) && e.missing.length) return true;
-    if (Array.isArray(e.antipatterns) && e.antipatterns.length) return true;
-    if (Array.isArray(e.ceremony) && e.ceremony.length) return true;
-    return false;
-  }
-
-  function setLintsBadge(count) {
-    if (!els.lintsBadge) return;
-    if (count > 0) {
-      els.lintsBadge.textContent = String(count);
-      els.lintsBadge.hidden = false;
-    } else {
-      els.lintsBadge.hidden = true;
-    }
-  }
-
-  function loadLintsBadge() {
-    return fetch("/api/prompt-lints")
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var events = data && Array.isArray(data.events) ? data.events : [];
-        setLintsBadge(events.filter(lintNeedsAttention).length);
-      })
-      .catch(function (err) {
-        console.warn("[claude-plans] failed to load prompt lints:", err);
-        setLintsBadge(0);
-      });
-  }
-
   async function loadInitial() {
     try {
       var res = await fetch("/api/claude-plans");
@@ -904,10 +863,11 @@
     }));
     renderRail();
     if (!state.selectedSlug) {
-      var paramSlug = new URLSearchParams(window.location.search).get("plan");
+      var pathMatch = window.location.pathname.match(/^\/claude-plans\/([a-z0-9][a-z0-9-]{0,63})$/);
+      var pathSlug = pathMatch && pathMatch[1];
       var sorted = sortedPlans();
-      var target = paramSlug && state.plans.has(paramSlug)
-        ? paramSlug
+      var target = pathSlug && state.plans.has(pathSlug)
+        ? pathSlug
         : (sorted.length > 0 ? sorted[0].slug : null);
       if (target) selectPlan(target);
     }
@@ -981,7 +941,6 @@
     setupSearch();
     setupTopics();
     setActiveTab("plan");
-    loadLintsBadge();
     loadInitial().then(startStream);
   });
 })();
