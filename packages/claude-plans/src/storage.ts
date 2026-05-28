@@ -22,13 +22,18 @@ import {
   ClaudePlan,
   ClaudePrompt,
   CURRENT_SCHEMA_VERSION,
+  DispatchToken,
   LinkedArtifact,
+  PipelineStage,
   PlanQuestion,
   PlanStatus,
   PlanWithArtifacts,
   PromptCyclePayload,
-  PromptLintEvent
+  PromptLintEvent,
+  StageTransition,
+  StageTransitionSource
 } from "./types";
+import { assertTransition, checkConflict } from "./state-machine";
 import { StructuredPlan, renderStructured } from "./renderer";
 import { promptCyclePayloadSchema } from "./schemas";
 import { extractCategories } from "./categories";
@@ -196,6 +201,13 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     schema_version: CURRENT_SCHEMA_VERSION
   };
   if (existing && existing.questions) plan.questions = existing.questions;
+  // Preserve v2 stage state across plan-content updates — pushPlan is a
+  // content-write surface, not a stage-write surface; only setStage may
+  // mutate stage / stage_history / dispatch_token.
+  if (existing && existing.stage !== undefined) plan.stage = existing.stage;
+  if (existing && existing.stage_history) plan.stage_history = existing.stage_history;
+  if (existing && existing.dispatch_token !== undefined) plan.dispatch_token = existing.dispatch_token;
+  if (existing && existing.dispatch_log) plan.dispatch_log = existing.dispatch_log;
 
   atomicWriteJson(planPath(root, slug), plan);
 
@@ -830,4 +842,119 @@ export interface GetLintEventsResult {
 
 export function getLintEvents(input: ListLintEventsInput = {}, options: StorageOptions = {}): GetLintEventsResult {
   return { events: listLintEvents(input, options) };
+}
+
+// ---- v2: stage + dispatch token --------------------------------------------
+
+export interface SetStageInput {
+  plan_slug: string;
+  to: PipelineStage;
+  by?: string;
+  source?: StageTransitionSource;
+}
+
+export interface SetStageResult {
+  plan_slug: string;
+  stage: PipelineStage;
+  token: DispatchToken;
+  history_length: number;
+}
+
+function tokenTtlMs(): number {
+  var env = process.env.DOVE_CLAUDE_PLANS_TOKEN_TTL_MS;
+  if (env) {
+    var n = parseInt(env, 10);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return 5 * 60 * 1000;
+}
+
+function issueToken(stage: PipelineStage, nowIsoStr: string): DispatchToken {
+  var token = "tok_" + crypto.randomBytes(12).toString("hex");
+  return {
+    token: token,
+    issued_for_stage: stage,
+    issued_at: nowIsoStr,
+    expires_at: new Date(Date.parse(nowIsoStr) + tokenTtlMs()).toISOString()
+  };
+}
+
+/**
+ * Move a plan to a new pipeline stage. Validates the transition against
+ * state-machine.ts, applies the conflict-resolution rule, atomically
+ * writes the new stage + appends to stage_history, and ISSUES a new
+ * one-time dispatch token bound to the target stage (5-minute TTL, see
+ * DOVE_CLAUDE_PLANS_TOKEN_TTL_MS).
+ *
+ * The returned token is the only way to call dispatch_stage in live
+ * mode (Phase D). A subsequent setStage rotates it — the previous
+ * outstanding token becomes effectively stale.
+ */
+export function setStage(input: SetStageInput, options: StorageOptions = {}): SetStageResult {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var source: StageTransitionSource = input.source || "code";
+  var history = plan.stage_history || [];
+
+  assertTransition(plan.stage || null, input.to);
+  checkConflict(history, source);
+
+  var now = nowIso();
+  var transition: StageTransition = {
+    from: plan.stage || null,
+    to: input.to,
+    at: now,
+    by: input.by || process.env.CLAUDE_CODE_SESSION_ID || "unknown",
+    source: source
+  };
+  var token = issueToken(input.to, now);
+
+  var next: ClaudePlan = Object.assign({}, plan, {
+    stage: input.to,
+    stage_history: history.concat([transition]),
+    dispatch_token: token,
+    updated_at: now,
+    schema_version: CURRENT_SCHEMA_VERSION
+  });
+  atomicWriteJson(planPath(root, plan.slug), next);
+
+  return {
+    plan_slug: plan.slug,
+    stage: input.to,
+    token: token,
+    history_length: (next.stage_history || []).length
+  };
+}
+
+export interface PullPlanResult {
+  plan: ClaudePlan;
+  artifacts: ClaudeArtifact[];
+  prompts: ClaudePrompt[];
+  questions: PlanQuestion[];
+  stage: PipelineStage | null;
+  stage_history: StageTransition[];
+  dispatch_log: ClaudePlan["dispatch_log"];
+}
+
+/**
+ * Single-read snapshot of a plan and all its v2 surface: artifacts,
+ * prompts, questions, stage state, history, dispatch_log. The dashboard
+ * uses this so the plan detail page renders without three round-trips.
+ *
+ * Returns null when the plan slug does not exist (callers in the
+ * registry surface this as PlanNotFoundError).
+ */
+export function loadPlanFull(slug: string, options: StorageOptions = {}): PullPlanResult | null {
+  var root = storageRoot(options);
+  var plan = readPlan(planPath(root, slug));
+  if (!plan) return null;
+  return {
+    plan: plan,
+    artifacts: listArtifacts(slug, options),
+    prompts: listPrompts(slug, options),
+    questions: (plan.questions || []).slice(),
+    stage: plan.stage || null,
+    stage_history: (plan.stage_history || []).slice(),
+    dispatch_log: (plan.dispatch_log || []).slice()
+  };
 }
