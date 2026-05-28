@@ -5,6 +5,7 @@ import * as path from "path";
 import {
   buildHandoffBundle,
   deletePlan,
+  getAnswers,
   getPlan,
   listArtifacts,
   listPlans,
@@ -13,6 +14,8 @@ import {
   pushArtifact,
   pushPlan,
   pushPrompt,
+  pushQuestion,
+  recordAnswer,
   slugify,
   updatePlanStatus
 } from "../storage";
@@ -546,12 +549,7 @@ describe("atomic writes", function () {
 
 // ---- v2: Q&A on plan records -----------------------------------------------
 
-import {
-  pushQuestion,
-  recordAnswer,
-  getAnswers,
-  __setIdGenerator
-} from "../storage";
+import { __setIdGenerator } from "../storage";
 
 function writeV1PlanFixture(root: string, slug: string): any {
   // Hand-written v1 record (no `questions` key) to prove backward-compat.
@@ -703,5 +701,158 @@ describe("plan questions (v2)", function () {
     }
     expect(threw).not.toBeNull();
     expect((threw as Error).message).toMatch(/plan not found/);
+  });
+});
+
+// ---- Phase B: v2 schema_version + migration -----------------------------------
+
+describe("schema_version + migrateV1OnLoad", function () {
+  it("stamps schema_version=2 on every pushPlan write", function () {
+    var root = mkTmp();
+    var p = pushPlan({ title: "Versioned", content_md: "x" }, { rootDir: root });
+    expect(p.schema_version).toBe(2);
+    var raw = JSON.parse(fs.readFileSync(path.join(root, "versioned.json"), "utf8"));
+    expect(raw.schema_version).toBe(2);
+  });
+
+  it("upgrades a v1 record on first v2 write (load-mutate-write materialization)", function () {
+    var root = mkTmp();
+    var slug = "legacy-plan";
+    // Hand-write a v1 record (no schema_version field) directly to disk.
+    var v1: any = {
+      slug: slug,
+      title: "Legacy plan",
+      status: "DRAFT",
+      content_md: "legacy body",
+      content_hash: "0".repeat(64),
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      session_id: null
+    };
+    fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify(v1, null, 2));
+
+    // Read-only access via getPlan returns the normalized record without
+    // touching disk.
+    var got = getPlan(slug, { rootDir: root });
+    expect(got && got.plan.schema_version).toBe(2);
+    var rawBefore = JSON.parse(fs.readFileSync(path.join(root, slug + ".json"), "utf8"));
+    expect(rawBefore.schema_version).toBeUndefined();
+
+    // A status transition triggers a write — the on-disk record is now v2.
+    updatePlanStatus(slug, "APPROVED", { rootDir: root });
+    var rawAfter = JSON.parse(fs.readFileSync(path.join(root, slug + ".json"), "utf8"));
+    expect(rawAfter.schema_version).toBe(2);
+    expect(rawAfter.status).toBe("APPROVED");
+  });
+
+  it("answering a v1 plan's question upgrades the record to v2", function () {
+    var root = mkTmp();
+    var slug = "legacy-with-question";
+    var v1: any = {
+      slug: slug,
+      title: "Legacy",
+      status: "DRAFT",
+      content_md: "x",
+      content_hash: "0".repeat(64),
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+      session_id: null,
+      questions: [
+        {
+          id: "q_aabbccdd",
+          question: "Pre-existing?",
+          asked_at: "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    };
+    fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify(v1, null, 2));
+
+    recordAnswer(
+      { plan_slug: slug, question_id: "q_aabbccdd", answer: "yes" },
+      { rootDir: root }
+    );
+
+    var raw = JSON.parse(fs.readFileSync(path.join(root, slug + ".json"), "utf8"));
+    expect(raw.schema_version).toBe(2);
+    expect(raw.questions[0].answer).toBe("yes");
+  });
+
+  it("migrateV1OnLoad is idempotent on a v2 record", function () {
+    var root = mkTmp();
+    pushPlan({ title: "Already v2", content_md: "x" }, { rootDir: root });
+    var raw = JSON.parse(fs.readFileSync(path.join(root, "already-v2.json"), "utf8"));
+    expect(raw.schema_version).toBe(2);
+    // Read twice; both reads should produce the same shape.
+    var first = getPlan("already-v2", { rootDir: root });
+    var second = getPlan("already-v2", { rootDir: root });
+    expect(first && first.plan).toEqual(second && second.plan);
+  });
+});
+
+// ---- Phase B: Q&A audit cases per design doc §2.4 -----------------------------
+
+describe("Q&A audit (Phase B)", function () {
+  it("rejects an answer for a question id that doesn't exist on the plan", function () {
+    var root = mkTmp();
+    pushPlan({ title: "Plan w/o question", content_md: "x" }, { rootDir: root });
+    var threw: Error | null = null;
+    try {
+      recordAnswer(
+        { plan_slug: "plan-w-o-question", question_id: "q_deadbeef", answer: "nope" },
+        { rootDir: root }
+      );
+    } catch (e) {
+      threw = e as Error;
+    }
+    expect(threw).not.toBeNull();
+    expect((threw as Error).message).toMatch(/question not found/);
+  });
+
+  it("getAnswers filters by stage exact-match (other stages excluded)", function () {
+    var root = mkTmp();
+    pushPlan({ title: "Multi-stage", content_md: "x" }, { rootDir: root });
+    pushQuestion(
+      { plan_slug: "multi-stage", question: "Q1", stage: "research" },
+      { rootDir: root }
+    );
+    pushQuestion(
+      { plan_slug: "multi-stage", question: "Q2", stage: "planning" },
+      { rootDir: root }
+    );
+    pushQuestion(
+      { plan_slug: "multi-stage", question: "Q3", stage: "research" },
+      { rootDir: root }
+    );
+    var res = getAnswers(
+      { plan_slug: "multi-stage", stage: "research" },
+      { rootDir: root }
+    );
+    expect(res.questions.map(function (q) { return q.question; })).toEqual(["Q1", "Q3"]);
+  });
+
+  it("locks documented last-write-wins behavior on simulated concurrent pushQuestion", function () {
+    // Two callers read the same baseline plan (no questions), each append
+    // their own question, and write back atomically. The second write wins
+    // and drops the first question. This is documented behavior — the test
+    // exists so a future change that introduces locking (or accidentally
+    // changes semantics) is caught.
+    var root = mkTmp();
+    pushPlan({ title: "Race", content_md: "x" }, { rootDir: root });
+
+    // Simulate the race by serializing the two ops while forcing them both
+    // to read the same baseline state. We do this by patching readFileSync
+    // briefly so the second call sees the pre-race plan.
+    var planFile = path.join(root, "race.json");
+    var baseline = fs.readFileSync(planFile, "utf8");
+
+    pushQuestion({ plan_slug: "race", question: "First" }, { rootDir: root });
+    // Reset baseline — simulates the second caller having read before
+    // the first caller's write landed.
+    fs.writeFileSync(planFile, baseline);
+    pushQuestion({ plan_slug: "race", question: "Second" }, { rootDir: root });
+
+    var got = getAnswers({ plan_slug: "race" }, { rootDir: root });
+    expect(got.questions.length).toBe(1);
+    expect(got.questions[0].question).toBe("Second");
   });
 });

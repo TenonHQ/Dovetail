@@ -19,6 +19,17 @@ export interface LinkedArtifact {
   note?: string;
 }
 
+/**
+ * Storage schema version stamped on every plan record written by v2+.
+ * Records loaded without this field are treated as v1 and normalized in
+ * memory by migrateV1OnLoad(); the upgrade is materialized on the next
+ * write. Phases C and D will add stage/dispatch fields under the same
+ * schema_version=2 marker — once a record is v2 it stays v2.
+ */
+export type ClaudePlanSchemaVersion = 1 | 2;
+
+export var CURRENT_SCHEMA_VERSION: ClaudePlanSchemaVersion = 2;
+
 export interface ClaudePlan {
   slug: string;
   title: string;
@@ -35,6 +46,11 @@ export interface ClaudePlan {
   linked_artifacts?: LinkedArtifact[];
   questions?: PlanQuestion[];
   categories?: string[];
+  /**
+   * Absent or 1 on legacy records. migrateV1OnLoad() normalizes reads to
+   * include this field at value 2; the next write persists it to disk.
+   */
+  schema_version?: ClaudePlanSchemaVersion;
 }
 
 export interface PlanQuestion {
