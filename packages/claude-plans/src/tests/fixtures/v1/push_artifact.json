@@ -1,0 +1,23 @@
+{
+  "tool": "push_artifact",
+  "seed": {
+    "tool": "push_plan",
+    "request": { "title": "Plan for artifact", "content_md": "seed" }
+  },
+  "request": {
+    "plan_slug": "plan-for-artifact",
+    "kind": "markdown",
+    "title": "Some notes",
+    "content": "## notes\n\nbody"
+  },
+  "response": {
+    "slug": "some-notes",
+    "plan_slug": "plan-for-artifact",
+    "kind": "markdown",
+    "title": "Some notes",
+    "content": "## notes\n\nbody",
+    "created_at": "2026-05-26T12:00:00.000Z",
+    "updated_at": "2026-05-26T12:00:00.000Z"
+  },
+  "notes": "Markdown artifact. Locks the ClaudeArtifact shape. Consumer: dashboard Artifacts tab."
+}

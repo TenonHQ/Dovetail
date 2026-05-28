@@ -1,0 +1,28 @@
+{
+  "tool": "update_plan_status",
+  "seed": {
+    "_comment": "Fixture-only — applied before exercising the tool.",
+    "tool": "push_plan",
+    "request": {
+      "title": "Plan for status transition",
+      "content_md": "seed"
+    }
+  },
+  "request": {
+    "slug": "plan-for-status-transition",
+    "to": "APPROVED"
+  },
+  "response": {
+    "slug": "plan-for-status-transition",
+    "title": "Plan for status transition",
+    "status": "APPROVED",
+    "content_md": "seed",
+    "content_html": null,
+    "content_hash": "<sha256 of content_md, recomputed at test time>",
+    "created_at": "2026-05-26T12:00:00.000Z",
+    "updated_at": "2026-05-26T12:00:00.000Z",
+    "session_id": null,
+    "categories": []
+  },
+  "notes": "DRAFT -> APPROVED, the most common transition. Locks the response shape (full ClaudePlan, not a {ok} envelope). Consumer: dashboard status badge, /pr workflow."
+}

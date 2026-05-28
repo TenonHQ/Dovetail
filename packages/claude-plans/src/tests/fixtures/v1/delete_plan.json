@@ -1,0 +1,10 @@
+{
+  "tool": "delete_plan",
+  "seed": {
+    "tool": "push_plan",
+    "request": { "title": "Plan for delete", "content_md": "seed" }
+  },
+  "request": { "slug": "plan-for-delete" },
+  "response": { "deleted": true, "slug": "plan-for-delete" },
+  "notes": "Locks the {deleted, slug} envelope (not the full plan record) and the truthy-on-existed contract. Consumer: dashboard delete action."
+}
