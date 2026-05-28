@@ -23,7 +23,8 @@ import {
   pushLintEventSchema,
   getLintEventsSchema,
   setStageSchema,
-  pullPlanSchema
+  pullPlanSchema,
+  dispatchStageSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -41,6 +42,7 @@ import {
   getLintEvents,
   setStage,
   loadPlanFull,
+  dispatchStage,
   StorageOptions
 } from "./storage";
 
@@ -60,7 +62,8 @@ export var TOOL_NAMES = [
   "push_lint_event",
   "get_lint_events",
   "set_stage",
-  "pull_plan"
+  "pull_plan",
+  "dispatch_stage"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -533,6 +536,43 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var result = loadPlanFull(parsed.plan_slug, storageOpts);
         if (!result) throw new Error("plan not found: " + parsed.plan_slug);
         return result;
+      }
+    },
+    {
+      name: "dispatch_stage",
+      description:
+        "Resolve (and optionally spawn) a Claude Code subprocess to drive a plan at the given " +
+        "pipeline stage. THIS IS THE RISKIEST V2 TOOL — read docs/v2-design.md §7 before relying " +
+        "on it in automation.\n\n" +
+        "MODES:\n" +
+        "  Dry-run (default): resolves the spawn command + working dir, appends a 'dry-run' " +
+        "DispatchEvent to the plan's dispatch_log, and returns. NO process is launched.\n" +
+        "  Live (confirm:true + token): consumes the plan's outstanding dispatch_token atomically " +
+        "before spawning the subprocess. The token must (a) equal plan.dispatch_token.token, " +
+        "(b) be unconsumed, (c) be within its 5-minute TTL, and (d) match target_stage. Failing " +
+        "any check raises NoTokenError / StaleTokenError.\n\n" +
+        "AGENT GATE: target_stage 'test-first' and 'test-reality' raise MissingAgentError until " +
+        "PR #160 ships the test-author + test-reality-checker agents. Never silent no-op.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan whose stage you want to drive.\n" +
+        "  target_stage (required) — one of the 10 PipelineStage values.\n" +
+        "  confirm (optional, default false) — when true, attempt a live spawn; otherwise dry-run.\n" +
+        "  token (required when confirm===true) — the token from the most recent set_stage call.\n" +
+        "  by (optional) — caller label for the dispatch_log entry. Defaults to CLAUDE_CODE_SESSION_ID.\n\n" +
+        "Output: { mode, plan_slug, target_stage, command, cwd, pid?, event }.",
+      shape: dispatchStageSchema.shape,
+      handler: async function (args: any) {
+        var parsed = dispatchStageSchema.parse(args);
+        return dispatchStage(
+          {
+            plan_slug: parsed.plan_slug,
+            target_stage: parsed.target_stage,
+            confirm: parsed.confirm,
+            token: parsed.token,
+            by: parsed.by
+          },
+          storageOpts
+        );
       }
     }
   ];

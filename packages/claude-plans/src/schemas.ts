@@ -186,3 +186,13 @@ export var setStageSchema = z.object({
 export var pullPlanSchema = z.object({
   plan_slug: z.string().min(1).max(64)
 });
+
+export var DISPATCH_TOKEN_PATTERN = /^tok_[0-9a-f]{24}$/;
+
+export var dispatchStageSchema = z.object({
+  plan_slug: z.string().min(1).max(64),
+  target_stage: pipelineStageSchema,
+  confirm: z.boolean().optional(),
+  token: z.string().regex(DISPATCH_TOKEN_PATTERN, "token must match tok_<24-hex>").optional(),
+  by: z.string().min(1).max(64).optional()
+});

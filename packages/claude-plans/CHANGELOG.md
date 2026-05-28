@@ -1,5 +1,22 @@
 # Changelog — @tenonhq/dovetail-claude-plans
 
+## Unreleased — Phase D (dispatch_stage)
+
+- New module `src/dispatch.ts`:
+  - Error classes: `MissingAgentError`, `NoTokenError`, `StaleTokenError`, `SpawnError`.
+  - `KNOWN_MISSING_AGENTS` constant gating stages `test-first` (test-author) and `test-reality` (test-reality-checker) — clear an entry when the agent ships (PR #160).
+  - `resolveDispatchCommand(plan, stage)` — argv builder (no shell interpolation surface). `DOVE_CLAUDE_PLANS_DISPATCH_CWD` overrides the working dir.
+  - `validateToken()` — pure helper running all 5 token preconditions from design doc §7.3.
+  - `productionSpawn` — detached + stdio-inherited `child_process.spawn`. Injectable for tests via `dispatchStage`'s `spawn` option.
+- New storage helper `dispatchStage()`:
+  - Default mode is dry-run: appends `mode: "dry-run"` `DispatchEvent` to `dispatch_log`, returns without spawning, **does not consume the token**.
+  - Live mode (`confirm: true`) consumes the plan's outstanding `dispatch_token` **atomically before spawn** — a crashed/leaked subprocess never invalidates the single-use guarantee. Logs a `spawn-error` event when the spawn primitive throws and rethrows.
+  - Stages 5/9 raise `MissingAgentError` before any I/O — never silent no-op.
+  - Failed token validation appends a `no-token` / `stale-token` event to `dispatch_log` so the dashboard sees the failed attempt.
+- New MCP tool `dispatch_stage` registered. `TOOL_NAMES.length` is now 15.
+- New `dispatch_stage` zod schema (`DISPATCH_TOKEN_PATTERN = /^tok_[0-9a-f]{24}$/`).
+- 20+ new tests covering: dry-run behavior, `MissingAgentError` for stages 5/9 (and no-disk-write on raise), every live-mode rejection mode (no token, mismatch, wrong stage, expired, consumed), successful live spawn (token consumed, argv recorded, pid in log), atomic consume-before-spawn (spawn crash leaves token consumed), `validateToken` and `resolveDispatchCommand` pure-unit cases.
+
 ## Unreleased — Phase C (state machine + set_stage + pull_plan)
 
 - New types: `PipelineStage` (10-stage enum), `StageTransition`, `DispatchToken`, `DispatchEvent`, `StageTransitionSource`. Added to `ClaudePlan` as optional fields (`stage`, `stage_history`, `dispatch_token`, `dispatch_log`).
