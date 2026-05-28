@@ -15,7 +15,8 @@
     "updated_at": "2026-05-26T12:00:00.000Z",
     "session_id": null,
     "categories": [],
-    "schema_version": 2
+    "schema_version": 2,
+    "url": "<dashboard deep-link, host-dependent>"
   },
-  "notes": "Plain content_md, no PR fields, no linked_artifacts. Locks the default-DRAFT, default-null session_id, and category-extraction default. Consumer: dashboard list view + /resume skill."
+  "notes": "Plain content_md, no PR fields, no linked_artifacts. Locks the default-DRAFT, default-null session_id, the category-extraction default, and the presence of the registry-added `url` deep-link (value host-dependent via CLAUDE_PLANS_DASHBOARD_URL, so recorded as a placeholder). Consumer: dashboard list view + /resume skill."
 }
