@@ -4,6 +4,7 @@ const axios = require("axios");
 const { wrapper } = require("axios-cookiejar-support");
 const { CookieJar } = require("tough-cookie");
 const fs = require("fs");
+const { execFile } = require("child_process");
 const RateLimit = require("express-rate-limit");
 
 // Everything resolves from CWD — run this from your Dovetail project directory
@@ -1070,6 +1071,100 @@ app.get("/api/prompt-lints", function (req, res) {
 app.get("/api/claude-plans", function (req, res) {
   try {
     res.json({ plans: listClaudePlans(), storage: CLAUDE_PLANS_DIR });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Live GitHub merge state for plan-linked PRs. Plans store pr_url but no merge
+// status, so we resolve it on demand via the `gh` CLI (authenticated locally).
+// Results are cached: a MERGED state is terminal and cached forever; anything
+// else is cached briefly so an open PR that later merges is picked up.
+const PR_URL_RE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/;
+const PR_STATUS_TTL_MS = 60 * 1000;
+const prStatusCache = new Map(); // pr_url -> { state, merged, fetchedAt }
+
+function ghPrState(prUrl) {
+  return new Promise(function (resolve) {
+    execFile(
+      "gh",
+      ["pr", "view", prUrl, "--json", "state,mergedAt"],
+      { timeout: 5000 },
+      function (err, stdout) {
+        if (err) return resolve({ state: "unknown", merged: false });
+        try {
+          const data = JSON.parse(stdout);
+          const state = data.state || "unknown";
+          resolve({ state: state, merged: state === "MERGED" });
+        } catch (e) {
+          resolve({ state: "unknown", merged: false });
+        }
+      }
+    );
+  });
+}
+
+function resolvePrStatus(prUrl) {
+  const cached = prStatusCache.get(prUrl);
+  const now = Date.now();
+  if (cached && (cached.merged || now - cached.fetchedAt < PR_STATUS_TTL_MS)) {
+    return Promise.resolve({ state: cached.state, merged: cached.merged });
+  }
+  return ghPrState(prUrl).then(function (result) {
+    prStatusCache.set(prUrl, {
+      state: result.state,
+      merged: result.merged,
+      fetchedAt: Date.now()
+    });
+    return result;
+  });
+}
+
+// Run promise-returning tasks with bounded concurrency so a large plan set
+// doesn't spawn dozens of `gh` processes at once.
+function mapWithConcurrency(items, limit, worker) {
+  return new Promise(function (resolve) {
+    const results = new Array(items.length);
+    let index = 0;
+    let completed = 0;
+    if (!items.length) return resolve(results);
+    function runNext() {
+      if (index >= items.length) return;
+      const i = index++;
+      Promise.resolve(worker(items[i]))
+        .then(function (r) { results[i] = r; })
+        .catch(function () { results[i] = null; })
+        .then(function () {
+          completed++;
+          if (completed === items.length) resolve(results);
+          else runNext();
+        });
+    }
+    for (let k = 0; k < Math.min(limit, items.length); k++) runNext();
+  });
+}
+
+// Place before "/api/claude-plans/:slug" so Express doesn't treat "pr-status"
+// as a slug. Always resolves to a 200 with whatever statuses we could gather —
+// a missing/unauthenticated `gh` degrades to {} rather than failing the page.
+app.get("/api/claude-plans/pr-status", function (req, res) {
+  try {
+    const urls = [];
+    const seen = {};
+    listClaudePlans().forEach(function (plan) {
+      const url = plan && plan.pr_url;
+      if (typeof url === "string" && PR_URL_RE.test(url) && !seen[url]) {
+        seen[url] = true;
+        urls.push(url);
+      }
+    });
+    mapWithConcurrency(urls, 5, resolvePrStatus).then(function (resolved) {
+      const statuses = {};
+      for (let i = 0; i < urls.length; i++) {
+        if (resolved[i]) statuses[urls[i]] = resolved[i];
+      }
+      res.json({ statuses: statuses });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

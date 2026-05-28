@@ -1312,6 +1312,49 @@
   background: color-mix(in srgb, var(--accent-fg) 20%, transparent);
 }
 
+/* Merged-PR filter toggle + per-row PR state dots */
+.cp-rail-filters {
+  padding: 8px 0 4px;
+}
+.cp-pr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.cp-pr-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: var(--accent);
+}
+.cp-pr-toggle--active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.cp-pr-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  margin: 0 4px;
+  background: var(--fg-muted);
+}
+.cp-pr-dot--merged { background: var(--success-700); }
+.cp-pr-dot--open { background: var(--warning-700); }
+.cp-pr-dot--closed { background: var(--danger); }
+.cp-pr-dot--unknown { background: var(--fg-muted); }
+
 /* ===========================================================================
  * v2 — Stage Map, Questions tab, Dispatch dialog (Phase E)
  * Lightweight additions on top of the existing token system.

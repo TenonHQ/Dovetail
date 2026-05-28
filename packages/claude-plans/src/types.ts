@@ -189,6 +189,7 @@ export interface PromptLintEvent {
   timestamp: string; // ISO 8601 — when the lint was observed
   score: number; // 0-100 Turn-0 checklist score
   threshold?: number; // the cutoff that triggered recording (e.g. 50)
+  outcome?: "nag" | "format"; // "nag" = below nag threshold (needs work); "format" = above format threshold (strong)
   missing: string[]; // missing checklist tags, e.g. ["<done>","<target>"]
   antipatterns?: string[];
   ceremony?: string[];
