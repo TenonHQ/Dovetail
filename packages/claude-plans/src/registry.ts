@@ -135,7 +135,7 @@ function sessionIdFromEnv(): string | null {
 export function planDashboardUrl(slug: string): string {
   var raw = process.env.CLAUDE_PLANS_DASHBOARD_URL || "http://localhost:3456";
   var base = raw.replace(/\/+$/, "");
-  return base + "/claude-plans/" + slug;
+  return base + "/claude-plans?plan=" + encodeURIComponent(slug);
 }
 
 export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
