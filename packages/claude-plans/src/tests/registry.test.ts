@@ -51,6 +51,25 @@ describe("registry", function () {
     expect(fs.existsSync(path.join(root, "from-mcp.json"))).toBe(true);
   });
 
+  it("push_plan returns a dashboard deep-link url honoring CLAUDE_PLANS_DASHBOARD_URL", async function () {
+    var root = mkTmp();
+    var desc = descByName({ storage: { rootDir: root } }, "push_plan");
+
+    var prev = process.env.CLAUDE_PLANS_DASHBOARD_URL;
+    delete process.env.CLAUDE_PLANS_DASHBOARD_URL;
+    try {
+      var defaultRes = await desc.handler({ title: "URL Default", content_md: "x" });
+      expect(defaultRes.url).toBe("http://localhost:3456/claude-plans/url-default");
+
+      process.env.CLAUDE_PLANS_DASHBOARD_URL = "https://plans.example.com/";
+      var overrideRes = await desc.handler({ title: "URL Override", content_md: "x" });
+      expect(overrideRes.url).toBe("https://plans.example.com/claude-plans/url-override");
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_PLANS_DASHBOARD_URL;
+      else process.env.CLAUDE_PLANS_DASHBOARD_URL = prev;
+    }
+  });
+
   it("push_diagram rejects non-mermaid sources with a helpful message", async function () {
     var root = mkTmp();
     var deps = { storage: { rootDir: root } };

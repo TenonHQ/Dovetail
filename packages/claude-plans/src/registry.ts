@@ -123,6 +123,15 @@ function sessionIdFromEnv(): string | null {
   return id ? id : null;
 }
 
+// Build the dashboard deep-link for a plan. Override the base via
+// CLAUDE_PLANS_DASHBOARD_URL if the dashboard runs on a non-default port/host.
+// Trailing slashes on the base are tolerated.
+export function planDashboardUrl(slug: string): string {
+  var raw = process.env.CLAUDE_PLANS_DASHBOARD_URL || "http://localhost:3456";
+  var base = raw.replace(/\/+$/, "");
+  return base + "/claude-plans/" + slug;
+}
+
 export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
   var storageOpts = deps.storage || {};
 
@@ -173,7 +182,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             "at least one of content_md, content_html, or content_structured must be provided"
           );
         }
-        return pushPlan(
+        var plan = pushPlan(
           {
             slug: parsed.slug,
             title: parsed.title,
@@ -190,6 +199,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           },
           storageOpts
         );
+        return Object.assign({}, plan, { url: planDashboardUrl(plan.slug) });
       }
     },
     {

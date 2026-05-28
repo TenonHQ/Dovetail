@@ -996,7 +996,7 @@ function startClaudePlanWatcher() {
   claudePlanWatcher.on("unlink", function (p) { handleWatcherChange("unlink", p); });
 }
 
-app.get("/claude-plans", function (req, res) {
+app.get(["/claude-plans", "/claude-plans/:slug"], function (req, res) {
   res.sendFile(path.join(__dirname, "public", "claude-plans.html"));
 });
 
