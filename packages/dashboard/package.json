@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-dashboard",
-  "version": "0.0.30",
+  "version": "0.0.31",
   "description": "Update Set Dashboard for Dovetail",
   "main": "server.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "postpublish": "npm run version:bump"
   },
   "dependencies": {
+    "@tenonhq/dovetail-claude-plans": "*",
     "axios": "^1.5.1",
     "axios-cookiejar-support": "^4.0.7",
     "chokidar": "^3.6.0",

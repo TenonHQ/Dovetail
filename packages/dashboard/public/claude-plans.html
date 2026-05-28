@@ -104,6 +104,9 @@
           <span class="cp-status-pill" id="cp-detail-status"></span>
           <span class="cp-stamp" id="cp-detail-stamp"></span>
         </header>
+        <!-- v2 Stage Map: 10-stage pipeline strip; clicking a stage triggers
+             POST /stage (subject to state-machine + conflict rules). -->
+        <div class="cp-stage-map" id="cp-stage-map" hidden></div>
         <nav class="cp-tabs">
           <button class="cp-tab active" data-tab="plan">Plan</button>
           <button class="cp-tab" data-tab="prompts">
@@ -112,10 +115,14 @@
           <button class="cp-tab" data-tab="artifacts">
             Artifacts <span class="cp-tab-count" id="cp-artifact-count">0</span>
           </button>
+          <button class="cp-tab" data-tab="questions">
+            Q&amp;A <span class="cp-tab-count" id="cp-question-count">0</span>
+          </button>
         </nav>
         <div class="cp-tab-panel" id="cp-tab-plan"></div>
         <div class="cp-tab-panel" id="cp-tab-prompts" hidden></div>
         <div class="cp-tab-panel" id="cp-tab-artifacts" hidden></div>
+        <div class="cp-tab-panel" id="cp-tab-questions" hidden></div>
       </article>
     </section>
   </main>

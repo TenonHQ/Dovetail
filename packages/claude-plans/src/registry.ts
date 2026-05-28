@@ -21,7 +21,10 @@ import {
   recordAnswerSchema,
   getAnswersSchema,
   pushLintEventSchema,
-  getLintEventsSchema
+  getLintEventsSchema,
+  setStageSchema,
+  pullPlanSchema,
+  dispatchStageSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -37,6 +40,9 @@ import {
   getAnswers,
   pushLintEvent,
   getLintEvents,
+  setStage,
+  loadPlanFull,
+  dispatchStage,
   StorageOptions
 } from "./storage";
 
@@ -54,7 +60,10 @@ export var TOOL_NAMES = [
   "record_answer",
   "get_answers",
   "push_lint_event",
-  "get_lint_events"
+  "get_lint_events",
+  "set_stage",
+  "pull_plan",
+  "dispatch_stage"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -469,6 +478,98 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             session_id: parsed.session_id,
             plan_slug: parsed.plan_slug,
             limit: parsed.limit
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "set_stage",
+      description:
+        "Move a plan to a new pipeline stage. Validates the transition against the v2 state " +
+        "machine (claude-plans/src/state-machine.ts) and rejects illegal moves with " +
+        "IllegalTransitionError. On success, atomically writes the new stage + appends a " +
+        "StageTransition to stage_history + issues a one-time DispatchToken bound to the new " +
+        "stage with a 5-minute TTL.\n\n" +
+        "The returned token is the only way to call dispatch_stage in live mode. Each call to " +
+        "set_stage rotates the token — the previous outstanding token is overwritten and becomes " +
+        "effectively stale.\n\n" +
+        "Conflict rule (docs/v2-design.md §4): dashboard-sourced writes always accept; " +
+        "code-sourced writes are rejected with ConflictRejectedError if the last recorded " +
+        "transition was dashboard-sourced and falls within the 30-second grace window " +
+        "(DOVE_CLAUDE_PLANS_DASHBOARD_GRACE_MS to tune).\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan to move.\n" +
+        "  to (required) — target stage. One of: research, pre-stage-improve, planning,\n" +
+        "    post-plan-improve, test-first, code, per-step-review, architectural-review,\n" +
+        "    test-reality, documentation.\n" +
+        "  by (optional) — who initiated the move. Defaults to CLAUDE_CODE_SESSION_ID.\n" +
+        "  source (optional) — 'code' (default) or 'dashboard'. The conflict rule keys off this.\n\n" +
+        "Output: { plan_slug, stage, token: DispatchToken, history_length }.",
+      shape: setStageSchema.shape,
+      handler: async function (args: any) {
+        var parsed = setStageSchema.parse(args);
+        return setStage(
+          {
+            plan_slug: parsed.plan_slug,
+            to: parsed.to,
+            by: parsed.by,
+            source: parsed.source
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "pull_plan",
+      description:
+        "Single-read snapshot of a plan and all its v2 surface: artifacts, prompts, questions, " +
+        "current stage, full stage_history, and dispatch_log. The dashboard's plan-detail page " +
+        "uses this so it can render without making three round-trips.\n\n" +
+        "Returns 404-equivalent (PlanNotFoundError) when the slug does not exist.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan to read.\n\n" +
+        "Output: { plan, artifacts[], prompts[], questions[], stage, stage_history[], dispatch_log[] }.",
+      shape: pullPlanSchema.shape,
+      handler: async function (args: any) {
+        var parsed = pullPlanSchema.parse(args);
+        var result = loadPlanFull(parsed.plan_slug, storageOpts);
+        if (!result) throw new Error("plan not found: " + parsed.plan_slug);
+        return result;
+      }
+    },
+    {
+      name: "dispatch_stage",
+      description:
+        "Resolve (and optionally spawn) a Claude Code subprocess to drive a plan at the given " +
+        "pipeline stage. THIS IS THE RISKIEST V2 TOOL — read docs/v2-design.md §7 before relying " +
+        "on it in automation.\n\n" +
+        "MODES:\n" +
+        "  Dry-run (default): resolves the spawn command + working dir, appends a 'dry-run' " +
+        "DispatchEvent to the plan's dispatch_log, and returns. NO process is launched.\n" +
+        "  Live (confirm:true + token): consumes the plan's outstanding dispatch_token atomically " +
+        "before spawning the subprocess. The token must (a) equal plan.dispatch_token.token, " +
+        "(b) be unconsumed, (c) be within its 5-minute TTL, and (d) match target_stage. Failing " +
+        "any check raises NoTokenError / StaleTokenError.\n\n" +
+        "AGENT GATE: target_stage 'test-first' and 'test-reality' raise MissingAgentError until " +
+        "PR #160 ships the test-author + test-reality-checker agents. Never silent no-op.\n\n" +
+        "Inputs:\n" +
+        "  plan_slug (required) — the plan whose stage you want to drive.\n" +
+        "  target_stage (required) — one of the 10 PipelineStage values.\n" +
+        "  confirm (optional, default false) — when true, attempt a live spawn; otherwise dry-run.\n" +
+        "  token (required when confirm===true) — the token from the most recent set_stage call.\n" +
+        "  by (optional) — caller label for the dispatch_log entry. Defaults to CLAUDE_CODE_SESSION_ID.\n\n" +
+        "Output: { mode, plan_slug, target_stage, command, cwd, pid?, event }.",
+      shape: dispatchStageSchema.shape,
+      handler: async function (args: any) {
+        var parsed = dispatchStageSchema.parse(args);
+        return dispatchStage(
+          {
+            plan_slug: parsed.plan_slug,
+            target_stage: parsed.target_stage,
+            confirm: parsed.confirm,
+            token: parsed.token,
+            by: parsed.by
           },
           storageOpts
         );

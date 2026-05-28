@@ -21,13 +21,30 @@ import {
   ClaudeArtifact,
   ClaudePlan,
   ClaudePrompt,
+  CURRENT_SCHEMA_VERSION,
+  DispatchEvent,
+  DispatchToken,
   LinkedArtifact,
+  PipelineStage,
   PlanQuestion,
   PlanStatus,
   PlanWithArtifacts,
   PromptCyclePayload,
-  PromptLintEvent
+  PromptLintEvent,
+  StageTransition,
+  StageTransitionSource
 } from "./types";
+import { assertTransition, checkConflict } from "./state-machine";
+import {
+  SpawnFn,
+  productionSpawn,
+  resolveDispatchCommand,
+  assertAgentAvailable,
+  validateToken,
+  makeEvent,
+  NoTokenError,
+  StaleTokenError
+} from "./dispatch";
 import { StructuredPlan, renderStructured } from "./renderer";
 import { promptCyclePayloadSchema } from "./schemas";
 import { extractCategories } from "./categories";
@@ -74,6 +91,26 @@ function readJson<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
   var raw = fs.readFileSync(filePath, "utf8");
   return JSON.parse(raw) as T;
+}
+
+/**
+ * Normalize a freshly-read plan record to the current schema in memory.
+ * Idempotent — running it on an already-v2 record is a no-op. Does NOT
+ * write to disk; the upgrade materializes when the next pushPlan /
+ * updatePlanStatus / pushQuestion / recordAnswer touches the record.
+ *
+ * Phases C and D extend this helper to default new fields (stage,
+ * stage_history, dispatch_token, dispatch_log) so consumers can always
+ * count on their presence at read time.
+ */
+export function migrateV1OnLoad(plan: ClaudePlan): ClaudePlan {
+  if (plan.schema_version === CURRENT_SCHEMA_VERSION) return plan;
+  return Object.assign({}, plan, { schema_version: CURRENT_SCHEMA_VERSION });
+}
+
+function readPlan(filePath: string): ClaudePlan | null {
+  var plan = readJson<ClaudePlan>(filePath);
+  return plan ? migrateV1OnLoad(plan) : null;
 }
 
 function planPath(root: string, slug: string): string {
@@ -130,7 +167,7 @@ export interface PushPlanInput {
 export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): ClaudePlan {
   var root = storageRoot(options);
   var slug = slugify(input.slug || input.title);
-  var existing = readJson<ClaudePlan>(planPath(root, slug));
+  var existing = readPlan(planPath(root, slug));
   var now = nowIso();
   var contentMd = input.content_md !== undefined ? input.content_md : "";
   var resolvedHtml = input.content_html;
@@ -171,8 +208,17 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     pr_url: input.pr_url !== undefined ? input.pr_url : (existing ? existing.pr_url : undefined),
     pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined),
     linked_artifacts: resolvedLinks,
-    categories: resolvedCategories
+    categories: resolvedCategories,
+    schema_version: CURRENT_SCHEMA_VERSION
   };
+  if (existing && existing.questions) plan.questions = existing.questions;
+  // Preserve v2 stage state across plan-content updates — pushPlan is a
+  // content-write surface, not a stage-write surface; only setStage may
+  // mutate stage / stage_history / dispatch_token.
+  if (existing && existing.stage !== undefined) plan.stage = existing.stage;
+  if (existing && existing.stage_history) plan.stage_history = existing.stage_history;
+  if (existing && existing.dispatch_token !== undefined) plan.dispatch_token = existing.dispatch_token;
+  if (existing && existing.dispatch_log) plan.dispatch_log = existing.dispatch_log;
 
   atomicWriteJson(planPath(root, slug), plan);
 
@@ -186,7 +232,7 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
 
 export function updatePlanStatus(slug: string, to: PlanStatus, options: StorageOptions = {}): ClaudePlan {
   var root = storageRoot(options);
-  var existing = readJson<ClaudePlan>(planPath(root, slug));
+  var existing = readPlan(planPath(root, slug));
   if (!existing) throw new Error("plan not found: " + slug);
 
   var allowed = ALLOWED_TRANSITIONS[existing.status];
@@ -194,14 +240,18 @@ export function updatePlanStatus(slug: string, to: PlanStatus, options: StorageO
     throw new Error("invalid transition: " + existing.status + " -> " + to);
   }
 
-  var next: ClaudePlan = Object.assign({}, existing, { status: to, updated_at: nowIso() });
+  var next: ClaudePlan = Object.assign({}, existing, {
+    status: to,
+    updated_at: nowIso(),
+    schema_version: CURRENT_SCHEMA_VERSION
+  });
   atomicWriteJson(planPath(root, slug), next);
   return next;
 }
 
 export function getPlan(slug: string, options: StorageOptions = {}): PlanWithArtifacts | null {
   var root = storageRoot(options);
-  var plan = readJson<ClaudePlan>(planPath(root, slug));
+  var plan = readPlan(planPath(root, slug));
   if (!plan) return null;
   return {
     plan: plan,
@@ -223,7 +273,7 @@ export function listPlans(options: ListOptions = {}): ClaudePlan[] {
   for (var i = 0; i < entries.length; i++) {
     var name = entries[i];
     if (!name.endsWith(".json")) continue;
-    var plan = readJson<ClaudePlan>(path.join(root, name));
+    var plan = readPlan(path.join(root, name));
     if (!plan) continue;
     if (options.status && plan.status !== options.status) continue;
     plans.push(plan);
@@ -661,7 +711,7 @@ function generateQuestionId(taken: PlanQuestion[]): string {
 }
 
 function loadPlan(root: string, slug: string): ClaudePlan {
-  var plan = readJson<ClaudePlan>(planPath(root, slug));
+  var plan = readPlan(planPath(root, slug));
   if (!plan) throw new Error("plan not found: " + slug);
   return plan;
 }
@@ -686,6 +736,7 @@ export function pushQuestion(input: PushQuestionInput, options: StorageOptions =
 
   plan.questions = existing.concat([question]);
   plan.updated_at = nowIso();
+  plan.schema_version = CURRENT_SCHEMA_VERSION;
   atomicWriteJson(planPath(root, plan.slug), plan);
   return question;
 }
@@ -710,6 +761,7 @@ export function recordAnswer(input: RecordAnswerInput, options: StorageOptions =
   questions[idx] = updated;
   plan.questions = questions;
   plan.updated_at = nowIso();
+  plan.schema_version = CURRENT_SCHEMA_VERSION;
   atomicWriteJson(planPath(root, plan.slug), plan);
   return updated;
 }
@@ -801,4 +853,296 @@ export interface GetLintEventsResult {
 
 export function getLintEvents(input: ListLintEventsInput = {}, options: StorageOptions = {}): GetLintEventsResult {
   return { events: listLintEvents(input, options) };
+}
+
+// ---- v2: stage + dispatch token --------------------------------------------
+
+export interface SetStageInput {
+  plan_slug: string;
+  to: PipelineStage;
+  by?: string;
+  source?: StageTransitionSource;
+}
+
+export interface SetStageResult {
+  plan_slug: string;
+  stage: PipelineStage;
+  token: DispatchToken;
+  history_length: number;
+}
+
+function tokenTtlMs(): number {
+  var env = process.env.DOVE_CLAUDE_PLANS_TOKEN_TTL_MS;
+  if (env) {
+    var n = parseInt(env, 10);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return 5 * 60 * 1000;
+}
+
+function issueToken(stage: PipelineStage, nowIsoStr: string): DispatchToken {
+  var token = "tok_" + crypto.randomBytes(12).toString("hex");
+  return {
+    token: token,
+    issued_for_stage: stage,
+    issued_at: nowIsoStr,
+    expires_at: new Date(Date.parse(nowIsoStr) + tokenTtlMs()).toISOString()
+  };
+}
+
+/**
+ * Move a plan to a new pipeline stage. Validates the transition against
+ * state-machine.ts, applies the conflict-resolution rule, atomically
+ * writes the new stage + appends to stage_history, and ISSUES a new
+ * one-time dispatch token bound to the target stage (5-minute TTL, see
+ * DOVE_CLAUDE_PLANS_TOKEN_TTL_MS).
+ *
+ * The returned token is the only way to call dispatch_stage in live
+ * mode (Phase D). A subsequent setStage rotates it — the previous
+ * outstanding token becomes effectively stale.
+ */
+export function setStage(input: SetStageInput, options: StorageOptions = {}): SetStageResult {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var source: StageTransitionSource = input.source || "code";
+  var history = plan.stage_history || [];
+
+  assertTransition(plan.stage || null, input.to);
+  checkConflict(history, source);
+
+  var now = nowIso();
+  var transition: StageTransition = {
+    from: plan.stage || null,
+    to: input.to,
+    at: now,
+    by: input.by || process.env.CLAUDE_CODE_SESSION_ID || "unknown",
+    source: source
+  };
+  var token = issueToken(input.to, now);
+
+  var next: ClaudePlan = Object.assign({}, plan, {
+    stage: input.to,
+    stage_history: history.concat([transition]),
+    dispatch_token: token,
+    updated_at: now,
+    schema_version: CURRENT_SCHEMA_VERSION
+  });
+  atomicWriteJson(planPath(root, plan.slug), next);
+
+  return {
+    plan_slug: plan.slug,
+    stage: input.to,
+    token: token,
+    history_length: (next.stage_history || []).length
+  };
+}
+
+export interface PullPlanResult {
+  plan: ClaudePlan;
+  artifacts: ClaudeArtifact[];
+  prompts: ClaudePrompt[];
+  questions: PlanQuestion[];
+  stage: PipelineStage | null;
+  stage_history: StageTransition[];
+  dispatch_log: ClaudePlan["dispatch_log"];
+}
+
+/**
+ * Single-read snapshot of a plan and all its v2 surface: artifacts,
+ * prompts, questions, stage state, history, dispatch_log. The dashboard
+ * uses this so the plan detail page renders without three round-trips.
+ *
+ * Returns null when the plan slug does not exist (callers in the
+ * registry surface this as PlanNotFoundError).
+ */
+export function loadPlanFull(slug: string, options: StorageOptions = {}): PullPlanResult | null {
+  var root = storageRoot(options);
+  var plan = readPlan(planPath(root, slug));
+  if (!plan) return null;
+  return {
+    plan: plan,
+    artifacts: listArtifacts(slug, options),
+    prompts: listPrompts(slug, options),
+    questions: (plan.questions || []).slice(),
+    stage: plan.stage || null,
+    stage_history: (plan.stage_history || []).slice(),
+    dispatch_log: (plan.dispatch_log || []).slice()
+  };
+}
+
+// ---- v2: dispatch_stage (Phase D) ------------------------------------------
+
+export interface DispatchStageInput {
+  plan_slug: string;
+  target_stage: PipelineStage;
+  confirm?: boolean;
+  token?: string;
+  by?: string;
+}
+
+export interface DispatchStageResult {
+  mode: "dry-run" | "live";
+  plan_slug: string;
+  target_stage: PipelineStage;
+  command: string;
+  cwd: string;
+  pid?: number;
+  event: DispatchEvent;
+}
+
+export interface DispatchStageOptions extends StorageOptions {
+  /** Override the spawn primitive — used in tests. */
+  spawn?: SpawnFn;
+}
+
+/**
+ * Resolve + (optionally) spawn a Claude Code subprocess for a plan
+ * stage. See dispatch.ts for the safety model.
+ *
+ * Default mode is dry-run: appends a "dry-run" DispatchEvent and
+ * returns without spawning. Live mode (`confirm: true`) consumes the
+ * plan's outstanding dispatch_token atomically BEFORE the spawn — a
+ * crashed subprocess does not invalidate the single-use guarantee.
+ */
+export function dispatchStage(
+  input: DispatchStageInput,
+  options: DispatchStageOptions = {}
+): DispatchStageResult {
+  var root = storageRoot(options);
+  var plan = loadPlan(root, input.plan_slug);
+  var by = input.by || process.env.CLAUDE_CODE_SESSION_ID || "unknown";
+  var spawnFn: SpawnFn = options.spawn || productionSpawn;
+
+  // Always do the missing-agent check before any I/O state change.
+  // Surfaces the gap immediately, never silently spawns.
+  assertAgentAvailable(input.target_stage);
+
+  var resolved = resolveDispatchCommand(plan, input.target_stage);
+  var liveRequested = input.confirm === true;
+
+  // ---- DRY-RUN path -------------------------------------------------------
+  if (!liveRequested) {
+    var nowDry = nowIso();
+    var event = makeEvent({
+      targetStage: input.target_stage,
+      mode: "dry-run",
+      by: by,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      outcome: "ok",
+      nowIso: nowDry
+    });
+    var nextDry: ClaudePlan = Object.assign({}, plan, {
+      dispatch_log: (plan.dispatch_log || []).concat([event]),
+      updated_at: nowDry,
+      schema_version: CURRENT_SCHEMA_VERSION
+    });
+    atomicWriteJson(planPath(root, plan.slug), nextDry);
+    return {
+      mode: "dry-run",
+      plan_slug: plan.slug,
+      target_stage: input.target_stage,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      event: event
+    };
+  }
+
+  // ---- LIVE path: validate token --------------------------------------
+  var check = validateToken(plan, input.token, input.target_stage, Date.now());
+  if (!check.ok) {
+    // Record the rejection in the log AND throw the typed error so the
+    // caller (dashboard) can branch. We deliberately persist the log
+    // entry — failed dispatches are operational signal.
+    var nowFail = nowIso();
+    // "no-token" covers both missing-arg and missing-stored-token. Other
+    // failure modes (mismatch, consumed, expired, wrong stage) are stale-token.
+    var isNoTokenCase =
+      check.reason === "token argument is required" ||
+      (typeof check.reason === "string" && check.reason.indexOf("no outstanding") !== -1);
+    var failOutcome: DispatchEvent["outcome"] = isNoTokenCase ? "no-token" : "stale-token";
+    var failEvent = makeEvent({
+      targetStage: input.target_stage,
+      mode: "live",
+      by: by,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      outcome: failOutcome,
+      error: check.reason,
+      nowIso: nowFail
+    });
+    var nextFail: ClaudePlan = Object.assign({}, plan, {
+      dispatch_log: (plan.dispatch_log || []).concat([failEvent]),
+      updated_at: nowFail,
+      schema_version: CURRENT_SCHEMA_VERSION
+    });
+    atomicWriteJson(planPath(root, plan.slug), nextFail);
+    if (failOutcome === "no-token") throw new NoTokenError(check.reason || "missing");
+    throw new StaleTokenError(check.reason || "invalid");
+  }
+
+  // ---- LIVE path: atomic consume BEFORE spawn -------------------------
+  var nowOk = nowIso();
+  var consumedToken = Object.assign({}, plan.dispatch_token, {
+    consumed_at: nowOk
+  });
+  // Pre-spawn write: token consumed, no spawn pid yet. If spawn throws,
+  // the token stays consumed (by design — we'd rather replay than risk
+  // a double-spawn).
+  var preSpawn: ClaudePlan = Object.assign({}, plan, {
+    dispatch_token: consumedToken,
+    updated_at: nowOk,
+    schema_version: CURRENT_SCHEMA_VERSION
+  });
+  atomicWriteJson(planPath(root, plan.slug), preSpawn);
+
+  // ---- LIVE path: spawn ------------------------------------------------
+  var spawned;
+  try {
+    spawned = spawnFn(resolved.argv, resolved.cwd);
+  } catch (e) {
+    var msg = e instanceof Error ? e.message : String(e);
+    var spawnFailEvent = makeEvent({
+      targetStage: input.target_stage,
+      mode: "live",
+      by: by,
+      command: resolved.command,
+      cwd: resolved.cwd,
+      outcome: "spawn-error",
+      error: msg,
+      nowIso: nowIso()
+    });
+    var postFail: ClaudePlan = Object.assign({}, preSpawn, {
+      dispatch_log: (preSpawn.dispatch_log || []).concat([spawnFailEvent]),
+      updated_at: spawnFailEvent.at
+    });
+    atomicWriteJson(planPath(root, plan.slug), postFail);
+    throw e;
+  }
+
+  var liveEvent = makeEvent({
+    targetStage: input.target_stage,
+    mode: "live",
+    by: by,
+    command: resolved.command,
+    cwd: resolved.cwd,
+    outcome: "ok",
+    pid: spawned.pid,
+    nowIso: nowIso()
+  });
+  var post: ClaudePlan = Object.assign({}, preSpawn, {
+    dispatch_log: (preSpawn.dispatch_log || []).concat([liveEvent]),
+    updated_at: liveEvent.at
+  });
+  atomicWriteJson(planPath(root, plan.slug), post);
+
+  return {
+    mode: "live",
+    plan_slug: plan.slug,
+    target_stage: input.target_stage,
+    command: resolved.command,
+    cwd: resolved.cwd,
+    pid: spawned.pid,
+    event: liveEvent
+  };
 }
