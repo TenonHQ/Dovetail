@@ -163,35 +163,38 @@
 
 /* ============================================================================
    Dark theme — activated by <html data-theme="dark">.
-   Used by the Claude Plans page; safe to adopt dashboard-wide later.
-   Overrides the semantic aliases only — the raw color scales above are shared.
-   Brand emerald and neon accent are preserved; grounds invert to dark woodgrain.
+   Mirrors the canonical [data-theme="dark"] block in the Tenon design system
+   (ClaudeDesign/project/colors_and_type.css). Overrides semantic aliases only;
+   the raw color scales above are shared. Grounds invert to a deep woodgrain-
+   emerald palette (#0A1A11 → #16352A two-step elevation). Brand emerald and
+   neon accent preserved; ink on neon stays emerald-900. Status tokens shift
+   from the 700 ramp to the 300 ramp for readability on dark.
    ============================================================================ */
 [data-theme="dark"] {
-  --bg: #0d1410;
-  --bg-subtle: #121c16;
-  --bg-muted: #18241c;
-  --bg-paper: #121c16;
-  --bg-oak: #20302554;
+  --bg: #0a1a11;
+  --bg-subtle: #0f2418;
+  --bg-muted: #16352a;
+  --bg-paper: #1a2418;
+  --bg-oak: #2a2a1f;
   --bg-deep: #060b08;
   --bg-overlay: rgba(0, 0, 0, 0.66);
 
-  --surface: #121c16;
-  --surface-raised: #18241c;
+  --surface: #10241a;
+  --surface-raised: #16352a;
 
-  --fg: #e9efe9;
-  --fg-muted: #8da095;
-  --fg-subtle: #5f7167;
-  --fg-on-dark: #e9efe9;
-  --fg-on-neon: var(--emerald-700);
+  --fg: #ecf3ef;
+  --fg-muted: #a3b8aa;        /* lifted to clear AA 4.5:1 on --surface */
+  --fg-subtle: #6f8378;
+  --fg-on-dark: #ecf3ef;
+  --fg-on-neon: var(--emerald-900);
 
   --accent: var(--neon-300);
   --accent-hover: var(--neon-500);
   --accent-press: var(--neon-700);
-  --accent-fg: #0d1410;
+  --accent-fg: var(--emerald-900);
 
   --brand: var(--emerald-50);
-  --brand-deep: #e9efe9;
+  --brand-deep: #ecf3ef;
 
   --success: var(--success-300);
   --warning: var(--warning-300);
@@ -199,8 +202,8 @@
   --danger-hover: var(--error-500);
   --info: var(--blue-300);
 
-  --border: #26342b;
-  --border-strong: #344538;
+  --border: #2b4233;
+  --border-strong: #3d5847;
   --border-subtle: #1d2922;
   --border-focus: var(--neon-500);
 
@@ -214,7 +217,7 @@
   --tag-blue-bg: #182040;   --tag-blue-fg: #aab4ff;
   --tag-cyan-bg: #0e2c3a;   --tag-cyan-fg: #8fd9f5;
   --tag-sage-bg: #1d2922;   --tag-sage-fg: #b6c6bc;
-  --tag-warm-bg: #2c2417;   --tag-warm-fg: #d8c4a2;
+  --tag-warm-bg: #2c2417;   --tag-warm-fg: #e6d3ae;   /* lifted from #d8c4a2 */
   --tag-yellow-bg: #322d0c; --tag-yellow-fg: #e8d860;
   --tag-purple-bg: #2a1633; --tag-purple-fg: #e29bf0;
   --tag-orange-bg: #331c0c; --tag-orange-fg: #f0a878;
