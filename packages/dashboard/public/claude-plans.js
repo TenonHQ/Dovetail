@@ -863,8 +863,13 @@
     }));
     renderRail();
     if (!state.selectedSlug) {
+      var pathMatch = window.location.pathname.match(/^\/claude-plans\/([a-z0-9][a-z0-9-]{0,63})$/);
+      var pathSlug = pathMatch && pathMatch[1];
       var sorted = sortedPlans();
-      if (sorted.length > 0) selectPlan(sorted[0].slug);
+      var target = pathSlug && state.plans.has(pathSlug)
+        ? pathSlug
+        : (sorted.length > 0 ? sorted[0].slug : null);
+      if (target) selectPlan(target);
     }
   }
 
