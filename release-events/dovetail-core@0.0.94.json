@@ -1,0 +1,30 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.94",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.94",
+  "prev_version": "0.0.93",
+  "published_at": "2026-05-28T23:46:03.175Z",
+  "git": {
+    "sha": "8a76deffc38892321c92ae538fee3bc6b8f90d76",
+    "tag": "dovetail-core@0.0.94"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "8a76deffc",
+      "subject": "fix: filesystem-safe record folder names (sys_id fallback for Windows) (#117)",
+      "pr": 117
+    },
+    {
+      "sha": "578d6fb2a",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "3faeec43f",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.93 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
