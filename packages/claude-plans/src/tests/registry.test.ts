@@ -88,11 +88,11 @@ describe("registry", function () {
     delete process.env.CLAUDE_PLANS_DASHBOARD_URL;
     try {
       var defaultRes = await desc.handler({ title: "URL Default", content_md: "x" });
-      expect(defaultRes.url).toBe("http://localhost:3456/claude-plans/url-default");
+      expect(defaultRes.url).toBe("http://localhost:3456/claude-plans?plan=url-default");
 
       process.env.CLAUDE_PLANS_DASHBOARD_URL = "https://plans.example.com/";
       var overrideRes = await desc.handler({ title: "URL Override", content_md: "x" });
-      expect(overrideRes.url).toBe("https://plans.example.com/claude-plans/url-override");
+      expect(overrideRes.url).toBe("https://plans.example.com/claude-plans?plan=url-override");
     } finally {
       if (prev === undefined) delete process.env.CLAUDE_PLANS_DASHBOARD_URL;
       else process.env.CLAUDE_PLANS_DASHBOARD_URL = prev;

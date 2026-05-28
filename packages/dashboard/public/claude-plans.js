@@ -219,7 +219,7 @@
     if (els.topics) {
       try {
         var stored = localStorage.getItem("cp-topics-collapsed");
-        if (stored === "1") els.topics.open = false;
+        els.topics.open = stored === "0";
       } catch (_) {}
       els.topics.addEventListener("toggle", function () {
         try {
@@ -709,6 +709,10 @@
 
   function selectPlan(slug) {
     state.selectedSlug = slug;
+    if (window.history && window.history.replaceState) {
+      var url = window.location.pathname + "?plan=" + encodeURIComponent(slug);
+      window.history.replaceState(null, "", url);
+    }
     renderRail();
     renderDetail();
   }
@@ -863,11 +867,10 @@
     }));
     renderRail();
     if (!state.selectedSlug) {
-      var pathMatch = window.location.pathname.match(/^\/claude-plans\/([a-z0-9][a-z0-9-]{0,63})$/);
-      var pathSlug = pathMatch && pathMatch[1];
+      var paramSlug = new URLSearchParams(window.location.search).get("plan");
       var sorted = sortedPlans();
-      var target = pathSlug && state.plans.has(pathSlug)
-        ? pathSlug
+      var target = paramSlug && state.plans.has(paramSlug)
+        ? paramSlug
         : (sorted.length > 0 ? sorted[0].slug : null);
       if (target) selectPlan(target);
     }
