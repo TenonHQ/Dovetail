@@ -34,6 +34,10 @@ function makeClient(scripted: Array<{ match: (table: string, query: string) => b
       changeUpdateSet: async function () { return {}; },
       deleteRecord: async function () { return {}; },
     },
+    now: {
+      get: async function () { return {} as any; },
+      post: async function () { return {} as any; },
+    },
   };
   return { client: client, cap: cap };
 }

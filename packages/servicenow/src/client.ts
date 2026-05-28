@@ -141,6 +141,17 @@ export interface ServiceNowClient {
     /** POST /api/cadso/dovetail/deleteRecord — body { table, sys_id }. Returns the deleted record. */
     deleteRecord: (params: { table: string; sys_id: string }) => Promise<{ [k: string]: any }>;
   };
+  now: {
+    /**
+     * GET an arbitrary native ServiceNow REST path (e.g. /api/now/processflow/...).
+     * Basic auth, same credentials/retry/throttle as the rest of the client.
+     * Use for endpoints that aren't the Table API or the Dovetail Scripted REST API
+     * — currently the Flow Designer processflow endpoints. Returns the raw response body.
+     */
+    get: <T = any>(path: string) => Promise<T>;
+    /** POST an arbitrary native ServiceNow REST path with a JSON body. See `get`. */
+    post: <T = any>(path: string, body: any) => Promise<T>;
+  };
 }
 
 /**
@@ -420,6 +431,20 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
           "claude.deleteRecord(" + params.table + ")",
         );
         return data.result || data;
+      }
+    },
+    now: {
+      get: function (path) {
+        return request<any>(
+          { method: "GET", url: path },
+          "now.get(" + path + ")",
+        );
+      },
+      post: function (path, body) {
+        return request<any>(
+          { method: "POST", url: path, data: body },
+          "now.post(" + path + ")",
+        );
       }
     }
   };
