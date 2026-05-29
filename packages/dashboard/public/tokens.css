@@ -79,6 +79,7 @@
   --fg-subtle: var(--neutral-300);
   --fg-on-dark: var(--neutral-25);
   --fg-on-neon: var(--emerald-500);
+  --code-inline-fg: var(--brand);
 
   --accent: var(--neon-300);
   --accent-hover: var(--neon-500);
@@ -187,6 +188,7 @@
   --fg-subtle: #6f8378;
   --fg-on-dark: #ecf3ef;
   --fg-on-neon: var(--emerald-900);
+  --code-inline-fg: var(--neon-300);
 
   --accent: var(--neon-300);
   --accent-hover: var(--neon-500);
