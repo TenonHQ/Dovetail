@@ -326,35 +326,10 @@ function commitVersionBumps(published, extraFiles) {
   }
 }
 
-/**
- * Build a Markdown release body from a package's OWN commit log (the commits
- * that touched packages/<dirName> in this range), not the shared merge message.
- * Reuses commitsForPackage — the same per-package log that feeds the knowledge
- * release-events — so the GitHub Release and the knowledge feed stay consistent.
- */
-function releaseNotesFor(pkg, range) {
-  const prevTag = pkg.prevVersion ? unscoped(pkg.name) + "@" + pkg.prevVersion : "";
-  const commits = commitsForPackage(pkg.dirName, prevTag, range.base, range.head);
-  let body = "Published `" + pkg.name + "@" + pkg.version + "` to npm.\n\n";
-  if (commits.length === 0) {
-    body += "_No package-scoped commits detected in this range._\n";
-    return body;
-  }
-  body += "### Changes\n\n";
-  for (let i = 0; i < commits.length; i++) {
-    const c = commits[i];
-    // c.sha is already the short SHA (commitsForPackage truncates to 9) — same
-    // value the knowledge feed records, so the two stay byte-for-byte aligned.
-    const sha = c.sha ? "  `" + c.sha + "`" : "";
-    // c.subject already carries "(#NN)" when a PR number was present.
-    body += "- " + c.subject + sha + "\n";
-  }
-  return body;
-}
-
 /** Create a git tag + GitHub Release for each published package. */
-function createReleases(published, range) {
+function createReleases(published, headSha) {
   console.log("\nCreating GitHub releases...");
+  const notesBase = captureSafe("git", ["log", "-1", "--format=%B", headSha]);
   for (let i = 0; i < published.length; i++) {
     const pkg = published[i];
     const tag = unscoped(pkg.name) + "@" + pkg.version;
@@ -362,9 +337,10 @@ function createReleases(published, range) {
       console.log("  release " + tag + " already exists — skipping");
       continue;
     }
-    const notes = releaseNotesFor(pkg, range);
+    const notes = "Published `" + pkg.name + "@" + pkg.version + "` to npm.\n\n"
+      + (notesBase ? notesBase : "");
     try {
-      run("gh", ["release", "create", tag, "--target", range.head, "--title", tag, "--notes", notes]);
+      run("gh", ["release", "create", tag, "--target", headSha, "--title", tag, "--notes", notes]);
       console.log("  created release " + tag);
     } catch (err) {
       // A release-record hiccup must not fail a build whose packages shipped.
@@ -465,7 +441,7 @@ function main() {
   } else if (published.length > 0) {
     const manifestFiles = emitReleaseManifest(published, range, range.head);
     commitVersionBumps(published, manifestFiles);
-    createReleases(published, range);
+    createReleases(published, range.head);
   }
 
   writeStepSummary(published, failed, args.dryRun);

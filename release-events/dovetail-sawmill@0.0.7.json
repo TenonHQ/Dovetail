@@ -1,0 +1,30 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-sawmill@0.0.7",
+  "package": "@tenonhq/dovetail-sawmill",
+  "version": "0.0.7",
+  "prev_version": "0.0.6",
+  "published_at": "2026-05-29T21:44:48.823Z",
+  "git": {
+    "sha": "1e949a30823f064a9dc603455f16cf5b10bc61d3",
+    "tag": "dovetail-sawmill@0.0.7"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "1e949a308",
+      "subject": "docs: Dovetail adoption pack (Claude operating guide, onboarding, INDEX, drift fix) (#121)",
+      "pr": 121
+    },
+    {
+      "sha": "9332fdf7a",
+      "subject": "chore(release): publish 20 packages [skip ci]"
+    },
+    {
+      "sha": "9046da774",
+      "subject": "chore(release): publish 19 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
