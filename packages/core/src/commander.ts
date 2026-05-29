@@ -20,7 +20,11 @@ import {
   showCurrentScopeCommand,
 } from "./updateSetCommands";
 import { dashboardCommand } from "./dashboardCommand";
-import { schemaPullCommand } from "./schemaCommand";
+import {
+  schemaPullCommand,
+  schemaDiffCommand,
+  schemaSnapshotsCommand,
+} from "./schemaCommand";
 import { initClaudeCommand } from "./claudeCommand";
 import { createRecordCommand } from "./createRecordCommand";
 import { deleteRecordCommand } from "./deleteRecordCommand";
@@ -463,11 +467,11 @@ export async function initCommands() {
     )
     .command(
       "schema <subcommand>",
-      "Manage ServiceNow table schemas (subcommands: pull)",
+      "Manage ServiceNow table schemas (subcommands: pull, diff, snapshots)",
       (cmdArgs: TSFIXME) => {
         cmdArgs.positional("subcommand", {
           describe: "Schema subcommand to run",
-          choices: ["pull"],
+          choices: ["pull", "diff", "snapshots"],
         });
         cmdArgs.options({
           ...sharedOptions,
@@ -480,7 +484,27 @@ export async function initCommands() {
             alias: "s",
             type: "string",
             describe:
-              "Pull schema for a single scope (default: all scopes from dove.config.js)",
+              "Single scope (default: all scopes from dove.config.js)",
+          },
+          snapshot: {
+            type: "string",
+            describe:
+              "pull: also save an immutable snapshot with this label (timestamp-only if no label)",
+          },
+          from: {
+            type: "string",
+            describe:
+              "diff: baseline ref — a snapshot label, snapshot dir name, or directory path (default: newest snapshot)",
+          },
+          to: {
+            type: "string",
+            describe:
+              'diff: comparison ref — "live" for a fresh pull, or a snapshot ref (default: live)',
+          },
+          format: {
+            type: "string",
+            choices: ["text", "json"],
+            describe: "diff: output format (default: text)",
           },
         });
         return cmdArgs;
@@ -488,6 +512,10 @@ export async function initCommands() {
       async (args: TSFIXME) => {
         if (args.subcommand === "pull") {
           await schemaPullCommand(args);
+        } else if (args.subcommand === "diff") {
+          await schemaDiffCommand(args);
+        } else if (args.subcommand === "snapshots") {
+          await schemaSnapshotsCommand(args);
         }
       },
     )

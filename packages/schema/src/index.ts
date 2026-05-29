@@ -4,6 +4,15 @@ import { organizeSchema } from "./organizer";
 
 export { fetchSchema } from "./fetcher";
 export { organizeSchema, groupByApplication } from "./organizer";
+export {
+  readSchemaTree,
+  writeSnapshot,
+  listSnapshots,
+  resolveSnapshotDir,
+  normalizeField,
+  SNAPSHOTS_DIRNAME,
+} from "./snapshot";
+export { diffSchemas, formatDiff } from "./diff";
 export * from "./types";
 
 export async function pullSchema(options: SchemaOptions): Promise<SchemaIndex> {
