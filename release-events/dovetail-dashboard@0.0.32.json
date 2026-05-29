@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.32",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.32",
+  "prev_version": "0.0.31",
+  "published_at": "2026-05-29T02:18:11.229Z",
+  "git": {
+    "sha": "6a12c10733b64732855a8125c84f0d4846ced256",
+    "tag": "dovetail-dashboard@0.0.32"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "6a12c1073",
+      "subject": "feat: claude-plans version history, feature score, selected-state + deep-link hardening (#118)",
+      "pr": 118
+    },
+    {
+      "sha": "578d6fb2a",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
