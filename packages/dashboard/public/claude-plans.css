@@ -285,7 +285,7 @@
   padding: 1px 6px;
   border-radius: var(--radius-xs);
   font-size: 13px;
-  color: var(--brand);
+  color: var(--code-inline-fg);
 }
 .cp-tab-panel pre {
   background: var(--neutral-900);
