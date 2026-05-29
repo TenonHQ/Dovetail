@@ -110,7 +110,7 @@ Each wraps one external service with typed clients, API methods, and formatters.
 |---|---|
 | `dovetail-servicenow` | ServiceNow platform helpers using the Dovetail Scripted REST API. Includes `addChoicesToField` (sys_choice + sys_dictionary upsert, update-set-aware) and the `buildFlow` CLI Phase 1 (`dove-sn` binary) for Custom Action Type + Subflow authoring. |
 | `dovetail-sawmill` | Sawmill REST client — retrieve, preview, and commit update sets across instances. Powers cross-environment code movement. |
-| `dovetail-mcp` | MCP stdio server (Phase 1, read-only) exposing 12 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads. Telemetry written to `~/.dovetail-mcp/telemetry.jsonl` (redacted). |
+| `dovetail-mcp` | MCP stdio server (read-mostly) exposing 16 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads, plus 4 ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`. Telemetry written to `~/.dovetail-mcp/telemetry.jsonl` (redacted). Full catalog: [`claude-operating-guide.md`](claude-operating-guide.md). |
 
 ### 2.2 Dependency Graph
 

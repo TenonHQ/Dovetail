@@ -74,3 +74,86 @@ export interface OrganizeOptions {
 export interface AppTableGroup {
   [appName: string]: RawSchemaMap;
 }
+
+// ---------------------------------------------------------------------------
+// Snapshot + diff
+// ---------------------------------------------------------------------------
+
+export type Severity = "BREAKING" | "WARN" | "INFO";
+
+export interface SnapshotManifest {
+  instance: string;
+  label: string | null;
+  created_at: string;
+  scopes: string[];
+  total_tables: number;
+}
+
+export interface SnapshotInfo extends SnapshotManifest {
+  dir: string;
+}
+
+// A field reduced to comparable primitives. `type`/`reference` are coerced from
+// either a string or a legacy {link,value} object; `inherited_from` is dropped.
+export interface NormalizedField {
+  name: string;
+  label: string;
+  type: string;
+  max_length: string;
+  mandatory: boolean;
+  reference: string;
+  default_value: string;
+}
+
+export interface NormalizedTable {
+  table_name: string;
+  label: string;
+  scope: string;
+  fields: NormalizedField[];
+}
+
+export interface NormalizedSchema {
+  instance: string;
+  generated_at: string | null;
+  tables: { [tableName: string]: NormalizedTable };
+}
+
+export type TableChangeKind = "added" | "removed";
+
+export interface TableChange {
+  table: string;
+  change: TableChangeKind;
+  severity: Severity;
+}
+
+export type FieldChangeKind =
+  | "added"
+  | "removed"
+  | "retyped"
+  | "length_shrunk"
+  | "length_grew"
+  | "newly_mandatory"
+  | "now_optional"
+  | "retargeted"
+  | "default_changed"
+  | "label_changed";
+
+export interface FieldChange {
+  table: string;
+  field: string;
+  change: FieldChangeKind;
+  severity: Severity;
+  from?: string | boolean | null;
+  to?: string | boolean | null;
+}
+
+export interface SchemaDiff {
+  instance: string;
+  from: { ref: string; generated_at: string | null };
+  to: { ref: string; generated_at: string | null };
+  scope: string | null;
+  summary: { breaking: number; warn: number; info: number };
+  tables: TableChange[];
+  fields: FieldChange[];
+  exit_code: number;
+}
