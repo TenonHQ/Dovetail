@@ -55,10 +55,10 @@ describe("plan version history", function () {
     var root = mkTmp();
     pushPlan({ slug: "p", title: "P", content_md: "a" }, { rootDir: root });
     pushPlan({ slug: "p", title: "P", content_md: "b" }, { rootDir: root }); // p has v1
-    // A separator-laden slug is slugified to a contained name (e.g.
-    // "../../../etc/passwd" -> "etc-passwd"), so it reads no file outside root.
-    expect(getVersion("../../../etc/passwd", 1, { rootDir: root })).toBeNull();
-    expect(listVersions("q/../../p", { rootDir: root })).toEqual([]); // -> "q-p", not "p"
+    // A separator-laden slug fails the anchored-regex guard and throws before
+    // any path is built — it can never read a file outside the storage root.
+    expect(function () { getVersion("../../../etc/passwd", 1, { rootDir: root }); }).toThrow(/invalid plan slug/);
+    expect(function () { listVersions("q/../../p", { rootDir: root }); }).toThrow(/invalid plan slug/);
     // p's own history is intact and addressable by its real slug.
     expect(listVersions("p", { rootDir: root }).length).toBe(1);
   });

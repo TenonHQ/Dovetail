@@ -139,12 +139,21 @@ function promptPath(root: string, planSlug: string, slug: string): string {
 // Capped at the most-recent MAX_PLAN_VERSIONS to bound disk growth.
 export var MAX_PLAN_VERSIONS = 20;
 
+// A plan slug must match the kebab shape slugify() produces — no "/" or ".",
+// so it can't traverse out of the storage root. Validating-then-using (an
+// anchored-regex guard that throws) is the barrier form CodeQL recognizes as a
+// path-injection sanitizer; slugify()'s transform is not modeled as one.
+// Dashboard routes pre-validate with the same shape; the MCP boundary (whose
+// schemas bound only length, not charset) relies on this guard.
+var SAFE_SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+function assertSafeSlug(slug: string): string {
+  if (!SAFE_SLUG.test(slug)) throw new Error("invalid plan slug: " + slug);
+  return slug;
+}
+
 function versionDir(root: string, planSlug: string): string {
-  // Sanitize the slug before it reaches a filesystem path. slugify() strips
-  // every non-[a-z0-9] character (including "/" and "."), so a hostile slug
-  // from the MCP boundary (schemas only bound length, not charset) can't
-  // traverse out of the storage root. Idempotent on already-valid slugs.
-  return path.join(root, slugify(planSlug), "versions");
+  return path.join(root, assertSafeSlug(planSlug), "versions");
 }
 
 function versionPath(root: string, planSlug: string, version: number): string {
