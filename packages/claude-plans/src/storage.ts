@@ -140,7 +140,11 @@ function promptPath(root: string, planSlug: string, slug: string): string {
 export var MAX_PLAN_VERSIONS = 20;
 
 function versionDir(root: string, planSlug: string): string {
-  return path.join(root, planSlug, "versions");
+  // Sanitize the slug before it reaches a filesystem path. slugify() strips
+  // every non-[a-z0-9] character (including "/" and "."), so a hostile slug
+  // from the MCP boundary (schemas only bound length, not charset) can't
+  // traverse out of the storage root. Idempotent on already-valid slugs.
+  return path.join(root, slugify(planSlug), "versions");
 }
 
 function versionPath(root: string, planSlug: string, version: number): string {

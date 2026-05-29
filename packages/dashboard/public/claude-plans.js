@@ -1018,6 +1018,9 @@
     fetch("/api/claude-plans/" + encodeURIComponent(plan.slug) + "/versions")
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        // Bail if the user switched plans while this fetch was in flight —
+        // otherwise a stale response would paint the wrong plan's history.
+        if (state.selectedSlug !== plan.slug) return;
         var versions = (data && data.versions) || [];
         if (els.versionCount) els.versionCount.textContent = String(versions.length);
         if (versions.length === 0) {

@@ -30,7 +30,7 @@ describe("plan version history", function () {
     expect(versions[0].version).toBe(1);
 
     var v1 = getVersion("p", 1, { rootDir: root });
-    expect(v1&& v1.plan.content_md).toBe("one");
+    expect(v1 && v1.plan.content_md).toBe("one");
   });
 
   it("restore re-pushes a prior version as the new current, non-destructively", function () {
@@ -49,6 +49,18 @@ describe("plan version history", function () {
       .map(function (m) { return getVersion("p", m.version, { rootDir: root }); })
       .map(function (v) { return v && v.plan.content_md; });
     expect(contents).toContain("v-c"); // nothing lost
+  });
+
+  it("sanitizes the slug so a traversal slug can't escape the storage root", function () {
+    var root = mkTmp();
+    pushPlan({ slug: "p", title: "P", content_md: "a" }, { rootDir: root });
+    pushPlan({ slug: "p", title: "P", content_md: "b" }, { rootDir: root }); // p has v1
+    // A separator-laden slug is slugified to a contained name (e.g.
+    // "../../../etc/passwd" -> "etc-passwd"), so it reads no file outside root.
+    expect(getVersion("../../../etc/passwd", 1, { rootDir: root })).toBeNull();
+    expect(listVersions("q/../../p", { rootDir: root })).toEqual([]); // -> "q-p", not "p"
+    // p's own history is intact and addressable by its real slug.
+    expect(listVersions("p", { rootDir: root }).length).toBe(1);
   });
 
   it("caps history at MAX_PLAN_VERSIONS, pruning oldest", function () {
