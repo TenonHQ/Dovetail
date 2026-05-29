@@ -86,9 +86,9 @@ module.exports = {
 - `dovetail-sawmill` — update-set retrieve/preview/commit across instances
 - `dovetail-schema` — ServiceNow table schema fetcher
 - `dovetail-mcp` — MCP stdio server, **read-mostly: 16 tools** (4 ClickUp read, 4 Gmail, 3 Calendar, 1 `servicenow_query_table`, + **4 ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`**, dry-run unless `confirm:true`). Telemetry at `~/.dovetail-mcp/telemetry.jsonl` (redacted).
-- `dovetail-claude-plans` — MCP server (12 tools: plans, Q&A, handoff) + CLI for plans surfaced in the dashboard
+- `dovetail-claude-plans` — MCP server (20 tools: plans, Q&A, pipeline stages, lint events, version history, handoff) + CLI for plans surfaced in the dashboard
 
-> **Full MCP catalog (33 tools across 3 servers — `dovetail-mcp`, `dovetail-claude-plans`, and the `dovetail-servicenow` authoring server) + when-to-use each tool: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).** That doc is the canonical source of truth for what Claude can do here.
+> **Full MCP catalog (41 tools across 3 servers — `dovetail-mcp`, `dovetail-claude-plans`, and the `dovetail-servicenow` authoring server) + when-to-use each tool: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).** That doc is the canonical source of truth for what Claude can do here.
 
 **Integrations**
 - `dovetail-clickup`, `dovetail-google-auth`, `dovetail-google-calendar`, `dovetail-gmail`

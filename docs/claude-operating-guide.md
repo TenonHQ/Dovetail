@@ -4,7 +4,7 @@
 >
 > Audience: a Claude Code session (or the developer reading over its shoulder). For *building/contributing* to Dovetail, see [`../ONBOARDING.md`](../ONBOARDING.md). For the platform design, see [`dovetail-platform-spec.md`](dovetail-platform-spec.md).
 
-Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**33 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
+Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**41 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
 
 ---
 
@@ -13,7 +13,7 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 | Server | Package | Tools | Posture | When you reach for it |
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
-| **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 12 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, build a session handoff |
+| **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 20 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, build a session handoff |
 | **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 5 | All writes, update-set-captured, `dryRun`-capable | Declaratively author SN views, list/form layouts, related lists, and field choices |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
@@ -55,33 +55,49 @@ Source: `packages/mcp/src/registry.ts`. The 4 write tools throw unless `SINC_MCP
 
 ---
 
-## 3. `dovetail-claude-plans` — 12 tools (plans, Q&A, handoff)
+## 3. `dovetail-claude-plans` — 20 tools (plans, Q&A, stages, lint, versions, handoff)
 
-Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders these at `http://localhost:3456/claude-plans`.
+Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders these at `http://localhost:3456/claude-plans`. **8 read · 12 write**, in four groups.
 
 > **Project rule (CTO repo):** every implementation plan / architecture proposal MUST be pushed via `push_plan` (with artifacts) before being presented. See the CTO `CLAUDE.md` §5.
 
-### Read (4)
-| Tool | What it does |
-|---|---|
-| `get_plan` | Read a plan + its nested artifacts by slug |
-| `list_recent_plans` | List plans newest-first (filter by `status`, `limit`) |
-| `get_answers` | List a plan's parked Q&A (filter `answered`, `stage`) |
-| `get_handoff_bundle` | Compose a paste-ready Markdown payload to resume a plan in a fresh session |
+### 3a. Plans & artifacts (core)
+| Tool | R/W | What it does |
+|---|---|---|
+| `push_plan` | W | Create/overwrite a plan (`content_md` \| `content_html` \| `content_structured`). Auto-slugs; defaults to DRAFT |
+| `update_plan_status` | W | Transition status — only DRAFT→APPROVED, DRAFT→EXITED, APPROVED→EXITED (reverses rejected) |
+| `push_artifact` | W | Attach an artifact (`kind`: markdown \| mermaid \| prompt-cycle) |
+| `push_diagram` | W | Attach a Mermaid diagram (wrapper over `push_artifact` kind=mermaid) |
+| `push_prompt` | W | Attach a rewritten prompt to the Prompt tab (with before/after lint scores) |
+| `delete_plan` | W | Permanently delete a plan + all artifacts |
+| `get_plan` | R | Read a plan + its nested artifacts by slug |
+| `list_recent_plans` | R | List plans newest-first (filter by `status`, `limit`) |
+| `get_handoff_bundle` | R | Compose a paste-ready Markdown payload to resume a plan in a fresh session |
 
-### Write (8)
-| Tool | What it does |
-|---|---|
-| `push_plan` | Create/overwrite a plan (`content_md` \| `content_html` \| `content_structured`). Auto-slugs; defaults to DRAFT |
-| `update_plan_status` | Transition status — only DRAFT→APPROVED, DRAFT→EXITED, APPROVED→EXITED (reverses rejected) |
-| `push_artifact` | Attach an artifact (`kind`: markdown \| mermaid \| prompt-cycle) |
-| `push_diagram` | Attach a Mermaid diagram (wrapper over `push_artifact` kind=mermaid) |
-| `push_prompt` | Attach a rewritten prompt to the Prompt tab (with before/after lint scores) |
-| `push_question` | Park a question on a plan for a later session/operator |
-| `record_answer` | Answer a previously-parked question (last-write-wins) |
-| `delete_plan` | Permanently delete a plan + all artifacts |
+### 3b. Q&A
+| Tool | R/W | What it does |
+|---|---|---|
+| `push_question` | W | Park a question on a plan for a later session/operator |
+| `record_answer` | W | Answer a previously-parked question (last-write-wins) |
+| `get_answers` | R | List a plan's parked Q&A (filter `answered`, `stage`) |
 
-**Typical flow:** `push_plan` → `push_diagram`/`push_artifact` → present → on approval `update_plan_status APPROVED`. Park unknowns with `push_question`; resume later with `get_handoff_bundle`.
+### 3c. v2 pipeline (stages)
+| Tool | R/W | What it does |
+|---|---|---|
+| `set_stage` | W | Move a plan to a new pipeline stage; validates the transition against the v2 state machine (`src/state-machine.ts`) and rejects illegal moves |
+| `dispatch_stage` | W | Resolve (and optionally spawn) a Claude Code subprocess to drive a plan at a stage. **Riskiest v2 tool — dry-run by default; live spawn needs `confirm:true` + a valid one-time token.** Read `docs/v2-design.md` §7 first |
+| `pull_plan` | R | Single-read snapshot of a plan + its full v2 surface (artifacts, prompts, questions, current stage, `stage_history`, `dispatch_log`) |
+
+### 3d. Lint events & version history
+| Tool | R/W | What it does |
+|---|---|---|
+| `push_lint_event` | W | Record a prompt-lint observation in the global store (dashboard `/prompt-lints`) |
+| `get_lint_events` | R | List prompt-lint events newest-first (filters: `session_id`, `plan_slug`, `limit`) |
+| `restore_plan_version` | W | Restore a prior plan version as the new current record (non-destructive — pre-restore state is snapshotted first) |
+| `list_plan_versions` | R | List a plan's auto-saved version snapshots, newest-first |
+| `get_plan_version` | R | Read one saved version snapshot (`{ version, saved_at, plan }`) |
+
+**Typical flow:** `push_plan` → `push_diagram`/`push_artifact` → present → on approval `update_plan_status APPROVED`. Park unknowns with `push_question`; resume later with `get_handoff_bundle`. Plan versions auto-save on every content-changing push, so an inferior overwrite is recoverable via `list_plan_versions` + `restore_plan_version`.
 
 ---
 
@@ -126,6 +142,7 @@ Source: `packages/core/src/commander.ts`. Run `npx dove <cmd> --help`.
 | scope family | `--scope` | `changeScope`, `currentScope` |
 | `dashboard` | `--port` | Launch the Update-Set Dashboard web UI |
 | `schema pull` | `--output`, `--scope` | Pull SN table schemas |
+| `knowledge-diff` | `--manifest`, `--config`, `--ledger`, `--out`, `--json` | Report Dovetail releases this repo hasn't documented yet — diffs the published `release-manifest.json` against a consumer `ledger.json` and stages per-package release-event JSON into `context/dovetail-releases/pending/` for the `dovetail-features-sync` skill. `--json` prints the diff instead of writing files |
 
 > **There is no `dove diff` command.** `--diff` is a flag on `push` and `build`. (Older docs listed `dove diff` — that was never a real command.)
 

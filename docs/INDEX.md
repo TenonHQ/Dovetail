@@ -7,7 +7,7 @@ Start here. Docs are tagged by audience — **🤖 Claude** (a Claude Code sessi
 | Doc | Audience | What it covers |
 |---|---|---|
 | [`../ONBOARDING.md`](../ONBOARDING.md) | 🛠 Developer | Zero → merged change: Node 22, install, build order, test, branch, **DRAFT PR**, auto-publish — plus a FAQ |
-| [`claude-operating-guide.md`](claude-operating-guide.md) | 🤖 Claude | **Canonical** capability surface: all 33 MCP tools (3 servers), the 3 CLIs, the 9 installable skills, write gates |
+| [`claude-operating-guide.md`](claude-operating-guide.md) | 🤖 Claude | **Canonical** capability surface: all 41 MCP tools (3 servers), the 3 CLIs, the 9 installable skills, write gates |
 | [`../CLAUDE.md`](../CLAUDE.md) | 🤖 Claude | In-repo working rules: config architecture, server-side REST API, releasing, troubleshooting |
 | [`../README.md`](../README.md) | 🛠 Developer | Product overview + the `dove` sync workflow (origin/Sincronia history) |
 

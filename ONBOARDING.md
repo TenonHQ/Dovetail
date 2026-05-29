@@ -103,7 +103,7 @@ A thin client for the Sawmill Scripted REST API that retrieves, previews, and co
 They aren't packages — they're stray build artifacts (`coverage/`, `dist/`). Ignore them; don't treat them as workspaces.
 
 **How many MCP tools are there, and can Claude write to ServiceNow/ClickUp?**
-33 tools across three MCP servers. ClickUp writes (4, in `dovetail-mcp`) are gated behind `SINC_MCP_WRITES_ENABLE=1` and dry-run unless `confirm:true`. SN authoring writes (5, in the `dovetail-servicenow` MCP) always go through an update set and support `dryRun`. Full catalog: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).
+41 tools across three MCP servers. ClickUp writes (4, in `dovetail-mcp`) are gated behind `SINC_MCP_WRITES_ENABLE=1` and dry-run unless `confirm:true`. SN authoring writes (5, in the `dovetail-servicenow` MCP) always go through an update set and support `dryRun`. Full catalog: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).
 
 **Build fails right after clone — what first?**
 Confirm `nvm use 22` (not a leftover Node 12/20 shell), then re-run `npm install` and `node Scripts/run-workspaces.js prepack`. Packages build in dependency order; a failure in `core`/`types` cascades.
