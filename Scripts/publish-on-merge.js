@@ -343,7 +343,9 @@ function releaseNotesFor(pkg, range) {
   body += "### Changes\n\n";
   for (let i = 0; i < commits.length; i++) {
     const c = commits[i];
-    const sha = c.sha ? "  `" + c.sha.slice(0, 7) + "`" : "";
+    // c.sha is already the short SHA (commitsForPackage truncates to 9) — same
+    // value the knowledge feed records, so the two stay byte-for-byte aligned.
+    const sha = c.sha ? "  `" + c.sha + "`" : "";
     // c.subject already carries "(#NN)" when a PR number was present.
     body += "- " + c.subject + sha + "\n";
   }
