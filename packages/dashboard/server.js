@@ -1308,6 +1308,53 @@ app.post("/api/claude-plans/:slug/dispatch", claudePlansLimiter, express.json(),
   }
 });
 
+// GET /api/claude-plans/:slug/versions — list saved version snapshots (newest-first).
+app.get("/api/claude-plans/:slug/versions", function (req, res) {
+  try {
+    var slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    res.json({ slug: slug, versions: claudePlansLib.listVersions(slug) });
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// GET /api/claude-plans/:slug/versions/:n — read one full version snapshot.
+app.get("/api/claude-plans/:slug/versions/:n", function (req, res) {
+  try {
+    var slug = req.params.slug;
+    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    var n = parseInt(req.params.n, 10);
+    if (!(n > 0)) return res.status(400).json({ error: "invalid version" });
+    var version = claudePlansLib.getVersion(slug, n);
+    if (!version) return res.status(404).json({ error: "version not found" });
+    res.json(version);
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// POST /api/claude-plans/:slug/versions/:n/restore — re-push a prior version as
+// the new current record. Non-destructive (pre-restore current is snapshotted).
+// The plan-file write triggers the chokidar watcher → plan:upsert SSE, so
+// connected dashboards refresh without a manual broadcast.
+app.post(
+  "/api/claude-plans/:slug/versions/:n/restore",
+  claudePlansLimiter,
+  function (req, res) {
+    try {
+      var slug = req.params.slug;
+      if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+      var n = parseInt(req.params.n, 10);
+      if (!(n > 0)) return res.status(400).json({ error: "invalid version" });
+      var plan = claudePlansLib.restoreVersion(slug, n);
+      res.json({ plan: plan });
+    } catch (e) {
+      sendTypedError(res, e);
+    }
+  }
+);
+
 app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
   try {
     var slug = req.params.slug;

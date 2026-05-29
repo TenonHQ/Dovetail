@@ -173,9 +173,16 @@
 }
 .cp-list-item:hover { background: var(--bg-subtle); }
 .cp-list-item.active {
+  /* Selected plan: filled raised surface + brand-emerald bar + bold.
+     --brand flips to a bright emerald (#32b57f) in dark mode, so the bar
+     stays legible without using the unreadable deep green on dark grounds. */
   background: var(--surface-raised);
-  border-left: 3px solid var(--accent);
+  border-left: 4px solid var(--brand);
+  padding-left: 12px;
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
+.cp-list-item.active:hover { background: var(--surface-raised); }
 .cp-list-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .cp-list-title { font-weight: var(--weight-semibold); font-size: 13px; color: var(--fg); }
 .cp-list-meta { font-size: 11px; color: var(--fg-muted); display: flex; gap: 8px; }
@@ -278,7 +285,7 @@
   padding: 1px 6px;
   border-radius: var(--radius-xs);
   font-size: 13px;
-  color: var(--emerald-700);
+  color: var(--brand);
 }
 .cp-tab-panel pre {
   background: var(--neutral-900);
@@ -292,7 +299,7 @@
 .cp-tab-panel th, .cp-tab-panel td { border: 1px solid var(--border); padding: 7px 11px; }
 .cp-tab-panel th { background: var(--bg-subtle); }
 .cp-tab-panel a { color: var(--brand); }
-.cp-tab-panel a:hover { color: var(--emerald-700); }
+.cp-tab-panel a:hover { color: var(--brand); }
 .cp-tab-panel blockquote {
   border-left: 3px solid var(--accent);
   padding-left: 12px;
@@ -635,7 +642,7 @@
   color: var(--fg-muted);
   text-align: center;
 }
-.cp-c-step-done .cp-c-step-label  { color: var(--emerald-700); }
+.cp-c-step-done .cp-c-step-label  { color: var(--brand); }
 .cp-c-step-active .cp-c-step-label { color: var(--fg); font-weight: var(--weight-bold); }
 .cp-c-step-error .cp-c-step-label  { color: var(--error-700); }
 .cp-c-step-note {
@@ -1525,4 +1532,49 @@
   border-radius: 4px;
   margin-top: 10px;
   font-size: 13px;
+}
+
+/* ─── Version history (History tab) ─────────────────────────────────────────
+ * Snapshot rows with View (inline expand) + Restore. Uses semantic tokens so
+ * it tracks light/dark; --brand flips to bright emerald in dark mode. */
+.cp-versions { display: flex; flex-direction: column; gap: 8px; }
+.cp-version {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.cp-version--current {
+  border-left: 4px solid var(--brand);
+  background: var(--surface-raised);
+}
+.cp-version-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.cp-version-label { font-weight: var(--weight-semibold); }
+.cp-version-status { text-transform: none; }
+.cp-version-stamp { color: var(--fg-muted); font-size: 12px; }
+.cp-version-actions { margin-left: auto; display: flex; gap: 8px; }
+.cp-version-btn {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out);
+}
+.cp-version-btn:hover { background: var(--bg-subtle); }
+.cp-version-btn:disabled { opacity: 0.6; cursor: default; }
+.cp-version-btn--primary {
+  border-color: var(--brand);
+  color: var(--brand);
+  font-weight: var(--weight-semibold);
+}
+.cp-version-body {
+  border-top: 1px solid var(--border);
+  padding: 14px;
 }
