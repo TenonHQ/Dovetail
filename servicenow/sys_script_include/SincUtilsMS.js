@@ -149,10 +149,20 @@ SincUtilsMS.prototype = {
         try {
           var recordMetadata = {};
           var elements = recGR.getElements();
+          // getElements() returns a Java collection whose `.length` is undefined in
+          // the global/REST execution context, so the legacy `j < elements.length`
+          // loop never iterated and metaData captured no record fields (only the
+          // underscore keys below). Resolve a real count via size()/get(), falling
+          // back to array indexing where `.length` is a number.
+          var useIndex = elements != null && typeof elements.length === "number";
+          var elementCount = 0;
+          if (elements != null) {
+            elementCount = useIndex ? elements.length : elements.size ? elements.size() : 0;
+          }
 
-          for (var j = 0; j < elements.length; j++) {
-            var element = elements[j];
-            var fieldName = element.getName();
+          for (var j = 0; j < elementCount; j++) {
+            var element = useIndex ? elements[j] : elements.get(j);
+            var fieldName = element.getName() + "";
 
             recordMetadata[fieldName] = {
               value: recGR.getValue(fieldName),
@@ -373,10 +383,20 @@ SincUtilsMS.prototype = {
           try {
             var recordMetadata = {};
             var elements = tableGR.getElements();
+            // getElements() returns a Java collection whose `.length` is undefined in
+            // the global/REST execution context, so the legacy `j < elements.length`
+            // loop never iterated and metaData captured no record fields (only the
+            // underscore keys below). Resolve a real count via size()/get(), falling
+            // back to array indexing where `.length` is a number.
+            var useIndex = elements != null && typeof elements.length === "number";
+            var elementCount = 0;
+            if (elements != null) {
+              elementCount = useIndex ? elements.length : elements.size ? elements.size() : 0;
+            }
 
-            for (var j = 0; j < elements.length; j++) {
-              var element = elements[j];
-              var fName = element.getName();
+            for (var j = 0; j < elementCount; j++) {
+              var element = useIndex ? elements[j] : elements.get(j);
+              var fName = element.getName() + "";
 
               recordMetadata[fName] = {
                 value: tableGR.getValue(fName),
