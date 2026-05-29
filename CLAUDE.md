@@ -85,8 +85,10 @@ module.exports = {
 - `dovetail-servicenow` — platform helpers (`addChoicesToField`, `buildFlow` CLI / `dove-sn` binary)
 - `dovetail-sawmill` — update-set retrieve/preview/commit across instances
 - `dovetail-schema` — ServiceNow table schema fetcher
-- `dovetail-mcp` — MCP stdio server, **Phase 1 read-only** (12 tools wrapping ClickUp/Gmail/Calendar/ServiceNow). Read-only enforced via import denylist + ESLint + symbol-scan tests. Telemetry at `~/.dovetail-mcp/telemetry.jsonl` (redacted).
-- `dovetail-claude-plans` — MCP server + CLI for plans surfaced in the dashboard
+- `dovetail-mcp` — MCP stdio server, **read-mostly: 16 tools** (4 ClickUp read, 4 Gmail, 3 Calendar, 1 `servicenow_query_table`, + **4 ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`**, dry-run unless `confirm:true`). Telemetry at `~/.dovetail-mcp/telemetry.jsonl` (redacted).
+- `dovetail-claude-plans` — MCP server (20 tools: plans, Q&A, pipeline stages, lint events, version history, handoff) + CLI for plans surfaced in the dashboard
+
+> **Full MCP catalog (41 tools across 3 servers — `dovetail-mcp`, `dovetail-claude-plans`, and the `dovetail-servicenow` authoring server) + when-to-use each tool: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).** That doc is the canonical source of truth for what Claude can do here.
 
 **Integrations**
 - `dovetail-clickup`, `dovetail-google-auth`, `dovetail-google-calendar`, `dovetail-gmail`
@@ -128,7 +130,8 @@ npx dove push                 # push local changes
 npx dove refresh              # refresh manifest, pull new files
 npx dove download <scope>     # full scope download
 npx dove status               # sync status + instance info
-npx dove diff                 # review pending changes
+# No `dove diff` command — `--diff <branch>` is a FLAG on push/build that scopes
+# the op to files changed vs a git branch, e.g. `npx dove push --diff main`.
 
 # Build / deploy
 npx dove build
@@ -195,7 +198,7 @@ Don't hand-edit. Use `npx dove refresh` to rebuild from ServiceNow.
 | Field corrupted on push | Add field type override under non-prefixed `includes.<table>` |
 | Manifest drift | `npx dove refresh` |
 | Build error | Node 22 LTS, plugin config |
-| Sync conflict | `npx dove diff`, then `npx dove refresh` |
+| Sync conflict | `npx dove status` (or the dashboard), then `npx dove refresh` |
 | Wrong scope on writes | Use Dovetail REST endpoints, not raw Table API |
 
 Debug logs: `dovetail-debug-*.log`.
