@@ -196,3 +196,17 @@ export var dispatchStageSchema = z.object({
   token: z.string().regex(DISPATCH_TOKEN_PATTERN, "token must match tok_<24-hex>").optional(),
   by: z.string().min(1).max(64).optional()
 });
+
+export var listPlanVersionsSchema = z.object({
+  slug: z.string().min(1).max(64)
+});
+
+export var getPlanVersionSchema = z.object({
+  slug: z.string().min(1).max(64),
+  version: z.number().int().positive()
+});
+
+export var restorePlanVersionSchema = z.object({
+  slug: z.string().min(1).max(64),
+  version: z.number().int().positive()
+});

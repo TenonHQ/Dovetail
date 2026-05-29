@@ -64,6 +64,8 @@
     promptsPanel: document.getElementById("cp-tab-prompts"),
     questionsPanel: document.getElementById("cp-tab-questions"),
     questionCount: document.getElementById("cp-question-count"),
+    versionsPanel: document.getElementById("cp-tab-versions"),
+    versionCount: document.getElementById("cp-version-count"),
     stageMap: document.getElementById("cp-stage-map"),
     tabs: document.querySelectorAll(".cp-tab"),
     topics: document.getElementById("cp-topics"),
@@ -630,6 +632,7 @@
     // v2 surfaces — Stage Map strip + Questions tab.
     renderStageMap(plan);
     renderQuestions(plan);
+    renderVersions(plan);
 
     addPlanSectionCopyBtns();
     addTabsCopyAll(plan, artifacts, prompts);
@@ -746,6 +749,7 @@
     els.artifactsPanel.hidden = tab !== "artifacts";
     if (els.promptsPanel) els.promptsPanel.hidden = tab !== "prompts";
     if (els.questionsPanel) els.questionsPanel.hidden = tab !== "questions";
+    if (els.versionsPanel) els.versionsPanel.hidden = tab !== "versions";
   }
 
   /* ─── v2 bidirectional pipeline (Phase E) ──────────────────────────────────
@@ -1005,6 +1009,139 @@
 
       els.questionsPanel.appendChild(card);
     });
+  }
+
+  function renderVersions(plan) {
+    if (!els.versionsPanel) return;
+    var panel = els.versionsPanel;
+    panel.innerHTML = "";
+    fetch("/api/claude-plans/" + encodeURIComponent(plan.slug) + "/versions")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var versions = (data && data.versions) || [];
+        if (els.versionCount) els.versionCount.textContent = String(versions.length);
+        if (versions.length === 0) {
+          var empty = document.createElement("div");
+          empty.className = "cp-detail-empty";
+          empty.style.padding = "40px 0";
+          empty.textContent =
+            "No prior versions yet. A snapshot is saved automatically whenever a " +
+            "push changes this plan's content.";
+          panel.appendChild(empty);
+          return;
+        }
+        var list = document.createElement("div");
+        list.className = "cp-versions";
+        // Synthetic "current" row at the top for orientation (not restorable).
+        list.appendChild(versionRow({
+          version: null,
+          saved_at: plan.updated_at,
+          title: plan.title,
+          status: plan.status
+        }, plan, true));
+        versions.forEach(function (v) {
+          list.appendChild(versionRow(v, plan, false));
+        });
+        panel.appendChild(list);
+      })
+      .catch(function () {
+        panel.innerHTML = "";
+        var err = document.createElement("div");
+        err.className = "cp-detail-empty";
+        err.style.padding = "40px 0";
+        err.textContent = "Could not load version history.";
+        panel.appendChild(err);
+      });
+  }
+
+  function versionRow(v, plan, isCurrent) {
+    var row = document.createElement("div");
+    row.className = "cp-version" + (isCurrent ? " cp-version--current" : "");
+
+    var head = document.createElement("div");
+    head.className = "cp-version-head";
+
+    var label = document.createElement("span");
+    label.className = "cp-version-label";
+    label.textContent = isCurrent ? "Current" : "v" + v.version;
+    head.appendChild(label);
+
+    if (v.status) {
+      var status = document.createElement("span");
+      status.className = "cp-status-pill cp-version-status";
+      status.textContent = v.status;
+      head.appendChild(status);
+    }
+
+    var stamp = document.createElement("span");
+    stamp.className = "cp-stamp cp-version-stamp";
+    stamp.textContent = v.saved_at ? fmtTime(v.saved_at) : "";
+    head.appendChild(stamp);
+
+    var actions = document.createElement("span");
+    actions.className = "cp-version-actions";
+    if (!isCurrent) {
+      var viewBtn = document.createElement("button");
+      viewBtn.type = "button";
+      viewBtn.className = "cp-version-btn";
+      viewBtn.textContent = "View";
+      var body = null;
+      viewBtn.addEventListener("click", function () {
+        if (body && body.parentNode) {
+          body.parentNode.removeChild(body);
+          body = null;
+          viewBtn.textContent = "View";
+          return;
+        }
+        viewBtn.textContent = "Hide";
+        body = document.createElement("div");
+        body.className = "cp-version-body cp-tab-panel";
+        row.appendChild(body);
+        fetch("/api/claude-plans/" + encodeURIComponent(plan.slug) + "/versions/" + v.version)
+          .then(function (r) { return r.json(); })
+          .then(function (snap) {
+            var p = snap && snap.plan;
+            if (!p) { body.textContent = "Snapshot unavailable."; return; }
+            if (p.content_html && window.DOMPurify) {
+              body.innerHTML = window.DOMPurify.sanitize(p.content_html);
+            } else {
+              renderMarkdown(p.content_md || "", body);
+            }
+          })
+          .catch(function () { body.textContent = "Could not load snapshot."; });
+      });
+      actions.appendChild(viewBtn);
+
+      var restoreBtn = document.createElement("button");
+      restoreBtn.type = "button";
+      restoreBtn.className = "cp-version-btn cp-version-btn--primary";
+      restoreBtn.textContent = "Restore";
+      restoreBtn.addEventListener("click", function () {
+        restoreVersion(plan.slug, v.version, restoreBtn);
+      });
+      actions.appendChild(restoreBtn);
+    }
+    head.appendChild(actions);
+    row.appendChild(head);
+    return row;
+  }
+
+  function restoreVersion(slug, version, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = "Restoring…"; }
+    fetch("/api/claude-plans/" + encodeURIComponent(slug) + "/versions/" + version + "/restore", {
+      method: "POST"
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, json: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.json && res.json.error) || "restore failed");
+        // The plan-file write fires an SSE plan:upsert → renderDetail →
+        // renderVersions refreshes the list automatically.
+        showToast("Restored v" + version + " as the current plan.");
+      })
+      .catch(function (e) {
+        if (btn) { btn.disabled = false; btn.textContent = "Restore"; }
+        showToast("Restore failed: " + e.message);
+      });
   }
 
   function submitAnswer(slug, questionId, answer) {

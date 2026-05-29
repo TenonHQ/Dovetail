@@ -224,6 +224,27 @@ export interface PlanWithArtifacts {
   prompts: ClaudePrompt[];
 }
 
+/**
+ * An immutable snapshot of a plan's prior content, written by pushPlan()
+ * whenever a re-push changes content_hash. Lets the dashboard surface a
+ * version history so an inferior overwrite can be recovered. Snapshots live
+ * under <root>/<plan-slug>/versions/<version>.json and are capped at
+ * MAX_PLAN_VERSIONS most-recent per plan.
+ */
+export interface PlanVersion {
+  version: number;
+  saved_at: string;
+  plan: ClaudePlan;
+}
+
+/** Lightweight version-list row (no full content) for the History tab. */
+export interface PlanVersionMeta {
+  version: number;
+  saved_at: string;
+  title: string;
+  status: PlanStatus;
+}
+
 export var ALLOWED_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   DRAFT: ["APPROVED", "EXITED"],
   APPROVED: ["EXITED"],

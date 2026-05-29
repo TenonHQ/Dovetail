@@ -16,7 +16,20 @@
     "session_id": null,
     "categories": [],
     "schema_version": 2,
-    "url": "<dashboard deep-link, host-dependent>"
+    "url": "<dashboard deep-link, host-dependent>",
+    "feature_score": {
+      "score": 0,
+      "missing": [
+        "structured content (content_structured / content_html)",
+        "a substantial body (>= 400 chars)",
+        "at least one diagram (push_diagram)",
+        "at least one markdown artifact (push_artifact)",
+        "linked related plans (linked_artifacts)",
+        "a linked PR (pr_url / pr_number)",
+        "topic categories"
+      ],
+      "hint": "Score 0.00/1.00 — add at least one diagram (push_diagram) and structured content (content_structured / content_html) to raise it."
+    }
   },
-  "notes": "Plain content_md, no PR fields, no linked_artifacts. Locks the default-DRAFT, default-null session_id, the category-extraction default, and the presence of the registry-added `url` deep-link (value host-dependent via CLAUDE_PLANS_DASHBOARD_URL, so recorded as a placeholder). Consumer: dashboard list view + /resume skill."
+  "notes": "Plain content_md, no PR fields, no linked_artifacts. Locks the default-DRAFT, default-null session_id, the category-extraction default, the registry-added `url` deep-link (host-dependent, placeholder), and the registry-added `feature_score` nudge (deterministic for this thin input — all 7 features missing, score 0). Consumer: dashboard list view + /resume skill."
 }

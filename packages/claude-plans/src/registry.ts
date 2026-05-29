@@ -24,13 +24,17 @@ import {
   getLintEventsSchema,
   setStageSchema,
   pullPlanSchema,
-  dispatchStageSchema
+  dispatchStageSchema,
+  listPlanVersionsSchema,
+  getPlanVersionSchema,
+  restorePlanVersionSchema
 } from "./schemas";
 import {
   pushPlan,
   updatePlanStatus,
   getPlan,
   listPlans,
+  listArtifacts,
   pushArtifact,
   pushPrompt,
   deletePlan,
@@ -43,8 +47,12 @@ import {
   setStage,
   loadPlanFull,
   dispatchStage,
+  listVersions,
+  getVersion,
+  restoreVersion,
   StorageOptions
 } from "./storage";
+import { scorePlanFeatures } from "./score";
 
 export var TOOL_NAMES = [
   "push_plan",
@@ -63,7 +71,10 @@ export var TOOL_NAMES = [
   "get_lint_events",
   "set_stage",
   "pull_plan",
-  "dispatch_stage"
+  "dispatch_stage",
+  "list_plan_versions",
+  "get_plan_version",
+  "restore_plan_version"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -156,6 +167,10 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       description:
         "Create or update a plan shown in the Dovetail dashboard at /claude-plans. " +
         "Auto-slugs from title when slug is omitted. Status defaults to DRAFT.\n\n" +
+        "Returns a feature_score {score:0..1, missing:[], hint} rating how fully this " +
+        "push uses the display surface (structured content, diagrams, linked PR, etc.). " +
+        "Act on a low score by attaching what's missing — push_diagram / push_artifact / " +
+        "content_structured — before presenting the plan.\n\n" +
         "Content — supply exactly one of:\n" +
         "  content_md: string — raw Markdown\n" +
         "  content_html: string — raw HTML (sanitized by DOMPurify)\n" +
@@ -214,7 +229,17 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           },
           storageOpts
         );
-        return Object.assign({}, plan, { url: planDashboardUrl(plan.slug) });
+        // Feature-usage score (0..1) returned to the caller as a nudge to use
+        // the full surface — diagrams, structured content, linked PR, etc.
+        // Advisory only; reflects what's attached at push time.
+        var feature_score = scorePlanFeatures({
+          plan: plan,
+          artifacts: listArtifacts(plan.slug, storageOpts)
+        });
+        return Object.assign({}, plan, {
+          url: planDashboardUrl(plan.slug),
+          feature_score: feature_score
+        });
       }
     },
     {
@@ -573,6 +598,45 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           },
           storageOpts
         );
+      }
+    },
+    {
+      name: "list_plan_versions",
+      description:
+        "List a plan's saved version snapshots, newest-first. A snapshot is auto-saved " +
+        "whenever a push changes the plan's content, so an inferior overwrite can be " +
+        "recovered. Returns { slug, versions: [{version, saved_at, title, status}] }.",
+      shape: listPlanVersionsSchema.shape,
+      handler: async function (args: any) {
+        var parsed = listPlanVersionsSchema.parse(args);
+        return { slug: parsed.slug, versions: listVersions(parsed.slug, storageOpts) };
+      }
+    },
+    {
+      name: "get_plan_version",
+      description:
+        "Read a single saved version of a plan (full snapshot). Returns the PlanVersion " +
+        "{ version, saved_at, plan }. Use list_plan_versions to discover version numbers.",
+      shape: getPlanVersionSchema.shape,
+      handler: async function (args: any) {
+        var parsed = getPlanVersionSchema.parse(args);
+        var v = getVersion(parsed.slug, parsed.version, storageOpts);
+        if (!v) throw new Error("version not found: " + parsed.slug + " v" + parsed.version);
+        return v;
+      }
+    },
+    {
+      name: "restore_plan_version",
+      description:
+        "Restore a prior version: re-push its content as the new current record. " +
+        "Non-destructive — the pre-restore current is itself snapshotted first, so nothing " +
+        "is lost. Use to recover after a session pushed an inferior plan. Returns the new " +
+        "current plan with its dashboard url.",
+      shape: restorePlanVersionSchema.shape,
+      handler: async function (args: any) {
+        var parsed = restorePlanVersionSchema.parse(args);
+        var plan = restoreVersion(parsed.slug, parsed.version, storageOpts);
+        return Object.assign({}, plan, { url: planDashboardUrl(plan.slug) });
       }
     }
   ];

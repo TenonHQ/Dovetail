@@ -28,6 +28,8 @@ import {
   PipelineStage,
   PlanQuestion,
   PlanStatus,
+  PlanVersion,
+  PlanVersionMeta,
   PlanWithArtifacts,
   PromptCyclePayload,
   PromptLintEvent,
@@ -133,6 +135,44 @@ function promptPath(root: string, planSlug: string, slug: string): string {
   return path.join(promptDir(root, planSlug), slug + ".json");
 }
 
+// Plan version snapshots live under <root>/<plan-slug>/versions/<n>.json.
+// Capped at the most-recent MAX_PLAN_VERSIONS to bound disk growth.
+export var MAX_PLAN_VERSIONS = 20;
+
+function versionDir(root: string, planSlug: string): string {
+  return path.join(root, planSlug, "versions");
+}
+
+function versionPath(root: string, planSlug: string, version: number): string {
+  return path.join(versionDir(root, planSlug), version + ".json");
+}
+
+function versionNumbers(root: string, planSlug: string): number[] {
+  var dir = versionDir(root, planSlug);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter(function (n) { return /^\d+\.json$/.test(n); })
+    .map(function (n) { return parseInt(n, 10); })
+    .sort(function (a, b) { return a - b; });
+}
+
+// Snapshot `plan` as the next version under its slug, then prune the oldest
+// snapshots beyond MAX_PLAN_VERSIONS. Called by pushPlan before it overwrites
+// an existing record whose content changed.
+function snapshotVersion(root: string, plan: ClaudePlan, savedAt: string): void {
+  var nums = versionNumbers(root, plan.slug);
+  var next = (nums.length ? nums[nums.length - 1] : 0) + 1;
+  var snapshot: PlanVersion = { version: next, saved_at: savedAt, plan: plan };
+  atomicWriteJson(versionPath(root, plan.slug, next), snapshot);
+
+  var all = versionNumbers(root, plan.slug);
+  var excess = all.length - MAX_PLAN_VERSIONS;
+  for (var i = 0; i < excess; i++) {
+    try { fs.unlinkSync(versionPath(root, plan.slug, all[i])); } catch (_e) { /* best effort */ }
+  }
+}
+
 // Lint events are global (not nested under a plan). The leading underscore keeps
 // the directory out of listPlans(), which only reads top-level "*.json" files.
 function lintEventsDir(root: string): string {
@@ -219,6 +259,13 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
   if (existing && existing.stage_history) plan.stage_history = existing.stage_history;
   if (existing && existing.dispatch_token !== undefined) plan.dispatch_token = existing.dispatch_token;
   if (existing && existing.dispatch_log) plan.dispatch_log = existing.dispatch_log;
+
+  // Version history: snapshot the prior record whenever content actually
+  // changed, so an inferior overwrite can be recovered from the dashboard.
+  // Identical re-pushes (same content_hash) don't create a snapshot.
+  if (existing && existing.content_hash !== plan.content_hash) {
+    snapshotVersion(root, existing, now);
+  }
 
   atomicWriteJson(planPath(root, slug), plan);
 
@@ -317,6 +364,64 @@ export function listPrompts(planSlug: string, options: StorageOptions = {}): Cla
     return a.created_at.localeCompare(b.created_at);
   });
   return prompts;
+}
+
+// List a plan's saved versions, newest-first, as lightweight metadata rows.
+export function listVersions(planSlug: string, options: StorageOptions = {}): PlanVersionMeta[] {
+  var root = storageRoot(options);
+  var nums = versionNumbers(root, planSlug);
+  var metas: PlanVersionMeta[] = [];
+  for (var i = 0; i < nums.length; i++) {
+    var v = readJson<PlanVersion>(versionPath(root, planSlug, nums[i]));
+    if (!v) continue;
+    metas.push({
+      version: v.version,
+      saved_at: v.saved_at,
+      title: v.plan.title,
+      status: v.plan.status
+    });
+  }
+  metas.sort(function (a, b) { return b.version - a.version; });
+  return metas;
+}
+
+// Read a single saved version (full plan snapshot), or null if absent.
+export function getVersion(
+  planSlug: string,
+  version: number,
+  options: StorageOptions = {}
+): PlanVersion | null {
+  var root = storageRoot(options);
+  return readJson<PlanVersion>(versionPath(root, planSlug, version));
+}
+
+// Restore a prior version: re-push its content as the new current record.
+// Non-destructive — pushPlan snapshots the pre-restore current first, so the
+// version you restored *from* also remains in history. Returns new current.
+export function restoreVersion(
+  planSlug: string,
+  version: number,
+  options: StorageOptions = {}
+): ClaudePlan {
+  var snapshot = getVersion(planSlug, version, options);
+  if (!snapshot) throw new Error("version not found: " + planSlug + " v" + version);
+  var p = snapshot.plan;
+  return pushPlan(
+    {
+      slug: p.slug,
+      title: p.title,
+      content_md: p.content_md,
+      content_html: p.content_html,
+      status: p.status,
+      session_id: p.session_id,
+      pr_number: p.pr_number,
+      pr_url: p.pr_url,
+      pr_title: p.pr_title,
+      linked_artifacts: p.linked_artifacts,
+      categories: p.categories
+    },
+    options
+  );
 }
 
 export interface PushArtifactInput {
