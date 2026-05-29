@@ -175,7 +175,7 @@ Source: `packages/claude-plans/src/cli.ts`.
 
 ## 6. `dove init-claude` — the 9 installable skills
 
-`npx dove init-claude` copies these from `packages/core/skills/` into your project's `.claude/commands/` (`packages/core/src/commands/claudeCommand.ts`):
+`npx dove init-claude` copies these from `packages/core/skills/` into your project's `.claude/commands/` (`packages/core/src/claudeCommand.ts`):
 
 `dove-setup-project`, `dove-configure-pipeline`, `dove-debug-build`, `dove-manage-tables`, `dove-create-record`, `dove-delete-record`, `dove-manage-update-sets`, `dove-create-plugin`, `dove-troubleshoot-sync`.
 
