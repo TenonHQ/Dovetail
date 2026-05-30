@@ -30,12 +30,21 @@
 
   // ── Open/close ─────────────────────────────────────────────────────────────
   function isOpen() { return drawer.classList.contains("cp-todo-open"); }
-  function setOpen(open) {
+  // `silent` skips focus moves — used on the initial persisted-open restore so a
+  // page load doesn't yank focus into the panel (and hijack the "/" shortcut).
+  function setOpen(open, silent) {
+    var wasOpen = isOpen();
     drawer.classList.toggle("cp-todo-open", open);
     drawer.setAttribute("aria-hidden", open ? "false" : "true");
     toggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
     try { localStorage.setItem(OPEN_KEY, open ? "1" : "0"); } catch (e) {}
-    if (open && input) input.focus();
+    if (silent) return;
+    if (open) {
+      if (input) input.focus();
+    } else if (wasOpen && drawer.contains(document.activeElement)) {
+      // Don't strand keyboard focus inside the now-aria-hidden subtree.
+      toggleBtn.focus();
+    }
   }
   toggleBtn.addEventListener("click", function () { setOpen(!isOpen()); });
   if (closeBtn) closeBtn.addEventListener("click", function () { setOpen(false); });
@@ -272,10 +281,10 @@
     } catch (e) { /* SSE unsupported — panel still works via manual actions */ }
   }
 
-  // Restore persisted open state (default closed).
+  // Restore persisted open state (default closed). Silent: no focus steal.
   var saved = "0";
   try { saved = localStorage.getItem(OPEN_KEY) || "0"; } catch (e) {}
-  setOpen(saved === "1");
+  setOpen(saved === "1", true);
 
   load();
   connectStream();
