@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.34",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.34",
+  "prev_version": "0.0.33",
+  "published_at": "2026-05-30T08:18:23.493Z",
+  "git": {
+    "sha": "d8151d39e4fa684a3bfee0b9f5bc6f51859bffe4",
+    "tag": "dovetail-dashboard@0.0.34"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "d8151d39e",
+      "subject": "feat(todo): TODO MCP package + dashboard priority checklist (#124)",
+      "pr": 124
+    },
+    {
+      "sha": "da705804d",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.33 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
