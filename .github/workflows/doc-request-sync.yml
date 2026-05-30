@@ -1,0 +1,50 @@
+# Caller workflow template — DEPLOY TO EACH CHILD REPO as .github/workflows/doc-request-sync.yml
+# (ServiceNowFiles, Dovetail, Mortise, Sashimono, servicenow-types — any repo with docs to keep current).
+#
+# Fires when a PR is merged into main, collects the changed paths, and calls the reusable workflow
+# in Craftsman, which upserts this repo's single `doc-request` issue. Skips non-merge closes,
+# the doc-gen bot's own branches, and the manual `skip-doc-request` opt-out label.
+
+name: Doc Request Sync
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  collect:
+    if: >
+      github.event.pull_request.merged == true &&
+      !startsWith(github.event.pull_request.head.ref, 'docs/auto-') &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-doc-request')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read   # least-privilege: pulls.listFiles only (R-3)
+    outputs:
+      changed_paths: ${{ steps.files.outputs.paths }}
+    steps:
+      - name: List changed paths
+        id: files
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100
+            });
+            core.setOutput("paths", files.map(f => f.filename).join("\n"));
+
+  sync:
+    needs: collect
+    uses: TenonHQ/Craftsman/.github/workflows/doc-request-sync.yml@main
+    with:
+      repo_full_name: ${{ github.repository }}
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_title: ${{ github.event.pull_request.title }}
+      pr_url: ${{ github.event.pull_request.html_url }}
+      changed_paths: ${{ needs.collect.outputs.changed_paths }}
+    # No secrets needed: the reusable workflow defaults to the caller's github.token, which can
+    # create an issue in this repo. (That is the per-repo decision paying off — no cross-repo PAT.)
