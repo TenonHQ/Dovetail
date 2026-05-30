@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-todo",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MCP server + CLI for a drag-to-reorder priority TODO checklist surfaced in the Dovetail dashboard.",
   "main": "./dist/index.js",
   "bin": {
