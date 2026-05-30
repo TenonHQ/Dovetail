@@ -1380,7 +1380,20 @@ app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
 // live in exactly one place (same pattern as the claude-plans routes above).
 // The single store file is watched so MCP-driven and dashboard-driven changes
 // both stream to the /todos page.
-const todoLib = require("@tenonhq/dovetail-todo/dist/storage");
+//
+// @tenonhq/dovetail-todo is an OPTIONAL dependency: the package may not be
+// installed (e.g. a fresh `npm i @tenonhq/dovetail-dashboard` before the todo
+// package is published). Guard the require so a missing package disables the
+// TODO panel gracefully instead of crashing the whole dashboard at boot.
+let todoLib = null;
+try {
+  todoLib = require("@tenonhq/dovetail-todo/dist/storage");
+} catch (err) {
+  console.warn(
+    "[todos] @tenonhq/dovetail-todo not installed — TODO panel disabled. " +
+      "Install it to enable /todos."
+  );
+}
 
 const TODO_DIR =
   process.env.DOVE_TODO_DIR || path.join(os.homedir(), ".dovetail", "todos");
@@ -1418,9 +1431,19 @@ function emitTodoState() {
   }
 }
 
+// Middleware: 503 the TODO API when the optional package isn't installed,
+// so the panel degrades cleanly instead of throwing on a null todoLib.
+function requireTodoLib(req, res, next) {
+  if (!todoLib) {
+    return res.status(503).json({ error: "@tenonhq/dovetail-todo is not installed" });
+  }
+  next();
+}
+
 let todoWatcher = null;
 function startTodoWatcher() {
   if (todoWatcher) return;
+  if (!todoLib) return; // optional package absent — nothing to watch
   try {
     fs.mkdirSync(TODO_DIR, { recursive: true });
   } catch (err) {
@@ -1439,7 +1462,7 @@ app.get("/todos", todoReadLimiter, function (req, res) {
   res.sendFile(path.join(__dirname, "public", "todos.html"));
 });
 
-app.get("/api/todos", todoReadLimiter, function (req, res) {
+app.get("/api/todos", todoReadLimiter, requireTodoLib, function (req, res) {
   try {
     res.json({ list: todoLib.loadList({ rootDir: TODO_DIR }), storage: TODO_DIR });
   } catch (e) {
@@ -1474,7 +1497,7 @@ app.get("/api/todos/stream", function (req, res) {
 });
 
 // POST /api/todos — add a one-line item. Body: { text, position? }
-app.post("/api/todos", todoLimiter, function (req, res) {
+app.post("/api/todos", todoLimiter, requireTodoLib, function (req, res) {
   try {
     const body = req.body || {};
     const result = todoLib.addTodo(
@@ -1489,7 +1512,7 @@ app.post("/api/todos", todoLimiter, function (req, res) {
 });
 
 // POST /api/todos/reorder — persist a full priority order. Body: { ids: [] }
-app.post("/api/todos/reorder", todoLimiter, function (req, res) {
+app.post("/api/todos/reorder", todoLimiter, requireTodoLib, function (req, res) {
   try {
     const body = req.body || {};
     const list = todoLib.reorderTodos({ ids: body.ids }, { rootDir: TODO_DIR });
@@ -1501,7 +1524,7 @@ app.post("/api/todos/reorder", todoLimiter, function (req, res) {
 });
 
 // POST /api/todos/clear-done — drop every completed item.
-app.post("/api/todos/clear-done", todoLimiter, function (req, res) {
+app.post("/api/todos/clear-done", todoLimiter, requireTodoLib, function (req, res) {
   try {
     const result = todoLib.clearDone({ rootDir: TODO_DIR });
     broadcastTodos(result.list);
@@ -1512,7 +1535,7 @@ app.post("/api/todos/clear-done", todoLimiter, function (req, res) {
 });
 
 // PATCH /api/todos/:id — toggle done or edit text. Body: { done? } or { text }
-app.patch("/api/todos/:id", todoLimiter, function (req, res) {
+app.patch("/api/todos/:id", todoLimiter, requireTodoLib, function (req, res) {
   try {
     const id = req.params.id;
     const body = req.body || {};
@@ -1530,7 +1553,7 @@ app.patch("/api/todos/:id", todoLimiter, function (req, res) {
 });
 
 // DELETE /api/todos/:id — remove one item.
-app.delete("/api/todos/:id", todoLimiter, function (req, res) {
+app.delete("/api/todos/:id", todoLimiter, requireTodoLib, function (req, res) {
   try {
     const result = todoLib.removeTodo({ id: req.params.id }, { rootDir: TODO_DIR });
     broadcastTodos(result.list);
