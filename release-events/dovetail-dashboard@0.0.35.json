@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.35",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.35",
+  "prev_version": "0.0.34",
+  "published_at": "2026-05-30T09:01:34.128Z",
+  "git": {
+    "sha": "31178f2465068e24d4804cc467976f9ede3c9788",
+    "tag": "dovetail-dashboard@0.0.35"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "31178f246",
+      "subject": "fix(todo): apply PR #124 review findings (R-1…R-4) + unblock republish (#125)",
+      "pr": 125
+    },
+    {
+      "sha": "55de31527",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.34 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
