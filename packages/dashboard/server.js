@@ -1390,6 +1390,11 @@ const todoLimiter = RateLimit({
   windowMs: 15 * 60 * 1000,
   max: 240,
 });
+// Read limiter for the page + list endpoints, which touch the filesystem.
+const todoReadLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+});
 
 // SSE fan-out for the TODO panel — one frame per connected client.
 const todoSseClients = new Set();
@@ -1430,11 +1435,11 @@ function startTodoWatcher() {
   todoWatcher.on("unlink", function () { broadcastTodos({ schema_version: 1, items: [] }); });
 }
 
-app.get("/todos", function (req, res) {
+app.get("/todos", todoReadLimiter, function (req, res) {
   res.sendFile(path.join(__dirname, "public", "todos.html"));
 });
 
-app.get("/api/todos", function (req, res) {
+app.get("/api/todos", todoReadLimiter, function (req, res) {
   try {
     res.json({ list: todoLib.loadList({ rootDir: TODO_DIR }), storage: TODO_DIR });
   } catch (e) {
