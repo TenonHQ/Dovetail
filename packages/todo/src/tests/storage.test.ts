@@ -175,4 +175,22 @@ describe("storage", function () {
     fs.writeFileSync(todosPath(opts), JSON.stringify({ items: "not-an-array" }));
     expect(loadList(opts).items).toEqual([]);
   });
+
+  test("a wholly-invalid JSON file degrades to an empty list (R-4)", function () {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(todosPath(opts), "{ not valid json");
+    expect(loadList(opts).items).toEqual([]);
+  });
+
+  test("addTodo collapses newlines to keep items one-line (R-3)", function () {
+    var r = addTodo({ text: "line one\nline two\r\nthree" }, opts);
+    expect(r.item.text).toBe("line one line two three");
+    expect(r.item.text.indexOf("\n")).toBe(-1);
+  });
+
+  test("updateTodo collapses newlines too (R-3)", function () {
+    var a = addTodo({ text: "ok" }, opts).item;
+    var u = updateTodo({ id: a.id, text: "a\nb" }, opts);
+    expect(u.item.text).toBe("a b");
+  });
 });
