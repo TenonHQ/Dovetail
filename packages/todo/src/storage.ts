@@ -44,6 +44,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+// Collapse any newline/control whitespace to single spaces and trim. The MCP
+// layer rejects multi-line text via zod, but the dashboard REST routes call
+// storage directly — normalizing here keeps the "one-line item" invariant on
+// every write surface rather than only the MCP one.
+function oneLine(input: string): string {
+  return (input || "").replace(/\s*[\r\n]+\s*/g, " ").trim();
+}
+
 function atomicWriteJson(filePath: string, value: unknown): void {
   ensureDir(path.dirname(filePath));
   var tmp = filePath + ".tmp." + process.pid + "." + crypto.randomBytes(4).toString("hex");
@@ -86,7 +94,14 @@ export function loadList(options: StorageOptions = {}): TodoList {
   var file = todosPath(options);
   if (!fs.existsSync(file)) return emptyList();
   var raw = fs.readFileSync(file, "utf8");
-  var parsed = JSON.parse(raw) as Partial<TodoList>;
+  var parsed: Partial<TodoList>;
+  try {
+    parsed = JSON.parse(raw) as Partial<TodoList>;
+  } catch (e) {
+    // A torn read between a writer's tmp+rename, or a hand-corrupted file,
+    // shouldn't 500 the dashboard. Degrade to an empty list.
+    return emptyList();
+  }
   var items = Array.isArray(parsed.items) ? (parsed.items as TodoItem[]) : [];
   return {
     schema_version: CURRENT_SCHEMA_VERSION,
@@ -124,7 +139,7 @@ export interface MutationResult {
 }
 
 export function addTodo(input: AddTodoInput, options: StorageOptions = {}): MutationResult {
-  var text = (input.text || "").trim();
+  var text = oneLine(input.text);
   if (!text) throw new Error("todo text is required");
   var list = loadList(options);
   var now = nowIso();
@@ -174,7 +189,7 @@ export interface UpdateTodoInput {
 }
 
 export function updateTodo(input: UpdateTodoInput, options: StorageOptions = {}): MutationResult {
-  var text = (input.text || "").trim();
+  var text = oneLine(input.text);
   if (!text) throw new Error("todo text is required");
   var list = loadList(options);
   var idx = findIndex(list.items, input.id);
