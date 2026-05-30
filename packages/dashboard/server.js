@@ -1374,16 +1374,179 @@ app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
   }
 });
 
+// --- TODO Panel ---
+// A drag-to-reorder priority checklist. All writes go through
+// @tenonhq/dovetail-todo's storage layer so the ordering/validation rules
+// live in exactly one place (same pattern as the claude-plans routes above).
+// The single store file is watched so MCP-driven and dashboard-driven changes
+// both stream to the /todos page.
+const todoLib = require("@tenonhq/dovetail-todo/dist/storage");
+
+const TODO_DIR =
+  process.env.DOVE_TODO_DIR || path.join(os.homedir(), ".dovetail", "todos");
+const TODO_FILE = path.join(TODO_DIR, "todos.json");
+
+const todoLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 240,
+});
+
+// SSE fan-out for the TODO panel — one frame per connected client.
+const todoSseClients = new Set();
+
+function broadcastTodos(list) {
+  const frame = "event: todos:update\ndata: " + JSON.stringify({ list: list }) + "\n\n";
+  for (const res of todoSseClients) {
+    try {
+      res.write(frame);
+    } catch (err) {
+      todoSseClients.delete(res);
+    }
+  }
+}
+
+function emitTodoState() {
+  try {
+    broadcastTodos(todoLib.loadList({ rootDir: TODO_DIR }));
+  } catch (e) {
+    // A torn/partial read between rename events is transient; ignore.
+  }
+}
+
+let todoWatcher = null;
+function startTodoWatcher() {
+  if (todoWatcher) return;
+  try {
+    fs.mkdirSync(TODO_DIR, { recursive: true });
+  } catch (err) {
+    console.warn("[todos] could not create storage dir:", err.message);
+  }
+  todoWatcher = chokidar.watch(TODO_FILE, {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
+  });
+  todoWatcher.on("add", emitTodoState);
+  todoWatcher.on("change", emitTodoState);
+  todoWatcher.on("unlink", function () { broadcastTodos({ schema_version: 1, items: [] }); });
+}
+
+app.get("/todos", function (req, res) {
+  res.sendFile(path.join(__dirname, "public", "todos.html"));
+});
+
+app.get("/api/todos", function (req, res) {
+  try {
+    res.json({ list: todoLib.loadList({ rootDir: TODO_DIR }), storage: TODO_DIR });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/todos/stream", function (req, res) {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+  res.write("event: hello\ndata: {}\n\n");
+  todoSseClients.add(res);
+
+  const heartbeat = setInterval(function () {
+    try {
+      res.write(": heartbeat\n\n");
+    } catch (err) {
+      clearInterval(heartbeat);
+      todoSseClients.delete(res);
+    }
+  }, 25000);
+
+  req.on("close", function () {
+    clearInterval(heartbeat);
+    todoSseClients.delete(res);
+  });
+});
+
+// POST /api/todos — add a one-line item. Body: { text, position? }
+app.post("/api/todos", todoLimiter, function (req, res) {
+  try {
+    const body = req.body || {};
+    const result = todoLib.addTodo(
+      { text: body.text, position: body.position },
+      { rootDir: TODO_DIR }
+    );
+    broadcastTodos(result.list);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// POST /api/todos/reorder — persist a full priority order. Body: { ids: [] }
+app.post("/api/todos/reorder", todoLimiter, function (req, res) {
+  try {
+    const body = req.body || {};
+    const list = todoLib.reorderTodos({ ids: body.ids }, { rootDir: TODO_DIR });
+    broadcastTodos(list);
+    res.json({ list: list });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// POST /api/todos/clear-done — drop every completed item.
+app.post("/api/todos/clear-done", todoLimiter, function (req, res) {
+  try {
+    const result = todoLib.clearDone({ rootDir: TODO_DIR });
+    broadcastTodos(result.list);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PATCH /api/todos/:id — toggle done or edit text. Body: { done? } or { text }
+app.patch("/api/todos/:id", todoLimiter, function (req, res) {
+  try {
+    const id = req.params.id;
+    const body = req.body || {};
+    let result;
+    if (typeof body.text === "string") {
+      result = todoLib.updateTodo({ id: id, text: body.text }, { rootDir: TODO_DIR });
+    } else {
+      result = todoLib.toggleTodo({ id: id, done: body.done }, { rootDir: TODO_DIR });
+    }
+    broadcastTodos(result.list);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// DELETE /api/todos/:id — remove one item.
+app.delete("/api/todos/:id", todoLimiter, function (req, res) {
+  try {
+    const result = todoLib.removeTodo({ id: req.params.id }, { rootDir: TODO_DIR });
+    broadcastTodos(result.list);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Only start the server when run directly (not when require()-d).
 // Callers like dashboardCommand.ts and allScopesCommands.ts use
 // spawn("node", [serverPath]) which sets require.main === module.
 if (require.main === module) {
   startClaudePlanWatcher();
+  startTodoWatcher();
   app.listen(PORT, "127.0.0.1", function () {
     console.log("\n  Dovetail Update Set Dashboard");
     console.log("  Instance:  " + SN_INSTANCE);
     console.log("  Project:   " + PROJECT_ROOT);
     console.log("  Dashboard: http://localhost:" + PORT);
-    console.log("  Claude:    http://localhost:" + PORT + "/claude-plans\n");
+    console.log("  Claude:    http://localhost:" + PORT + "/claude-plans");
+    console.log("  TODO:      http://localhost:" + PORT + "/todos\n");
   });
 }

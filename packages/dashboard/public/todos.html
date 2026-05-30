@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dovetail — TODO</title>
+  <script>
+    /* Apply the saved theme before first paint to avoid a flash of light. */
+    (function () {
+      try {
+        var t = localStorage.getItem("cp-theme");
+        if (t === "dark" || t === "light") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="todos.css">
+</head>
+<body class="td-body">
+  <header>
+    <div class="header-left">
+      <svg class="brand-mark" viewBox="0 0 55 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M34.3254 13.7847H48.0563H54.9235V0H48.0563H34.3254H20.5946H6.8637H0V13.7847H6.8637H20.5946V27.5693H34.3254V13.7847Z" fill="#00663C"></path>
+        <path d="M54.9235 41.354V27.5693H48.0563H34.3254V41.354H20.5946V27.5693H6.8637H0V41.354V55.1387H20.5946H34.3254H54.9235V41.354Z" fill="#00663C"></path>
+      </svg>
+      <h1><span>Dovetail</span> TODO</h1>
+    </div>
+    <div class="header-right">
+      <a class="cp-nav-link" href="/" title="Update Sets dashboard">Update Sets</a>
+      <a class="cp-nav-link" href="/claude-plans" title="Claude plans pushed via MCP">Claude Plans</a>
+      <button class="cp-theme-toggle" id="cp-theme-toggle" type="button"
+        aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+    </div>
+  </header>
+
+  <main class="td-main">
+    <section class="td-panel">
+      <form class="td-add" id="td-add-form" autocomplete="off">
+        <input type="text" id="td-input" class="td-input" maxlength="280"
+          placeholder="Add a priority… (Enter to add to bottom, Shift+Enter to top)">
+        <button type="submit" class="td-add-btn" id="td-add-btn">Add</button>
+      </form>
+
+      <div class="td-toolbar">
+        <div class="td-summary" id="td-summary">—</div>
+        <div class="td-toolbar-actions">
+          <label class="td-toggle-done">
+            <input type="checkbox" id="td-hide-done"> Hide done
+          </label>
+          <button class="td-clear-btn" id="td-clear-done" type="button" title="Remove all completed items">Clear done</button>
+        </div>
+      </div>
+
+      <ul class="td-list" id="td-list" aria-label="Priority TODO list"></ul>
+      <div class="td-empty" id="td-empty" style="display:none;">
+        Nothing here yet. Add your first priority above — top of the list is what you work on next.
+      </div>
+      <p class="td-hint">Drag a row by its handle to reprioritize. Order is priority: the top item is next.</p>
+    </section>
+  </main>
+
+  <div class="toast-container" id="toast-container"></div>
+  <script src="todos.js"></script>
+</body>
+</html>
