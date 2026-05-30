@@ -1,0 +1,103 @@
+/* ============================================================================
+   Claude Plans — embedded TODO side panel.
+   A right-anchored drawer you can open/close from the header. Inner list rows
+   reuse the .td-* classes from todos.css; this file owns only the drawer shell,
+   the header toggle button, and the open/close animation. Tokens: tokens.css.
+   ============================================================================ */
+
+/* ── Header toggle button ─────────────────────────────────────────────────── */
+.cp-todo-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+.cp-todo-toggle[aria-expanded="true"] {
+  color: var(--brand);
+}
+.cp-todo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-radius: 9px;
+}
+
+/* ── Drawer shell ─────────────────────────────────────────────────────────── */
+.cp-todo-drawer {
+  /* Anchored below the 64px sticky header (z-index 50) and kept beneath it
+     (z-index 40) so the header's nav, theme toggle, and TODO button stay
+     clickable while the drawer is open. */
+  position: fixed;
+  top: 64px;
+  right: 0;
+  height: calc(100vh - 64px);
+  width: min(400px, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-3);
+  transform: translateX(100%);
+  transition: transform var(--dur-2) var(--ease-out);
+  z-index: 40;
+  will-change: transform;
+}
+.cp-todo-drawer.cp-todo-open {
+  transform: translateX(0);
+}
+
+.cp-todo-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.cp-todo-drawer-title {
+  font-weight: var(--weight-semibold);
+  font-size: 15px;
+  color: var(--fg);
+}
+.cp-todo-drawer-header .td-summary {
+  flex: 1;
+}
+.cp-todo-close {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  transition: color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.cp-todo-close:hover {
+  color: var(--fg);
+  background: var(--surface);
+}
+
+.cp-todo-drawer-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+/* Inner list reuses todos.css (.td-*). Pull the trailing hint in a touch. */
+.cp-todo-drawer-body .td-hint {
+  margin-top: var(--space-5);
+}

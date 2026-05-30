@@ -18,6 +18,8 @@
   <link rel="stylesheet" href="/tokens.css" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/claude-plans.css" />
+  <link rel="stylesheet" href="/todos.css" />
+  <link rel="stylesheet" href="/cp-todo.css" />
 </head>
 <body class="cp-body">
   <header>
@@ -33,7 +35,10 @@
       <a class="cp-nav-link" href="/prompt-lints">Prompt Lints
         <span class="cp-lints-badge" id="cp-lints-badge" title="Prompts needing review" hidden>0</span>
         &rarr;</a>
-      <a class="cp-nav-link" href="/todos">TODO</a>
+      <button class="cp-nav-link cp-todo-toggle" id="cp-todo-toggle" type="button"
+        aria-expanded="false" aria-controls="cp-todo-drawer"
+        title="Open TODO priorities panel">TODO
+        <span class="cp-todo-badge" id="cp-todo-badge" hidden>0</span></button>
       <button class="cp-theme-toggle" id="cp-theme-toggle" type="button"
         aria-label="Toggle dark mode" title="Toggle dark mode"></button>
       <span class="cp-storage" id="cp-storage" title="storage root"></span>
@@ -141,6 +146,42 @@
     </section>
   </main>
 
+  <!-- TODO side panel: a drawer hosting @tenonhq/dovetail-todo's priority list,
+       open/closed from the header TODO button. Backed by the same /api/todos
+       endpoints + SSE stream as the standalone /todos page. -->
+  <aside class="cp-todo-drawer" id="cp-todo-drawer" aria-hidden="true" aria-label="TODO priorities">
+    <div class="cp-todo-drawer-header">
+      <span class="cp-todo-drawer-title">TODO</span>
+      <span class="td-summary" id="cpt-summary">—</span>
+      <button class="cp-todo-close" id="cp-todo-close" type="button"
+        title="Close (Esc)" aria-label="Close TODO panel">×</button>
+    </div>
+    <div class="cp-todo-drawer-body">
+      <form class="td-add" id="cpt-add-form" autocomplete="off">
+        <input type="text" id="cpt-input" class="td-input" maxlength="280"
+          placeholder="Add a priority… (Enter = bottom, Shift+Enter = top)">
+        <button type="submit" class="td-add-btn" id="cpt-add-btn">Add</button>
+      </form>
+      <div class="td-toolbar">
+        <div class="td-toolbar-actions">
+          <label class="td-toggle-done">
+            <input type="checkbox" id="cpt-hide-done"> Hide done
+          </label>
+          <button class="td-clear-btn" id="cpt-clear-done" type="button"
+            title="Remove all completed items">Clear done</button>
+        </div>
+      </div>
+      <ul class="td-list" id="cpt-list" aria-label="Priority TODO list"></ul>
+      <div class="td-empty" id="cpt-empty" style="display:none;">
+        Nothing here yet. Add your first priority above — the top of the list is what you work on next.
+      </div>
+      <p class="td-hint">Drag a row by its handle to reprioritize. Top item is next.</p>
+    </div>
+  </aside>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/cp-todo-panel.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.6/dist/mermaid.min.js"></script>
