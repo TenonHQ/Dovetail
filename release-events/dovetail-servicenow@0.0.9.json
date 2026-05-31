@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.9",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.9",
+  "prev_version": "0.0.8",
+  "published_at": "2026-05-31T16:52:41.024Z",
+  "git": {
+    "sha": "6e62bec706d10158b1f1496e3e2246a927c1c0b5",
+    "tag": "dovetail-servicenow@0.0.9"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "6e62bec70",
+      "subject": "fix(servicenow): editFlow persistence + copyFlow (dropped from #129 squash-merge) (#130)",
+      "pr": 130
+    },
+    {
+      "sha": "d32523991",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.8 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
