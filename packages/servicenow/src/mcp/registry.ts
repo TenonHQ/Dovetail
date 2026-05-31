@@ -20,6 +20,7 @@ import { addChoicesToField } from "../choices";
 import { readFlow } from "../flowDesigner/readFlow";
 import { readActionType } from "../flowDesigner/readActionType";
 import { publishFlow } from "../flowDesigner/publishFlow";
+import { copyFlow } from "../flowDesigner/copyFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
 import {
@@ -31,6 +32,7 @@ import {
   viewFlowSchema,
   viewActionSchema,
   publishFlowSchema,
+  copyFlowSchema,
   testFlowSchema,
   editFlowSchema
 } from "./schemas";
@@ -44,6 +46,7 @@ export var TOOL_NAMES = [
   "flow_view",
   "action_view",
   "flow_publish",
+  "flow_copy",
   "flow_test",
   "flow_edit"
 ] as const;
@@ -162,6 +165,20 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       }
     },
     {
+      name: "flow_copy",
+      description:
+        "Copy a ServiceNow flow/subflow via the Designer's Copy endpoint — a complete, faithful "
+        + "clone created as an INACTIVE DRAFT in the target scope. sourceSysId is the sys_hub_flow "
+        + "to copy; newName is the copy's name; scopeSysId defaults to the source's scope. Publish "
+        + "with flow_publish when ready. Do NOT publish + activate a copy of a triggered production "
+        + "flow unless you intend it to fire.",
+      shape: copyFlowSchema.shape,
+      handler: async function (args: any) {
+        var p = copyFlowSchema.parse(args);
+        return copyFlow({ client: client(), sourceSysId: p.sourceSysId, newName: p.newName, scopeSysId: p.scopeSysId });
+      }
+    },
+    {
       name: "flow_test",
       description:
         "Test or run a ServiceNow flow/subflow. mode='validate' (default) is a safe, read-only "
@@ -185,10 +202,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     {
       name: "flow_edit",
       description:
-        "Edit a ServiceNow flow/subflow in place and re-publish. Supports rename "
-        + "(name/internalName), description, and patchStepInputs (set named input values on steps "
-        + "by uiId or label). apply=false (default) is a dry-run that returns the diff; apply=true "
-        + "publishes the edit (a write). sysId is the sys_hub_flow sys_id.",
+        "Edit a ServiceNow flow/subflow in place. Supports rename (name/internalName), description, "
+        + "and patchStepInputs (set named input values on steps by uiId or label). apply=false "
+        + "(default) is a dry-run that returns the diff; apply=true persists the edit (a write). "
+        + "Rename/description require updateSetSysId (they write sys_hub_flow via the update-set-aware "
+        + "API); patchStepInputs ride a snapshot recompile. sysId is the sys_hub_flow sys_id.",
       shape: editFlowSchema.shape,
       handler: async function (args: any) {
         var p = editFlowSchema.parse(args);
@@ -197,7 +215,8 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
           sysId: p.sysId,
           ops: p.ops,
           apply: p.apply,
-          scopeSysId: p.scopeSysId
+          scopeSysId: p.scopeSysId,
+          updateSetSysId: p.updateSetSysId
         });
       }
     }

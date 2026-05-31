@@ -80,6 +80,12 @@ export var publishFlowSchema = z.object({
   scopeSysId: z.string().optional()
 });
 
+export var copyFlowSchema = z.object({
+  sourceSysId: z.string().min(1),
+  newName: z.string().min(1),
+  scopeSysId: z.string().optional()
+});
+
 export var testFlowSchema = z.object({
   sysId: z.string().min(1),
   mode: z.union([z.literal("validate"), z.literal("execute")]).optional(),
@@ -105,5 +111,6 @@ export var editFlowSchema = z.object({
     patchStepInputs: z.array(stepInputPatchSchema).optional()
   }),
   apply: z.boolean().optional(),
-  scopeSysId: z.string().optional()
+  scopeSysId: z.string().optional(),
+  updateSetSysId: z.string().optional()
 });

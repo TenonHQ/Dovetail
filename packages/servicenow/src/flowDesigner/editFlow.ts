@@ -44,15 +44,27 @@ export interface EditFlowParams {
   /** sys_id of the sys_hub_flow (flow or subflow) to edit. */
   sysId: string;
   ops: EditFlowOps;
-  /** When true, publish the edited model. When false/omitted, dry-run (no write). */
+  /** When true, persist the edits. When false/omitted, dry-run (no write). */
   apply?: boolean;
   /** Override sysparm_transaction_scope for the publish; defaults to the model's scope. */
   scopeSysId?: string;
+  /**
+   * Update set sys_id that captures top-level field writes (rename/description).
+   * REQUIRED when apply=true and the ops include rename or description — those
+   * fields are written to sys_hub_flow through the update-set-aware Dovetail API
+   * (the snapshot POST does NOT persist them). Not needed for patchStepInputs-only
+   * edits (those ride the snapshot POST).
+   */
+  updateSetSysId?: string;
 }
 
 export interface EditFlowResult {
-  /** "dry-run" (computed, not published) or "published". */
-  status: "dry-run" | "published";
+  /**
+   * "dry-run"  — computed, nothing written;
+   * "applied"  — edits persisted (record fields written; snapshot recompiled iff
+   *              a step input changed).
+   */
+  status: "dry-run" | "applied";
   /** Human-readable list of changes that were applied to the model. */
   changes: Array<string>;
   /** Requested edits that could not be matched (e.g. unknown step or input). */
@@ -115,35 +127,45 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
     throw new Error("editFlow: sysId is required.");
   }
 
-  // Read the full model — we need the raw instance graph to patch it.
+  // Read the full model — we need the raw instance graph to patch step inputs
+  // and to resolve the flow's scope for the update-set-aware record write.
   var read = await readFlow({ client: client, sysId: sysId, raw: true });
   var model = read.raw;
   if (!model || typeof model !== "object") {
-    // Defensive — readFlow already throws on a bad response, but the raw model
-    // could in theory be absent.
     var resp = await client.now.get<any>("/api/now/processflow/flow/" + encodeURIComponent(sysId));
     model = unwrapModel(resp);
   }
+  var scopeSysId = params.scopeSysId || (typeof model.scope === "string" ? model.scope : "");
 
   var changes: Array<string> = [];
   var warnings: Array<string> = [];
 
+  // Top-level sys_hub_flow columns. These are NOT persisted by the snapshot POST
+  // (that only writes step input values), so they go through a direct,
+  // update-set-aware record write — see recordFields below.
+  var recordFields: Record<string, any> = {};
   if (ops.rename) {
     if (ops.rename.name) {
-      model.name = ops.rename.name;
+      recordFields.name = ops.rename.name;
       changes.push("name -> " + ops.rename.name);
     }
     if (ops.rename.internalName) {
-      model.internalName = ops.rename.internalName;
+      recordFields.internal_name = ops.rename.internalName;
       changes.push("internalName -> " + ops.rename.internalName);
     }
   }
-
   if (typeof ops.description === "string") {
-    model.description = ops.description;
+    recordFields.description = ops.description;
     changes.push("description updated");
   }
 
+  // Step input values ride the snapshot POST — the publish is documented to
+  // persist step input values back to the design records (verified for action
+  // types). For FLOWS this is best-effort: we apply, republish, then read back
+  // and confirm each value actually took (see the verify pass after publish), so
+  // a non-persist surfaces as a warning instead of a silent false success.
+  var stepInputsChanged = false;
+  var verifyTargets: Array<{ step: string; input: string; value: any }> = [];
   if (ops.patchStepInputs && ops.patchStepInputs.length > 0) {
     for (var i = 0; i < ops.patchStepInputs.length; i += 1) {
       var patch = ops.patchStepInputs[i];
@@ -154,6 +176,8 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
       }
       var ok = setInputValue(step, patch.input, patch.value);
       if (ok) {
+        stepInputsChanged = true;
+        verifyTargets.push({ step: patch.step, input: patch.input, value: patch.value });
         changes.push("step '" + (step.name || patch.step) + "' input '" + patch.input + "' updated");
       } else {
         warnings.push("input not found: " + patch.input + " on step " + patch.step);
@@ -161,20 +185,67 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
     }
   }
 
-  if (!params.apply) {
+  if (!params.apply || changes.length === 0) {
+    // Dry-run, or nothing matched — never write/publish a no-op.
     return { status: "dry-run", changes: changes, warnings: warnings };
   }
 
-  if (changes.length === 0) {
-    // Nothing matched — don't publish a no-op (which would still recompile).
-    return { status: "dry-run", changes: changes, warnings: warnings };
+  // 1. Persist top-level field edits via the Dovetail write API, pinned to the
+  //    caller-supplied update set so the change is captured for promotion.
+  if (Object.keys(recordFields).length > 0) {
+    if (!params.updateSetSysId) {
+      throw new Error(
+        "editFlow: updateSetSysId is required to apply rename/description edits "
+          + "(they write sys_hub_flow through the update-set-aware API). Pass an "
+          + "in-progress update set sys_id, or limit ops to patchStepInputs."
+      );
+    }
+    await client.claude.pushWithUpdateSet({
+      update_set_sys_id: params.updateSetSysId,
+      table: "sys_hub_flow",
+      record_sys_id: sysId,
+      fields: recordFields
+    });
   }
 
-  var pub = await publishFlow({ client: client, sysId: sysId, model: model, scopeSysId: params.scopeSysId });
+  // 2. Republish only when step inputs changed (recompiles the snapshot AND
+  //    persists the step values). Metadata-only edits need no recompile.
+  var snapshotSysId: string | undefined;
+  if (stepInputsChanged) {
+    var pub = await publishFlow({ client: client, sysId: sysId, model: model, scopeSysId: scopeSysId || undefined });
+    snapshotSysId = pub.snapshotSysId;
+
+    // 3. Verify the step-input changes actually persisted. The snapshot POST is
+    //    only documented to persist step values for action types; for flows it
+    //    can no-op. Read the model back and confirm each value took — a miss is
+    //    surfaced as a warning rather than a silent false "applied".
+    var afterResp = await client.now.get<any>("/api/now/processflow/flow/" + encodeURIComponent(sysId));
+    var afterModel = unwrapModel(afterResp);
+    for (var v = 0; v < verifyTargets.length; v += 1) {
+      var t = verifyTargets[v];
+      var liveStep = afterModel ? findStep(afterModel, t.step) : null;
+      var persisted = false;
+      if (liveStep && Array.isArray(liveStep.inputs)) {
+        for (var k = 0; k < liveStep.inputs.length; k += 1) {
+          if (liveStep.inputs[k] && liveStep.inputs[k].name === t.input) {
+            persisted = String(liveStep.inputs[k].value) === String(t.value);
+            break;
+          }
+        }
+      }
+      if (!persisted) {
+        warnings.push(
+          "step input '" + t.input + "' on '" + t.step + "' did not persist via the snapshot POST "
+            + "— verify in the Designer (flow step-input persistence is best-effort)."
+        );
+      }
+    }
+  }
+
   return {
-    status: "published",
+    status: "applied",
     changes: changes,
     warnings: warnings,
-    snapshotSysId: pub.snapshotSysId
+    snapshotSysId: snapshotSysId
   };
 }

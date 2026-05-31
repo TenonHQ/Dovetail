@@ -37,6 +37,7 @@ import { formatBuildFlowResult } from "./flowDesigner-formatter";
 import { readFlow } from "./flowDesigner/readFlow";
 import { readActionType } from "./flowDesigner/readActionType";
 import { publishFlow } from "./flowDesigner/publishFlow";
+import { copyFlow } from "./flowDesigner/copyFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { testFlow } from "./flowDesigner/testFlow";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
@@ -352,6 +353,41 @@ async function runPublishFlow(flags: Record<string, string>): Promise<number> {
 }
 
 /**
+ * dove-sn copy-flow:
+ *   --sys-id <sys_id>   Required. Source sys_hub_flow sys_id (flow or subflow).
+ *   --name <name>       Required. Name for the copy.
+ *   --scope <sys_id>    Optional. Target scope (defaults to the source's scope).
+ *   --json              Optional. Emit the structured CopyFlowResult.
+ *
+ * Copies the flow via the Designer's own Copy endpoint — a complete, faithful
+ * clone created as an INACTIVE DRAFT. Publish it with publish-flow when ready.
+ * (Do NOT publish + activate a copy of a triggered production flow unless you
+ * intend it to fire.)
+ */
+async function runCopyFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  var name = flags.name;
+  if (!sysId || !name) {
+    process.stderr.write("copy-flow: --sys-id <sys_id> and --name <name> are required\n");
+    return 1;
+  }
+  var params: any = { client: createClient({}), sourceSysId: sysId, newName: name };
+  if (flags.scope || flags.scopeSysId) {
+    params.scopeSysId = flags.scope || flags.scopeSysId;
+  }
+  var result = await copyFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    "Copied to '" + result.name + "' (sys_id " + result.sysId + ", scope " + result.scopeSysId
+      + ") — inactive draft. Publish with: dove-sn publish-flow --sys-id " + result.sysId + "\n"
+  );
+  return 0;
+}
+
+/**
  * dove-sn test-flow:
  *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
  *   --execute           Optional. Actually run it (default is validate-only).
@@ -401,12 +437,14 @@ async function runTestFlow(flags: Record<string, string>): Promise<number> {
  * dove-sn edit-flow:
  *   --sys-id <sys_id>     Required. sys_hub_flow sys_id (flow or subflow).
  *   --from-json <path>    Required. JSON EditFlowOps { rename?, description?, patchStepInputs? }.
- *   --apply               Optional. Publish the edit (default is a dry-run diff).
+ *   --apply               Optional. Persist the edit (default is a dry-run diff).
  *   --scope <sys_id>      Optional. sysparm_transaction_scope for the publish.
+ *   --update-set <sys_id> Required with --apply when ops include rename/description.
  *   --json                Optional. Emit the structured EditFlowResult.
  *
- * Reads the model, applies the declarative edits, and (with --apply) re-publishes
- * via the snapshot endpoint. Without --apply it prints the would-be changes.
+ * Reads the model, applies the declarative edits, and (with --apply) persists them:
+ * rename/description via the update-set-aware record write, step inputs via a
+ * snapshot recompile. Without --apply it prints the would-be changes.
  */
 async function runEditFlow(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
@@ -427,6 +465,9 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
   };
   if (flags.scope || flags.scopeSysId) {
     params.scopeSysId = flags.scope || flags.scopeSysId;
+  }
+  if (flags["update-set"] || flags.updateSetSysId) {
+    params.updateSetSysId = flags["update-set"] || flags.updateSetSysId;
   }
   var result = await editFlow(params);
   if (flags.json === "true") {
@@ -477,10 +518,12 @@ function printHelp(): void {
     "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
     "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
     "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
+    "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
+    "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
     "  test-flow          Validate (default) or run a flow/subflow\n" +
     "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
-    "  edit-flow          Patch a flow/subflow (rename, description, step inputs) + publish\n" +
-    "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--scope <sys_id>] [--json])\n" +
+    "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
+    "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
     "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n"
   );
 }
@@ -502,6 +545,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "publish-flow") {
     return await runPublishFlow(parsed.flags);
+  }
+  if (parsed.command === "copy-flow") {
+    return await runCopyFlow(parsed.flags);
   }
   if (parsed.command === "test-flow") {
     return await runTestFlow(parsed.flags);
