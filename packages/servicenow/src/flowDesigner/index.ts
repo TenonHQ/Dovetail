@@ -38,6 +38,12 @@ export type { ReadActionTypeParams, ReadActionTypeResult, ActionIo } from "./rea
 export { publishFlow } from "./publishFlow";
 export type { PublishFlowParams, PublishFlowResult } from "./publishFlow";
 
+export { editFlow } from "./editFlow";
+export type { EditFlowParams, EditFlowResult, EditFlowOps, StepInputPatch } from "./editFlow";
+
+export { testFlow, DEFAULT_RUN_FLOW_PATH } from "./testFlow";
+export type { TestFlowParams, TestFlowResult } from "./testFlow";
+
 export {
   generateSysId,
   stripSystemFields,

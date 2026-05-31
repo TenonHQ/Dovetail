@@ -37,6 +37,8 @@ import { formatBuildFlowResult } from "./flowDesigner-formatter";
 import { readFlow } from "./flowDesigner/readFlow";
 import { readActionType } from "./flowDesigner/readActionType";
 import { publishFlow } from "./flowDesigner/publishFlow";
+import { editFlow } from "./flowDesigner/editFlow";
+import { testFlow } from "./flowDesigner/testFlow";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
@@ -349,6 +351,99 @@ async function runPublishFlow(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn test-flow:
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
+ *   --execute           Optional. Actually run it (default is validate-only).
+ *   --confirm           Required with --execute. A deliberate run-for-real gate.
+ *   --inputs <json>     Optional. JSON object of inputs (or --inputs-json <path>).
+ *   --json              Optional. Emit the structured TestFlowResult.
+ *
+ * Default (no --execute) is a safe pre-flight: published? readable? inputs match
+ * declared variables? --execute POSTs the FlowAPI runner endpoint (see
+ * resources/runFlow.md). Executing a flow can cause real side effects.
+ */
+async function runTestFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("test-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  var inputs: Record<string, any> = {};
+  if (flags["inputs-json"]) {
+    inputs = JSON.parse(fs.readFileSync(flags["inputs-json"], "utf8"));
+  } else if (flags.inputs) {
+    inputs = JSON.parse(flags.inputs);
+  }
+  var params: any = {
+    client: createClient({}),
+    sysId: sysId,
+    mode: flags.execute === "true" ? "execute" : "validate",
+    inputs: inputs,
+    confirm: flags.confirm === "true"
+  };
+  if (flags.runner) {
+    params.runnerPath = flags.runner;
+  }
+  var result = await testFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write("[" + result.mode + "] ok=" + result.ok + "\n");
+  for (var i = 0; i < result.notes.length; i += 1) {
+    process.stdout.write("  " + result.notes[i] + "\n");
+  }
+  return result.ok ? 0 : 2;
+}
+
+/**
+ * dove-sn edit-flow:
+ *   --sys-id <sys_id>     Required. sys_hub_flow sys_id (flow or subflow).
+ *   --from-json <path>    Required. JSON EditFlowOps { rename?, description?, patchStepInputs? }.
+ *   --apply               Optional. Publish the edit (default is a dry-run diff).
+ *   --scope <sys_id>      Optional. sysparm_transaction_scope for the publish.
+ *   --json                Optional. Emit the structured EditFlowResult.
+ *
+ * Reads the model, applies the declarative edits, and (with --apply) re-publishes
+ * via the snapshot endpoint. Without --apply it prints the would-be changes.
+ */
+async function runEditFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("edit-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  if (!flags["from-json"]) {
+    process.stderr.write("edit-flow: --from-json <path> (EditFlowOps) is required\n");
+    return 1;
+  }
+  var ops = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
+  var params: any = {
+    client: createClient({}),
+    sysId: sysId,
+    ops: ops,
+    apply: flags.apply === "true"
+  };
+  if (flags.scope || flags.scopeSysId) {
+    params.scopeSysId = flags.scope || flags.scopeSysId;
+  }
+  var result = await editFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write("[" + result.status + "] " + result.changes.length + " change(s)"
+    + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n");
+  for (var i = 0; i < result.changes.length; i += 1) {
+    process.stdout.write("  + " + result.changes[i] + "\n");
+  }
+  for (var w = 0; w < result.warnings.length; w += 1) {
+    process.stdout.write("  ! " + result.warnings[w] + "\n");
+  }
+  return 0;
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -382,6 +477,10 @@ function printHelp(): void {
     "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
     "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
     "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
+    "  test-flow          Validate (default) or run a flow/subflow\n" +
+    "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
+    "  edit-flow          Patch a flow/subflow (rename, description, step inputs) + publish\n" +
+    "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--scope <sys_id>] [--json])\n" +
     "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n"
   );
 }
@@ -403,6 +502,12 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "publish-flow") {
     return await runPublishFlow(parsed.flags);
+  }
+  if (parsed.command === "test-flow") {
+    return await runTestFlow(parsed.flags);
+  }
+  if (parsed.command === "edit-flow") {
+    return await runEditFlow(parsed.flags);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);

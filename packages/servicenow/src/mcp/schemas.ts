@@ -79,3 +79,31 @@ export var publishFlowSchema = z.object({
   sysId: z.string().min(1),
   scopeSysId: z.string().optional()
 });
+
+export var testFlowSchema = z.object({
+  sysId: z.string().min(1),
+  mode: z.union([z.literal("validate"), z.literal("execute")]).optional(),
+  inputs: z.record(z.any()).optional(),
+  confirm: z.boolean().optional(),
+  runnerPath: z.string().optional()
+});
+
+export var stepInputPatchSchema = z.object({
+  step: z.string().min(1),
+  input: z.string().min(1),
+  value: z.any()
+});
+
+export var editFlowSchema = z.object({
+  sysId: z.string().min(1),
+  ops: z.object({
+    rename: z.object({
+      name: z.string().optional(),
+      internalName: z.string().optional()
+    }).optional(),
+    description: z.string().optional(),
+    patchStepInputs: z.array(stepInputPatchSchema).optional()
+  }),
+  apply: z.boolean().optional(),
+  scopeSysId: z.string().optional()
+});

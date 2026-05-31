@@ -20,6 +20,8 @@ import { addChoicesToField } from "../choices";
 import { readFlow } from "../flowDesigner/readFlow";
 import { readActionType } from "../flowDesigner/readActionType";
 import { publishFlow } from "../flowDesigner/publishFlow";
+import { editFlow } from "../flowDesigner/editFlow";
+import { testFlow } from "../flowDesigner/testFlow";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -28,7 +30,9 @@ import {
   addChoicesToFieldSchema,
   viewFlowSchema,
   viewActionSchema,
-  publishFlowSchema
+  publishFlowSchema,
+  testFlowSchema,
+  editFlowSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -39,7 +43,9 @@ export var TOOL_NAMES = [
   "add_choices_to_field",
   "flow_view",
   "action_view",
-  "flow_publish"
+  "flow_publish",
+  "flow_test",
+  "flow_edit"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -153,6 +159,46 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       handler: async function (args: any) {
         var p = publishFlowSchema.parse(args);
         return publishFlow({ client: client(), sysId: p.sysId, scopeSysId: p.scopeSysId });
+      }
+    },
+    {
+      name: "flow_test",
+      description:
+        "Test or run a ServiceNow flow/subflow. mode='validate' (default) is a safe, read-only "
+        + "pre-flight — checks the flow is published and that supplied inputs match its declared "
+        + "variables; it never runs the flow. mode='execute' actually runs it via the server-side "
+        + "FlowAPI runner and REQUIRES confirm=true (running a flow can cause real side effects, "
+        + "e.g. sending an SMS). sysId is the sys_hub_flow sys_id.",
+      shape: testFlowSchema.shape,
+      handler: async function (args: any) {
+        var p = testFlowSchema.parse(args);
+        return testFlow({
+          client: client(),
+          sysId: p.sysId,
+          mode: p.mode,
+          inputs: p.inputs,
+          confirm: p.confirm,
+          runnerPath: p.runnerPath
+        });
+      }
+    },
+    {
+      name: "flow_edit",
+      description:
+        "Edit a ServiceNow flow/subflow in place and re-publish. Supports rename "
+        + "(name/internalName), description, and patchStepInputs (set named input values on steps "
+        + "by uiId or label). apply=false (default) is a dry-run that returns the diff; apply=true "
+        + "publishes the edit (a write). sysId is the sys_hub_flow sys_id.",
+      shape: editFlowSchema.shape,
+      handler: async function (args: any) {
+        var p = editFlowSchema.parse(args);
+        return editFlow({
+          client: client(),
+          sysId: p.sysId,
+          ops: p.ops,
+          apply: p.apply,
+          scopeSysId: p.scopeSysId
+        });
       }
     }
   ];

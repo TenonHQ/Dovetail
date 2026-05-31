@@ -35,6 +35,9 @@ export {
   readFlow,
   readActionType,
   publishFlow,
+  editFlow,
+  testFlow,
+  DEFAULT_RUN_FLOW_PATH,
   generateSysId,
   topoSort,
   executeWritePlan,
@@ -67,6 +70,12 @@ export type {
   ActionIo,
   PublishFlowParams,
   PublishFlowResult,
+  EditFlowParams,
+  EditFlowResult,
+  EditFlowOps,
+  StepInputPatch,
+  TestFlowParams,
+  TestFlowResult,
   WriteOp,
   WriteOpResult
 } from "./flowDesigner";
