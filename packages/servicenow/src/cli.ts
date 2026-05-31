@@ -34,6 +34,10 @@ import { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
 import { runStdio, runSmoke } from "./mcp/server";
 import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
 import { formatBuildFlowResult } from "./flowDesigner-formatter";
+import { readFlow } from "./flowDesigner/readFlow";
+import { readActionType } from "./flowDesigner/readActionType";
+import { publishFlow } from "./flowDesigner/publishFlow";
+import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
   ChoiceValue,
@@ -255,6 +259,96 @@ async function runSetRelatedLists(flags: Record<string, string>): Promise<void> 
  * dove-sn mcp — run the MCP stdio server. With --smoke, list the registered
  * tools and exit. Otherwise the process stays alive until the transport closes.
  */
+/**
+ * dove-sn view-flow:
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
+ *   --json              Optional. Emit the structured ReadFlowResult.
+ *   --raw               Optional (with --json). Include the full processflow model.
+ *
+ * Reads the compiled flow headlessly via GET /api/now/processflow/flow/{id} and
+ * prints the ordered, nesting-aware step graph + flow variables. Read-only.
+ */
+async function runViewFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("view-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  var client = createClient({});
+  var result = await readFlow({ client: client, sysId: sysId, raw: flags.raw === "true" });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(formatReadFlowResult(result) + "\n");
+  return 0;
+}
+
+/**
+ * dove-sn view-action:
+ *   --sys-id <sys_id>   Required. sys_hub_action_type_definition sys_id.
+ *   --scope <sys_id>    Required. Application scope (sysparm_transaction_scope).
+ *   --json [--raw]      Optional. Structured ReadActionTypeResult / full model.
+ *
+ * Reads a Custom Action Type's compiled model (identity, inputs, outputs). Read-only.
+ */
+async function runViewAction(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  var scope = flags.scope || flags.scopeSysId;
+  if (!sysId || !scope) {
+    process.stderr.write("view-action: --sys-id <sys_id> and --scope <sys_id> are required\n");
+    return 1;
+  }
+  var client = createClient({});
+  var result = await readActionType({
+    client: client,
+    sysId: sysId,
+    scopeSysId: scope,
+    raw: flags.raw === "true"
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(formatReadActionTypeResult(result) + "\n");
+  return 0;
+}
+
+/**
+ * dove-sn publish-flow:
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow) to publish.
+ *   --scope <sys_id>    Optional. sysparm_transaction_scope (defaults to the model's scope).
+ *   --json              Optional. Emit the structured PublishFlowResult.
+ *
+ * Compiles the flow's snapshot via POST /api/now/processflow/flow/{id}/snapshot —
+ * a WRITE that recompiles the current design. Use the Designer to edit, then this
+ * to publish. (For edited content, the library publishFlow accepts a model.)
+ */
+async function runPublishFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("publish-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  var params: { client: any; sysId: string; scopeSysId?: string } = {
+    client: createClient({}),
+    sysId: sysId
+  };
+  if (flags.scope || flags.scopeSysId) {
+    params.scopeSysId = flags.scope || flags.scopeSysId;
+  }
+  var result = await publishFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    "Published flow " + sysId + " (HTTP " + result.httpStatus + ")"
+      + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n"
+  );
+  return 0;
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -282,6 +376,12 @@ function printHelp(): void {
     "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
     "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
     "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
+    "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
+    "                     (--sys-id <sys_id> [--json] [--raw])\n" +
+    "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
+    "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
+    "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
+    "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
     "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n"
   );
 }
@@ -294,6 +394,15 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "build-flow") {
     return await runBuildFlowCmd(parsed.flags);
+  }
+  if (parsed.command === "view-flow") {
+    return await runViewFlow(parsed.flags);
+  }
+  if (parsed.command === "view-action") {
+    return await runViewAction(parsed.flags);
+  }
+  if (parsed.command === "publish-flow") {
+    return await runPublishFlow(parsed.flags);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);

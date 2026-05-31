@@ -63,3 +63,19 @@ export var addChoicesToFieldSchema = z.object({
   updateSetSysId: z.string().min(1),
   choiceType: z.union([z.literal(0), z.literal(1), z.literal(3)]).nullable().optional()
 });
+
+export var viewFlowSchema = z.object({
+  sysId: z.string().min(1),
+  raw: z.boolean().optional()
+});
+
+export var viewActionSchema = z.object({
+  sysId: z.string().min(1),
+  scopeSysId: z.string().min(1),
+  raw: z.boolean().optional()
+});
+
+export var publishFlowSchema = z.object({
+  sysId: z.string().min(1),
+  scopeSysId: z.string().optional()
+});

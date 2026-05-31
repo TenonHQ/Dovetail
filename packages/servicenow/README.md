@@ -154,7 +154,24 @@ npx dove-sn set-related-lists \
   --table x_cadso_automate_audience \
   --related-lists "x_cadso_automate_audience_member.audience" \
   --update-set 0083c3bb33d003507b18bc534d5c7b6d
+
+# View a flow / subflow's compiled step graph (read-only, headless)
+npx dove-sn view-flow --sys-id 327c53bfc33e3250d4ddf1db05013135
+npx dove-sn view-flow --sys-id <sys_id> --json --raw   # structured + full model
+
+# View a Custom Action Type's model (inputs/outputs)
+npx dove-sn view-action --sys-id <action_type_sys_id> --scope <scope_sys_id>
+
+# Publish (compile the snapshot of) a flow / subflow after editing in the Designer
+npx dove-sn publish-flow --sys-id <sys_id>             # scope defaults to the flow's
 ```
+
+`view-flow` reads `GET /api/now/processflow/flow/{id}` — the Designer's own model
+endpoint — and prints the ordered, nesting-aware action + flow-logic step graph
+plus the flow variables. This works for the integration user with plain basic
+auth; the raw `sys_hub_flow_snapshot` Table API 404 is a row-level restriction on
+the working snapshot, not a barrier. `publish-flow` POSTs the model back to
+`.../flow/{id}/snapshot`, recompiling the current design (a write).
 
 `set-form-layout` JSON payload shape:
 
@@ -193,10 +210,12 @@ console.log(formatLayoutResult("form layout", result));
 
 ## MCP server
 
-`dove-sn mcp` runs a self-contained MCP stdio server exposing the write tools to
+`dove-sn mcp` runs a self-contained MCP stdio server exposing the tools to
 Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
-`set_related_lists`, and `add_choices_to_field`. It reads ServiceNow credentials
-from the same env vars as the CLI.
+`set_related_lists`, `add_choices_to_field`, plus the Flow Designer tools
+`flow_view` (read a flow/subflow's step graph), `action_view` (read an action
+type's model), and `flow_publish` (compile a flow/subflow snapshot). It reads
+ServiceNow credentials from the same env vars as the CLI.
 
 ```bash
 npx dove-sn mcp --smoke   # list the registered tools and exit

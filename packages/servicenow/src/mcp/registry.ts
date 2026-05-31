@@ -17,12 +17,18 @@ import { setListLayout } from "../layout/listLayout";
 import { setFormLayout } from "../layout/formLayout";
 import { setRelatedLists } from "../layout/relatedLists";
 import { addChoicesToField } from "../choices";
+import { readFlow } from "../flowDesigner/readFlow";
+import { readActionType } from "../flowDesigner/readActionType";
+import { publishFlow } from "../flowDesigner/publishFlow";
 import {
   createViewSchema,
   setListLayoutSchema,
   setFormLayoutSchema,
   setRelatedListsSchema,
-  addChoicesToFieldSchema
+  addChoicesToFieldSchema,
+  viewFlowSchema,
+  viewActionSchema,
+  publishFlowSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -30,7 +36,10 @@ export var TOOL_NAMES = [
   "set_list_layout",
   "set_form_layout",
   "set_related_lists",
-  "add_choices_to_field"
+  "add_choices_to_field",
+  "flow_view",
+  "action_view",
+  "flow_publish"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -105,6 +114,45 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       shape: addChoicesToFieldSchema.shape,
       handler: async function (args: any) {
         return addChoicesToField(client(), addChoicesToFieldSchema.parse(args));
+      }
+    },
+    {
+      name: "flow_view",
+      description:
+        "Read a ServiceNow Flow Designer flow or subflow's compiled step graph, headless. "
+        + "Returns the ordered, nesting-aware list of action + flow-logic steps plus the flow "
+        + "variables, via GET /api/now/processflow/flow/{sysId}. Read-only. Pass raw:true to "
+        + "include the full processflow model. sysId is the sys_hub_flow sys_id.",
+      shape: viewFlowSchema.shape,
+      handler: async function (args: any) {
+        var p = viewFlowSchema.parse(args);
+        return readFlow({ client: client(), sysId: p.sysId, raw: p.raw });
+      }
+    },
+    {
+      name: "action_view",
+      description:
+        "Read a ServiceNow Custom Action Type's compiled model (identity, inputs, outputs), "
+        + "headless, via GET /api/now/processflow/action/action_types/{sysId}. Read-only. "
+        + "sysId is the sys_hub_action_type_definition sys_id; scopeSysId is the application "
+        + "scope (sysparm_transaction_scope). Pass raw:true for the full model.",
+      shape: viewActionSchema.shape,
+      handler: async function (args: any) {
+        var p = viewActionSchema.parse(args);
+        return readActionType({ client: client(), sysId: p.sysId, scopeSysId: p.scopeSysId, raw: p.raw });
+      }
+    },
+    {
+      name: "flow_publish",
+      description:
+        "Publish (compile the snapshot of) a ServiceNow Flow Designer flow or subflow via "
+        + "POST /api/now/processflow/flow/{sysId}/snapshot. This is a WRITE that recompiles the "
+        + "flow's current design — use after editing in the Designer. sysId is the sys_hub_flow "
+        + "sys_id; scopeSysId defaults to the flow's own scope.",
+      shape: publishFlowSchema.shape,
+      handler: async function (args: any) {
+        var p = publishFlowSchema.parse(args);
+        return publishFlow({ client: client(), sysId: p.sysId, scopeSysId: p.scopeSysId });
       }
     }
   ];
