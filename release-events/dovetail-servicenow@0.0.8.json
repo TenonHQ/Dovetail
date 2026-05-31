@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.8",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.8",
+  "prev_version": "0.0.7",
+  "published_at": "2026-05-31T03:07:57.716Z",
+  "git": {
+    "sha": "41b87ff39f4dcb7f6fd5bbbd3d3d26446d450bc6",
+    "tag": "dovetail-servicenow@0.0.8"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "41b87ff39",
+      "subject": "feat(servicenow): view + test + publish + edit flows/subflows/actions (Dovetail Flow Capability) (#129)",
+      "pr": 129
+    },
+    {
+      "sha": "cbd551e00",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.7 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
