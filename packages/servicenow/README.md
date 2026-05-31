@@ -162,6 +162,9 @@ npx dove-sn view-flow --sys-id <sys_id> --json --raw   # structured + full model
 # View a Custom Action Type's model (inputs/outputs)
 npx dove-sn view-action --sys-id <action_type_sys_id> --scope <scope_sys_id>
 
+# Copy a flow / subflow (creates an INACTIVE DRAFT) via the Designer's Copy endpoint
+npx dove-sn copy-flow --sys-id <sys_id> --name "My Copy"   # scope defaults to source's
+
 # Publish (compile the snapshot of) a flow / subflow after editing in the Designer
 npx dove-sn publish-flow --sys-id <sys_id>             # scope defaults to the flow's
 
@@ -169,17 +172,23 @@ npx dove-sn publish-flow --sys-id <sys_id>             # scope defaults to the f
 npx dove-sn test-flow --sys-id <sys_id> --inputs '{"phone":"+1555..."}'
 npx dove-sn test-flow --sys-id <sys_id> --execute --confirm --inputs '{...}'  # runs it
 
-# Edit a flow in place (rename / description / step inputs), then publish
+# Edit a flow in place (rename / description / step inputs)
 echo '{"rename":{"name":"New Name"},"patchStepInputs":[{"step":"Calculate SMS Send At","input":"send_rate","value":"5"}]}' > ops.json
-npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json            # dry-run (diff)
-npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json --apply    # publish the edit
+npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json                          # dry-run (diff)
+npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json --apply --update-set <id> # persist
 ```
 
+`copy-flow` calls the Designer's own `POST /processflow/flow/{id}/copy` — a
+complete, faithful clone created as an **inactive draft**. (Don't publish +
+activate a copy of a triggered production flow unless you intend it to fire.)
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
-declared variables?) that never runs the flow. `--execute --confirm` runs it via
-the server-side FlowAPI runner (deploy `resources/runFlow.md` first); running a
-flow can cause real side effects. `edit-flow` defaults to a **dry-run** diff;
-`--apply` re-publishes the patched model via the snapshot endpoint.
+declared variables?) that never runs the flow; `--execute --confirm` runs it via
+the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
+
+`edit-flow` defaults to a **dry-run** diff. With `--apply`: rename/description are
+written to `sys_hub_flow` through the update-set-aware API (so `--update-set` is
+**required** for those), while `patchStepInputs` ride a snapshot recompile (the
+`/snapshot` POST persists step input values but NOT top-level flow fields).
 
 `view-flow` reads `GET /api/now/processflow/flow/{id}` — the Designer's own model
 endpoint — and prints the ordered, nesting-aware action + flow-logic step graph
@@ -229,9 +238,10 @@ console.log(formatLayoutResult("form layout", result));
 Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, plus the Flow Designer tools
 `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
-type's model), `flow_publish` (compile a flow/subflow snapshot), `flow_test`
-(validate or run a flow), and `flow_edit` (patch a flow + publish). It reads
-ServiceNow credentials from the same env vars as the CLI.
+type's model), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
+(copy a flow as an inactive draft), `flow_test` (validate or run a flow), and
+`flow_edit` (patch a flow). It reads ServiceNow credentials from the same env
+vars as the CLI.
 
 ```bash
 npx dove-sn mcp --smoke   # list the registered tools and exit

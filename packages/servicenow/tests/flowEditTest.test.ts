@@ -106,7 +106,7 @@ describe("editFlow", function () {
     expect(ctx.cap.posts).toHaveLength(0); // dry-run => no publish
   });
 
-  it("apply publishes the patched model with the new input value", async function () {
+  it("apply republishes the patched model with the new input value (step inputs ride the snapshot POST)", async function () {
     var ctx = mockClient({
       getResponse: flowModel(),
       postResponse: { result: { data: { latestSnapshot: "snap-edit" } } },
@@ -117,7 +117,7 @@ describe("editFlow", function () {
       apply: true,
       ops: { patchStepInputs: [{ step: "calc", input: "timezone", value: "America/Denver" }] },
     });
-    expect(r.status).toBe("published");
+    expect(r.status).toBe("applied");
     expect(r.snapshotSysId).toBe("snap-edit");
     expect(ctx.cap.posts).toHaveLength(1);
     expect(ctx.cap.posts[0].path).toContain("/snapshot");
@@ -125,6 +125,41 @@ describe("editFlow", function () {
     var calc = ctx.cap.posts[0].body.actionInstances[0];
     var tz = calc.inputs.filter(function (x: any) { return x.name === "timezone"; })[0];
     expect(tz.value).toBe("America/Denver");
+  });
+
+  it("metadata-only edits write the record (no snapshot recompile)", async function () {
+    // Capture the update-set-aware record write.
+    var pushes: Array<any> = [];
+    var ctx = mockClient({ getResponse: flowModel() });
+    ctx.client.claude.pushWithUpdateSet = async function (p: any) { pushes.push(p); return { sys_id: p.record_sys_id }; };
+
+    var r = await editFlow({
+      client: ctx.client,
+      sysId: FLOW,
+      apply: true,
+      updateSetSysId: "us_sys_id_000000000000000000000000",
+      ops: { rename: { name: "Renamed" }, description: "new desc" },
+    });
+    expect(r.status).toBe("applied");
+    expect(r.snapshotSysId).toBeUndefined();   // no step change => no recompile
+    expect(ctx.cap.posts).toHaveLength(0);      // no /snapshot POST
+    // The record write hit sys_hub_flow with name + description in the given update set.
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].table).toBe("sys_hub_flow");
+    expect(pushes[0].record_sys_id).toBe(FLOW);
+    expect(pushes[0].fields.name).toBe("Renamed");
+    expect(pushes[0].fields.description).toBe("new desc");
+    expect(pushes[0].update_set_sys_id).toBe("us_sys_id_000000000000000000000000");
+  });
+
+  it("throws when rename/description is applied without an update set", async function () {
+    var ctx = mockClient({ getResponse: flowModel() });
+    await expect(editFlow({
+      client: ctx.client,
+      sysId: FLOW,
+      apply: true,
+      ops: { description: "x" },
+    })).rejects.toThrow(/updateSetSysId is required/);
   });
 
   it("reports unmatched steps/inputs as warnings and does not publish a no-op", async function () {
