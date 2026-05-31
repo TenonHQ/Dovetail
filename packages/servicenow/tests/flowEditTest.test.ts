@@ -7,11 +7,14 @@ interface Cap {
   posts: Array<{ path: string; body: any }>;
 }
 
-function mockClient(opts: { getResponse?: any; postResponse?: any; postThrows?: Error }): {
+function mockClient(opts: { getResponse?: any; getResponses?: Array<any>; postResponse?: any; postThrows?: Error }): {
   client: ServiceNowClient;
   cap: Cap;
 } {
   var cap: Cap = { gets: [], posts: [] };
+  // getResponses (if provided) is consumed sequentially — index 0 is the initial
+  // model read, index 1 the post-publish verify read. Falls back to getResponse.
+  var getIdx = 0;
   var client = {
     table: { query: async function () { return []; } },
     buildAgent: {
@@ -28,6 +31,11 @@ function mockClient(opts: { getResponse?: any; postResponse?: any; postThrows?: 
     now: {
       get: async function <T>(path: string): Promise<T> {
         cap.gets.push(path);
+        if (opts.getResponses) {
+          var r = opts.getResponses[getIdx] !== undefined ? opts.getResponses[getIdx] : opts.getResponses[opts.getResponses.length - 1];
+          getIdx += 1;
+          return r as T;
+        }
         return opts.getResponse as T;
       },
       post: async function <T>(path: string, body: any): Promise<T> {
@@ -106,9 +114,15 @@ describe("editFlow", function () {
     expect(ctx.cap.posts).toHaveLength(0); // dry-run => no publish
   });
 
-  it("apply republishes the patched model with the new input value (step inputs ride the snapshot POST)", async function () {
+  it("apply republishes the patched model + verifies persistence (no warning when it took)", async function () {
     var ctx = mockClient({
-      getResponse: flowModel(),
+      // get[0] = initial read (timezone UTC); get[1] = verify read (now Denver = persisted)
+      getResponses: [flowModel(), flowModel({
+        actionInstances: [{
+          order: "28", name: "Calculate SMS Send At", uiUniqueIdentifier: "calc", parent: "try", deleted: false,
+          inputs: [{ name: "send_rate", value: "0" }, { name: "timezone", value: "America/Denver" }],
+        }],
+      })],
       postResponse: { result: { data: { latestSnapshot: "snap-edit" } } },
     });
     var r = await editFlow({
@@ -119,12 +133,29 @@ describe("editFlow", function () {
     });
     expect(r.status).toBe("applied");
     expect(r.snapshotSysId).toBe("snap-edit");
+    expect(r.warnings).toHaveLength(0); // verify read confirmed it persisted
     expect(ctx.cap.posts).toHaveLength(1);
     expect(ctx.cap.posts[0].path).toContain("/snapshot");
-    // The posted model carries the patched value.
     var calc = ctx.cap.posts[0].body.actionInstances[0];
     var tz = calc.inputs.filter(function (x: any) { return x.name === "timezone"; })[0];
     expect(tz.value).toBe("America/Denver");
+  });
+
+  it("warns when a step-input change did not persist (snapshot POST no-op)", async function () {
+    var ctx = mockClient({
+      // get[0] = initial read (mutated in place by editFlow); get[1] = FRESH verify
+      // read still showing UTC -> the change didn't persist server-side.
+      getResponses: [flowModel(), flowModel()],
+      postResponse: { result: { data: { latestSnapshot: "snap-x" } } },
+    });
+    var r = await editFlow({
+      client: ctx.client,
+      sysId: FLOW,
+      apply: true,
+      ops: { patchStepInputs: [{ step: "calc", input: "timezone", value: "America/Denver" }] },
+    });
+    expect(r.status).toBe("applied");
+    expect(r.warnings.some(function (w) { return w.indexOf("did not persist") >= 0; })).toBe(true);
   });
 
   it("metadata-only edits write the record (no snapshot recompile)", async function () {

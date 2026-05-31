@@ -189,6 +189,10 @@ the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
 written to `sys_hub_flow` through the update-set-aware API (so `--update-set` is
 **required** for those), while `patchStepInputs` ride a snapshot recompile (the
 `/snapshot` POST persists step input values but NOT top-level flow fields).
+Step-input persistence via the snapshot POST is verified for action types but is
+**best-effort for flows** — after the recompile, `edit-flow` reads the model back
+and **warns** if a value didn't actually persist, so a no-op never reports as a
+silent success.
 
 `view-flow` reads `GET /api/now/processflow/flow/{id}` — the Designer's own model
 endpoint — and prints the ordered, nesting-aware action + flow-logic step graph

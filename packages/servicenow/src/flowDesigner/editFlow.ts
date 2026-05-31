@@ -159,9 +159,13 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
     changes.push("description updated");
   }
 
-  // Step input values DO ride along with the snapshot POST (the publish persists
-  // them back to the design records), so these are applied to the model + republished.
+  // Step input values ride the snapshot POST — the publish is documented to
+  // persist step input values back to the design records (verified for action
+  // types). For FLOWS this is best-effort: we apply, republish, then read back
+  // and confirm each value actually took (see the verify pass after publish), so
+  // a non-persist surfaces as a warning instead of a silent false success.
   var stepInputsChanged = false;
+  var verifyTargets: Array<{ step: string; input: string; value: any }> = [];
   if (ops.patchStepInputs && ops.patchStepInputs.length > 0) {
     for (var i = 0; i < ops.patchStepInputs.length; i += 1) {
       var patch = ops.patchStepInputs[i];
@@ -173,6 +177,7 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
       var ok = setInputValue(step, patch.input, patch.value);
       if (ok) {
         stepInputsChanged = true;
+        verifyTargets.push({ step: patch.step, input: patch.input, value: patch.value });
         changes.push("step '" + (step.name || patch.step) + "' input '" + patch.input + "' updated");
       } else {
         warnings.push("input not found: " + patch.input + " on step " + patch.step);
@@ -209,6 +214,32 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
   if (stepInputsChanged) {
     var pub = await publishFlow({ client: client, sysId: sysId, model: model, scopeSysId: scopeSysId || undefined });
     snapshotSysId = pub.snapshotSysId;
+
+    // 3. Verify the step-input changes actually persisted. The snapshot POST is
+    //    only documented to persist step values for action types; for flows it
+    //    can no-op. Read the model back and confirm each value took — a miss is
+    //    surfaced as a warning rather than a silent false "applied".
+    var afterResp = await client.now.get<any>("/api/now/processflow/flow/" + encodeURIComponent(sysId));
+    var afterModel = unwrapModel(afterResp);
+    for (var v = 0; v < verifyTargets.length; v += 1) {
+      var t = verifyTargets[v];
+      var liveStep = afterModel ? findStep(afterModel, t.step) : null;
+      var persisted = false;
+      if (liveStep && Array.isArray(liveStep.inputs)) {
+        for (var k = 0; k < liveStep.inputs.length; k += 1) {
+          if (liveStep.inputs[k] && liveStep.inputs[k].name === t.input) {
+            persisted = String(liveStep.inputs[k].value) === String(t.value);
+            break;
+          }
+        }
+      }
+      if (!persisted) {
+        warnings.push(
+          "step input '" + t.input + "' on '" + t.step + "' did not persist via the snapshot POST "
+            + "— verify in the Designer (flow step-input persistence is best-effort)."
+        );
+      }
+    }
   }
 
   return {
