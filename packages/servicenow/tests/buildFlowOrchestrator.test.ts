@@ -152,7 +152,7 @@ describe("runBuildFlow — update set state", function () {
 });
 
 describe("runBuildFlow — clone happy path", function () {
-  it("runs end-to-end through clone + verify + publish, returning needs-ui-publish in degraded mode", async function () {
+  it("runs end-to-end through clone + verify + real subflow publish, returning done", async function () {
     var ctx = makeClient([
       { match: function (t) { return t === "sys_update_set"; }, rows: [{ sys_id: US, state: "in progress", name: "WIP" }] },
       // Idempotency check — empty (target name not yet there)
@@ -171,21 +171,46 @@ describe("runBuildFlow — clone happy path", function () {
       { match: function (t) { return t === "sys_hub_flow_variable"; }, rows: [] },
       { match: function (t) { return t === "sys_hub_action_instance_v2"; }, rows: [] },
       { match: function (t) { return t === "sys_hub_flow_logic_instance_v2"; }, rows: [] },
-      // No snapshot (degraded mode)
       { match: function (t) { return t === "sys_hub_flow_snapshot"; }, rows: [] },
     ]);
+    // Subflows now publish for real via publishFlow (processflow POST). The base
+    // mock's now.get/now.post resolve to {} — a successful 2xx — so publishFlow
+    // returns published and the orchestrator reports done (exit 0). No fallback
+    // to the degraded triggerPublication, so no pushWithUpdateSet call.
     var r = await runBuildFlow(ctx.client, {
       kind: "subflow", mode: "clone", sourceSysId: SOURCE,
       newName: "Cloned", newScope: SCOPE, updateSetSysId: US,
     }, { skipPublish: false, snapshotTimeoutMs: 600 });
 
-    // We didn't get a snapshot → snapshot-pending → needs-ui-publish (exit 2).
-    expect(r.outcome).toBe("needs-ui-publish");
-    expect(r.exitCode).toBe(2);
+    expect(r.outcome).toBe("done");
+    expect(r.exitCode).toBe(0);
     expect(r.artifact).toBeDefined();
     expect(r.artifact!.action).toBe("created");
     expect(ctx.cap.creates.length).toBeGreaterThan(0);
-    expect(ctx.cap.pushes.length).toBe(1); // the publish trigger
+    expect(r.publish?.status).toBe("published");
+    expect(ctx.cap.pushes.length).toBe(0); // real publish succeeded — degraded path not used
+  });
+
+  it("falls back to the degraded triggerPublication when the real publish throws", async function () {
+    var ctx = makeClient([
+      { match: function (t) { return t === "sys_update_set"; }, rows: [{ sys_id: US, state: "in progress", name: "WIP" }] },
+      { match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("name=Cloned") >= 0; }, rows: [] },
+      { match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("sys_id=" + SOURCE) >= 0; },
+        rows: [{ sys_id: SOURCE, name: "Source", type: "subflow", sys_scope: "old" }] },
+      // No snapshot → triggerPublication's poll never resolves → needs-ui-publish.
+      { match: function (t) { return t === "sys_hub_flow_snapshot"; }, rows: [] },
+    ]);
+    // Make the real processflow publish fail so we exercise the fallback path.
+    ctx.client.now.post = async function () { throw new Error("processflow 500"); };
+
+    var r = await runBuildFlow(ctx.client, {
+      kind: "subflow", mode: "clone", sourceSysId: SOURCE,
+      newName: "Cloned", newScope: SCOPE, updateSetSysId: US,
+    }, { skipPublish: false, snapshotTimeoutMs: 300 });
+
+    expect(r.outcome).toBe("needs-ui-publish");
+    expect(r.exitCode).toBe(2);
+    expect(ctx.cap.pushes.length).toBe(1); // fell back to triggerPublication's pushWithUpdateSet
   });
 
   it("returns done (exit 0) when publish snapshot lands", async function () {

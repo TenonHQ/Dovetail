@@ -17,6 +17,8 @@ import { verifyArtifact } from "./verifyArtifact";
 import type { VerifyReport } from "./verifyArtifact";
 import { triggerPublication } from "./triggerPublication";
 import type { TriggerPublicationResult } from "./triggerPublication";
+import { publishFlow } from "./publishFlow";
+import { publishActionType } from "./publishActionType";
 import type { FlowKind } from "./listTemplates";
 
 export interface BuildFlowSpec {
@@ -38,6 +40,15 @@ export interface BuildFlowOptions {
   skipPublish?: boolean;
   /** Forwarded to triggerPublication. Useful for tight tests; defaults to its own 15s. */
   snapshotTimeoutMs?: number;
+  /**
+   * Steps fixture for publishing an action-type clone. The action-type model GET
+   * returns `steps: null`, so the real publisher (publishActionType) needs a
+   * steps array. When provided for kind="actionType", the orchestrator uses the
+   * real processflow publisher; without it, action-type publish falls back to
+   * the degraded triggerPublication. Ignored for subflows (publishFlow re-posts
+   * the full model, which already carries the instance graph).
+   */
+  steps?: Array<Record<string, any>>;
 }
 
 /**
@@ -85,6 +96,55 @@ function unrecoverable(spec: BuildFlowSpec, stage: string, message: string): Bui
     spec: spec,
     error: { stage: stage, message: message },
   };
+}
+
+/**
+ * Publish a freshly cloned artifact. Tries the real processflow publisher first
+ * (publishFlow for subflows, publishActionType for action types when a steps
+ * fixture is supplied), and falls back to the degraded triggerPublication if the
+ * real path is unavailable or throws. Never throws — always returns a
+ * TriggerPublicationResult-compatible object so the caller's outcome mapping is
+ * unchanged (status "published" => done; anything else => needs-ui-publish).
+ */
+async function publishArtifact(
+  client: ServiceNowClient,
+  spec: BuildFlowSpec,
+  sysId: string,
+  opts: BuildFlowOptions
+): Promise<TriggerPublicationResult> {
+  try {
+    if (spec.kind === "subflow") {
+      var pf = await publishFlow({ client: client, sysId: sysId, scopeSysId: spec.newScope });
+      return { status: "published", snapshotSysId: pf.snapshotSysId, pushSucceeded: true };
+    }
+    // actionType: the real publisher needs a steps fixture (model GET => steps:null).
+    if (spec.kind === "actionType" && opts.steps && opts.steps.length > 0) {
+      var pa = await publishActionType({
+        client: client,
+        sysId: sysId,
+        scopeSysId: spec.newScope,
+        steps: opts.steps,
+      });
+      return { status: "published", snapshotSysId: pa.snapshotSysId, pushSucceeded: true };
+    }
+  } catch (err) {
+    // Real publish failed — fall through to the degraded path below, which is
+    // engineered to surface a UI publish URL rather than throw.
+  }
+
+  try {
+    return await triggerPublication({
+      client: client,
+      sysId: sysId,
+      kind: spec.kind,
+      updateSetSysId: spec.updateSetSysId,
+      snapshotTimeoutMs: opts.snapshotTimeoutMs,
+    });
+  } catch (err) {
+    // triggerPublication is engineered to never throw on the happy path, but
+    // defensive: treat unexpected throws as needs-ui-publish.
+    return { status: "needs-ui-publish", pushSucceeded: false, uiPublishUrl: undefined };
+  }
 }
 
 function validateSpec(spec: any): BuildFlowSpec {
@@ -235,26 +295,14 @@ export async function runBuildFlow(
     };
   }
 
-  // Phase 4: publication (best-effort, degraded mode until Phase 0 lands).
+  // Phase 4: publication. Try the real processflow publisher first (compiles
+  // the snapshot via the Designer's own Publish endpoint — basic auth, 2xx),
+  // and fall back to the degraded triggerPublication (status flip + poll, UI
+  // fallback) only if the real path throws. This is what replaces the long-
+  // standing "needs-ui-publish" default for the common case.
   var publish: TriggerPublicationResult | undefined;
   if (!opts.skipPublish) {
-    try {
-      publish = await triggerPublication({
-        client: client,
-        sysId: cloneResult.sysId,
-        kind: spec.kind,
-        updateSetSysId: spec.updateSetSysId,
-        snapshotTimeoutMs: opts.snapshotTimeoutMs,
-      });
-    } catch (err: any) {
-      // triggerPublication is engineered to never throw on the happy path,
-      // but defensive: treat unexpected throws as needs-ui-publish.
-      publish = {
-        status: "needs-ui-publish",
-        pushSucceeded: false,
-        uiPublishUrl: undefined,
-      };
-    }
+    publish = await publishArtifact(client, spec, cloneResult.sysId, opts);
   }
 
   var artifact = {

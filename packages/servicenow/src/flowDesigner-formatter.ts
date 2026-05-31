@@ -4,11 +4,19 @@
  */
 
 import type { BuildFlowResult } from "./flowDesigner/buildFlowOrchestrator";
+import type { ReadFlowResult } from "./flowDesigner/readFlow";
+import type { ReadActionTypeResult } from "./flowDesigner/readActionType";
 
 function indent(s: string, n: number): string {
   var pad = "";
   for (var i = 0; i < n; i++) pad += " ";
   return s.split("\n").map(function (line) { return pad + line; }).join("\n");
+}
+
+function pad(s: string, width: number): string {
+  var out = s;
+  while (out.length < width) out += " ";
+  return out;
 }
 
 export function formatBuildFlowResult(result: BuildFlowResult): string {
@@ -74,6 +82,63 @@ export function formatBuildFlowResult(result: BuildFlowResult): string {
   } else if (result.outcome === "write-failed") {
     lines.push("");
     lines.push("Partial state may be in the update set. Discard the update set in the SN UI to roll back, or re-run after fixing the error above.");
+  }
+
+  return lines.join("\n");
+}
+
+/** Human view for `dove-sn view-flow` — the ordered, nested step graph. */
+export function formatReadFlowResult(result: ReadFlowResult): string {
+  var lines: Array<string> = [];
+  lines.push(result.name + " (" + result.type + ")");
+  lines.push("  internal: " + result.internalName);
+  lines.push("  sys_id:   " + result.sysId + "  scope: " + result.scopeSysId);
+  lines.push("  status:   " + result.status
+    + "  published=" + result.published + "  userCanRead=" + result.userCanRead);
+  lines.push("  instances: " + result.counts.action + " action + "
+    + result.counts.logic + " logic = " + result.counts.total + " total");
+
+  lines.push("");
+  lines.push("Step graph (order  kind  label):");
+  for (var i = 0; i < result.steps.length; i += 1) {
+    var s = result.steps[i];
+    var depthPad = "";
+    for (var d = 0; d < s.depth; d += 1) depthPad += "  ";
+    var kind = s.kind === "action" ? "A" : "L";
+    lines.push("  " + depthPad + pad(String(s.order), 3) + "  " + kind + "  " + s.label);
+  }
+
+  if (result.variables.length > 0) {
+    lines.push("");
+    lines.push("Flow variables (" + result.variables.length + "):");
+    for (var v = 0; v < result.variables.length; v += 1) {
+      lines.push("  " + result.variables[v].label + "  [" + result.variables[v].type + "]");
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/** Human view for `dove-sn view-action` — identity + the action's I/O contract. */
+export function formatReadActionTypeResult(result: ReadActionTypeResult): string {
+  var lines: Array<string> = [];
+  lines.push(result.name + " (action type)");
+  lines.push("  internal: " + result.internalName);
+  lines.push("  sys_id:   " + result.sysId);
+  if (result.description) {
+    lines.push("  " + result.description);
+  }
+
+  lines.push("");
+  lines.push("Inputs (" + result.counts.inputs + "):");
+  for (var i = 0; i < result.inputs.length; i += 1) {
+    lines.push("  " + result.inputs[i].label + "  [" + result.inputs[i].type + "]");
+  }
+
+  lines.push("");
+  lines.push("Outputs (" + result.counts.outputs + "):");
+  for (var o = 0; o < result.outputs.length; o += 1) {
+    lines.push("  " + result.outputs[o].label + "  [" + result.outputs[o].type + "]");
   }
 
   return lines.join("\n");

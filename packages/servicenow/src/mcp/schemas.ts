@@ -63,3 +63,47 @@ export var addChoicesToFieldSchema = z.object({
   updateSetSysId: z.string().min(1),
   choiceType: z.union([z.literal(0), z.literal(1), z.literal(3)]).nullable().optional()
 });
+
+export var viewFlowSchema = z.object({
+  sysId: z.string().min(1),
+  raw: z.boolean().optional()
+});
+
+export var viewActionSchema = z.object({
+  sysId: z.string().min(1),
+  scopeSysId: z.string().min(1),
+  raw: z.boolean().optional()
+});
+
+export var publishFlowSchema = z.object({
+  sysId: z.string().min(1),
+  scopeSysId: z.string().optional()
+});
+
+export var testFlowSchema = z.object({
+  sysId: z.string().min(1),
+  mode: z.union([z.literal("validate"), z.literal("execute")]).optional(),
+  inputs: z.record(z.any()).optional(),
+  confirm: z.boolean().optional(),
+  runnerPath: z.string().optional()
+});
+
+export var stepInputPatchSchema = z.object({
+  step: z.string().min(1),
+  input: z.string().min(1),
+  value: z.any()
+});
+
+export var editFlowSchema = z.object({
+  sysId: z.string().min(1),
+  ops: z.object({
+    rename: z.object({
+      name: z.string().optional(),
+      internalName: z.string().optional()
+    }).optional(),
+    description: z.string().optional(),
+    patchStepInputs: z.array(stepInputPatchSchema).optional()
+  }),
+  apply: z.boolean().optional(),
+  scopeSysId: z.string().optional()
+});

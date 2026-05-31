@@ -34,6 +34,12 @@ import { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
 import { runStdio, runSmoke } from "./mcp/server";
 import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
 import { formatBuildFlowResult } from "./flowDesigner-formatter";
+import { readFlow } from "./flowDesigner/readFlow";
+import { readActionType } from "./flowDesigner/readActionType";
+import { publishFlow } from "./flowDesigner/publishFlow";
+import { editFlow } from "./flowDesigner/editFlow";
+import { testFlow } from "./flowDesigner/testFlow";
+import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
   ChoiceValue,
@@ -255,6 +261,189 @@ async function runSetRelatedLists(flags: Record<string, string>): Promise<void> 
  * dove-sn mcp — run the MCP stdio server. With --smoke, list the registered
  * tools and exit. Otherwise the process stays alive until the transport closes.
  */
+/**
+ * dove-sn view-flow:
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
+ *   --json              Optional. Emit the structured ReadFlowResult.
+ *   --raw               Optional (with --json). Include the full processflow model.
+ *
+ * Reads the compiled flow headlessly via GET /api/now/processflow/flow/{id} and
+ * prints the ordered, nesting-aware step graph + flow variables. Read-only.
+ */
+async function runViewFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("view-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  var client = createClient({});
+  var result = await readFlow({ client: client, sysId: sysId, raw: flags.raw === "true" });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(formatReadFlowResult(result) + "\n");
+  return 0;
+}
+
+/**
+ * dove-sn view-action:
+ *   --sys-id <sys_id>   Required. sys_hub_action_type_definition sys_id.
+ *   --scope <sys_id>    Required. Application scope (sysparm_transaction_scope).
+ *   --json [--raw]      Optional. Structured ReadActionTypeResult / full model.
+ *
+ * Reads a Custom Action Type's compiled model (identity, inputs, outputs). Read-only.
+ */
+async function runViewAction(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  var scope = flags.scope || flags.scopeSysId;
+  if (!sysId || !scope) {
+    process.stderr.write("view-action: --sys-id <sys_id> and --scope <sys_id> are required\n");
+    return 1;
+  }
+  var client = createClient({});
+  var result = await readActionType({
+    client: client,
+    sysId: sysId,
+    scopeSysId: scope,
+    raw: flags.raw === "true"
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(formatReadActionTypeResult(result) + "\n");
+  return 0;
+}
+
+/**
+ * dove-sn publish-flow:
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow) to publish.
+ *   --scope <sys_id>    Optional. sysparm_transaction_scope (defaults to the model's scope).
+ *   --json              Optional. Emit the structured PublishFlowResult.
+ *
+ * Compiles the flow's snapshot via POST /api/now/processflow/flow/{id}/snapshot —
+ * a WRITE that recompiles the current design. Use the Designer to edit, then this
+ * to publish. (For edited content, the library publishFlow accepts a model.)
+ */
+async function runPublishFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("publish-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  var params: { client: any; sysId: string; scopeSysId?: string } = {
+    client: createClient({}),
+    sysId: sysId
+  };
+  if (flags.scope || flags.scopeSysId) {
+    params.scopeSysId = flags.scope || flags.scopeSysId;
+  }
+  var result = await publishFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    "Published flow " + sysId + " (HTTP " + result.httpStatus + ")"
+      + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n"
+  );
+  return 0;
+}
+
+/**
+ * dove-sn test-flow:
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
+ *   --execute           Optional. Actually run it (default is validate-only).
+ *   --confirm           Required with --execute. A deliberate run-for-real gate.
+ *   --inputs <json>     Optional. JSON object of inputs (or --inputs-json <path>).
+ *   --json              Optional. Emit the structured TestFlowResult.
+ *
+ * Default (no --execute) is a safe pre-flight: published? readable? inputs match
+ * declared variables? --execute POSTs the FlowAPI runner endpoint (see
+ * resources/runFlow.md). Executing a flow can cause real side effects.
+ */
+async function runTestFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("test-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  var inputs: Record<string, any> = {};
+  if (flags["inputs-json"]) {
+    inputs = JSON.parse(fs.readFileSync(flags["inputs-json"], "utf8"));
+  } else if (flags.inputs) {
+    inputs = JSON.parse(flags.inputs);
+  }
+  var params: any = {
+    client: createClient({}),
+    sysId: sysId,
+    mode: flags.execute === "true" ? "execute" : "validate",
+    inputs: inputs,
+    confirm: flags.confirm === "true"
+  };
+  if (flags.runner) {
+    params.runnerPath = flags.runner;
+  }
+  var result = await testFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write("[" + result.mode + "] ok=" + result.ok + "\n");
+  for (var i = 0; i < result.notes.length; i += 1) {
+    process.stdout.write("  " + result.notes[i] + "\n");
+  }
+  return result.ok ? 0 : 2;
+}
+
+/**
+ * dove-sn edit-flow:
+ *   --sys-id <sys_id>     Required. sys_hub_flow sys_id (flow or subflow).
+ *   --from-json <path>    Required. JSON EditFlowOps { rename?, description?, patchStepInputs? }.
+ *   --apply               Optional. Publish the edit (default is a dry-run diff).
+ *   --scope <sys_id>      Optional. sysparm_transaction_scope for the publish.
+ *   --json                Optional. Emit the structured EditFlowResult.
+ *
+ * Reads the model, applies the declarative edits, and (with --apply) re-publishes
+ * via the snapshot endpoint. Without --apply it prints the would-be changes.
+ */
+async function runEditFlow(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  if (!sysId) {
+    process.stderr.write("edit-flow: --sys-id <sys_id> is required\n");
+    return 1;
+  }
+  if (!flags["from-json"]) {
+    process.stderr.write("edit-flow: --from-json <path> (EditFlowOps) is required\n");
+    return 1;
+  }
+  var ops = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
+  var params: any = {
+    client: createClient({}),
+    sysId: sysId,
+    ops: ops,
+    apply: flags.apply === "true"
+  };
+  if (flags.scope || flags.scopeSysId) {
+    params.scopeSysId = flags.scope || flags.scopeSysId;
+  }
+  var result = await editFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write("[" + result.status + "] " + result.changes.length + " change(s)"
+    + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n");
+  for (var i = 0; i < result.changes.length; i += 1) {
+    process.stdout.write("  + " + result.changes[i] + "\n");
+  }
+  for (var w = 0; w < result.warnings.length; w += 1) {
+    process.stdout.write("  ! " + result.warnings[w] + "\n");
+  }
+  return 0;
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -282,6 +471,16 @@ function printHelp(): void {
     "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
     "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
     "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
+    "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
+    "                     (--sys-id <sys_id> [--json] [--raw])\n" +
+    "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
+    "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
+    "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
+    "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
+    "  test-flow          Validate (default) or run a flow/subflow\n" +
+    "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
+    "  edit-flow          Patch a flow/subflow (rename, description, step inputs) + publish\n" +
+    "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--scope <sys_id>] [--json])\n" +
     "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n"
   );
 }
@@ -294,6 +493,21 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "build-flow") {
     return await runBuildFlowCmd(parsed.flags);
+  }
+  if (parsed.command === "view-flow") {
+    return await runViewFlow(parsed.flags);
+  }
+  if (parsed.command === "view-action") {
+    return await runViewAction(parsed.flags);
+  }
+  if (parsed.command === "publish-flow") {
+    return await runPublishFlow(parsed.flags);
+  }
+  if (parsed.command === "test-flow") {
+    return await runTestFlow(parsed.flags);
+  }
+  if (parsed.command === "edit-flow") {
+    return await runEditFlow(parsed.flags);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);
