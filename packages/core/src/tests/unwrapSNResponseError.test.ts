@@ -49,7 +49,7 @@ function makeAxiosError(overrides: {
   error.isAxiosError = true;
   error.config = {
     method: overrides.method || "post",
-    url: overrides.url || "api/sinc/sincronia/getManifest/x_cadso_example",
+    url: overrides.url || "api/cadso/dovetail_sync/getManifest/x_cadso_example",
   };
   error.response = {
     status: overrides.status,
@@ -88,7 +88,7 @@ describe("unwrapSNResponse — error handling", function () {
     var axErr = makeAxiosError({
       status: 500,
       method: "post",
-      url: "api/sinc/sincronia/getManifest/x_cadso_automate",
+      url: "api/cadso/dovetail_sync/getManifest/x_cadso_automate",
       data: snBody,
       statusText: "Internal Server Error",
     });

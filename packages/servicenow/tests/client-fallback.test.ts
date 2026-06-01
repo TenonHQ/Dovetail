@@ -1,4 +1,4 @@
-// Tests for the /api/cadso/dovetail/* -> /api/cadso/claude/* 404 fallback
+// Tests for the /api/cadso/dovetail_core/* -> /api/cadso/dovetail/* 404 fallback
 // in packages/servicenow/src/client.ts (the `dovetailRequest` helper, exposed
 // through the `client.claude.*` namespace).
 
@@ -43,7 +43,7 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
     warnSpy.mockRestore();
   });
 
-  it("first call hits /api/cadso/dovetail/<op>", async function () {
+  it("first call hits /api/cadso/dovetail_core/<op>", async function () {
     mockHttp.request.mockResolvedValueOnce(ok({ sys_id: "abc" }));
     var client = createClient();
 
@@ -51,11 +51,11 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
 
     expect(mockHttp.request).toHaveBeenCalledTimes(1);
     var call = mockHttp.request.mock.calls[0][0];
-    expect(call.url).toBe("/api/cadso/dovetail/currentUpdateSet");
+    expect(call.url).toBe("/api/cadso/dovetail_core/currentUpdateSet");
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it("on 404, retries against /api/cadso/claude/<op> and warns once", async function () {
+  it("on 404, retries against /api/cadso/dovetail/<op> and warns once", async function () {
     mockHttp.request
       .mockResolvedValueOnce(notFound())
       .mockResolvedValueOnce(ok({ sys_id: "abc" }));
@@ -65,14 +65,14 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
 
     expect(result).toEqual({ sys_id: "abc" });
     expect(mockHttp.request).toHaveBeenCalledTimes(2);
-    expect(mockHttp.request.mock.calls[0][0].url).toBe("/api/cadso/dovetail/currentUpdateSet");
-    expect(mockHttp.request.mock.calls[1][0].url).toBe("/api/cadso/claude/currentUpdateSet");
+    expect(mockHttp.request.mock.calls[0][0].url).toBe("/api/cadso/dovetail_core/currentUpdateSet");
+    expect(mockHttp.request.mock.calls[1][0].url).toBe("/api/cadso/dovetail/currentUpdateSet");
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0][0]).toContain("[deprecation]");
-    expect(warnSpy.mock.calls[0][0]).toContain("/api/cadso/dovetail/currentUpdateSet");
+    expect(warnSpy.mock.calls[0][0]).toContain("/api/cadso/dovetail_core/currentUpdateSet");
   });
 
-  it("after latching, subsequent calls go straight to /api/cadso/claude/<op>", async function () {
+  it("after latching, subsequent calls go straight to /api/cadso/dovetail/<op>", async function () {
     mockHttp.request
       .mockResolvedValueOnce(notFound())
       .mockResolvedValueOnce(ok({ sys_id: "abc" }))
@@ -90,8 +90,8 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
     });
 
     expect(mockHttp.request).toHaveBeenCalledTimes(4);
-    expect(mockHttp.request.mock.calls[2][0].url).toBe("/api/cadso/claude/createRecord");
-    expect(mockHttp.request.mock.calls[3][0].url).toBe("/api/cadso/claude/pushWithUpdateSet");
+    expect(mockHttp.request.mock.calls[2][0].url).toBe("/api/cadso/dovetail/createRecord");
+    expect(mockHttp.request.mock.calls[3][0].url).toBe("/api/cadso/dovetail/pushWithUpdateSet");
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -102,7 +102,7 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
     await expect(client.claude.currentUpdateSet()).rejects.toThrow(/SN auth error 401/);
 
     expect(mockHttp.request).toHaveBeenCalledTimes(1);
-    expect(mockHttp.request.mock.calls[0][0].url).toBe("/api/cadso/dovetail/currentUpdateSet");
+    expect(mockHttp.request.mock.calls[0][0].url).toBe("/api/cadso/dovetail_core/currentUpdateSet");
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
@@ -117,6 +117,6 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
     await clientB.claude.currentUpdateSet();
 
     var lastCall = mockHttp.request.mock.calls[mockHttp.request.mock.calls.length - 1][0];
-    expect(lastCall.url).toBe("/api/cadso/dovetail/currentUpdateSet");
+    expect(lastCall.url).toBe("/api/cadso/dovetail_core/currentUpdateSet");
   });
 });

@@ -6,7 +6,7 @@ import {
   PromoteResponse,
 } from "./types";
 
-var PROMOTE_PATH = "/api/cadso/sawmill/promote";
+var PROMOTE_PATH = "/api/cadso/dovetail_promote/promote";
 var MAX_RETRIES = 3;
 var RATE_LIMIT_PER_SEC = 20;
 
