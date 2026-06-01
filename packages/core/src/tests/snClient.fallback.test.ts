@@ -1,4 +1,4 @@
-// Tests for the /api/cadso/dovetail/* -> /api/cadso/claude/* 404 fallback
+// Tests for the /api/cadso/dovetail_core/* -> /api/cadso/dovetail/* 404 fallback
 // in _callDovetailApi (snClient.ts). Covers: first call hits the dovetail
 // endpoint, 404 latches the legacy path with a one-time warning, subsequent
 // calls skip dovetail, and non-404 errors do NOT trigger fallback.
@@ -26,7 +26,7 @@ jest.mock("../genericUtils", function () {
 import {
   _callDovetailApi,
   _resetDovetailApiFallback,
-  _isUsingLegacyClaudePath,
+  _isUsingLegacyPath,
 } from "../snClient";
 
 function makeAxiosError(status: number, data?: any): any {
@@ -46,7 +46,7 @@ describe("_callDovetailApi 404 fallback", function () {
     jest.clearAllMocks();
   });
 
-  it("first request hits /api/cadso/dovetail/<op>", async function () {
+  it("first request hits /api/cadso/dovetail_core/<op>", async function () {
     var seen: string[] = [];
     var call = jest.fn(async function (endpoint: string) {
       seen.push(endpoint);
@@ -55,15 +55,15 @@ describe("_callDovetailApi 404 fallback", function () {
 
     await _callDovetailApi("changeScope", call);
 
-    expect(seen).toEqual(["api/cadso/dovetail/changeScope"]);
-    expect(_isUsingLegacyClaudePath()).toBe(false);
+    expect(seen).toEqual(["api/cadso/dovetail_core/changeScope"]);
+    expect(_isUsingLegacyPath()).toBe(false);
   });
 
-  it("on 404, retries against legacy /api/cadso/claude/<op> and warns once", async function () {
+  it("on 404, retries against legacy /api/cadso/dovetail/<op> and warns once", async function () {
     var seen: string[] = [];
     var call = jest.fn(async function (endpoint: string) {
       seen.push(endpoint);
-      if (endpoint.indexOf("api/cadso/dovetail/") === 0) {
+      if (endpoint.indexOf("api/cadso/dovetail_core/") === 0) {
         throw makeAxiosError(404);
       }
       return makeAxiosResponse({ ok: true });
@@ -73,21 +73,21 @@ describe("_callDovetailApi 404 fallback", function () {
 
     expect(result.data).toEqual({ ok: true });
     expect(seen).toEqual([
+      "api/cadso/dovetail_core/changeScope",
       "api/cadso/dovetail/changeScope",
-      "api/cadso/claude/changeScope",
     ]);
-    expect(_isUsingLegacyClaudePath()).toBe(true);
+    expect(_isUsingLegacyPath()).toBe(true);
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn.mock.calls[0][0]).toContain("[deprecation]");
+    expect(mockLogger.warn.mock.calls[0][0]).toContain("/api/cadso/dovetail_core/changeScope");
     expect(mockLogger.warn.mock.calls[0][0]).toContain("/api/cadso/dovetail/changeScope");
-    expect(mockLogger.warn.mock.calls[0][0]).toContain("/api/cadso/claude/changeScope");
   });
 
   it("after latching, subsequent calls skip dovetail and warn no more", async function () {
     var seen: string[] = [];
     var call = jest.fn(async function (endpoint: string) {
       seen.push(endpoint);
-      if (endpoint.indexOf("api/cadso/dovetail/") === 0) {
+      if (endpoint.indexOf("api/cadso/dovetail_core/") === 0) {
         throw makeAxiosError(404);
       }
       return makeAxiosResponse({ ok: true });
@@ -101,8 +101,8 @@ describe("_callDovetailApi 404 fallback", function () {
     await _callDovetailApi("changeUpdateSet", call);
 
     expect(seen).toEqual([
-      "api/cadso/claude/changeScope",
-      "api/cadso/claude/changeUpdateSet",
+      "api/cadso/dovetail/changeScope",
+      "api/cadso/dovetail/changeUpdateSet",
     ]);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
@@ -117,7 +117,7 @@ describe("_callDovetailApi 404 fallback", function () {
     });
 
     expect(call).toHaveBeenCalledTimes(1);
-    expect(_isUsingLegacyClaudePath()).toBe(false);
+    expect(_isUsingLegacyPath()).toBe(false);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
@@ -131,7 +131,7 @@ describe("_callDovetailApi 404 fallback", function () {
     });
 
     expect(call).toHaveBeenCalledTimes(1);
-    expect(_isUsingLegacyClaudePath()).toBe(false);
+    expect(_isUsingLegacyPath()).toBe(false);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
@@ -143,7 +143,7 @@ describe("_callDovetailApi 404 fallback", function () {
     await expect(_callDovetailApi("changeScope", call)).rejects.toThrow("ECONNREFUSED");
 
     expect(call).toHaveBeenCalledTimes(1);
-    expect(_isUsingLegacyClaudePath()).toBe(false);
+    expect(_isUsingLegacyPath()).toBe(false);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
@@ -159,7 +159,7 @@ describe("_callDovetailApi 404 fallback", function () {
       } catch (e: any) {
         expect(e.response.status).toBe(401);
         expect(e.message).toContain("HTTP 401");
-        expect(e.message).toContain("api/cadso/dovetail/changeScope");
+        expect(e.message).toContain("api/cadso/dovetail_core/changeScope");
         expect(e.message).toContain("User Not Authenticated");
       }
     });
@@ -179,8 +179,8 @@ describe("_callDovetailApi 404 fallback", function () {
       } catch (e: any) {
         expect(e.response.status).toBe(400);
         expect(e.message).toContain("HTTP 400");
-        expect(e.message).toContain("api/cadso/dovetail/changeScope");
-        expect(e.message).toContain("Re-import the Dovetail Scripted REST API XML");
+        expect(e.message).toContain("api/cadso/dovetail_core/changeScope");
+        expect(e.message).toContain("Install the Dovetail application's Scripted REST APIs");
       }
     });
 
@@ -195,7 +195,7 @@ describe("_callDovetailApi 404 fallback", function () {
       } catch (e: any) {
         expect(e.message).toContain("HTTP 400");
         expect(e.message).toContain("Invalid scope name");
-        expect(e.message).not.toContain("Re-import the Dovetail Scripted REST API XML");
+        expect(e.message).not.toContain("Install the Dovetail application's Scripted REST APIs");
       }
     });
 
@@ -203,7 +203,7 @@ describe("_callDovetailApi 404 fallback", function () {
       var calls: string[] = [];
       var call = jest.fn(async function (endpoint: string) {
         calls.push(endpoint);
-        if (endpoint.indexOf("api/cadso/dovetail/") === 0) {
+        if (endpoint.indexOf("api/cadso/dovetail_core/") === 0) {
           throw makeAxiosError(404, {});
         }
         throw makeAxiosError(500, { error: { message: "boom" } });
@@ -214,12 +214,12 @@ describe("_callDovetailApi 404 fallback", function () {
         throw new Error("expected rejection");
       } catch (e: any) {
         expect(calls).toEqual([
+          "api/cadso/dovetail_core/changeScope",
           "api/cadso/dovetail/changeScope",
-          "api/cadso/claude/changeScope",
         ]);
         expect(e.response.status).toBe(500);
         expect(e.message).toContain("HTTP 500");
-        expect(e.message).toContain("api/cadso/claude/changeScope");
+        expect(e.message).toContain("api/cadso/dovetail/changeScope");
         expect(e.message).toContain("boom");
       }
     });

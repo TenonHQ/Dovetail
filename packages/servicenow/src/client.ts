@@ -6,15 +6,15 @@
  *   - `buildAgent.*`  — reads via the sn_build_agent API, with graceful
  *                       fallback to Table API / sys_dictionary when the
  *                       Build Agent plugin is unavailable
- *   - `claude.*`      — writes via the Dovetail Scripted REST API
- *                       (/api/cadso/dovetail/*), which handles update-set + scope
- *                       switching atomically so every write lands in the right
- *                       update set without touching sys_user_preference.
- *                       Falls back to the legacy /api/cadso/claude/* path on
- *                       instances where the API has not yet been re-imported.
- *                       The namespace name `claude` is preserved for API
- *                       compatibility; the underlying server-side API is now
- *                       named "Dovetail".
+ *   - `claude.*`      — writes via the Dovetail core Scripted REST API
+ *                       (/api/cadso/dovetail_core/*), which handles update-set +
+ *                       scope switching atomically so every write lands in the
+ *                       right update set without touching sys_user_preference.
+ *                       Falls back to the legacy global-scope /api/cadso/dovetail/*
+ *                       path on instances without the Dovetail app installed.
+ *                       The `claude.*` property name is preserved for API
+ *                       compatibility; the server-side API now lives in the
+ *                       Dovetail scoped application as "Dovetail Core".
  *
  * Env fallbacks mirror prior dashboard-fetch helpers so dev setups that already
  * have SN_INSTANCE/SN_USER/SN_PASSWORD work without reconfiguration.
@@ -119,7 +119,7 @@ export interface ServiceNowClient {
     getTableSchema: (table: string) => Promise<TableSchema>;
   };
   claude: {
-    /** POST /api/cadso/dovetail/createRecord (legacy path: /api/cadso/claude/createRecord). */
+    /** POST /api/cadso/dovetail_core/createRecord (legacy: /api/cadso/dovetail/createRecord). */
     createRecord: (params: {
       table: string;
       fields: Record<string, any>;
@@ -127,18 +127,18 @@ export interface ServiceNowClient {
       update_set_sys_id?: string;
       sys_id?: string;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
-    /** POST /api/cadso/dovetail/pushWithUpdateSet (legacy: /api/cadso/claude/pushWithUpdateSet). */
+    /** POST /api/cadso/dovetail_core/pushWithUpdateSet (legacy: /api/cadso/dovetail/pushWithUpdateSet). */
     pushWithUpdateSet: (params: {
       update_set_sys_id: string;
       table: string;
       record_sys_id: string;
       fields: Record<string, any>;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
-    /** GET /api/cadso/dovetail/currentUpdateSet?scope=... (legacy: /api/cadso/claude/currentUpdateSet). */
+    /** GET /api/cadso/dovetail_core/currentUpdateSet?scope=... (legacy: /api/cadso/dovetail/currentUpdateSet). */
     currentUpdateSet: (scope?: string) => Promise<{ sys_id: string; name: string }>;
-    /** GET /api/cadso/dovetail/changeUpdateSet?sysId=... — pins the REST session's active update set. */
+    /** GET /api/cadso/dovetail_core/changeUpdateSet?sysId=... — pins the REST session's active update set. */
     changeUpdateSet: (params: { sysId: string }) => Promise<{ [k: string]: any }>;
-    /** POST /api/cadso/dovetail/deleteRecord — body { table, sys_id }. Returns the deleted record. */
+    /** POST /api/cadso/dovetail_core/deleteRecord — body { table, sys_id }. Returns the deleted record. */
     deleteRecord: (params: { table: string; sys_id: string }) => Promise<{ [k: string]: any }>;
   };
   now: {
@@ -186,11 +186,12 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
   });
 
   var lastAt = 0;
-  // Dovetail Scripted REST API rebrand: prefer /api/cadso/dovetail/* and fall back
-  // to the legacy /api/cadso/claude/* path on instances where the rename hasn't
-  // been imported yet. Latch the legacy flag after the first 404 to avoid paying
-  // the round-trip cost on every subsequent call.
-  var useDovetailLegacyClaudePath = false;
+  // Dovetail core Scripted REST API: prefer the Dovetail-app path
+  // /api/cadso/dovetail_core/* and fall back to the legacy global-scope path
+  // /api/cadso/dovetail/* on instances that don't have the Dovetail app yet.
+  // Latch the legacy flag after the first 404 to avoid paying the round-trip
+  // cost on every subsequent call.
+  var useDovetailLegacyPath = false;
 
   async function request<T = any>(cfg: AxiosRequestConfig, ctx: string): Promise<T> {
     var attempt429 = 0;
@@ -245,8 +246,8 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     }
   }
 
-  // Dovetail Scripted REST API request: try /api/cadso/dovetail/<op>, fall back to
-  // /api/cadso/claude/<op> on 404 (with a one-time deprecation warning).
+  // Dovetail core Scripted REST API request: try /api/cadso/dovetail_core/<op>,
+  // fall back to the legacy /api/cadso/dovetail/<op> on 404 (one-time warning).
   async function dovetailRequest<T = any>(
     method: string,
     op: string,
@@ -254,22 +255,22 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     params: any | null,
     ctx: string,
   ): Promise<T> {
-    var url = useDovetailLegacyClaudePath
-      ? "/api/cadso/claude/" + op
-      : "/api/cadso/dovetail/" + op;
+    var url = useDovetailLegacyPath
+      ? "/api/cadso/dovetail/" + op
+      : "/api/cadso/dovetail_core/" + op;
     try {
       return await request<T>({ method: method, url: url, data: body, params: params }, ctx);
     } catch (e: any) {
       var msg = e && e.message ? String(e.message) : "";
-      if (!useDovetailLegacyClaudePath && msg.indexOf("SN 404 on") === 0) {
+      if (!useDovetailLegacyPath && msg.indexOf("SN 404 on") === 0) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[deprecation] /api/cadso/dovetail/" + op +
-            " returned 404. Falling back to legacy /api/cadso/claude/" + op +
-            ". Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+          "[deprecation] /api/cadso/dovetail_core/" + op +
+            " returned 404. Falling back to legacy /api/cadso/dovetail/" + op +
+            ". Install the Dovetail application's Scripted REST APIs to silence this warning.",
         );
-        useDovetailLegacyClaudePath = true;
-        var legacyUrl = "/api/cadso/claude/" + op;
+        useDovetailLegacyPath = true;
+        var legacyUrl = "/api/cadso/dovetail/" + op;
         return await request<T>({ method: method, url: legacyUrl, data: body, params: params }, ctx);
       }
       throw e;

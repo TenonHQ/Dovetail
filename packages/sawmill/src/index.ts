@@ -2,7 +2,7 @@
  * @tenonhq/dovetail-sawmill
  *
  * ServiceNow update set promotion client for Dovetail.
- * Wraps the Sawmill Scripted REST API (POST /api/cadso/sawmill/promote).
+ * Wraps the Dovetail Promote Scripted REST API (POST /api/cadso/dovetail_promote/promote).
  */
 
 export { createSawmillApi, SawmillApiError } from "./client";

@@ -55,28 +55,28 @@ function _getHttpStatus(e: unknown): number | undefined {
   return undefined;
 }
 
-// Dovetail server-side Scripted REST API was renamed from "Claude" (path
-// /api/cadso/claude/*) to "Dovetail" (path /api/cadso/dovetail/*). On instances
-// where the rename hasn't been imported yet, the new path returns 404. We try
-// the dovetail path first; if it 404s we fall back to the legacy claude path
-// for the rest of the session, with a one-time deprecation warning.
-let _dovetailApiUseLegacyClaudePath = false;
+// Dovetail's core Scripted REST API now lives in the Dovetail scoped
+// application at /api/cadso/dovetail_core/*. Older instances still expose the
+// previous global-scope path /api/cadso/dovetail/*. We try dovetail_core first;
+// if it 404s we fall back to the legacy /api/cadso/dovetail/* path for the rest
+// of the session, with a one-time deprecation warning.
+let _dovetailApiUseLegacyPath = false;
 function _dovetailEndpoint(op: string): string {
-  return _dovetailApiUseLegacyClaudePath
-    ? "api/cadso/claude/" + op
-    : "api/cadso/dovetail/" + op;
+  return _dovetailApiUseLegacyPath
+    ? "api/cadso/dovetail/" + op
+    : "api/cadso/dovetail_core/" + op;
 }
 // Exported for tests only: reset the latched fallback state between test cases.
 export function _resetDovetailApiFallback(): void {
-  _dovetailApiUseLegacyClaudePath = false;
+  _dovetailApiUseLegacyPath = false;
 }
 // Exported for tests only: inspect the latched fallback state.
-export function _isUsingLegacyClaudePath(): boolean {
-  return _dovetailApiUseLegacyClaudePath;
+export function _isUsingLegacyPath(): boolean {
+  return _dovetailApiUseLegacyPath;
 }
 // SN returns 400 with this body when a Scripted REST endpoint does not exist
-// at the requested URI. The /dovetail -> /claude fallback above only fires on
-// 404, so the same "endpoint missing" condition presents as an opaque 400 to
+// at the requested URI. The dovetail_core -> dovetail fallback above only fires
+// on 404, so the same "endpoint missing" condition presents as an opaque 400 to
 // callers. Detect it and surface a clear hint.
 var _SN_MISSING_ENDPOINT_BODY = "Requested URI does not represent any resource";
 
@@ -103,7 +103,7 @@ function _enrichDovetailApiError(
   var missingEndpoint =
     status === 400 && body.indexOf(_SN_MISSING_ENDPOINT_BODY) !== -1;
   var hint = missingEndpoint
-    ? " — Scripted REST endpoint not found on this instance. Re-import the Dovetail Scripted REST API XML (see Dovetail/docs/dovetail-servicenow-migration.md)."
+    ? " — Scripted REST endpoint not found on this instance. Install the Dovetail application's Scripted REST APIs (dovetail_core / dovetail_sync / dovetail_promote)."
     : "";
   e.message =
     "Dovetail REST call failed: " +
@@ -122,13 +122,13 @@ export async function _callDovetailApi<T>(
   try {
     return await call(endpoint);
   } catch (e) {
-    if (!_dovetailApiUseLegacyClaudePath && _getHttpStatus(e) === 404) {
+    if (!_dovetailApiUseLegacyPath && _getHttpStatus(e) === 404) {
       logger.warn(
-        "[deprecation] /api/cadso/dovetail/" + op +
-          " returned 404. Falling back to legacy /api/cadso/claude/" + op +
-          ". Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+        "[deprecation] /api/cadso/dovetail_core/" + op +
+          " returned 404. Falling back to legacy /api/cadso/dovetail/" + op +
+          ". Install the Dovetail application's Scripted REST APIs to silence this warning.",
       );
-      _dovetailApiUseLegacyClaudePath = true;
+      _dovetailApiUseLegacyPath = true;
       var legacyEndpoint = _dovetailEndpoint(op);
       try {
         return await call(legacyEndpoint);
@@ -332,13 +332,13 @@ export const snClient = (
   const client = rateLimit(rawAxios, { maxRPS: 20 });
 
   const getAppList = () => {
-    const endpoint = "api/sinc/sincronia/getAppList";
+    const endpoint = "api/cadso/dovetail_sync/getAppList";
     type AppListResponse = Sinc.SNAPIResponse<SN.App[]>;
     return client.get<AppListResponse>(endpoint);
   };
 
   const updateATFfile = (contents: string, sysId: string) => {
-    const endpoint = "api/sinc/sincronia/pushATFfile";
+    const endpoint = "api/cadso/dovetail_sync/pushATFfile";
     try {
       return client.post(endpoint, { file: contents, sys_id: sysId });
     } catch (e) {
@@ -410,7 +410,7 @@ export const snClient = (
   };
 
   const getCurrentScope = () => {
-    const endpoint = "api/sinc/sincronia/getCurrentScope";
+    const endpoint = "api/cadso/dovetail_sync/getCurrentScope";
     type ScopeResponse = Sinc.SNAPIResponse<SN.ScopeObj>;
     return client.get<ScopeResponse>(endpoint);
   };
@@ -470,7 +470,7 @@ export const snClient = (
     missingFiles: SN.MissingFileTableMap,
     tableOptions: Sinc.ITableOptionsMap,
   ) => {
-    const endpoint = `api/sinc/sincronia/bulkDownload`;
+    const endpoint = `api/cadso/dovetail_sync/bulkDownload`;
 
     const tableCount = Object.keys(missingFiles).length;
     fileLogger.debug("Bulk downloading files for " + tableCount + " tables");
@@ -484,7 +484,7 @@ export const snClient = (
     config: Sinc.ScopedConfig,
     withFiles = false,
   ) => {
-    const endpoint = `api/sinc/sincronia/getManifest/${scope}`;
+    const endpoint = `api/cadso/dovetail_sync/getManifest/${scope}`;
     const {
       includes = {},
       excludes = {},
