@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.10",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.10",
+  "prev_version": "0.0.9",
+  "published_at": "2026-06-01T21:28:08.724Z",
+  "git": {
+    "sha": "a3ea5ead48b0bd4c324e0847e7e768a43520c7ec",
+    "tag": "dovetail-servicenow@0.0.10"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "a3ea5ead4",
+      "subject": "feat(client): point Dovetail clients at the scoped dovetail_* APIs (#132)",
+      "pr": 132
+    },
+    {
+      "sha": "93d180eef",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.9 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

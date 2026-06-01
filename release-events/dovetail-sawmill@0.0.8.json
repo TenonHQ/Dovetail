@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-sawmill@0.0.8",
+  "package": "@tenonhq/dovetail-sawmill",
+  "version": "0.0.8",
+  "prev_version": "0.0.7",
+  "published_at": "2026-06-01T21:28:08.724Z",
+  "git": {
+    "sha": "a3ea5ead48b0bd4c324e0847e7e768a43520c7ec",
+    "tag": "dovetail-sawmill@0.0.8"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "a3ea5ead4",
+      "subject": "feat(client): point Dovetail clients at the scoped dovetail_* APIs (#132)",
+      "pr": 132
+    },
+    {
+      "sha": "776f1fc53",
+      "subject": "chore(release): @tenonhq/dovetail-sawmill@0.0.7 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

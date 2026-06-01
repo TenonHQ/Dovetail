@@ -1,0 +1,50 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.96",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.96",
+  "prev_version": "0.0.95",
+  "published_at": "2026-06-01T21:28:08.724Z",
+  "git": {
+    "sha": "a3ea5ead48b0bd4c324e0847e7e768a43520c7ec",
+    "tag": "dovetail-core@0.0.96"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "a3ea5ead4",
+      "subject": "feat(client): point Dovetail clients at the scoped dovetail_* APIs (#132)",
+      "pr": 132
+    },
+    {
+      "sha": "93d180eef",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.9 [skip ci]"
+    },
+    {
+      "sha": "d32523991",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.8 [skip ci]"
+    },
+    {
+      "sha": "ba1c67775",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.36 [skip ci]"
+    },
+    {
+      "sha": "9901285c6",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.35 [skip ci]"
+    },
+    {
+      "sha": "55de31527",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.34 [skip ci]"
+    },
+    {
+      "sha": "776f1fc53",
+      "subject": "chore(release): @tenonhq/dovetail-sawmill@0.0.7 [skip ci]"
+    },
+    {
+      "sha": "407d6d75e",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
