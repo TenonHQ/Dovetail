@@ -124,7 +124,13 @@ const processRecsInManTable = async (
 ) => {
   const { records } = table;
   const recKeys = Object.keys(records);
-  const recKeyToPath = (key: string) => path.join(tablePath, records[key].name);
+  // Derive the folder name via toSafeFolderName, not the raw record.name. The
+  // download path normalizes manifest keys upstream (processManifest), but the
+  // refresh path (processMissingFiles) feeds this writer the raw bulkDownload
+  // response, whose .name is the unmodified ServiceNow display name — which can
+  // be filesystem-unsafe (e.g. a `<table>.*` ACL). toSafeFolderName is
+  // idempotent on already-safe names, so re-applying it here is harmless.
+  const recKeyToPath = (key: string) => path.join(tablePath, toSafeFolderName(records[key]));
   const recPathPromises = recKeys
     .map(recKeyToPath)
     .map(fUtils.createDirRecursively);
@@ -629,12 +635,17 @@ export const refreshAllFiles = async (
       var recs = filesToProcess[tableName].records;
       var recKeys = Object.keys(recs);
       await Promise.all(recKeys.map(function(k) {
-        return fUtils.createDirRecursively(path.join(tablePath, recs[k].name));
+        // toSafeFolderName, not raw recs[k].name: the bulkDownload response
+        // carries the unmodified ServiceNow display name, which may be
+        // filesystem-unsafe (e.g. a `<table>.*` ACL). Without this, refresh
+        // recreates Windows-illegal folders that normalizeManifestKeys
+        // already removed from the manifest.
+        return fUtils.createDirRecursively(path.join(tablePath, toSafeFolderName(recs[k])));
       }));
 
       await processBatched(recKeys, CONCURRENCY_RECORDS, async function(recKey) {
         var rec = recs[recKey];
-        var recPath = path.join(tablePath, rec.name);
+        var recPath = path.join(tablePath, toSafeFolderName(rec));
 
         // Split server-provided metadata off from the regular files so we can
         // track whether any regular file actually changed — metaData shouldn't
