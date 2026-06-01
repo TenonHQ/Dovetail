@@ -1,7 +1,33 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-01T21:28:08.741Z",
+  "generated_at": "2026-06-01T23:57:01.678Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.97",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.97",
+      "prev_version": "0.0.96",
+      "published_at": "2026-06-01T23:57:01.670Z",
+      "git": {
+        "sha": "a0c364c7070a82f70c5dc9eed01c29c61b2f8b56",
+        "tag": "dovetail-core@0.0.97"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "a0c364c70",
+          "subject": "fix: route refresh folder writes through toSafeFolderName (Windows-safe names) (#133)",
+          "pr": 133
+        },
+        {
+          "sha": "958f4fcd7",
+          "subject": "chore(release): publish 3 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-core@0.0.96",
