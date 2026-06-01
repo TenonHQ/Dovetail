@@ -1,0 +1,10 @@
+{
+  "sys_id": "95b9db8d33d7a6107b18bc534d5c7b6f",
+  "http_method": "GET",
+  "requires_authentication": "true",
+  "name": "Change Update Set",
+  "produces": "application/json,application/xml,text/xml",
+  "active": "true",
+  "relative_path": "/changeUpdateSet",
+  "consumes": "application/json,application/xml,text/xml"
+}

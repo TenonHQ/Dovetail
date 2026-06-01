@@ -1,0 +1,10 @@
+{
+  "sys_id": "8570ee0cc3cc0310d4ddf1db05013106",
+  "http_method": "POST",
+  "requires_authentication": "true",
+  "name": "Push with Update Set",
+  "produces": "application/json,application/xml,text/xml",
+  "active": "true",
+  "relative_path": "/pushWithUpdateSet",
+  "consumes": "application/json,application/xml,text/xml"
+}

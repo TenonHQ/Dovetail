@@ -1,0 +1,10 @@
+{
+  "sys_id": "b8a9db8d33d7a6107b18bc534d5c7b7b",
+  "short_description": "",
+  "service_id": "dovetail",
+  "base_uri": "/api/cadso/dovetail",
+  "name": "Dovetail",
+  "namespace": "cadso",
+  "active": "true",
+  "enforce_acl": "cf9d01d3e73003009d6247e603f6a990"
+}

@@ -1,0 +1,10 @@
+{
+  "sys_id": "d8215358c3044710d4ddf1db05013187",
+  "http_method": "POST",
+  "requires_authentication": "true",
+  "name": "Dovetail - Create Record",
+  "produces": "application/json,application/xml,text/xml",
+  "active": "true",
+  "relative_path": "/createRecord",
+  "consumes": "application/json,application/xml,text/xml"
+}

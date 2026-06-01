@@ -1,0 +1,10 @@
+{
+  "sys_id": "fe3bbfc9339ba6107b18bc534d5c7b2d",
+  "http_method": "GET",
+  "requires_authentication": "true",
+  "name": "Change Scope",
+  "produces": "application/json,application/xml,text/xml",
+  "active": "true",
+  "relative_path": "/changeScope",
+  "consumes": "application/json,application/xml,text/xml"
+}

@@ -1,0 +1,10 @@
+{
+  "sys_id": "d811bb8d331ba6107b18bc534d5c7bd1",
+  "http_method": "GET",
+  "requires_authentication": "true",
+  "name": "Current Update Set",
+  "produces": "application/json,application/xml,text/xml",
+  "active": "true",
+  "relative_path": "/currentUpdateSet",
+  "consumes": "application/json,application/xml,text/xml"
+}

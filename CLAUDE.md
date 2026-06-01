@@ -104,11 +104,12 @@ module.exports = {
 
 ## Server-Side REST API
 
-Dovetail's server operations live in a **global-scoped Scripted REST API** named **"Dovetail"** (legacy name: "Claude").
+Dovetail's server operations live in a Scripted REST API named **"Dovetail"** (legacy name: "Claude"), being consolidated into the **Dovetail** global-type scoped app (`sys_app 5f33b5d433d90b147b18bc534d5c7bf6`).
 
 - **Base path:** `/api/cadso/dovetail/` (client falls back to legacy `/api/cadso/claude/` — see [`../docs/dovetail-servicenow-migration.md`](../docs/dovetail-servicenow-migration.md))
 - **Web service definition sys_id:** `b8a9db8d33d7a6107b18bc534d5c7b7b`
-- **Auth:** authenticated + `snc_internal_role`
+- **Auth:** authenticated + `dovetail_user` role (legacy installs use `snc_internal_role`; the bootstrap switches to `dovetail_user`)
+- **Stand up on a new instance / move instances:** run the one-shot in [`servicenow/bootstrap/`](servicenow/bootstrap/README.md) — creates both the Dovetail (`cadso`) and Sincronia (`sinc`) APIs in the Dovetail app, in-scope, gated on `dovetail_user`. Recovered Dovetail-API source: [`servicenow/dovetail-api/`](servicenow/dovetail-api/).
 
 | Method | Path | Purpose |
 |---|---|---|
