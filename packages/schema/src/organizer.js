@@ -62,7 +62,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                 scope: tableData.scope,
                 parent: tableData.parent,
                 hierarchy: tableData.hierarchy,
-                created_at: new Date().toISOString(),
                 field_count: tableData.fields.length,
                 fields: tableData.fields,
             };
@@ -81,7 +80,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
                 field_count: tables[tableName].fields.length,
                 has_parent: !!tables[tableName].parent,
             })),
-            generated_at: new Date().toISOString(),
         };
         const summaryPath = path_1.default.join(appDir, "_summary.json");
         await fs_1.promises.writeFile(summaryPath, JSON.stringify(summary, null, 2));
@@ -90,7 +88,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         const { outputDir, tablesByApp, instance, scopes, totalTables } = options;
         const index = {
             instance,
-            generated_at: new Date().toISOString(),
             total_tables: totalTables,
             scopes,
             applications: Object.keys(tablesByApp).map((appName) => ({

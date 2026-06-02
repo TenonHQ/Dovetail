@@ -68,7 +68,6 @@ async function writeTableFiles(options: {
       scope: tableData.scope,
       parent: tableData.parent,
       hierarchy: tableData.hierarchy,
-      created_at: new Date().toISOString(),
       field_count: tableData.fields.length,
       fields: tableData.fields,
     };
@@ -94,7 +93,6 @@ async function writeSummary(options: {
       field_count: tables[tableName].fields.length,
       has_parent: !!tables[tableName].parent,
     })),
-    generated_at: new Date().toISOString(),
   };
 
   const summaryPath = path.join(appDir, "_summary.json");
@@ -112,7 +110,6 @@ async function writeIndex(options: {
 
   const index: SchemaIndex = {
     instance,
-    generated_at: new Date().toISOString(),
     total_tables: totalTables,
     scopes,
     applications: Object.keys(tablesByApp).map((appName) => ({
