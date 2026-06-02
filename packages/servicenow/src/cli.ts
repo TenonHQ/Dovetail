@@ -39,6 +39,7 @@ import { readFlow } from "./flowDesigner/readFlow";
 import { readActionType } from "./flowDesigner/readActionType";
 import { publishFlow } from "./flowDesigner/publishFlow";
 import { copyFlow } from "./flowDesigner/copyFlow";
+import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { testFlow } from "./flowDesigner/testFlow";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
@@ -389,6 +390,71 @@ async function runCopyFlow(flags: Record<string, string>): Promise<number> {
 }
 
 /**
+ * dove-sn create-flow:
+ *   --name <name>           Required. Name for the new flow.
+ *   --template <sys_id>     Required. Published sys_hub_flow whose trigger+action graph is grafted.
+ *   --scope <sys_id>        Required. Target scope (sysparm_transaction_scope).
+ *   --internal-name <name>  Optional. internal_name (defaults to a slug of --name).
+ *   --description <text>    Optional.
+ *   --trigger-table <table> Optional. Patch the trigger's table input (e.g. customer_contact).
+ *   --trigger-condition <q> Optional. Patch the trigger's condition (encoded query).
+ *   --log-message <text>    Optional. Patch the action's message / short_description.
+ *   --dry-run               Optional. Print the plan + template graph counts; write nothing.
+ *   --json                  Optional. Emit the structured CreateFlowResult.
+ *
+ * Creates a NEW flow from scratch and PUBLISHES it: POST /processflow/flow mints an
+ * initialised envelope, the template's trigger+action graph is grafted on (ids remapped,
+ * values patched), then the snapshot is compiled. The result is a published flow — a
+ * published triggered flow can fire on its trigger, so do NOT graft a production send
+ * template you don't intend to fire (the result's `active` flag reports whether it's live).
+ *
+ * Exit codes: 0 published OR dry-run; 2 created-but-not-published (snapshot didn't compile).
+ */
+async function runCreateFlow(flags: Record<string, string>): Promise<number> {
+  var name = flags.name;
+  var templateSysId = flags.template || flags["template-sys-id"] || flags.templateSysId;
+  var scope = flags.scope || flags.scopeSysId;
+  if (!name || !templateSysId || !scope) {
+    process.stderr.write("create-flow: --name, --template <sys_id> and --scope <sys_id> are required\n");
+    return 1;
+  }
+  var params: any = {
+    client: createClient({}),
+    name: name,
+    templateSysId: templateSysId,
+    scopeSysId: scope
+  };
+  if (flags["internal-name"] || flags.internalName) { params.internalName = flags["internal-name"] || flags.internalName; }
+  if (flags.description) { params.description = flags.description; }
+  if (flags["trigger-table"] || flags.triggerTable) { params.triggerTable = flags["trigger-table"] || flags.triggerTable; }
+  if (flags["trigger-condition"] !== undefined || flags.triggerCondition !== undefined) {
+    params.triggerCondition = flags["trigger-condition"] !== undefined ? flags["trigger-condition"] : flags.triggerCondition;
+  }
+  if (flags["log-message"] || flags.logMessage) { params.logMessage = flags["log-message"] || flags.logMessage; }
+  if (flags["dry-run"] === "true") { params.dryRun = true; }
+
+  var result = await createFlow(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else if (result.status === "dry-run") {
+    process.stdout.write(
+      "[dry-run] would create '" + result.name + "' (internal " + result.internalName + ") in scope "
+        + result.scopeSysId + " — grafting " + result.graph.triggers + " trigger + "
+        + result.graph.actions + " action + " + result.graph.logic + " logic from template\n"
+    );
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] '" + result.name + "' sys_id " + result.sysId
+        + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "")
+        + (result.active === undefined ? "" : result.active ? " — ACTIVE (will fire)" : " — inactive")
+        + "\n"
+    );
+  }
+  if (result.status === "not-published") { return 2; }
+  return 0;
+}
+
+/**
  * dove-sn test-flow:
  *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
  *   --execute           Optional. Actually run it (default is validate-only).
@@ -521,6 +587,10 @@ function printHelp(): void {
     "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
     "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
     "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
+    "  create-flow        Create a NEW flow (type=flow) from scratch + publish (grafts a template)\n" +
+    "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
+    "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
+    "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
     "  test-flow          Validate (default) or run a flow/subflow\n" +
     "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
     "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
@@ -556,6 +626,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "copy-flow") {
     return await runCopyFlow(parsed.flags);
+  }
+  if (parsed.command === "create-flow") {
+    return await runCreateFlow(parsed.flags);
   }
   if (parsed.command === "test-flow") {
     return await runTestFlow(parsed.flags);

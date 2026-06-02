@@ -41,6 +41,9 @@ export type { PublishFlowParams, PublishFlowResult } from "./publishFlow";
 export { copyFlow } from "./copyFlow";
 export type { CopyFlowParams, CopyFlowResult } from "./copyFlow";
 
+export { createFlow, buildPublishModel } from "./createFlow";
+export type { CreateFlowParams, CreateFlowResult } from "./createFlow";
+
 export { editFlow } from "./editFlow";
 export type { EditFlowParams, EditFlowResult, EditFlowOps, StepInputPatch } from "./editFlow";
 
