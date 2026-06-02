@@ -49,9 +49,11 @@ Ask the user which symptom they are experiencing (if not already clear):
    - Instance should NOT have `https://` prefix or trailing slash
    - Credentials must have admin or developer role
 
-2. **Test connection:** `npx dove status`
+2. **Test connection:** `npx dove status` (add `--env <path>` to test a specific credential file, e.g. `npx dove status --env .env.prod`)
 
 3. **Check the Dovetail server scoped app** is installed on the instance. Without it, API endpoints will 404.
+
+   - **Hitting the wrong instance?** A stray `.env` in the working directory — or a shell-exported `SN_INSTANCE` — can override the file you expect. Pass `--env <path>` to load credentials from a specific file (every `dove` command accepts it; alias `-e`). Already-set environment variables still win, so unset conflicting `SN_*` vars if needed.
 
 4. **Check for MFA/SSO:** If the instance uses MFA or SSO, basic auth may not work. You may need a local ServiceNow account.
 

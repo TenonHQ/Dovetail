@@ -51,6 +51,13 @@ export async function initCommands() {
   };
 
   yargs
+    .option("env", {
+      alias: "e",
+      type: "string",
+      describe:
+        "Path to a .env file to load for this command (default: .env in the project root). Lets one checkout target multiple instances.",
+    })
+    .global("env")
     .command(
       ["watch", "w", "watchAllScopes"],
       "Watch all scopes for file changes and sync to ServiceNow",

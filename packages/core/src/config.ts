@@ -33,6 +33,7 @@ let config_path: string | undefined;
 let source_path: string | undefined;
 let build_path: string | undefined;
 let env_path: string | undefined;
+let env_path_override: string | undefined;
 let manifest_path: string | undefined;
 let diff_path: string | undefined;
 let diff_file: Sinc.DiffFile | undefined;
@@ -124,6 +125,17 @@ export function getBuildPath() {
 export function getEnvPath() {
   if (env_path) return env_path;
   throw new Error("Error getting env path");
+}
+
+/**
+ * @description Overrides the .env file the CLI loads for this invocation.
+ * Set from the per-command `--env` flag before loadConfigs() runs (see
+ * bootstrap.ts) so `loadEnvPath` resolves to the requested file. Pass an
+ * absolute path; relative resolution is handled by the caller (resolveEnvArgPath).
+ * @param {string} absolutePath - Absolute path to the .env file to load.
+ */
+export function setEnvPathOverride(absolutePath: string) {
+  env_path_override = absolutePath;
 }
 
 export function getDiffPath() {
@@ -494,6 +506,13 @@ async function loadBuildPath() {
 
 async function loadEnvPath() {
   let rootDir = getRootDir();
+  // A per-command `--env` override wins over the project-root .env so a single
+  // checkout can target multiple instances by pointing at different credential
+  // files. The override is already resolved to an absolute path by the caller.
+  if (env_path_override) {
+    env_path = env_path_override;
+    return;
+  }
   env_path = path.join(rootDir, ".env");
 }
 

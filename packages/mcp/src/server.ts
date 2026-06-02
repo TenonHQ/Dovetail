@@ -7,6 +7,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./index";
+import { loadEnvFile } from "./loadEnv";
 import { TOOL_NAMES } from "./registry";
 
 export { createServer };
@@ -29,6 +30,10 @@ async function runStdio(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Load credentials before reading config. `--env <path>` or DOVETAIL_ENV_FILE
+  // points the server at a specific file; otherwise the cwd .env is used. A
+  // host's injected process.env always wins (dotenv never overrides).
+  loadEnvFile();
   if (process.argv.indexOf("--smoke") !== -1) {
     await runSmoke();
     return;

@@ -157,7 +157,13 @@ npx dove init-claude          # install Claude Code skills
 npx dove task clear           # deselect active task (avoid stale update set pushes)
 npx dove migrate              # Sincronia → Dovetail (default dry-run; --apply to execute)
 npx dove clickup              # subcommands: tasks, task, create, update, comment, teams, setup, spaces, lists
+
+# Target a different instance per command (global flag on every command)
+npx dove push --env .env.prod         # alias: -e, --env-file
+npx dove status -e ../envs/workshop.env
 ```
+
+**Per-command `.env` selection.** Every `dove` command accepts a global `--env <path>` flag (alias `-e` / `--env-file`) that loads credentials from a specific file instead of the project-root `.env` — so one checkout can target multiple instances. `dove login --env .env.prod` also *writes* to that file. The same applies to `dove-sn` (`--env` / `DOVETAIL_ENV_FILE`) and the MCP servers (`--env` arg / `DOVETAIL_ENV_FILE`). Variables already in the environment are never overridden, so an exported `SN_INSTANCE` still wins (useful in CI).
 
 First-time setup: `npm i -D @tenonhq/dovetail-core` → `npx dove init` → `npx dove configure` (creates `.env`, do not commit) → `npx dove watch`.
 
@@ -193,7 +199,8 @@ Don't hand-edit. Use `npx dove refresh` to rebuild from ServiceNow.
 
 | Symptom | First check |
 |---|---|
-| Auth failure | `.env` credentials, instance URL format, user role |
+| Auth failure | `.env` credentials, instance URL format, user role (or pass `--env <path>` to load a different file) |
+| Hitting the wrong instance | A stray `.env` in cwd, or shell-exported `SN_INSTANCE` overriding the file — pass `--env <path>` and unset conflicting vars |
 | Nothing syncs | `includes._tables` is defined and non-empty |
 | Field corrupted on push | Add field type override under non-prefixed `includes.<table>` |
 | Manifest drift | `npx dove refresh` |
