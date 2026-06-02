@@ -6,8 +6,24 @@ import fs from "fs";
 import path from "path";
 import { logger } from "../Logger";
 import { writeEnvVars } from "../FileUtils";
+import * as ConfigManager from "../config";
 import { discoverPlugins } from "./discovery";
 import { corePlugin, validateCoreLogin } from "./corePlugin";
+
+/**
+ * @description Resolves the .env file login should read from and write to,
+ * honoring a per-command `--env` override when one is set. Falls back to
+ * <rootDir>/.env when config hasn't loaded an override.
+ * @param {string} rootDir - Project root used for the default .env location.
+ * @returns {string} Absolute path to the target .env file.
+ */
+function resolveLoginEnvPath(rootDir: string): string {
+  try {
+    return ConfigManager.getEnvPath();
+  } catch (e) {
+    return path.resolve(rootDir, ".env");
+  }
+}
 
 // ============================================================================
 // Init Context
@@ -20,7 +36,7 @@ import { corePlugin, validateCoreLogin } from "./corePlugin";
  */
 function buildInitContext(plugins: Sinc.InitPlugin[]): Sinc.InitContext {
   const rootDir = process.cwd();
-  const envPath = path.resolve(rootDir, ".env");
+  const envPath = resolveLoginEnvPath(rootDir);
   const env: Record<string, string> = {};
 
   // Load existing .env values
@@ -300,10 +316,11 @@ function saveEnvVars(context: Sinc.InitContext, plugins: Sinc.InitPlugin[]): voi
     .map(key => ({ key, value: context.env[key] }));
 
   if (vars.length > 0) {
-    writeEnvVars({ vars });
+    const envPath = resolveLoginEnvPath(process.cwd());
+    writeEnvVars({ vars, envPath });
     // Also set on process.env for immediate use
     vars.forEach(({ key, value }) => { process.env[key] = value; });
-    logger.success(chalk.green("✓ Saved to .env (existing values preserved)"));
+    logger.success(chalk.green("✓ Saved to " + path.basename(envPath) + " (existing values preserved)"));
   }
 }
 

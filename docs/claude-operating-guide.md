@@ -146,6 +146,8 @@ Source: `packages/core/src/commander.ts`. Run `npx dove <cmd> --help`.
 
 > **There is no `dove diff` command.** `--diff` is a flag on `push` and `build`. (Older docs listed `dove diff` — that was never a real command.)
 
+> **Global `--env <path>` (alias `-e`, `--env-file`).** Every command loads credentials from this file instead of the project-root `.env`, so one checkout can target multiple instances (`npx dove push --env .env.prod`). `login --env <path>` writes there too. Already-set environment variables are never overridden.
+
 ### `dove-sn` (package `servicenow`) — SN authoring CLI
 Source: `packages/servicenow/src/cli.ts`. Every write lands in `--update-set`; most support `--dry-run` and `--json`.
 
@@ -158,6 +160,8 @@ Source: `packages/servicenow/src/cli.ts`. Every write lands in `--update-set`; m
 | `set-related-lists` | Set a form's related lists (`--from-json` or `--related-lists`); `--prune` |
 | `build-flow` | Author Custom Action Types + Subflows from a JSON spec. Exit codes: `0` done/unchanged/dry-run, `2` needs UI publish, `3` verify-mismatch, `4` write-failed, `5` unrecoverable |
 | `mcp` | Run the MCP stdio server (`--smoke` lists tools and exits) |
+
+> **`--env <path>` (alias `--env-file`, or the `DOVETAIL_ENV_FILE` env var)** selects which `.env` file `dove-sn` loads credentials from — applies to every subcommand including `mcp`. Default is `.env` in the cwd. Both `dovetail-mcp` (`dove-mcp`) and this server also read `DOVETAIL_ENV_FILE`, letting an MCP host point a server at a specific credential file.
 
 ### `dove-claude-plans` (package `claude-plans`) — plan store CLI
 Source: `packages/claude-plans/src/cli.ts`.
