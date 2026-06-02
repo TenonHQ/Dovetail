@@ -1,7 +1,5 @@
 # Dovetail
 
-> Formerly **Sincronia** — see [Migrating from Sincronia](docs/migrate-from-sincronia.md) if you're upgrading an existing project.
-
 ## Overview
 
 Dovetail is a tool for managing ServiceNow code in a more modern way. It allows you to:
@@ -48,10 +46,6 @@ Check out the [tutorial videos](https://www.youtube.com/watch?v=CqdppnM-FvM&list
 In order to use Dovetail, you will need:
 
 - [Node.js](https://nodejs.org/en/) version 20 LTS or later
-- **If you are on Windows** you will also need :
-  - Windows subsystem for Linux installed (Ubuntu should work fine)
-  - Preferably updated to version 1903+ (Previous versions untested/not working)
-  - (Optional) Preferably Windows Terminal installed for rendering the text from the tool
 
 ### Instructions
 
@@ -123,7 +117,7 @@ project_folder/
         field_name.extension
 ```
 
-Records are shown as folders because there are times where there are multiple code files per record. This makes it very important that you **never have records with the exact same display value in the same table!** If you do, then you will notice issues building your files to the right record in ServiceNow.
+Records are shown as folders because there are times where there are multiple code files per record. The folder name defaults to the record's display value, but Dovetail falls back to the record's `sys_id` whenever the display value is unsafe for the filesystem (contains characters like `< > : " | ? * \ /`, ends in a space or dot, or is empty). When two records would resolve to the same folder name, the duplicate is automatically disambiguated with a short `sys_id` suffix — so duplicate display values no longer break the build.
 
 #### dove.config.js
 
@@ -367,7 +361,7 @@ module.exports = {
 
 **Note on differentiatorField**
 
-This feature will currently put a colon in the filename. This will break the Windows filesystem. Use at your own risk.
+Folder names are sanitized before they hit disk — any character that is unsafe for the filesystem (e.g. a colon from `sys_id`) triggers an automatic fallback to the record's `sys_id`, so a differentiator value is never written verbatim into a path that would break Windows.
 
 ## FAQ
 
@@ -406,5 +400,3 @@ For an example project, we uploaded the [server side code for Dovetail](https://
 ## History and License
 
 Dovetail is a fork of [Sincronia](https://github.com/Nuvolo/sincronia), originally authored by Nuvolo and the Sincronia contributors. TenonHQ has maintained and extended the project since 2024 — modifications are recorded in this repository's Git history and in [CHANGELOG.md](CHANGELOG.md). The project remains licensed under the GNU General Public License v3 (see [LICENSE](LICENSE)).
-
-If you're upgrading an existing Sincronia project, see [docs/migrate-from-sincronia.md](docs/migrate-from-sincronia.md). The npm packages have been republished under the `@tenonhq/dovetail-*` namespace and the CLI binary is now `dove` (`sinc` remains as a deprecated alias for one minor release).
