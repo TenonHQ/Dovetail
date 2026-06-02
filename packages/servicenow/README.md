@@ -206,8 +206,10 @@ and **publishes** it: `POST /processflow/flow` initialises the envelope, the
 trigger + action graph is grafted from a published template flow (`--template`,
 ids remapped + values patched via `--trigger-table` / `--trigger-condition` /
 `--log-message`), a `versioning/create_version` bookmark is written, then the
-`/snapshot` POST compiles it. The result is a **published, ACTIVE** flow — so do
-NOT graft a production send template you don't intend to fire. The
+`/snapshot` POST compiles it. The result is a **published** flow — a published
+triggered flow can fire on its trigger, so do NOT graft a production send template
+you don't intend to fire (the `active` flag on the result reports whether it's
+live). The
 `POST /processflow/flow` create step is the crux: a Table-API / Dovetail
 `createRecord` insert never initialises the processflow envelope, so its snapshot
 POST silently no-ops (stays draft). Sequence reverse-engineered from Workflow

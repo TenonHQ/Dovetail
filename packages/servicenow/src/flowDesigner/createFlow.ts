@@ -76,6 +76,13 @@ export interface CreateFlowResult {
   snapshotSysId?: string;
   /** Counts grafted from the template. */
   graph: { triggers: number; actions: number; logic: number };
+  /**
+   * Whether the published flow is ACTIVE (will fire on its trigger). Read back
+   * from the snapshot response when it reports it; `undefined` when the response
+   * doesn't carry an active flag (dry-run, or a server payload that omits it).
+   * Don't assume inactive on `undefined` — confirm against the flow record.
+   */
+  active?: boolean;
   /** HTTP status of the snapshot POST (0 on dry-run). */
   httpStatus: number;
 }
@@ -87,7 +94,10 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  // The first replace collapses every run of non-alphanumerics to a single "_",
+  // so consecutive underscores can never occur here — a single-char trim (no "+"
+  // quantifier) is sufficient and avoids the polynomial-backtracking pattern.
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
 /** Normalize `{ result: { data } }` / `{ data }` / `{ result }` / bare to the model. */
@@ -291,6 +301,7 @@ export async function createFlow(params: CreateFlowParams): Promise<CreateFlowRe
   var snapBody = unwrapModel(snapResp);
   var publishedFlag = snapBody && (snapBody.isPublished === true || snapBody.status === "published");
   var snapshotSysId = extractSnapshotSysId(snapBody);
+  var active = snapBody && typeof snapBody.active === "boolean" ? snapBody.active : undefined;
 
   return {
     status: publishedFlag || snapshotSysId ? "published" : "not-published",
@@ -300,6 +311,7 @@ export async function createFlow(params: CreateFlowParams): Promise<CreateFlowRe
     scopeSysId: params.scopeSysId,
     snapshotSysId: snapshotSysId,
     graph: graph,
+    active: active,
     httpStatus: 200,
   };
 }

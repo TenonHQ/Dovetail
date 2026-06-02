@@ -95,7 +95,7 @@ function routedPost(path: string): any {
     return { result: "", session: { notifications: [] } };
   }
   if (path.indexOf("/snapshot") >= 0) {
-    return { result: { data: { id: NEW, status: "published", isPublished: true, latestSnapshot: SNAP } } };
+    return { result: { data: { id: NEW, status: "published", isPublished: true, active: true, latestSnapshot: SNAP } } };
   }
   return {};
 }
@@ -161,6 +161,7 @@ describe("createFlow", function () {
     expect(r.status).toBe("published");
     expect(r.sysId).toBe(NEW);
     expect(r.snapshotSysId).toBe(SNAP);
+    expect(r.active).toBe(true);
     expect(r.graph).toEqual({ triggers: 1, actions: 1, logic: 0 });
     // call order: GET template, POST create, POST create_version, POST snapshot
     expect(ctx.cap.gets[0]).toContain("/processflow/flow/" + TEMPLATE);

@@ -187,12 +187,13 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
         "Create a NEW ServiceNow Flow Designer flow (sys_hub_flow, type=flow) from scratch and "
         + "PUBLISH it, headless. Mints a fresh flow via POST /processflow/flow, grafts the trigger + "
         + "action graph from an existing published template flow (templateSysId), then compiles the "
-        + "snapshot — leaving a published, active flow. Unlike flow_copy (which duplicates a flow), "
+        + "snapshot — leaving a published flow (the result's `active` flag reports whether it will "
+        + "fire). Unlike flow_copy (which duplicates a flow), "
         + "this creates a new flow you can re-point at a different trigger table / message. "
         + "name + templateSysId + scopeSysId are required; triggerTable / triggerCondition / "
         + "logMessage patch the grafted graph; dryRun:true returns the plan + template graph counts "
-        + "without writing. WARNING: the result is ACTIVE — do not graft a production send template "
-        + "you don't intend to fire.",
+        + "without writing. WARNING: a published triggered flow can fire on its trigger — do not graft "
+        + "a production send template you don't intend to fire.",
       shape: createFlowSchema.shape,
       handler: async function (args: any) {
         var p = createFlowSchema.parse(args);

@@ -404,8 +404,9 @@ async function runCopyFlow(flags: Record<string, string>): Promise<number> {
  *
  * Creates a NEW flow from scratch and PUBLISHES it: POST /processflow/flow mints an
  * initialised envelope, the template's trigger+action graph is grafted on (ids remapped,
- * values patched), then the snapshot is compiled. The result is a published, ACTIVE flow
- * — do NOT graft a production send template you don't intend to fire.
+ * values patched), then the snapshot is compiled. The result is a published flow — a
+ * published triggered flow can fire on its trigger, so do NOT graft a production send
+ * template you don't intend to fire (the result's `active` flag reports whether it's live).
  *
  * Exit codes: 0 published OR dry-run; 2 created-but-not-published (snapshot didn't compile).
  */
@@ -444,7 +445,9 @@ async function runCreateFlow(flags: Record<string, string>): Promise<number> {
   } else {
     process.stdout.write(
       "[" + result.status + "] '" + result.name + "' sys_id " + result.sysId
-        + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n"
+        + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "")
+        + (result.active === undefined ? "" : result.active ? " — ACTIVE (will fire)" : " — inactive")
+        + "\n"
     );
   }
   if (result.status === "not-published") { return 2; }
