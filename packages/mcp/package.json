@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-mcp",
-  "version": "0.0.8",
+  "version": "0.0.7",
   "description": "MCP server exposing read tools for ClickUp / Gmail / Calendar / ServiceNow plus gated ClickUp writes, backed by the Dovetail integration packages.",
   "main": "./dist/index.js",
   "bin": {
