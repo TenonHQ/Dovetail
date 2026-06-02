@@ -55,8 +55,8 @@ Reads ServiceNow credentials from env vars in this order of precedence:
 | User     | `SN_USER`       | `SN_DEV_USERNAME`   | `SN_PROD_USERNAME`   |
 | Password | `SN_PASSWORD`   | `SN_DEV_PASSWORD`   | `SN_PROD_PASSWORD`   |
 
-The dev/prod fallbacks match the names documented in the committed
-`Craftsman/.env.example`, so existing developer setups work out of the box.
+The dev/prod fallbacks match the names already documented in
+`Craftsman/CLAUDE.local.md`, so existing developer setups work out of the box.
 Bare instance names (e.g. `TenonWorkStudio`) get `.service-now.com` appended
 automatically.
 
