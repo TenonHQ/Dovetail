@@ -111,6 +111,39 @@ describe("download — folder names are filesystem-safe (self-sufficient writer)
     expect(Object.keys(manifest.tables.sys_ui_script.records)).toEqual([UI_SYS_ID]);
   });
 
+  test("other Windows-illegal names also fall back to sys_id (wildcard ACL, trailing space)", async function () {
+    var ACL_SYS_ID = "bc91c2a5f334621048dff31590812771";
+    var SPACE_SYS_ID = "cc22dd33ee44ff5500112233445566aa";
+    var manifest: any = {
+      tables: {
+        sys_security_acl: {
+          records: {
+            // A `<table>.*` wildcard ACL — the `*` (and trailing `.*`) is illegal on Windows.
+            "x_cadso_work_campaign.*": {
+              name: "x_cadso_work_campaign.*",
+              sys_id: ACL_SYS_ID,
+              files: [{ name: "script", type: "js", content: "// acl" }],
+            },
+            // A trailing space is silently stripped by Win32 — also unsafe.
+            "Trailing Space ": {
+              name: "Trailing Space ",
+              sys_id: SPACE_SYS_ID,
+              files: [{ name: "script", type: "js", content: "// space" }],
+            },
+          },
+        },
+      },
+    };
+
+    await AllScopes.processManifestForScope(manifest, tmpRoot, true);
+
+    var folders = listFolders("sys_security_acl");
+    expect(folders).toContain(ACL_SYS_ID);
+    expect(folders).toContain(SPACE_SYS_ID);
+    expect(folders).not.toContain("x_cadso_work_campaign.*");
+    expect(folders).not.toContain("Trailing Space ");
+  });
+
   test("a filesystem-safe name stays human-readable (no needless sys_id fallback)", async function () {
     var manifest: any = {
       tables: {

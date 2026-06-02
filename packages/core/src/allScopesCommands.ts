@@ -224,8 +224,9 @@ export async function processScope(
       logger.warn("No _tables whitelist defined — writing ALL tables for " + scopeName);
     }
 
-    // Normalize record keys from sys_id to display name
-    AppUtils.normalizeManifestKeys(manifest);
+    // Record-key normalization now happens inside processManifestForScope (the
+    // writer owns the folder ≡ key invariant). The missing-files structure
+    // below keys by record.sys_id, so it does not depend on normalized names.
 
     // Build the missing files structure from the filtered manifest
     var manifestTables = manifest.tables || {};
