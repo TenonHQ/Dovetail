@@ -180,6 +180,10 @@ npx dove-sn view-action --sys-id <action_type_sys_id> --scope <scope_sys_id>
 # Copy a flow / subflow (creates an INACTIVE DRAFT) via the Designer's Copy endpoint
 npx dove-sn copy-flow --sys-id <sys_id> --name "My Copy"   # scope defaults to source's
 
+# Create a NEW flow (type=flow) from scratch and PUBLISH it (grafts a template's trigger+action)
+npx dove-sn create-flow --name "My Flow" --template <published_flow_sys_id> --scope <scope_sys_id> \
+  --trigger-table customer_contact --log-message "hello"            # add --dry-run to preview
+
 # Publish (compile the snapshot of) a flow / subflow after editing in the Designer
 npx dove-sn publish-flow --sys-id <sys_id>             # scope defaults to the flow's
 
@@ -196,6 +200,19 @@ npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json --apply --update-se
 `copy-flow` calls the Designer's own `POST /processflow/flow/{id}/copy` — a
 complete, faithful clone created as an **inactive draft**. (Don't publish +
 activate a copy of a triggered production flow unless you intend it to fire.)
+
+`create-flow` mints a **brand-new** flow (`sys_hub_flow`, `type=flow`) from scratch
+and **publishes** it: `POST /processflow/flow` initialises the envelope, the
+trigger + action graph is grafted from a published template flow (`--template`,
+ids remapped + values patched via `--trigger-table` / `--trigger-condition` /
+`--log-message`), a `versioning/create_version` bookmark is written, then the
+`/snapshot` POST compiles it. The result is a **published, ACTIVE** flow — so do
+NOT graft a production send template you don't intend to fire. The
+`POST /processflow/flow` create step is the crux: a Table-API / Dovetail
+`createRecord` insert never initialises the processflow envelope, so its snapshot
+POST silently no-ops (stays draft). Sequence reverse-engineered from Workflow
+Studio HARs and validated live (2026-06-02, tenonworkstudio). Exit `0` published
+or dry-run; `2` created-but-not-published.
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
@@ -258,7 +275,8 @@ Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, plus the Flow Designer tools
 `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
-(copy a flow as an inactive draft), `flow_test` (validate or run a flow), and
+(copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
+publish, grafting a template), `flow_test` (validate or run a flow), and
 `flow_edit` (patch a flow). It reads ServiceNow credentials from the same env
 vars as the CLI.
 

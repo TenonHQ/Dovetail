@@ -86,6 +86,18 @@ export var copyFlowSchema = z.object({
   scopeSysId: z.string().optional()
 });
 
+export var createFlowSchema = z.object({
+  name: z.string().min(1),
+  templateSysId: z.string().min(1),
+  scopeSysId: z.string().min(1),
+  internalName: z.string().optional(),
+  description: z.string().optional(),
+  triggerTable: z.string().optional(),
+  triggerCondition: z.string().optional(),
+  logMessage: z.string().optional(),
+  dryRun: z.boolean().optional()
+});
+
 export var testFlowSchema = z.object({
   sysId: z.string().min(1),
   mode: z.union([z.literal("validate"), z.literal("execute")]).optional(),

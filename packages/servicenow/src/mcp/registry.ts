@@ -21,6 +21,7 @@ import { readFlow } from "../flowDesigner/readFlow";
 import { readActionType } from "../flowDesigner/readActionType";
 import { publishFlow } from "../flowDesigner/publishFlow";
 import { copyFlow } from "../flowDesigner/copyFlow";
+import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
 import {
@@ -33,6 +34,7 @@ import {
   viewActionSchema,
   publishFlowSchema,
   copyFlowSchema,
+  createFlowSchema,
   testFlowSchema,
   editFlowSchema
 } from "./schemas";
@@ -47,6 +49,7 @@ export var TOOL_NAMES = [
   "action_view",
   "flow_publish",
   "flow_copy",
+  "flow_create",
   "flow_test",
   "flow_edit"
 ] as const;
@@ -176,6 +179,35 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       handler: async function (args: any) {
         var p = copyFlowSchema.parse(args);
         return copyFlow({ client: client(), sourceSysId: p.sourceSysId, newName: p.newName, scopeSysId: p.scopeSysId });
+      }
+    },
+    {
+      name: "flow_create",
+      description:
+        "Create a NEW ServiceNow Flow Designer flow (sys_hub_flow, type=flow) from scratch and "
+        + "PUBLISH it, headless. Mints a fresh flow via POST /processflow/flow, grafts the trigger + "
+        + "action graph from an existing published template flow (templateSysId), then compiles the "
+        + "snapshot — leaving a published, active flow. Unlike flow_copy (which duplicates a flow), "
+        + "this creates a new flow you can re-point at a different trigger table / message. "
+        + "name + templateSysId + scopeSysId are required; triggerTable / triggerCondition / "
+        + "logMessage patch the grafted graph; dryRun:true returns the plan + template graph counts "
+        + "without writing. WARNING: the result is ACTIVE — do not graft a production send template "
+        + "you don't intend to fire.",
+      shape: createFlowSchema.shape,
+      handler: async function (args: any) {
+        var p = createFlowSchema.parse(args);
+        return createFlow({
+          client: client(),
+          name: p.name,
+          templateSysId: p.templateSysId,
+          scopeSysId: p.scopeSysId,
+          internalName: p.internalName,
+          description: p.description,
+          triggerTable: p.triggerTable,
+          triggerCondition: p.triggerCondition,
+          logMessage: p.logMessage,
+          dryRun: p.dryRun
+        });
       }
     },
     {
