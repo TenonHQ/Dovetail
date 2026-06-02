@@ -23,6 +23,7 @@
  */
 
 import * as fs from "fs";
+import { loadEnvFile } from "./loadEnv";
 import { createClient } from "./client";
 import { addChoicesToField } from "./choices";
 import { formatAddChoicesResult } from "./formatter";
@@ -524,12 +525,19 @@ function printHelp(): void {
     "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
     "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
     "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-    "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n"
+    "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
+    "\nGlobal flags:\n" +
+    "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
+    "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n"
   );
 }
 
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
+  // Load credentials before any command runs. `--env`/`--env-file` (or the
+  // DOVETAIL_ENV_FILE env var) selects a specific file so one checkout can
+  // target multiple instances; otherwise the cwd `.env` is used.
+  loadEnvFile(parsed.flags.env || parsed.flags["env-file"]);
   if (parsed.command === "add-choices") {
     await runAddChoices(parsed.flags);
     return 0;

@@ -56,6 +56,7 @@ SN_INSTANCE=your-instance.service-now.com
 - Instance should NOT have `https://` prefix or trailing slash
 - Optional: `DASHBOARD_PORT=3456`
 - **Never commit `.env` to git**
+- **Multiple instances?** Keep one file per instance (`.env.dev`, `.env.prod`) and pass `--env <path>` (alias `-e`) on any command: `npx dove push --env .env.prod`. `dove login --env .env.prod` writes credentials to that file too. Git-ignore the whole pattern (`.env*`).
 
 #### Set up `.gitignore`
 ```

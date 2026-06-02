@@ -66,6 +66,21 @@ SN_USER=...
 SN_PASSWORD=...
 ```
 
+### Selecting a .env file per command
+
+Every `dove-sn` command (and `dove-sn mcp`) loads `.env` from the current
+directory by default. Point it at a different file to target another instance:
+
+```bash
+npx dove-sn view-flow --sys-id <id> --env .env.prod
+npx dove-sn add-choices --env ../envs/workshop.env --table ... --column ...
+```
+
+`--env` (alias `--env-file`) wins over the `DOVETAIL_ENV_FILE` env var, which in
+turn beats the default `.env`. Variables already present in the environment are
+never overridden, so an exported `SN_INSTANCE` still takes precedence over the
+file — handy for CI.
+
 ## CLI
 
 ```bash
