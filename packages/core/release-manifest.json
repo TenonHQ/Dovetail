@@ -1,7 +1,41 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-02T17:01:03.752Z",
+  "generated_at": "2026-06-02T18:16:07.004Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.99",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.99",
+      "prev_version": "0.0.98",
+      "published_at": "2026-06-02T18:16:06.996Z",
+      "git": {
+        "sha": "bad6776e9a426207b700d39dd139438c8a934d49",
+        "tag": "dovetail-core@0.0.99"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "bad6776e9",
+          "subject": "fix(core): write instance-relative _record_link in metaData.json (#139)",
+          "pr": 139
+        },
+        {
+          "sha": "e0cf83a8c",
+          "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.13 [skip ci]"
+        },
+        {
+          "sha": "bd127c726",
+          "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.12 [skip ci]"
+        },
+        {
+          "sha": "448696846",
+          "subject": "chore(release): publish 3 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.13",
