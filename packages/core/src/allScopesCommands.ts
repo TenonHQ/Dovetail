@@ -28,8 +28,9 @@ export interface ScopeResult {
   error?: Error;
 }
 
-// Custom function to process manifest with specific source directory
-async function processManifestForScope(
+// Custom function to process manifest with specific source directory.
+// Exported for regression testing of filesystem-safe folder writing.
+export async function processManifestForScope(
   manifest: SN.AppManifest,
   sourceDirectory: string,
   forceWrite = false,
@@ -42,6 +43,14 @@ async function processManifestForScope(
       logger.error("Failed to create directory: " + sourceDirectory);
       throw dirError;
     }
+
+    // Re-key the manifest to filesystem-safe folder names before writing.
+    // Idempotent, so it is safe even when the caller already normalized.
+    // Without this, a Windows-illegal display name (trailing dot/space, or
+    // any of <>:"|?*) would be written as a raw folder and abort `git clone`
+    // on Windows. Keeps the folder ≡ manifest-key invariant `dove push` relies
+    // on. See toSafeFolderName / normalizeManifestKeys (PR #117, #133).
+    AppUtils.normalizeManifestKeys(manifest);
 
     const tables = manifest.tables || {};
     const tableNames = Object.keys(tables);
@@ -73,8 +82,10 @@ async function processManifestForScope(
 
       for (const recordName of recordNames) {
         const record = tableRecords.records[recordName];
-        // Use the record's name property instead of the key for the directory name
-        const recordDirName = record.name || recordName;
+        // Derive the folder via toSafeFolderName (never the raw record.name):
+        // normalizeManifestKeys above already re-keyed unsafe names to sys_id,
+        // and this keeps the writer defensive if that ever changes.
+        const recordDirName = AppUtils.toSafeFolderName(record);
         const recordPath = path.join(tablePath, recordDirName);
 
         // Check if metadata file exists in the files from server
@@ -213,8 +224,9 @@ export async function processScope(
       logger.warn("No _tables whitelist defined — writing ALL tables for " + scopeName);
     }
 
-    // Normalize record keys from sys_id to display name
-    AppUtils.normalizeManifestKeys(manifest);
+    // Record-key normalization now happens inside processManifestForScope (the
+    // writer owns the folder ≡ key invariant). The missing-files structure
+    // below keys by record.sys_id, so it does not depend on normalized names.
 
     // Build the missing files structure from the filtered manifest
     var manifestTables = manifest.tables || {};
