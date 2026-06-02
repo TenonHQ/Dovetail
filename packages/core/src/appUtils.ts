@@ -47,10 +47,20 @@ const getUpdateSetConfig = (): UpdateSetConfig => {
   return {};
 };
 
+// Strip the ServiceNow instance host from an absolute _record_link, leaving the
+// instance-relative path. The CADSO metadata endpoint returns an absolute URL
+// (https://<instance>.service-now.com/<table>.do?sys_id=...); persisting that
+// makes the on-disk artifact instance-bound, so a re-pull from a different
+// instance rewrites every metaData.json with the new host. The relative path
+// (/<table>.do?sys_id=...) resolves against whatever instance the reader is on.
+// Matches any *.service-now.com host so the output is portable across instances.
+const stripRecordLinkHost = (link: string): string =>
+  link.replace(/^https?:\/\/[^/]+\.service-now\.com/i, "");
+
 // Merge _lastUpdatedOn into the server-provided metadata content. Preserves all
 // record fields (sys_id, sys_scope, field value/display_value pairs, etc.) so
 // the local metaData.json is a full snapshot of the record, not just a stub.
-const stampMetadataContent = (file: SN.File): SN.File => {
+export const stampMetadataContent = (file: SN.File): SN.File => {
   if (file.name !== "metaData" || file.type !== "json") return file;
   const stamp = new Date().toISOString();
   if (!file.content) {
@@ -62,6 +72,9 @@ const stampMetadataContent = (file: SN.File): SN.File => {
       metadata._lastUpdatedOn = metadata.sys_updated_on.value;
     } else {
       metadata._lastUpdatedOn = stamp;
+    }
+    if (typeof metadata._record_link === "string") {
+      metadata._record_link = stripRecordLinkHost(metadata._record_link);
     }
     return { ...file, content: JSON.stringify(metadata, null, 2) };
   } catch (e) {
