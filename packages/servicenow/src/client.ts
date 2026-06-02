@@ -25,7 +25,7 @@ import type { ServiceNowClientConfig } from "./types";
 
 /**
  * Env precedence for instance/auth: explicit cfg > SN_* > SN_DEV_* > SN_PROD_*.
- * SN_DEV_* / SN_PROD_* fallbacks match the names documented in Craftsman/CLAUDE.local.md
+ * SN_DEV_* / SN_PROD_* fallbacks match the names documented in Craftsman/.env.example
  * so existing developer setups work without re-exporting variables. SN_DEV_INSTANCE
  * may be a bare instance name (e.g. "TenonWorkStudio") — `.service-now.com` is
  * appended when it isn't already part of the host.
