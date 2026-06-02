@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.100",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.100",
+  "prev_version": "0.0.99",
+  "published_at": "2026-06-02T21:39:46.687Z",
+  "git": {
+    "sha": "602efb3b4ae7a1c450bdcfacdecea12ee618f085",
+    "tag": "dovetail-core@0.0.100"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "602efb3b4",
+      "subject": "fix(core): Windows-safe folder names in the download writer (#140)",
+      "pr": 140
+    },
+    {
+      "sha": "d3fd80bf7",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.99 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
