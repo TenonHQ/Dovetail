@@ -27,7 +27,6 @@ export interface TableSchema {
   scope: string;
   parent: string | null;
   hierarchy: string[];
-  created_at: string;
   field_count: number;
   fields: TableField[];
 }
@@ -41,12 +40,14 @@ export interface AppSummary {
     field_count: number;
     has_parent: boolean;
   }>;
-  generated_at: string;
 }
 
 export interface SchemaIndex {
   instance: string;
-  generated_at: string;
+  // Optional: the generator no longer stamps a per-pull timestamp into the
+  // tracked dump (it produced 100% diff noise). Kept optional so snapshots and
+  // older baselines that still carry it remain readable for diffs.
+  generated_at?: string;
   total_tables: number;
   scopes: string[];
   applications: Array<{
