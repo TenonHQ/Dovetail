@@ -419,20 +419,28 @@ export const snClient = (
     updateSetName: string,
     scopeSysId?: string,
     description?: string,
+    scopeName?: string,
   ) => {
-    const endpoint = `api/now/table/sys_update_set`;
-    type UpdateSetCreateResponse = Sinc.SNAPIResponse<SN.UpdateSetRecord>;
-    const data: any = {
+    // Route through Dovetail's scope-aware createRecord endpoint instead of the
+    // raw Table API. A POST to api/now/table/sys_update_set is silently
+    // mis-scoped: the platform business rule ignores the `application` field
+    // and stamps the record with the API user's session current_app (usually
+    // x_cadso_core). See Documentation/ServiceNow-Update-Set-Scoping.md.
+    const fields: Record<string, string> = {
       name: updateSetName,
       state: "in progress",
     };
     if (scopeSysId) {
-      data.application = scopeSysId;
+      fields.application = scopeSysId;
     }
     if (description) {
-      data.description = description;
+      fields.description = description;
     }
-    return client.post<UpdateSetCreateResponse>(endpoint, data);
+    return createRecord({
+      table: "sys_update_set",
+      scope: scopeName,
+      fields,
+    });
   };
 
   const getCurrentUpdateSetUserPref = (userSysId: string) => {

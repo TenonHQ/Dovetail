@@ -308,9 +308,10 @@ class MultiScopeWatcherManager {
         updateSet = { sys_id: existing[0].sys_id, name: existing[0].name };
         logger.info(`[${scopeName}] Found existing update set: ${updateSet.name}`);
       } else {
-        // Create a new one with explicit scope sys_id
+        // Create a new one — pass scope name so createUpdateSet routes
+        // through Dovetail's scope-aware createRecord endpoint, not Table API.
         var createResp = await unwrapSNResponse(
-          client.createUpdateSet(updateSetName, scopeSysId, description)
+          client.createUpdateSet(updateSetName, scopeSysId, description, scopeName)
         );
         updateSet = { sys_id: createResp.sys_id, name: updateSetName };
         logger.info(`[${scopeName}] Auto-created update set: ${updateSet.name}`);

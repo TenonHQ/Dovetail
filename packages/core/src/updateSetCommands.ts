@@ -214,9 +214,10 @@ export async function createUpdateSetCommand(args: any): Promise<void> {
       await switchToScope(scopeSysId, scope);
     }
     
-    // Create the update set in the correct scope
+    // Create the update set in the correct scope. Pass scope name so the
+    // server-side createRecord runs inside the target scope; see snClient.ts.
     logger.info(`Creating update set: ${name}`);
-    const createResponse = client.createUpdateSet(name, scopeSysId, description);
+    const createResponse = client.createUpdateSet(name, scopeSysId, description, scope);
     const createResult = await unwrapSNResponse(createResponse);
     const updateSetSysId = (createResult as any).sys_id;
     

@@ -1191,7 +1191,7 @@ export const createAndAssignUpdateSet = async (updateSetName = "", scope?: strin
     }
   }
   const { sys_id: updateSetSysId } = await unwrapSNResponse(
-    client.createUpdateSet(updateSetName, scopeSysId),
+    client.createUpdateSet(updateSetName, scopeSysId, undefined, scope),
   );
   const userSysId = await unwrapTableAPIFirstItem(
     client.getUserSysId(),
