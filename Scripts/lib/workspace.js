@@ -207,12 +207,17 @@ function dependentsClosure(seedDirs, packages) {
 /**
  * Preserve the operator prefix of a semver range and swap in a new version.
  *   "^0.0.9"  -> "^0.0.10"   "0.0.9" -> "0.0.10"   ">=1.2.0" -> ">=0.0.10"
- * Non-pin specs ("*", "workspace:*", "latest", git/url ranges) are returned
- * unchanged so they are never corrupted.
+ *
+ * Only a *complete* single-operator pin is rewritten. Compound ranges
+ * (">=0.0.9 <0.1.0"), hyphen ranges ("0.0.9 - 0.1.0"), prerelease pins, and
+ * non-pin specs ("*", "workspace:*", "latest", git/url) are returned unchanged
+ * so they are never corrupted — and a range that already admits the new
+ * version needs no rewrite anyway. The trailing `$` anchor is what makes a
+ * compound range fall through instead of having its first term clobbered.
  */
 function applyRangePrefix(oldRange, newVersion) {
   const text = String(oldRange);
-  const match = text.match(/^(\^|~|>=|<=|>|<|=)?\s*\d+\.\d+\.\d+/);
+  const match = text.match(/^(\^|~|>=|<=|>|<|=)?\s*\d+\.\d+\.\d+$/);
   if (!match) {
     return text;
   }
