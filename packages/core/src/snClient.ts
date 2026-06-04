@@ -114,6 +114,21 @@ function _enrichDovetailApiError(
   return e;
 }
 
+// True when an error indicates the Dovetail Scripted REST endpoint does not
+// exist on this instance (404, or the 400 "Requested URI does not represent any
+// resource" body). Used to degrade createUpdateSet to the Table API path on
+// instances that do not have the createUpdateSet op deployed yet.
+function _isMissingDovetailEndpoint(e: unknown): boolean {
+  if (!axios.isAxiosError(e)) return false;
+  var status = e.response ? e.response.status : undefined;
+  if (status === 404) return true;
+  if (status === 400) {
+    var body = e.response ? _summarizeResponseBody(e.response.data) : "";
+    return body.indexOf(_SN_MISSING_ENDPOINT_BODY) !== -1;
+  }
+  return false;
+}
+
 export async function _callDovetailApi<T>(
   op: string,
   call: (endpoint: string) => Promise<AxiosResponse<T>>,
@@ -415,13 +430,17 @@ export const snClient = (
     return client.get<ScopeResponse>(endpoint);
   };
 
-  const createUpdateSet = (
+  const createUpdateSet = async (
     updateSetName: string,
     scopeSysId?: string,
     description?: string,
-  ) => {
-    const endpoint = `api/now/table/sys_update_set`;
+  ): Promise<AxiosResponse<Sinc.SNAPIResponse<SN.UpdateSetRecord>>> => {
     type UpdateSetCreateResponse = Sinc.SNAPIResponse<SN.UpdateSetRecord>;
+    // Prefer the scope-safe Dovetail server op. It switches the current
+    // application and inserts the set in one server call, so the set always
+    // lands in `scopeSysId`. A raw Table API POST ignores `application` (the
+    // field defaults to the session's current app), and the old
+    // changeScope-then-POST path raced and mis-scoped sets created back to back.
     const data: any = {
       name: updateSetName,
       state: "in progress",
@@ -432,7 +451,42 @@ export const snClient = (
     if (description) {
       data.description = description;
     }
-    return client.post<UpdateSetCreateResponse>(endpoint, data);
+    try {
+      const resp = await _callDovetailApi<any>("createUpdateSet", (endpoint) =>
+        client.post<any>(endpoint, data),
+      );
+      const payload: any = resp.data || {};
+      const sysId = payload.sys_id || (payload.result && payload.result.sys_id);
+      if (!sysId) {
+        throw new Error("createUpdateSet endpoint returned no sys_id");
+      }
+      // Normalize to the Table-API shape that unwrapSNResponse expects
+      // (resp.data.result), so callers stay unchanged.
+      return {
+        ...resp,
+        data: {
+          result: {
+            sys_id: sysId,
+            name: payload.name || updateSetName,
+            application: payload.application,
+          },
+        },
+      } as AxiosResponse<UpdateSetCreateResponse>;
+    } catch (e) {
+      if (!_isMissingDovetailEndpoint(e)) {
+        throw e;
+      }
+      // Instance without the createUpdateSet op yet: degrade to the legacy
+      // Table API path so existing flows keep working during rollout. Sets
+      // created this way may be mis-scoped until the op is deployed.
+      logger.warn(
+        "Dovetail createUpdateSet endpoint not found on this instance; falling " +
+          "back to the Table API. Update sets may be mis-scoped until the " +
+          "Dovetail createUpdateSet REST op is installed on this instance.",
+      );
+      const endpoint = `api/now/table/sys_update_set`;
+      return client.post<UpdateSetCreateResponse>(endpoint, data);
+    }
   };
 
   const getCurrentUpdateSetUserPref = (userSysId: string) => {
