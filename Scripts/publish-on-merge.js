@@ -141,6 +141,39 @@ function unscoped(name) {
   return name.replace(/^@[^/]+\//, "");
 }
 
+/**
+ * Pin a package's workspace dependency ranges to the versions published so far
+ * in this run (the cascade step). Returns true if any range moved. When write
+ * is false the computation runs without touching disk (dry-run preview).
+ */
+function pinPublishedDeps(pkg, publishedVersions, write) {
+  const manifest = JSON.parse(fs.readFileSync(pkg.manifestPath, "utf8"));
+  const groups = ["dependencies", "devDependencies", "peerDependencies"];
+  let changed = false;
+  for (let g = 0; g < groups.length; g++) {
+    const group = manifest[groups[g]];
+    if (!group) {
+      continue;
+    }
+    const names = Object.keys(group);
+    for (let n = 0; n < names.length; n++) {
+      const name = names[n];
+      if (Object.prototype.hasOwnProperty.call(publishedVersions, name)) {
+        const next = ws.applyRangePrefix(group[name], publishedVersions[name]);
+        if (next !== group[name]) {
+          group[name] = next;
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed && write) {
+    fs.writeFileSync(pkg.manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    pkg.manifest = manifest;
+  }
+  return changed;
+}
+
 // ---------------------------------------------------------------------------
 // release manifest (downstream knowledge sync)
 // ---------------------------------------------------------------------------
@@ -382,8 +415,13 @@ function main() {
   }
 
   const changedDirs = changedPackageDirs(range);
-  const toPublish = ws.toposort(ws.listPackages()).filter(function (pkg) {
-    return changedDirs[pkg.dirName] === true && pkg.isPrivate === false;
+  const allPackages = ws.listPackages();
+  // Cascade: a changed package drags every (transitive) dependent into the
+  // publish set, so consumers re-pin to the version just shipped instead of
+  // staying frozen on an exact ^0.0.x pin.
+  const cascadeDirs = ws.dependentsClosure(changedDirs, allPackages);
+  const toPublish = ws.toposort(allPackages).filter(function (pkg) {
+    return cascadeDirs[pkg.dirName] === true && pkg.isPrivate === false;
   });
 
   if (toPublish.length === 0) {
@@ -391,23 +429,40 @@ function main() {
     return 0;
   }
 
-  console.log("\nChanged packages to publish (dependency order):");
+  console.log("\nPackages to publish (dependency order):");
   for (let i = 0; i < toPublish.length; i++) {
-    console.log("  - " + toPublish[i].name);
+    const tag = changedDirs[toPublish[i].dirName] === true ? "changed" : "cascade";
+    console.log("  - " + toPublish[i].name + "  [" + tag + "]");
   }
 
   const published = [];
   const failed = [];
+  const publishedVersions = {}; // name -> version shipped this run, for cascade pinning
 
   console.log("");
   for (let i = 0; i < toPublish.length; i++) {
     const pkg = toPublish[i];
+    const isDirect = changedDirs[pkg.dirName] === true;
+
+    // Re-pin this package's workspace deps to anything already published this
+    // run. In dry-run we compute the would-change flag without writing.
+    const depsRepinned = pinPublishedDeps(pkg, publishedVersions, !args.dryRun);
+
+    // A cascade-only package whose pinned ranges did not actually move needs
+    // no republish (e.g. it floats, or a dependency publish failed upstream).
+    if (!isDirect && !depsRepinned) {
+      console.log("• " + pkg.name + "  — no dependency range moved, skipping");
+      continue;
+    }
+
     const prevVersion = npmPublishedVersion(pkg.name);
     const version = resolvePublishVersion(pkg);
-    console.log("▶ " + pkg.name + "  source=" + pkg.version + "  ->  publish " + version);
+    const reason = isDirect ? "changed" : "cascade";
+    console.log("▶ " + pkg.name + "  source=" + pkg.version + "  ->  publish " + version + "  [" + reason + "]");
 
     if (args.dryRun) {
       published.push({ name: pkg.name, dirName: pkg.dirName, version: version, prevVersion: prevVersion });
+      publishedVersions[pkg.name] = version;
       continue;
     }
 
@@ -418,6 +473,7 @@ function main() {
     try {
       run("npm", ["publish", "--access", "public"], { cwd: pkg.dir });
       published.push({ name: pkg.name, dirName: pkg.dirName, version: version, prevVersion: prevVersion });
+      publishedVersions[pkg.name] = version;
       console.log("  published " + pkg.name + "@" + version + "\n");
     } catch (err) {
       console.error("  FAILED to publish " + pkg.name + ": " + err.message + "\n");
