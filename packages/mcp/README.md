@@ -21,7 +21,7 @@ Node 20 LTS required.
 
 ## Environment variables
 
-The server reads `.env` of the **calling** project (e.g. CTO repo). It boots
+The server reads `.env` of the **calling** project. It boots
 even if some integrations are missing — calls to those tools just return a
 clear "not configured" error.
 
@@ -93,7 +93,7 @@ npx @tenonhq/dovetail-mcp
 npx @tenonhq/dovetail-mcp --smoke
 ```
 
-## Wiring into Claude Code (CTO repo)
+## Wiring into Claude Code
 
 Add the server entry to `.claude/mcp.json` in the consuming project:
 

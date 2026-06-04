@@ -2,7 +2,7 @@
 
 > Status: **Design — STOPS here for Daniel's confirm before Phase B.**
 > Scope: full v2 (six MCP tools, stage state machine, dashboard surfaces).
-> Source brief: closed PR [Dman89/cto#159](https://github.com/Dman89/cto/pull/159) + plan file `/Users/dman89/.claude/plans/prompt-objective-evolve-tenonhq-dovetai-fluttering-lerdorf.md`.
+> Source brief: closed upstream operating-repo PR #159 + its plan file.
 
 This document is the single design artifact for v2. Phases B–E reference it; any deviation requires an amendment PR against this file.
 
@@ -405,7 +405,7 @@ The returned `command` string is for the dry-run display. The live spawn uses `a
   "plan_slug": "my-plan",
   "target_stage": "test-first",
   "command": "claude --resume-plan my-plan --target-stage test-first --session-source dispatch",
-  "cwd": "/Users/dman89/Documents/Tenon/CTO/Craftsman/Dovetail",
+  "cwd": "/path/to/Craftsman/Dovetail",
   "event": { "...": "the DispatchEvent appended to dispatch_log" }
 }
 ```

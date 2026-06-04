@@ -67,7 +67,7 @@ When using `--commit` flag:
 
 ### For Dovetail Core Package
 ```bash
-cd /Users/dman89/Documents/Tenon/Development/Craftsman/Dovetail/packages/core
+cd packages/core
 
 # Quick version bump for testing
 npm run version:bump
