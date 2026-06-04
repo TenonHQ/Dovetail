@@ -12,7 +12,7 @@ Part of the Dovetail npm-workspaces monorepo. Requires **Node 22+**.
 npm i -D @tenonhq/dovetail-claude-plans      # consumers
 ```
 
-The operating repo's `.mcp.json` already wires the server in via `npx -y @tenonhq/dovetail-claude-plans mcp`.
+Consuming projects wire the server in via their `.mcp.json`: `npx -y @tenonhq/dovetail-claude-plans mcp`.
 
 Local development inside the monorepo:
 

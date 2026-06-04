@@ -2,7 +2,7 @@
 
 ## Context
 
-AI agents have been working on the Sincronia project (`/Users/dman89/Documents/Tenon/Development/Craftsman/Sincronia`). This plan defines a comprehensive QA checklist of YES/NO questions that Claude can programmatically verify by reading files, running grep/glob, and executing safe shell commands. The goal is to confirm whether the codebase meets Tenon's standards across all dimensions.
+AI agents have been working on the Sincronia project. This plan defines a comprehensive QA checklist of YES/NO questions that Claude can programmatically verify by reading files, running grep/glob, and executing safe shell commands. The goal is to confirm whether the codebase meets Tenon's standards across all dimensions.
 
 ---
 
