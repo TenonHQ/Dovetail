@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.101",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.101",
+  "prev_version": "0.0.100",
+  "published_at": "2026-06-04T07:05:38.971Z",
+  "git": {
+    "sha": "7c78a10933956739a7a234e48362cd8dc0b7ad71",
+    "tag": "dovetail-core@0.0.101"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "7c78a1093",
+      "subject": "fix(core): bump dovetail-schema pin ^0.0.9 -> ^0.0.10 (#142)",
+      "pr": 142
+    },
+    {
+      "sha": "6d7b59a14",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.100 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
