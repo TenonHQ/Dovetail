@@ -29,6 +29,11 @@ const claudePlansLimiter = RateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,
 });
+// Rate limiter for promotion-gap refresh — each pull takes 2–5 min, so cap tightly
+const promotionGapLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+});
 const SN_PASSWORD = process.env.SN_PASSWORD || "";
 const BASE_URL = `https://${SN_INSTANCE}`;
 
@@ -82,8 +87,23 @@ function waitForRateLimit() {
   });
 }
 
+// Promotion Gap: output dir and backlog driver path
+const PROMOTION_BACKLOG_DIR =
+  process.env.PROMOTION_BACKLOG_DIR ||
+  path.join(require("os").homedir(), "Desktop", "Tenon", ".worktrees");
+const PROMOTION_BACKLOG_JSON = path.join(PROMOTION_BACKLOG_DIR, "will-promotion-backlog.json");
+const BACKLOG_DRIVER = path.resolve(
+  __dirname,
+  "../../../.claude/skills/servicenow-release-curation/drivers/backlog.mjs"
+);
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+// Serve ClaudeDesign fonts (Nib Pro + Inter) without copying font files
+app.use(
+  "/fonts/claude-design",
+  express.static(path.resolve(PROJECT_ROOT, "../ClaudeDesign/project/fonts"))
+);
 
 // Session-persistent ServiceNow client — cookie jar ensures scope changes
 // (changeScope) persist across subsequent requests in the same session.
@@ -1540,6 +1560,48 @@ app.delete("/api/todos/:id", todoLimiter, function (req, res) {
   }
 });
 
+// --- Promotion Gap Panel ---
+
+app.get("/promotion-gap", function (req, res) {
+  res.sendFile(path.join(__dirname, "public", "promotion-gap.html"));
+});
+
+// GET /api/promotion-gap/matrix — serve the backlog JSON verbatim
+app.get("/api/promotion-gap/matrix", function (req, res) {
+  try {
+    if (!fs.existsSync(PROMOTION_BACKLOG_JSON)) {
+      return res.status(404).json({
+        error: "no_data",
+        message: "No promotion gap data found. Run a fresh pull first."
+      });
+    }
+    var data = JSON.parse(fs.readFileSync(PROMOTION_BACKLOG_JSON, "utf8"));
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/promotion-gap/refresh — shell out to backlog.mjs fresh
+app.post("/api/promotion-gap/refresh", promotionGapLimiter, function (req, res) {
+  var TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  var env = Object.assign({}, process.env);
+  if (PROMOTION_BACKLOG_DIR) env.PROMOTION_BACKLOG_DIR = PROMOTION_BACKLOG_DIR;
+
+  execFile("node", [BACKLOG_DRIVER, "fresh"], { timeout: TIMEOUT_MS, env: env }, function (err, stdout, stderr) {
+    if (err) {
+      var errMsg = (stderr || err.message || "unknown error").slice(0, 500);
+      return res.status(500).json({ ok: false, error: errMsg });
+    }
+    try {
+      var data = JSON.parse(fs.readFileSync(PROMOTION_BACKLOG_JSON, "utf8"));
+      res.json({ ok: true, generatedAt: data.generatedAt });
+    } catch (readErr) {
+      res.json({ ok: true, generatedAt: new Date().toISOString() });
+    }
+  });
+});
+
 // Only start the server when run directly (not when require()-d).
 // Callers like dashboardCommand.ts and allScopesCommands.ts use
 // spawn("node", [serverPath]) which sets require.main === module.
@@ -1552,6 +1614,7 @@ if (require.main === module) {
     console.log("  Project:   " + PROJECT_ROOT);
     console.log("  Dashboard: http://localhost:" + PORT);
     console.log("  Claude:    http://localhost:" + PORT + "/claude-plans");
-    console.log("  TODO:      http://localhost:" + PORT + "/todos\n");
+    console.log("  TODO:      http://localhost:" + PORT + "/todos");
+    console.log("  Gap:       http://localhost:" + PORT + "/promotion-gap\n");
   });
 }

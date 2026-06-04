@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dovetail — Promotion Gap</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("cp-theme");
+        if (t === "dark" || t === "light") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/promotion-gap.css" />
+</head>
+<body class="cp-body">
+  <header>
+    <div class="header-left">
+      <svg class="brand-mark" viewBox="0 0 55 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M34.3254 13.7847H48.0563H54.9235V0H48.0563H34.3254H20.5946H6.8637H0V13.7847H6.8637H20.5946V27.5693H34.3254V13.7847Z" fill="#00663C"></path>
+        <path d="M54.9235 41.354V27.5693H48.0563H34.3254V41.354H20.5946V27.5693H6.8637H0V41.354V55.1387H20.5946H34.3254H54.9235V41.354Z" fill="#00663C"></path>
+      </svg>
+      <h1><span>Dovetail</span> Promotion Gap</h1>
+    </div>
+    <div class="header-right">
+      <a class="btn-refresh" href="/">&larr; Update Sets</a>
+      <a class="btn-refresh" href="/claude-plans">Claude Plans</a>
+      <button class="btn-refresh pg-refresh-btn" id="pg-refresh-btn" type="button" disabled>
+        Run Fresh Pull
+      </button>
+      <button class="cp-theme-toggle" id="cp-theme-toggle" type="button"
+        aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+    </div>
+  </header>
+
+  <main class="pg-main">
+
+    <!-- Freshness banner -->
+    <div class="pg-stale-banner" id="pg-stale-banner" hidden>
+      <span class="pg-stale-icon">&#9888;</span>
+      Data may be stale — <span id="pg-stale-age"></span>. Click <strong>Run Fresh Pull</strong> to refresh.
+    </div>
+
+    <!-- Pull-in-progress notice -->
+    <div class="pg-pulling-banner" id="pg-pulling-banner" hidden>
+      Pulling fresh snapshots — this typically takes 2–5 minutes&hellip;
+    </div>
+
+    <!-- Summary bar -->
+    <div class="pg-summary" id="pg-summary" hidden>
+      <div class="pg-stat">
+        <div class="pg-stat-val studio" id="sum-studio-not-yard">—</div>
+        <div class="pg-stat-key">Studio not in Yard</div>
+        <div class="pg-stat-bar"><div class="pg-bar-fill studio" id="bar-studio"></div></div>
+      </div>
+      <div class="pg-stat">
+        <div class="pg-stat-val yard" id="sum-yard-not-mill">—</div>
+        <div class="pg-stat-key">Yard not in Mill</div>
+        <div class="pg-stat-bar"><div class="pg-bar-fill yard" id="bar-yard"></div></div>
+      </div>
+      <div class="pg-stat">
+        <div class="pg-stat-val mill" id="sum-mill-not-shop">—</div>
+        <div class="pg-stat-key">Mill not in Shop</div>
+        <div class="pg-stat-bar"><div class="pg-bar-fill mill" id="bar-mill"></div></div>
+      </div>
+      <div class="pg-stat">
+        <div class="pg-stat-val" id="sum-total">—</div>
+        <div class="pg-stat-key">Total Records</div>
+        <div class="pg-stat-bar"><div class="pg-bar-fill" id="bar-total" style="width:100%;background:var(--border-strong)"></div></div>
+      </div>
+    </div>
+
+    <!-- Pipeline stage cards -->
+    <div class="pg-pipeline" id="pg-pipeline" hidden>
+      <div class="pg-stage studio">
+        <div class="pg-stage-name studio">Studio</div>
+        <div class="pg-stage-url">tenonworkstudio.service-now.com</div>
+        <div class="pg-stage-stat-label">Snapshot</div>
+        <div class="pg-stage-stat-val" id="snap-studio">—</div>
+      </div>
+      <div class="pg-arrow">&#8250;</div>
+      <div class="pg-stage yard">
+        <div class="pg-stage-name yard">Yard</div>
+        <div class="pg-stage-url">tenonworkyard.service-now.com</div>
+        <div class="pg-stage-stat-label">Gap from Studio</div>
+        <div class="pg-stage-stat-val" id="gap-yard">—</div>
+        <div id="badge-yard"></div>
+      </div>
+      <div class="pg-arrow">&#8250;</div>
+      <div class="pg-stage mill">
+        <div class="pg-stage-name mill">Mill</div>
+        <div class="pg-stage-url">tenonworkmill.service-now.com</div>
+        <div class="pg-stage-stat-label">Gap from Yard</div>
+        <div class="pg-stage-stat-val" id="gap-mill">—</div>
+        <div id="badge-mill"></div>
+      </div>
+      <div class="pg-arrow">&#8250;</div>
+      <div class="pg-stage shop">
+        <div class="pg-stage-name shop">Shop</div>
+        <div class="pg-stage-url">tenonworkshop.service-now.com</div>
+        <div class="pg-stage-stat-label">Gap from Mill</div>
+        <div class="pg-stage-stat-val" id="gap-shop">—</div>
+        <div id="badge-shop"></div>
+      </div>
+    </div>
+
+    <!-- Gap matrix -->
+    <div class="pg-matrix-section" id="pg-matrix-section">
+      <div class="pg-section-title">
+        Change Gap Matrix
+        <span class="pg-updated" id="pg-updated"></span>
+      </div>
+      <div class="pg-controls">
+        <button class="pg-filter active" data-filter="all">All</button>
+        <button class="pg-filter" data-filter="gap">Has Gaps</button>
+        <button class="pg-filter" data-filter="missing-shop">Missing from Shop</button>
+        <button class="pg-filter" data-filter="promoted">Fully Promoted</button>
+        <div class="pg-controls-right">
+          <div class="pg-view-toggle">
+            <button class="pg-view-btn active" data-view="table">Table</button>
+            <button class="pg-view-btn" data-view="gantt">Gantt</button>
+          </div>
+          <div class="pg-search-wrap">
+            <input type="search" id="pg-search" class="pg-search" placeholder="Search records…" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+      <div id="pg-gantt-wrap" hidden></div>
+      <div class="pg-table-wrap">
+        <table class="pg-table">
+          <thead>
+            <tr>
+              <th data-sort="name">Record <span class="pg-sort-arrow" id="sa-name">&#8597;</span></th>
+              <th data-sort="scope">Scope <span class="pg-sort-arrow" id="sa-scope">&#8597;</span></th>
+              <th data-sort="status">Status <span class="pg-sort-arrow" id="sa-status">&#8597;</span></th>
+              <th class="pg-rung-col studio" data-sort="studio" title="Studio (dev)">Studio <span class="pg-sort-arrow" id="sa-studio">&#8597;</span></th>
+              <th class="pg-rung-col yard" data-sort="yard" title="Yard">Yard <span class="pg-sort-arrow" id="sa-yard">&#8597;</span></th>
+              <th class="pg-rung-col mill" data-sort="mill" title="Mill">Mill <span class="pg-sort-arrow" id="sa-mill">&#8597;</span></th>
+              <th class="pg-rung-col shop" data-sort="shop" title="Shop (release)">Shop <span class="pg-sort-arrow" id="sa-shop">&#8597;</span></th>
+            </tr>
+          </thead>
+          <tbody id="pg-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pg-table-footer">
+        <span id="pg-row-count">—</span>
+        <span class="pg-disclaimer">v1 matches by sys_id — renamed records may appear as false gaps</span>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/promotion-gap-table.js"></script>
+  <script src="/promotion-gap-refresh.js"></script>
+  <script src="/promotion-gap-gantt.js"></script>
+  <script src="/promotion-gap.js"></script>
+</body>
+</html>
