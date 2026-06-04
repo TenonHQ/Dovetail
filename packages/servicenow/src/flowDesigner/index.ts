@@ -29,6 +29,9 @@ export type { TriggerPublicationParams, TriggerPublicationResult } from "./trigg
 export { publishActionType } from "./publishActionType";
 export type { PublishActionTypeParams, PublishActionTypeResult } from "./publishActionType";
 
+export { editActionType } from "./editActionType";
+export type { EditActionTypeParams, EditActionTypeResult, EditActionTypeOps } from "./editActionType";
+
 export { readFlow } from "./readFlow";
 export type { ReadFlowParams, ReadFlowResult, FlowStep, FlowVariable } from "./readFlow";
 

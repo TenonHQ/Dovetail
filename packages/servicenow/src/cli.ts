@@ -41,6 +41,7 @@ import { publishFlow } from "./flowDesigner/publishFlow";
 import { copyFlow } from "./flowDesigner/copyFlow";
 import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
+import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
@@ -552,6 +553,73 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn edit-action:
+ *   --sys-id <sys_id>                  Required. sys_hub_action_type_definition sys_id.
+ *   --scope <sys_id>                   Required. sysparm_transaction_scope (app scope sys_id).
+ *   --patch-script "<find>::<replace>" Optional. Find/replace in the script step value.
+ *   --set-script <path>                Optional. Replace the script step value from a file.
+ *   --merge-outputs <path>             Optional. JSON file: an output-variable object/array to merge by name.
+ *   --script-input <name>              Optional. Input name holding the script (default: auto-detect).
+ *   --update-set <sys_id>              Optional. Capture the republish into this update set.
+ *   --apply                            Optional. Republish (POST /snapshot). Omit for dry-run.
+ *   --json                             Optional. Emit the structured EditActionTypeResult.
+ *
+ * Edits a published Custom Action Type's script and/or output variables and
+ * republishes through the snapshot POST. Dry-run (read-only) by default; --apply writes.
+ */
+async function runEditAction(flags: Record<string, string>): Promise<number> {
+  var sysId = flags["sys-id"] || flags.sysId;
+  var scope = flags.scope || flags.scopeSysId;
+  if (!sysId || !scope) {
+    process.stderr.write("edit-action: --sys-id <sys_id> and --scope <sys_id> are required\n");
+    return 1;
+  }
+  var ops: any = {};
+  if (flags["patch-script"]) {
+    var parts = String(flags["patch-script"]).split("::");
+    if (parts.length !== 2) {
+      process.stderr.write("edit-action: --patch-script must be \"<find>::<replace>\"\n");
+      return 1;
+    }
+    ops.patchScript = { find: parts[0], replace: parts[1] };
+  }
+  if (flags["set-script"]) {
+    ops.setScript = fs.readFileSync(flags["set-script"], "utf8");
+  }
+  if (flags["merge-outputs"]) {
+    var parsedOutputs = JSON.parse(fs.readFileSync(flags["merge-outputs"], "utf8"));
+    ops.mergeOutputs = Array.isArray(parsedOutputs) ? parsedOutputs : [parsedOutputs];
+  }
+  if (flags["script-input"]) {
+    ops.scriptInputName = flags["script-input"];
+  }
+  var result = await editActionType({
+    client: createClient({}),
+    sysId: sysId,
+    scopeSysId: scope,
+    ops: ops,
+    apply: flags.apply === "true",
+    updateSetSysId: flags["update-set"] || flags.updateSetSysId
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write("[" + result.status + "] " + result.changes.length + " change(s)"
+    + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n");
+  for (var ci = 0; ci < result.changes.length; ci += 1) {
+    process.stdout.write("  + " + result.changes[ci] + "\n");
+  }
+  for (var wi = 0; wi < result.warnings.length; wi += 1) {
+    process.stdout.write("  ! " + result.warnings[wi] + "\n");
+  }
+  if (result.status === "preview" && result.scriptAfter !== undefined && result.scriptAfter !== result.scriptBefore) {
+    process.stdout.write("\n--- script after ---\n" + result.scriptAfter + "\n");
+  }
+  return 0;
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -635,6 +703,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "edit-flow") {
     return await runEditFlow(parsed.flags);
+  }
+  if (parsed.command === "edit-action") {
+    return await runEditAction(parsed.flags);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);

@@ -195,6 +195,12 @@ npx dove-sn test-flow --sys-id <sys_id> --execute --confirm --inputs '{...}'  # 
 echo '{"rename":{"name":"New Name"},"patchStepInputs":[{"step":"Calculate SMS Send At","input":"send_rate","value":"5"}]}' > ops.json
 npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json                          # dry-run (diff)
 npx dove-sn edit-flow --sys-id <sys_id> --from-json ops.json --apply --update-set <id> # persist
+
+# Edit a Custom Action Type's script and/or output variables, then republish (headless)
+npx dove-sn edit-action --sys-id <action_type_sys_id> --scope <scope_sys_id> \
+  --patch-script "grabHashData::grabRecipients"                                   # dry-run (diff)
+npx dove-sn edit-action --sys-id <id> --scope <scope> --set-script ./script.js \
+  --merge-outputs ./output-var.json --apply --update-set <id>                     # persist + publish
 ```
 
 `copy-flow` calls the Designer's own `POST /processflow/flow/{id}/copy` — a
@@ -227,6 +233,17 @@ Step-input persistence via the snapshot POST is verified for action types but is
 **best-effort for flows** — after the recompile, `edit-flow` reads the model back
 and **warns** if a value didn't actually persist, so a no-op never reports as a
 silent success.
+
+`edit-action` edits a **published Custom Action Type** headlessly: it GETs the
+model, fetches the steps from `.../{id}/step_instances` (the model GET returns
+`steps:null`), patches the script step input (`--patch-script "<find>::<replace>"`
+or `--set-script <file>`) and/or merges output-variable definitions
+(`--merge-outputs <json>`, matched by `name`), grafts the steps back, and POSTs
+`/snapshot` to recompile — the same snapshot POST `publishActionType` uses, which
+persists step input values back to `sys_variable_value`. It deliberately avoids
+the Designer's model PUT, whose client-side step transform is unsafe to
+hand-reconstruct. Dry-run (diff) by default; `--apply` republishes, and
+`--update-set <id>` pins the capture into a chosen update set.
 
 `view-flow` reads `GET /api/now/processflow/flow/{id}` — the Designer's own model
 endpoint — and prints the ordered, nesting-aware action + flow-logic step graph
