@@ -149,6 +149,82 @@ function maxVersion(a, b) {
   return compareVersions(a, b) >= 0 ? a : b;
 }
 
+/**
+ * Expand a set of seed package directories to include every workspace package
+ * that transitively depends on a seed — the reverse-dependency closure.
+ *
+ * This is what lets the publisher *cascade*: when package P changes, every
+ * package that depends on P (and their dependents, recursively) must also
+ * republish so their pinned ranges advance to P's new version. Without this,
+ * an internal patch fix is stranded — consumers pin `^0.0.x`, which is an
+ * exact pin on a 0.0.x version, so they never resolve the newer release.
+ *
+ * @param {Object} seedDirs  map of dirName -> true (the directly-changed packages)
+ * @param {Array<Object>} packages  all workspace packages (from listPackages)
+ * @returns {Object} map of dirName -> true covering seeds + all dependents
+ */
+function dependentsClosure(seedDirs, packages) {
+  const byName = {};
+  const byDir = {};
+  for (let i = 0; i < packages.length; i++) {
+    byName[packages[i].name] = packages[i];
+    byDir[packages[i].dirName] = packages[i];
+  }
+  // Reverse edges: depName -> [packages that depend on it].
+  const dependents = {};
+  for (let i = 0; i < packages.length; i++) {
+    const deps = workspaceDependencies(packages[i], byName);
+    for (let d = 0; d < deps.length; d++) {
+      if (!dependents[deps[d]]) {
+        dependents[deps[d]] = [];
+      }
+      dependents[deps[d]].push(packages[i]);
+    }
+  }
+  const inSet = {};
+  const queue = [];
+  const seedNames = Object.keys(seedDirs);
+  for (let i = 0; i < seedNames.length; i++) {
+    const pkg = byDir[seedNames[i]];
+    if (pkg && inSet[pkg.dirName] !== true) {
+      inSet[pkg.dirName] = true;
+      queue.push(pkg);
+    }
+  }
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const deps = dependents[current.name] || [];
+    for (let d = 0; d < deps.length; d++) {
+      if (inSet[deps[d].dirName] !== true) {
+        inSet[deps[d].dirName] = true;
+        queue.push(deps[d]);
+      }
+    }
+  }
+  return inSet;
+}
+
+/**
+ * Preserve the operator prefix of a semver range and swap in a new version.
+ *   "^0.0.9"  -> "^0.0.10"   "0.0.9" -> "0.0.10"   ">=1.2.0" -> ">=0.0.10"
+ *
+ * Only a *complete* single-operator pin is rewritten. Compound ranges
+ * (">=0.0.9 <0.1.0"), hyphen ranges ("0.0.9 - 0.1.0"), prerelease pins, and
+ * non-pin specs ("*", "workspace:*", "latest", git/url) are returned unchanged
+ * so they are never corrupted — and a range that already admits the new
+ * version needs no rewrite anyway. The trailing `$` anchor is what makes a
+ * compound range fall through instead of having its first term clobbered.
+ */
+function applyRangePrefix(oldRange, newVersion) {
+  const text = String(oldRange);
+  const match = text.match(/^(\^|~|>=|<=|>|<|=)?\s*\d+\.\d+\.\d+$/);
+  if (!match) {
+    return text;
+  }
+  const prefix = match[1] ? match[1] : "";
+  return prefix + newVersion;
+}
+
 module.exports = {
   REPO_ROOT: REPO_ROOT,
   PACKAGES_DIR: PACKAGES_DIR,
@@ -158,5 +234,7 @@ module.exports = {
   parseVersion: parseVersion,
   compareVersions: compareVersions,
   bumpPatch: bumpPatch,
-  maxVersion: maxVersion
+  maxVersion: maxVersion,
+  dependentsClosure: dependentsClosure,
+  applyRangePrefix: applyRangePrefix
 };
