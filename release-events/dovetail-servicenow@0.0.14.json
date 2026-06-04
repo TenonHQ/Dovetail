@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.14",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.14",
+  "prev_version": "0.0.13",
+  "published_at": "2026-06-04T08:56:53.804Z",
+  "git": {
+    "sha": "44e5c84b85007cf6e9223b279ff79afd5319c5ab",
+    "tag": "dovetail-servicenow@0.0.14"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "44e5c84b8",
+      "subject": "chore(docs): neutralize upstream operating-repo references in package docs (#145)",
+      "pr": 145
+    },
+    {
+      "sha": "e0cf83a8c",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.13 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
