@@ -59,7 +59,7 @@ Source: `packages/mcp/src/registry.ts`. The 4 write tools throw unless `SINC_MCP
 
 Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders these at `http://localhost:3456/claude-plans`. **8 read · 12 write**, in four groups.
 
-> **Project rule (CTO repo):** every implementation plan / architecture proposal MUST be pushed via `push_plan` (with artifacts) before being presented. See the CTO `CLAUDE.md` §5.
+> **Project rule (operating repo):** every implementation plan / architecture proposal MUST be pushed via `push_plan` (with artifacts) before being presented. See the operating repo's `CLAUDE.md` §5.
 
 ### 3a. Plans & artifacts (core)
 | Tool | R/W | What it does |

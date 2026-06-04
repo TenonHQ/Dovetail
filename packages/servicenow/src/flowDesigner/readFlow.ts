@@ -21,7 +21,7 @@
  * empty. Pass `raw: true` to also get the unmodified model back (e.g. for
  * round-trip diffing into git, or to feed publishFlow).
  *
- * Full write-up: docs/documenting-servicenow-flows.md (CTO repo).
+ * Full write-up: docs/documenting-servicenow-flows.md (operating repo).
  */
 
 import type { ServiceNowClient } from "../client";

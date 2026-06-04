@@ -341,7 +341,7 @@ message. For a faithful clone, capture the source action's `steps` from a HAR of
 the Publish call and store it as a fixture beside your driver.
 
 Full recipe and the 6-record action-type graph:
-`docs/servicenow-flow-designer-headless-authoring.md` in the CTO repo.
+`docs/servicenow-flow-designer-headless-authoring.md` in the operating repo.
 
 ## Roadmap
 
