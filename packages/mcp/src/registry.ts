@@ -6,9 +6,16 @@
  * Dependencies are passed in by the caller — server.ts builds them from
  * loadConfig(), tests inject mocks. This split keeps registry.ts pure of
  * env access.
+ *
+ * Every descriptor carries MCP tool annotations (readOnlyHint / destructiveHint
+ * / idempotentHint) — untrusted behavioural hints per the MCP spec. They are
+ * informational to permission UX, but Claude Code already uses readOnlyHint to
+ * schedule read-only tools concurrently, and hosts that gate on destructiveHint
+ * get correct confirmation behaviour for free.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { withTelemetry } from "./telemetry";
@@ -99,8 +106,32 @@ interface ToolDescriptor {
   name: ToolName;
   description: string;
   shape: z.ZodRawShape;
+  annotations: ToolAnnotations;
   handler: (args: any) => Promise<any>;
 }
+
+// Annotation presets. All tools reach external services (ClickUp/Gmail/
+// Calendar/ServiceNow), so openWorldHint stays at its spec default of true.
+var READ_ONLY: ToolAnnotations = { readOnlyHint: true };
+// A write that overwrites existing state (re-running with the same args
+// converges, so it is idempotent but still destructive).
+var WRITE_OVERWRITE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true
+};
+// A purely additive create (re-running produces another record).
+var WRITE_CREATE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false
+};
+// A purely additive, idempotent link (re-running is a no-op).
+var WRITE_ADDITIVE_IDEMPOTENT: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true
+};
 
 function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
   var clickupReady = !!deps.clickup;
@@ -111,6 +142,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_list_tasks",
       description: "List ClickUp tasks assigned to the authenticated user, grouped by status. teamId optional if CLICKUP_TEAM_ID is set.",
       shape: clickupListTasksSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupListTasks(args, deps.clickup as ClickUpDeps);
       })
@@ -119,6 +151,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_get_task",
       description: "Fetch a single ClickUp task by ID.",
       shape: clickupGetTaskSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupGetTask(args, deps.clickup as ClickUpDeps);
       })
@@ -127,6 +160,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_search_tasks",
       description: "Search team tasks by substring match against task name/description. teamId optional if CLICKUP_TEAM_ID is set.",
       shape: clickupSearchTasksSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupSearchTasks(args, deps.clickup as ClickUpDeps);
       })
@@ -135,6 +169,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_get_team_sync",
       description: "Returns a structured JSON team sync with the 7-stage pipeline (Blocked, In Progress, In Review, QA, UAT, Ready for Release, Done) plus unmapped statuses and unassigned tasks.",
       shape: clickupGetTeamSyncSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupGetTeamSync(args, deps.clickup as ClickUpDeps);
       })
@@ -143,6 +178,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_update_task",
       description: "Gated write: update a ClickUp task (name, markdownContent, status, priority). Requires SINC_MCP_WRITES_ENABLE=1; returns a dry-run preview unless confirm:true. Use customTaskIds:true + teamId to target a custom ID like DEV-225.",
       shape: clickupUpdateTaskSchema.shape,
+      annotations: WRITE_OVERWRITE,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupUpdateTask(args, deps.clickup as ClickUpDeps);
       })
@@ -151,6 +187,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_set_custom_field",
       description: "Gated write: set one custom-field value on a task (POST /task/{id}/field/{fieldId}). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true. value shape: string for text/url, option id for drop_down, { add:[], rem:[] } for users.",
       shape: clickupSetCustomFieldSchema.shape,
+      annotations: WRITE_OVERWRITE,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupSetCustomField(args, deps.clickup as ClickUpDeps);
       })
@@ -159,6 +196,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_create_task",
       description: "Gated write: create a ClickUp task in a list (markdownContent, status, priority, assignees, customFields). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true.",
       shape: clickupCreateTaskSchema.shape,
+      annotations: WRITE_CREATE,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupCreateTask(args, deps.clickup as ClickUpDeps);
       })
@@ -167,6 +205,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "clickup_link_tasks",
       description: "Gated write: link two ClickUp tasks (POST /task/{id}/link/{linksTo}). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true. Use customTaskIds:true + teamId for custom IDs.",
       shape: clickupLinkTasksSchema.shape,
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupLinkTasks(args, deps.clickup as ClickUpDeps);
       })
@@ -175,6 +214,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "gmail_get_unread",
       description: "Fetch unread emails from the inbox.",
       shape: gmailGetUnreadSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Gmail)", deps.missingDescription, function (args) {
         return gmailGetUnread(args, deps.gmail as GmailDeps);
       })
@@ -183,6 +223,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "gmail_get_starred",
       description: "Fetch starred emails.",
       shape: gmailGetStarredSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Gmail)", deps.missingDescription, function (args) {
         return gmailGetStarred(args, deps.gmail as GmailDeps);
       })
@@ -191,6 +232,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "gmail_search",
       description: "Search emails using Gmail query syntax (e.g. 'from:alice has:attachment').",
       shape: gmailSearchSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Gmail)", deps.missingDescription, function (args) {
         return gmailSearch(args, deps.gmail as GmailDeps);
       })
@@ -199,6 +241,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "gmail_get_action_required",
       description: "Fetch unread action-required emails matched against subject patterns and labels (defaults: 'action required', 'urgent', 'asap', 'time sensitive').",
       shape: gmailGetActionRequiredSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Gmail)", deps.missingDescription, function (args) {
         return gmailGetActionRequired(args, deps.gmail as GmailDeps);
       })
@@ -207,6 +250,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "calendar_get_today",
       description: "Fetch today's calendar events.",
       shape: calendarGetTodaySchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Calendar)", deps.missingDescription, function (args) {
         return calendarGetToday(args, deps.calendar as CalendarDeps);
       })
@@ -215,6 +259,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "calendar_get_week",
       description: "Fetch the next 7 days of calendar events.",
       shape: calendarGetWeekSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Calendar)", deps.missingDescription, function (args) {
         return calendarGetWeek(args, deps.calendar as CalendarDeps);
       })
@@ -223,6 +268,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "calendar_get_event",
       description: "Fetch a single calendar event by ID.",
       shape: calendarGetEventSchema.shape,
+      annotations: READ_ONLY,
       handler: requireConfig(googleReady, "Google (Calendar)", deps.missingDescription, function (args) {
         return calendarGetEvent(args, deps.calendar as CalendarDeps);
       })
@@ -231,6 +277,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       name: "servicenow_query_table",
       description: "Read-only GET against the ServiceNow Table API. Required: table (lower-case identifier), sysparm_query (ServiceNow encoded query). Optional: fields[] limits the columns returned, limit caps row count (default 100, max 1000). Tables on the deny list (sys_user_password, sys_credential, etc.) are rejected unless SINC_MCP_SN_TABLE_OVERRIDE=<table> is set.",
       shape: servicenowQueryTableSchema.shape,
+      annotations: READ_ONLY,
       handler: function (args: any) {
         return servicenowQueryTable(args, deps.servicenow);
       }
@@ -268,7 +315,8 @@ function registerOne(server: McpServer, desc: ToolDescriptor): void {
     desc.name,
     {
       description: desc.description,
-      inputSchema: desc.shape
+      inputSchema: desc.shape,
+      annotations: desc.annotations
     },
     async function (args: any) {
       try {

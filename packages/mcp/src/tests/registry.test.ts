@@ -111,3 +111,64 @@ describe("registry — descriptors", function () {
     expect(typeof sn.handler).toBe("function");
   });
 });
+
+describe("registry — annotations", function () {
+  var readTools = [
+    "clickup_list_tasks",
+    "clickup_get_task",
+    "clickup_search_tasks",
+    "clickup_get_team_sync",
+    "gmail_get_unread",
+    "gmail_get_starred",
+    "gmail_search",
+    "gmail_get_action_required",
+    "calendar_get_today",
+    "calendar_get_week",
+    "calendar_get_event",
+    "servicenow_query_table"
+  ];
+
+  function byName(): Record<string, any> {
+    var descs = buildDescriptorsForTests(makeFullDeps());
+    var map: Record<string, any> = {};
+    for (var i = 0; i < descs.length; i++) {
+      map[descs[i].name] = descs[i];
+    }
+    return map;
+  }
+
+  it("every descriptor carries an annotations object", function () {
+    var descs = buildDescriptorsForTests(makeFullDeps());
+    for (var i = 0; i < descs.length; i++) {
+      expect(typeof descs[i].annotations).toBe("object");
+      expect(descs[i].annotations).not.toBeNull();
+    }
+  });
+
+  it("read tools are marked readOnlyHint:true", function () {
+    var map = byName();
+    for (var i = 0; i < readTools.length; i++) {
+      expect(map[readTools[i]].annotations.readOnlyHint).toBe(true);
+    }
+  });
+
+  it("write tools are not read-only and carry destructive/idempotent hints", function () {
+    var map = byName();
+
+    expect(map["clickup_update_task"].annotations.readOnlyHint).toBe(false);
+    expect(map["clickup_update_task"].annotations.destructiveHint).toBe(true);
+    expect(map["clickup_update_task"].annotations.idempotentHint).toBe(true);
+
+    expect(map["clickup_set_custom_field"].annotations.readOnlyHint).toBe(false);
+    expect(map["clickup_set_custom_field"].annotations.destructiveHint).toBe(true);
+    expect(map["clickup_set_custom_field"].annotations.idempotentHint).toBe(true);
+
+    expect(map["clickup_create_task"].annotations.readOnlyHint).toBe(false);
+    expect(map["clickup_create_task"].annotations.destructiveHint).toBe(false);
+    expect(map["clickup_create_task"].annotations.idempotentHint).toBe(false);
+
+    expect(map["clickup_link_tasks"].annotations.readOnlyHint).toBe(false);
+    expect(map["clickup_link_tasks"].annotations.destructiveHint).toBe(false);
+    expect(map["clickup_link_tasks"].annotations.idempotentHint).toBe(true);
+  });
+});
