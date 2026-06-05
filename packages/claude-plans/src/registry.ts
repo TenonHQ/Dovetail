@@ -5,6 +5,7 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import {
@@ -87,8 +88,25 @@ interface ToolDescriptor {
   name: ToolName;
   description: string;
   shape: z.ZodRawShape;
+  annotations: ToolAnnotations;
   handler: (args: any) => Promise<any>;
 }
+
+// MCP tool annotations (spec 2025-11-25) — untrusted behavioural hints that let a
+// host parallelize reads and gate writes; never a security boundary. Five presets
+// cover every tool's safety profile:
+//   READ_ONLY                 — no writes; safe to auto-approve and run concurrently.
+//   WRITE_ADDITIVE_IDEMPOTENT — additive/recoverable write, safe to repeat (upsert, restore).
+//   WRITE_CREATE              — additive write, NOT idempotent (each call appends a new record).
+//   WRITE_OVERWRITE           — destructive but idempotent (delete: same end state on repeat).
+//   WRITE_EXECUTE             — destructive AND non-idempotent (dispatch can spawn a subprocess).
+// openWorldHint is left at its spec default — these tools operate on local plan storage;
+// dispatch_stage is the lone tool that can reach outside it (spawns a subprocess in live mode).
+var READ_ONLY: ToolAnnotations = { readOnlyHint: true };
+var WRITE_ADDITIVE_IDEMPOTENT: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
+var WRITE_CREATE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
+var WRITE_OVERWRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
+var WRITE_EXECUTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false };
 
 var MERMAID_HEADERS = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|c4Context)\b/;
 
@@ -164,6 +182,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
   return [
     {
       name: "push_plan",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Create or update a plan shown in the Dovetail dashboard at /claude-plans. " +
         "Auto-slugs from title when slug is omitted. Status defaults to DRAFT.\n\n" +
@@ -244,6 +263,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "update_plan_status",
+      annotations: WRITE_CREATE,
       description:
         "Transition a plan's status. Allowed: DRAFT->APPROVED, DRAFT->EXITED, APPROVED->EXITED. Reverses and skips are rejected.",
       shape: updatePlanStatusSchema.shape,
@@ -254,6 +274,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "get_plan",
+      annotations: READ_ONLY,
       description: "Returns a plan record with its nested artifacts.",
       shape: getPlanSchema.shape,
       handler: async function (args: any) {
@@ -265,6 +286,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "list_recent_plans",
+      annotations: READ_ONLY,
       description: "List plans newest-first. Optional filters: status, limit (default 20).",
       shape: listRecentPlansSchema.shape,
       handler: async function (args: any) {
@@ -275,6 +297,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "push_artifact",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Attach an artifact to an existing plan. Kind is one of:\n" +
         "  markdown — raw Markdown content.\n" +
@@ -293,6 +316,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "push_diagram",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Attach a Mermaid diagram to a plan. Convenience wrapper around push_artifact with kind='mermaid'. Validates the source begins with a recognized Mermaid header.",
       shape: pushDiagramSchema.shape,
@@ -313,6 +337,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "push_prompt",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Attach a rewritten prompt to an existing plan. Surfaces on the dashboard's Prompt tab " +
         "alongside the plan that motivated it, and the newest prompt is hoisted into the " +
@@ -335,6 +360,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "delete_plan",
+      annotations: WRITE_OVERWRITE,
       description: "Permanently delete a plan and all its artifacts from local storage.",
       shape: deletePlanSchema.shape,
       handler: async function (args: any) {
@@ -345,6 +371,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "get_handoff_bundle",
+      annotations: READ_ONLY,
       description:
         "Compose a single paste-ready Markdown payload for resuming a plan in a fresh Claude session. " +
         "Combines the plan content, its artifacts (markdown / mermaid / prompt-cycle), and optional " +
@@ -369,6 +396,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "push_question",
+      annotations: WRITE_CREATE,
       description:
         "Park a question on an existing plan so it can be answered by the operator (dashboard) " +
         "or another Claude session. Returns the new PlanQuestion with an assigned id (format: " +
@@ -404,6 +432,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "record_answer",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Record (or overwrite) an answer to a question on a plan. The question must already " +
         "exist on the plan — call push_question first if it does not. Returns the updated " +
@@ -430,6 +459,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "get_answers",
+      annotations: READ_ONLY,
       description:
         "List Q&A entries for a plan with optional filters. Returns the full PlanQuestion list " +
         "(each entry has the question, the answer if recorded, and metadata). Empty list if the " +
@@ -455,6 +485,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "push_lint_event",
+      annotations: WRITE_CREATE,
       description:
         "Record a prompt-lint observation in the global lint-events store, surfaced on the " +
         "dashboard's standalone Prompt Lints page at /prompt-lints. Unlike artifacts/prompts, " +
@@ -492,6 +523,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "get_lint_events",
+      annotations: READ_ONLY,
       description:
         "List prompt-lint events from the global store, newest first. Optional filters: " +
         "session_id, plan_slug, limit (default all). Output: { events: PromptLintEvent[] }.",
@@ -510,6 +542,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "set_stage",
+      annotations: WRITE_CREATE,
       description:
         "Move a plan to a new pipeline stage. Validates the transition against the v2 state " +
         "machine (claude-plans/src/state-machine.ts) and rejects illegal moves with " +
@@ -547,6 +580,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "pull_plan",
+      annotations: READ_ONLY,
       description:
         "Single-read snapshot of a plan and all its v2 surface: artifacts, prompts, questions, " +
         "current stage, full stage_history, and dispatch_log. The dashboard's plan-detail page " +
@@ -565,6 +599,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "dispatch_stage",
+      annotations: WRITE_EXECUTE,
       description:
         "Resolve (and optionally spawn) a Claude Code subprocess to drive a plan at the given " +
         "pipeline stage. THIS IS THE RISKIEST V2 TOOL — read docs/v2-design.md §7 before relying " +
@@ -602,6 +637,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "list_plan_versions",
+      annotations: READ_ONLY,
       description:
         "List a plan's saved version snapshots, newest-first. A snapshot is auto-saved " +
         "whenever a push changes the plan's content, so an inferior overwrite can be " +
@@ -614,6 +650,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "get_plan_version",
+      annotations: READ_ONLY,
       description:
         "Read a single saved version of a plan (full snapshot). Returns the PlanVersion " +
         "{ version, saved_at, plan }. Use list_plan_versions to discover version numbers.",
@@ -627,6 +664,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
     },
     {
       name: "restore_plan_version",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Restore a prior version: re-push its content as the new current record. " +
         "Non-destructive — the pre-restore current is itself snapshotted first, so nothing " +
@@ -650,7 +688,7 @@ export function registerAllTools(server: McpServer, deps: RegistryDeps = {}): vo
 function registerOne(server: McpServer, desc: ToolDescriptor): void {
   (server.registerTool as any)(
     desc.name,
-    { description: desc.description, inputSchema: desc.shape },
+    { description: desc.description, inputSchema: desc.shape, annotations: desc.annotations },
     async function (args: any) {
       try {
         var result = await desc.handler(args);
