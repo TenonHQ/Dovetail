@@ -1,0 +1,47 @@
+name: Internal dep-range guard
+
+# Blocks any PR that re-introduces a non-floating internal @tenonhq/dovetail-*
+# dependency range (a `^0.0.x` hard pin, an exact pin, or `*`) — which would
+# force consumers to set an `overrides` block / `--legacy-peer-deps` (ERESOLVE).
+#
+# The guard (Scripts/normalize-internal-deps.js --check) is OFFLINE and
+# dependency-free: it reads the package.json files directly, so this runs in
+# milliseconds with no `npm install`. publish.yml runs the same --check plus the
+# guard's full node --test suite at merge time; this is the fast PR-time gate so
+# a stale pin is caught before review, not at publish.
+#
+# Fires on every PR to main, including Draft PRs (the default in this repo) —
+# `pull_request` events fire for drafts, and the rule applies to them too.
+
+on:
+  pull_request:
+    branches: [main]
+
+# One run per PR branch; supersede in-flight runs on a new push.
+concurrency:
+  group: dep-range-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Cheap insurance: a syntax break in the guard would otherwise let --check
+      # error out ambiguously.
+      - name: Syntax-check the guard
+        run: node --check Scripts/normalize-internal-deps.js
+
+      # The actual gate — offline, no npm install needed.
+      - name: Check internal dependency ranges
+        run: node Scripts/normalize-internal-deps.js --check
