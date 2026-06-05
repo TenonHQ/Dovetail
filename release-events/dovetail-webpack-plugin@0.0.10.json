@@ -1,0 +1,30 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-webpack-plugin@0.0.10",
+  "package": "@tenonhq/dovetail-webpack-plugin",
+  "version": "0.0.10",
+  "prev_version": "0.0.9",
+  "published_at": "2026-06-05T06:43:18.252Z",
+  "git": {
+    "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
+    "tag": "dovetail-webpack-plugin@0.0.10"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "71bdf9bba",
+      "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
+      "pr": 148
+    },
+    {
+      "sha": "9332fdf7a",
+      "subject": "chore(release): publish 20 packages [skip ci]"
+    },
+    {
+      "sha": "9046da774",
+      "subject": "chore(release): publish 19 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

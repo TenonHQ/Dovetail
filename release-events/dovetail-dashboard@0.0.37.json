@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.37",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.37",
+  "prev_version": "0.0.36",
+  "published_at": "2026-06-05T06:43:18.252Z",
+  "git": {
+    "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
+    "tag": "dovetail-dashboard@0.0.37"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "71bdf9bba",
+      "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
+      "pr": 148
+    },
+    {
+      "sha": "ba1c67775",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.36 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

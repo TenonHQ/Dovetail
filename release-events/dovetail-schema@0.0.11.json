@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-schema@0.0.11",
+  "package": "@tenonhq/dovetail-schema",
+  "version": "0.0.11",
+  "prev_version": "0.0.10",
+  "published_at": "2026-06-05T06:43:18.252Z",
+  "git": {
+    "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
+    "tag": "dovetail-schema@0.0.11"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "71bdf9bba",
+      "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
+      "pr": 148
+    },
+    {
+      "sha": "a8922d9d5",
+      "subject": "chore(release): @tenonhq/dovetail-schema@0.0.10 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
