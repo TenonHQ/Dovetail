@@ -14,7 +14,7 @@
   "author": "Multiple",
   "license": "GPL-3.0",
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.17",
+    "@tenonhq/dovetail-types": "~0.0.19",
     "@types/prettier": "^2.7.3",
     "typescript": "^5.2.2"
   },

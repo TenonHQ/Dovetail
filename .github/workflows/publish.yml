@@ -65,6 +65,15 @@ jobs:
       - name: Test all packages
         run: node Scripts/run-workspaces.js test
 
+      # Guard: every internal @tenonhq/dovetail-* range must be a floating
+      # ~0.0.x. A caret hard-pin (^0.0.x) or wildcard (*) would force consumers
+      # to set an overrides block / --legacy-peer-deps. Blocks the publish if a
+      # stale pin slips back in. The guard's own unit tests run first.
+      - name: Check internal dependency ranges
+        run: |
+          node --test Scripts/normalize-internal-deps.test.js
+          node Scripts/normalize-internal-deps.js --check
+
       - name: Publish changed packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

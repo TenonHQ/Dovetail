@@ -21,6 +21,6 @@
     "packages/*"
   ],
   "dependencies": {
-    "@tenonhq/dovetail-core": "^0.0.82"
+    "@tenonhq/dovetail-core": "~0.0.102"
   }
 }

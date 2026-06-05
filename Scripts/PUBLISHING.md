@@ -35,9 +35,25 @@ next free patch — a version collision is impossible.
 
 ## What gets published
 
-Only packages whose files changed in the merge, detected with
-`git diff <before> <after>`. Inter-package dependencies use `^` ranges, so a
-patch bump reaches consumers without republishing them.
+Packages whose files changed in the merge (detected with
+`git diff <before> <after>`) — **plus every package that transitively depends on
+a changed one**, dragged in by the cascade (`dependentsClosure` in
+`Scripts/lib/workspace.js`) so each dependent's pinned range advances to the
+version just shipped. Published in dependency order.
+
+Inter-package dependencies use **`~0.0.x`** (tilde) ranges, never `^0.0.x`. This
+is deliberate: for a pre-1.0 version npm treats `^0.0.x` as a **hard pin**
+(`^0.0.10` resolves to `0.0.10` only, not `0.0.11`), so a caret range silently
+freezes a consumer onto one patch and triggers `ERESOLVE` the moment a newer
+patch ships — forcing an `overrides` block or `--legacy-peer-deps`. `~0.0.x`
+floats across the whole `0.0.*` series (`~0.0.10` == `>=0.0.10 <0.1.0`), so
+consumers adopt later patches with no override. The tilde floor is anchored to
+the **npm-published** version (`min(npmLatest, sourceVersion)`), never the
+source version — source runs one patch ahead of the registry, so anchoring there
+would demand a sibling patch that is not yet published and break installs.
+`Scripts/normalize-internal-deps.js --check` runs in CI and rejects any `^0.0.x`,
+exact pin, or `*` internal range; `--write` rewrites them to the correct
+floating floor.
 
 A package with `"private": true` in its `package.json` is never published.
 
@@ -58,8 +74,9 @@ tag (`<pkg>@<version>`) and a GitHub Release are created for each package.
 | `.github/workflows/publish.yml` | The release workflow |
 | `Scripts/lib/workspace.js` | Package discovery, dependency graph, toposort, semver |
 | `Scripts/run-workspaces.js` | Runs an npm script across all packages in dependency order |
-| `Scripts/publish-on-merge.js` | Detect → publish → commit → tag → release |
+| `Scripts/publish-on-merge.js` | Detect → cascade → publish → commit → tag → release |
 | `Scripts/bump-version.js` | The `postpublish` patch bump (unchanged) |
+| `Scripts/normalize-internal-deps.js` | Guard/fixer: keeps internal ranges floating `~0.0.x` (`--check` in CI, `--write` to remediate) |
 
 ## Dry runs
 

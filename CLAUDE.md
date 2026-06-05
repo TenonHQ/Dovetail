@@ -23,8 +23,9 @@ Full command reference: see `Essential Commands` further down, or `npx dove --he
 
 How publishing works:
 - **Trigger** — merge to `main` touching `packages/**` runs `.github/workflows/publish.yml`.
-- **Scope** — only packages with changed files; built and published in dependency order.
-- **Gate** — full monorepo must build (`tsc`) and pass tests; any failure publishes nothing.
+- **Scope** — packages with changed files, **plus every package that transitively depends on a changed one** (the cascade), built and published in dependency order.
+- **Internal ranges** — inter-package `@tenonhq/dovetail-*` deps MUST be floating `~0.0.x`, never `^0.0.x`. On a pre-1.0 package `^0.0.x` is a *hard pin* (`^0.0.10` = `0.0.10` only), which forces consumers to set an `overrides` block / `--legacy-peer-deps` (ERESOLVE). CI enforces this via `node Scripts/normalize-internal-deps.js --check`; run `--write` to fix a violation.
+- **Gate** — full monorepo must build (`tsc`) and pass tests, and the internal-range guard must be clean; any failure publishes nothing.
 - **Versioning** — patch-bumped automatically: `max(package.json version, npm-latest + 1 patch)`. For a minor/major release, edit the package's `version` in your PR; CI honors it.
 - **After publish** — CI commits `postpublish` version bumps back to `main` as `chore(release): … [skip ci]` and cuts git tags + GitHub Releases per package.
 
