@@ -33,7 +33,7 @@
     "webpack": "^5.88.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.17",
+    "@tenonhq/dovetail-types": "~0.0.19",
     "@types/memory-fs": "^0.3.4",
     "@types/webpack": "^5.28.3"
   }

@@ -17,7 +17,7 @@
     "typescript": "^5.2.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.17"
+    "@tenonhq/dovetail-types": "~0.0.19"
   },
   "files": [
     "dist"

@@ -32,7 +32,7 @@
     "sass": "^1.69.0"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "^0.0.17"
+    "@tenonhq/dovetail-types": "~0.0.19"
   },
   "gitHead": "67b694054cf072be150b9bd4dc3d1b01f8e24ed9"
 }
