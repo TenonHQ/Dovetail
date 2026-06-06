@@ -27,6 +27,8 @@ import {
 } from "@tenonhq/dovetail-mcp-kit";
 import type { ToolAnnotations } from "@tenonhq/dovetail-mcp-kit";
 
+import { clickupGetTeamSyncOutput, servicenowQueryTableOutput } from "./outputSchemas";
+
 import {
   clickupListTasksSchema,
   clickupGetTaskSchema,
@@ -113,6 +115,7 @@ interface ToolDescriptor {
   description: string;
   shape: z.ZodRawShape;
   annotations: ToolAnnotations;
+  outputSchema?: z.ZodRawShape;
   handler: (args: any) => Promise<any>;
 }
 
@@ -158,6 +161,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       description: "Returns a structured JSON team sync with the 7-stage pipeline (Blocked, In Progress, In Review, QA, UAT, Ready for Release, Done) plus unmapped statuses and unassigned tasks.",
       shape: clickupGetTeamSyncSchema.shape,
       annotations: READ_ONLY,
+      outputSchema: clickupGetTeamSyncOutput.shape,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupGetTeamSync(args, deps.clickup as ClickUpDeps);
       })
@@ -266,6 +270,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       description: "Read-only GET against the ServiceNow Table API. Required: table (lower-case identifier), sysparm_query (ServiceNow encoded query). Optional: fields[] limits the columns returned, limit caps row count (default 100, max 1000). Tables on the deny list (sys_user_password, sys_credential, etc.) are rejected unless SINC_MCP_SN_TABLE_OVERRIDE=<table> is set.",
       shape: servicenowQueryTableSchema.shape,
       annotations: READ_ONLY,
+      outputSchema: servicenowQueryTableOutput.shape,
       handler: function (args: any) {
         return servicenowQueryTable(args, deps.servicenow);
       }

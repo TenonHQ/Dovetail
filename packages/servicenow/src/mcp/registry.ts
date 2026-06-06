@@ -20,6 +20,8 @@ import {
 } from "@tenonhq/dovetail-mcp-kit";
 import type { ToolAnnotations } from "@tenonhq/dovetail-mcp-kit";
 
+import { flowViewOutput, actionViewOutput } from "./outputSchemas";
+
 import { createClient } from "../client";
 import type { ServiceNowClient } from "../client";
 import { createView } from "../layout/views";
@@ -76,6 +78,7 @@ export interface ToolDescriptor {
   description: string;
   shape: z.ZodRawShape;
   annotations: ToolAnnotations;
+  outputSchema?: z.ZodRawShape;
   handler: (args: any) => Promise<any>;
 }
 
@@ -151,6 +154,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     {
       name: "flow_view",
       annotations: READ_ONLY,
+      outputSchema: flowViewOutput.shape,
       description:
         "Read a ServiceNow Flow Designer flow or subflow's compiled step graph, headless. "
         + "Returns the ordered, nesting-aware list of action + flow-logic steps plus the flow "
@@ -165,6 +169,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     {
       name: "action_view",
       annotations: READ_ONLY,
+      outputSchema: actionViewOutput.shape,
       description:
         "Read a ServiceNow Custom Action Type's compiled model (identity, inputs, outputs), "
         + "headless, via GET /api/now/processflow/action/action_types/{sysId}. Read-only. "

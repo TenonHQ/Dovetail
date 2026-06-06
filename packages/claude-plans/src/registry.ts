@@ -63,6 +63,13 @@ import {
   StorageOptions
 } from "./storage";
 import { scorePlanFeatures } from "./score";
+import {
+  pushPlanOutput,
+  pullPlanOutput,
+  getHandoffBundleOutput,
+  listRecentPlansOutput,
+  getAnswersOutput
+} from "./outputSchemas";
 
 export var TOOL_NAMES = [
   "push_plan",
@@ -98,6 +105,7 @@ interface ToolDescriptor {
   description: string;
   shape: z.ZodRawShape;
   annotations: ToolAnnotations;
+  outputSchema?: z.ZodRawShape;
   handler: (args: any) => Promise<any>;
 }
 
@@ -222,6 +230,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         '    { "type":"checklist", "title":"Pre-deploy", "items":[{"label":"Tests pass","done":true},{"label":"Migration run","done":false}] }\n' +
         "  ] }",
       shape: pushPlanSchema.shape,
+      outputSchema: pushPlanOutput.shape,
       handler: async function (args: any) {
         var parsed = pushPlanSchema.parse(args);
         if (!parsed.content_md && !parsed.content_html && !parsed.content_structured) {
@@ -287,6 +296,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       annotations: READ_ONLY,
       description: "List plans newest-first. Optional filters: status, limit (default 20).",
       shape: listRecentPlansSchema.shape,
+      outputSchema: listRecentPlansOutput.shape,
       handler: async function (args: any) {
         var parsed = listRecentPlansSchema.parse(args || {});
         var limit = parsed.limit || 20;
@@ -383,6 +393,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         "  include_artifact_kinds (optional) — restrict which kinds appear in the bundle.\n\n" +
         "Output: { slug, markdown, ready_to_paste_prompt }.",
       shape: getHandoffBundleSchema.shape,
+      outputSchema: getHandoffBundleOutput.shape,
       handler: async function (args: any) {
         var parsed = getHandoffBundleSchema.parse(args || {});
         return buildHandoffBundle(parsed.slug, {
@@ -469,6 +480,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         "  stage (optional) — exact-match filter on the question's stage tag.\n\n" +
         "Output: { plan_slug, questions: PlanQuestion[] }. Questions are returned in insertion order.",
       shape: getAnswersSchema.shape,
+      outputSchema: getAnswersOutput.shape,
       handler: async function (args: any) {
         var parsed = getAnswersSchema.parse(args);
         return getAnswers(
@@ -588,6 +600,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         "  plan_slug (required) — the plan to read.\n\n" +
         "Output: { plan, artifacts[], prompts[], questions[], stage, stage_history[], dispatch_log[] }.",
       shape: pullPlanSchema.shape,
+      outputSchema: pullPlanOutput.shape,
       handler: async function (args: any) {
         var parsed = pullPlanSchema.parse(args);
         var result = loadPlanFull(parsed.plan_slug, storageOpts);
