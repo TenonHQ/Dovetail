@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.16",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.16",
+  "prev_version": "0.0.15",
+  "published_at": "2026-06-06T00:18:10.412Z",
+  "git": {
+    "sha": "fd0a1e07f570dfbb06854771563cd688a368efda",
+    "tag": "dovetail-servicenow@0.0.16"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "fd0a1e07f",
+      "subject": "feat: annotate dovetail-servicenow tools with read-only/destructive hints (#151)",
+      "pr": 151
+    },
+    {
+      "sha": "d5e064760",
+      "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.15 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

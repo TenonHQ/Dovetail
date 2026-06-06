@@ -1,28 +1,28 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-06T00:13:50.814Z",
+  "generated_at": "2026-06-06T00:18:10.427Z",
   "events": [
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-claude-plans@0.0.22",
-      "package": "@tenonhq/dovetail-claude-plans",
-      "version": "0.0.22",
-      "prev_version": "0.0.21",
-      "published_at": "2026-06-06T00:13:50.800Z",
+      "event_id": "dovetail-servicenow@0.0.16",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.16",
+      "prev_version": "0.0.15",
+      "published_at": "2026-06-06T00:18:10.412Z",
       "git": {
-        "sha": "fca377ec4384f690dead625bef1cb3eeefb399e4",
-        "tag": "dovetail-claude-plans@0.0.22"
+        "sha": "fd0a1e07f570dfbb06854771563cd688a368efda",
+        "tag": "dovetail-servicenow@0.0.16"
       },
       "semver_bump": "patch",
       "commits": [
         {
-          "sha": "fca377ec4",
-          "subject": "feat: annotate dovetail-claude-plans tools with read-only/destructive hints (#152)",
-          "pr": 152
+          "sha": "fd0a1e07f",
+          "subject": "feat: annotate dovetail-servicenow tools with read-only/destructive hints (#151)",
+          "pr": 151
         },
         {
-          "sha": "af1417796",
-          "subject": "chore(release): publish 3 packages [skip ci]"
+          "sha": "d5e064760",
+          "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.15 [skip ci]"
         }
       ],
       "exports_delta": null,
@@ -30,20 +30,20 @@
     },
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.38",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.38",
-      "prev_version": "0.0.37",
-      "published_at": "2026-06-06T00:13:50.800Z",
+      "event_id": "dovetail-mcp@0.0.11",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.11",
+      "prev_version": "0.0.10",
+      "published_at": "2026-06-06T00:18:10.412Z",
       "git": {
-        "sha": "fca377ec4384f690dead625bef1cb3eeefb399e4",
-        "tag": "dovetail-dashboard@0.0.38"
+        "sha": "fd0a1e07f570dfbb06854771563cd688a368efda",
+        "tag": "dovetail-mcp@0.0.11"
       },
       "semver_bump": "patch",
       "commits": [
         {
-          "sha": "de9d77971",
-          "subject": "chore(release): publish 14 packages [skip ci]"
+          "sha": "0dc4422b1",
+          "subject": "chore(release): @tenonhq/dovetail-mcp@0.0.10 [skip ci]"
         }
       ],
       "exports_delta": null,
