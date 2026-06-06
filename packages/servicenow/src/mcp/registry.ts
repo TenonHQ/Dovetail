@@ -8,7 +8,6 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { createClient } from "../client";
@@ -66,24 +65,8 @@ export interface ToolDescriptor {
   name: ToolName;
   description: string;
   shape: z.ZodRawShape;
-  annotations: ToolAnnotations;
   handler: (args: any) => Promise<any>;
 }
-
-// MCP tool annotations (spec 2025-11-25) — untrusted behavioural hints that let a
-// host parallelize reads and gate writes; never a security boundary. Five presets
-// cover every tool's safety profile:
-//   READ_ONLY                 — no writes; safe to auto-approve and run concurrently.
-//   WRITE_ADDITIVE_IDEMPOTENT — additive write, safe to repeat (idempotent upsert/create).
-//   WRITE_CREATE              — additive write, NOT idempotent (each call mints a new record).
-//   WRITE_OVERWRITE           — destructive but idempotent (prune/overwrite: same end state).
-//   WRITE_EXECUTE             — destructive AND non-idempotent (runs a flow; repeating repeats the effect).
-// openWorldHint is left at its spec default (true) — every tool reaches a ServiceNow instance.
-var READ_ONLY: ToolAnnotations = { readOnlyHint: true };
-var WRITE_ADDITIVE_IDEMPOTENT: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
-var WRITE_CREATE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
-var WRITE_OVERWRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
-var WRITE_EXECUTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false };
 
 export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor> {
   function client(): ServiceNowClient {
@@ -92,7 +75,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
   return [
     {
       name: "create_view",
-      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Create a ServiceNow custom view (sys_ui_view). Idempotent — an existing view of the "
         + "same name is returned unchanged. Every write is captured in the supplied update set.",
@@ -103,7 +85,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "set_list_layout",
-      annotations: WRITE_OVERWRITE,
       description:
         "Declaratively set a ServiceNow list layout — which columns appear in a list, and their "
         + "order — for a table + view. Idempotent; prune (default true) removes columns not in "
@@ -115,7 +96,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "set_form_layout",
-      annotations: WRITE_OVERWRITE,
       description:
         "Declaratively set a ServiceNow form layout — sections and the fields within them — for "
         + "a table + view. The first section is the primary section (omit its caption). "
@@ -128,7 +108,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "set_related_lists",
-      annotations: WRITE_OVERWRITE,
       description:
         "Declaratively set which related lists appear on a ServiceNow form for a table + view. "
         + "Related-list ids are \"<table>.<field>\" or \"REL:<sys_relationship>\". Idempotent; "
@@ -140,7 +119,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "add_choices_to_field",
-      annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Upsert sys_choice values for a ServiceNow table.column and (optionally) flip "
         + "sys_dictionary.choice so the field renders as a dropdown. Idempotent. Writes are "
@@ -152,7 +130,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "flow_view",
-      annotations: READ_ONLY,
       description:
         "Read a ServiceNow Flow Designer flow or subflow's compiled step graph, headless. "
         + "Returns the ordered, nesting-aware list of action + flow-logic steps plus the flow "
@@ -166,7 +143,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "action_view",
-      annotations: READ_ONLY,
       description:
         "Read a ServiceNow Custom Action Type's compiled model (identity, inputs, outputs), "
         + "headless, via GET /api/now/processflow/action/action_types/{sysId}. Read-only. "
@@ -180,7 +156,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "flow_publish",
-      annotations: WRITE_OVERWRITE,
       description:
         "Publish (compile the snapshot of) a ServiceNow Flow Designer flow or subflow via "
         + "POST /api/now/processflow/flow/{sysId}/snapshot. This is a WRITE that recompiles the "
@@ -194,7 +169,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "flow_copy",
-      annotations: WRITE_CREATE,
       description:
         "Copy a ServiceNow flow/subflow via the Designer's Copy endpoint — a complete, faithful "
         + "clone created as an INACTIVE DRAFT in the target scope. sourceSysId is the sys_hub_flow "
@@ -209,7 +183,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "flow_create",
-      annotations: WRITE_CREATE,
       description:
         "Create a NEW ServiceNow Flow Designer flow (sys_hub_flow, type=flow) from scratch and "
         + "PUBLISH it, headless. Mints a fresh flow via POST /processflow/flow, grafts the trigger + "
@@ -240,7 +213,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "flow_test",
-      annotations: WRITE_EXECUTE,
       description:
         "Test or run a ServiceNow flow/subflow. mode='validate' (default) is a safe, read-only "
         + "pre-flight — checks the flow is published and that supplied inputs match its declared "
@@ -262,7 +234,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
     },
     {
       name: "flow_edit",
-      annotations: WRITE_OVERWRITE,
       description:
         "Edit a ServiceNow flow/subflow in place. Supports rename (name/internalName), description, "
         + "and patchStepInputs (set named input values on steps by uiId or label). apply=false "
@@ -295,7 +266,7 @@ export function registerAllTools(server: McpServer, deps: RegistryDeps = {}): vo
 function registerOne(server: McpServer, desc: ToolDescriptor): void {
   (server.registerTool as any)(
     desc.name,
-    { description: desc.description, inputSchema: desc.shape, annotations: desc.annotations },
+    { description: desc.description, inputSchema: desc.shape },
     async function (args: any) {
       try {
         var result = await desc.handler(args);
