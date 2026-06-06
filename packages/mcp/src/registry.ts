@@ -15,11 +15,17 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { withTelemetry } from "./telemetry";
-import { mapToolError } from "./errors";
+import {
+  READ_ONLY,
+  WRITE_OVERWRITE,
+  WRITE_CREATE,
+  WRITE_ADDITIVE_IDEMPOTENT,
+  registerKitTools,
+  withTelemetry
+} from "@tenonhq/dovetail-mcp-kit";
+import type { ToolAnnotations } from "@tenonhq/dovetail-mcp-kit";
 
 import {
   clickupListTasksSchema,
@@ -110,28 +116,10 @@ interface ToolDescriptor {
   handler: (args: any) => Promise<any>;
 }
 
-// Annotation presets. All tools reach external services (ClickUp/Gmail/
-// Calendar/ServiceNow), so openWorldHint stays at its spec default of true.
-var READ_ONLY: ToolAnnotations = { readOnlyHint: true };
-// A write that overwrites existing state (re-running with the same args
-// converges, so it is idempotent but still destructive).
-var WRITE_OVERWRITE: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: true,
-  idempotentHint: true
-};
-// A purely additive create (re-running produces another record).
-var WRITE_CREATE: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false
-};
-// A purely additive, idempotent link (re-running is a no-op).
-var WRITE_ADDITIVE_IDEMPOTENT: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: true
-};
+// Annotation presets (READ_ONLY / WRITE_OVERWRITE / WRITE_CREATE /
+// WRITE_ADDITIVE_IDEMPOTENT) come from @tenonhq/dovetail-mcp-kit. All tools
+// reach external services, so openWorldHint stays at its spec default of true.
+// None of this server's tools need WRITE_EXECUTE.
 
 function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
   var clickupReady = !!deps.clickup;
@@ -301,54 +289,9 @@ function requireConfig(
 }
 
 export function registerAllTools(server: McpServer, deps: RegistryDeps): void {
-  var descriptors = buildDescriptors(deps);
-  for (var i = 0; i < descriptors.length; i++) {
-    registerOne(server, descriptors[i]);
-  }
-}
-
-function registerOne(server: McpServer, desc: ToolDescriptor): void {
-  // Cast at the SDK boundary: registerTool's deep generic inference over
-  // ZodRawShapeCompat blows past the TypeScript instantiation depth limit
-  // when a heterogeneous descriptor list feeds the same call site.
-  (server.registerTool as any)(
-    desc.name,
-    {
-      description: desc.description,
-      inputSchema: desc.shape,
-      annotations: desc.annotations
-    },
-    async function (args: any) {
-      try {
-        var result = await withTelemetry(desc.name, args, function () {
-          return desc.handler(args);
-        });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(result)
-            }
-          ]
-        };
-      } catch (err) {
-        var mapped = mapToolError(err);
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify({
-                error: mapped.message,
-                retryable: mapped.retryable,
-                tool: desc.name
-              })
-            }
-          ]
-        };
-      }
-    }
-  );
+  // registerKitTools owns serialization + the { error, retryable, tool } contract.
+  // withTelemetry is injected so this server keeps recording telemetry as before.
+  registerKitTools(server, buildDescriptors(deps), { telemetry: withTelemetry });
 }
 
 export function buildDescriptorsForTests(deps: RegistryDeps): ToolDescriptor[] {
