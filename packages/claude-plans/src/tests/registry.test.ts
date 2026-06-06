@@ -438,3 +438,66 @@ describe("registry", function () {
     expect((res as Error).message).toMatch(/question not found/);
   });
 });
+
+describe("registry — annotations", function () {
+  var readTools = [
+    "get_plan",
+    "list_recent_plans",
+    "get_handoff_bundle",
+    "get_answers",
+    "get_lint_events",
+    "pull_plan",
+    "list_plan_versions",
+    "get_plan_version"
+  ];
+
+  function byName(): Record<string, any> {
+    var map: Record<string, any> = {};
+    buildDescriptors({}).forEach(function (d) {
+      map[d.name] = d;
+    });
+    return map;
+  }
+
+  it("every descriptor carries an annotations object", function () {
+    buildDescriptors({}).forEach(function (d) {
+      expect(typeof d.annotations).toBe("object");
+      expect(d.annotations).not.toBeNull();
+    });
+  });
+
+  it("read tools are marked readOnlyHint:true", function () {
+    var map = byName();
+    readTools.forEach(function (name) {
+      expect(map[name].annotations.readOnlyHint).toBe(true);
+    });
+  });
+
+  it("write tools carry the right destructive/idempotent hints", function () {
+    var map = byName();
+
+    // additive, idempotent upserts / recoverable restore
+    ["push_plan", "push_artifact", "push_diagram", "push_prompt", "record_answer", "restore_plan_version"].forEach(function (name) {
+      expect(map[name].annotations.readOnlyHint).toBe(false);
+      expect(map[name].annotations.destructiveHint).toBe(false);
+      expect(map[name].annotations.idempotentHint).toBe(true);
+    });
+
+    // additive, non-idempotent appends (each call creates a new record / id)
+    ["update_plan_status", "push_question", "push_lint_event", "set_stage"].forEach(function (name) {
+      expect(map[name].annotations.readOnlyHint).toBe(false);
+      expect(map[name].annotations.destructiveHint).toBe(false);
+      expect(map[name].annotations.idempotentHint).toBe(false);
+    });
+
+    // destructive but idempotent (delete: same end state on repeat)
+    expect(map["delete_plan"].annotations.readOnlyHint).toBe(false);
+    expect(map["delete_plan"].annotations.destructiveHint).toBe(true);
+    expect(map["delete_plan"].annotations.idempotentHint).toBe(true);
+
+    // destructive AND non-idempotent (dispatch_stage can spawn a subprocess in live mode)
+    expect(map["dispatch_stage"].annotations.readOnlyHint).toBe(false);
+    expect(map["dispatch_stage"].annotations.destructiveHint).toBe(true);
+    expect(map["dispatch_stage"].annotations.idempotentHint).toBe(false);
+  });
+});
