@@ -5,8 +5,17 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+
+import {
+  READ_ONLY,
+  WRITE_ADDITIVE_IDEMPOTENT,
+  WRITE_CREATE,
+  WRITE_OVERWRITE,
+  WRITE_EXECUTE,
+  registerKitTools
+} from "@tenonhq/dovetail-mcp-kit";
+import type { ToolAnnotations } from "@tenonhq/dovetail-mcp-kit";
 
 import {
   pushPlanSchema,
@@ -92,21 +101,10 @@ interface ToolDescriptor {
   handler: (args: any) => Promise<any>;
 }
 
-// MCP tool annotations (spec 2025-11-25) — untrusted behavioural hints that let a
-// host parallelize reads and gate writes; never a security boundary. Five presets
-// cover every tool's safety profile:
-//   READ_ONLY                 — no writes; safe to auto-approve and run concurrently.
-//   WRITE_ADDITIVE_IDEMPOTENT — additive/recoverable write, safe to repeat (upsert, restore).
-//   WRITE_CREATE              — additive write, NOT idempotent (each call appends a new record).
-//   WRITE_OVERWRITE           — destructive but idempotent (delete: same end state on repeat).
-//   WRITE_EXECUTE             — destructive AND non-idempotent (dispatch can spawn a subprocess).
+// Annotation presets (READ_ONLY / WRITE_ADDITIVE_IDEMPOTENT / WRITE_CREATE /
+// WRITE_OVERWRITE / WRITE_EXECUTE) come from @tenonhq/dovetail-mcp-kit.
 // openWorldHint is left at its spec default — these tools operate on local plan storage;
 // dispatch_stage is the lone tool that can reach outside it (spawns a subprocess in live mode).
-var READ_ONLY: ToolAnnotations = { readOnlyHint: true };
-var WRITE_ADDITIVE_IDEMPOTENT: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true };
-var WRITE_CREATE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
-var WRITE_OVERWRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true };
-var WRITE_EXECUTE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false };
 
 var MERMAID_HEADERS = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|c4Context)\b/;
 
@@ -681,30 +679,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
 }
 
 export function registerAllTools(server: McpServer, deps: RegistryDeps = {}): void {
-  var descriptors = buildDescriptors(deps);
-  for (var i = 0; i < descriptors.length; i++) registerOne(server, descriptors[i]);
-}
-
-function registerOne(server: McpServer, desc: ToolDescriptor): void {
-  (server.registerTool as any)(
-    desc.name,
-    { description: desc.description, inputSchema: desc.shape, annotations: desc.annotations },
-    async function (args: any) {
-      try {
-        var result = await desc.handler(args);
-        return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
-      } catch (err) {
-        var message = err instanceof Error ? err.message : String(err);
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify({ error: message, tool: desc.name })
-            }
-          ]
-        };
-      }
-    }
-  );
+  // registerKitTools owns serialization + the { error, retryable, tool } contract.
+  // No telemetry recorder is injected here (telemetry parity is a P2 follow-on).
+  registerKitTools(server, buildDescriptors(deps));
 }
