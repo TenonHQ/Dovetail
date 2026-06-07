@@ -120,6 +120,11 @@ function npmPublishedVersion(name) {
   return captureSafe("npm", ["view", name, "version"], { stdio: ["ignore", "pipe", "ignore"] });
 }
 
+/** True when npm can resolve this exact package spec from the public registry. */
+function npmSpecResolves(name, range) {
+  return captureSafe("npm", ["view", name + "@" + range, "version"], { stdio: ["ignore", "pipe", "ignore"] }) !== null;
+}
+
 /** The version to publish: never at or below npm's latest. */
 function resolvePublishVersion(pkg) {
   const published = npmPublishedVersion(pkg.name);
@@ -172,6 +177,31 @@ function pinPublishedDeps(pkg, publishedVersions, write) {
     pkg.manifest = manifest;
   }
   return changed;
+}
+
+/**
+ * Runtime internal dependencies must be installable before publishing a
+ * consumer package. A dependency is OK if this run already published it, or if
+ * the current manifest range resolves from npm. Otherwise the package would
+ * publish successfully but fail for clean npm consumers with E404/ETARGET.
+ */
+function unresolvedRuntimeInternalDeps(pkg, publishedVersions) {
+  const deps = pkg.manifest.dependencies || {};
+  const names = Object.keys(deps);
+  const unresolved = [];
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    if (name.indexOf("@tenonhq/dovetail-") !== 0) {
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(publishedVersions, name)) {
+      continue;
+    }
+    if (!npmSpecResolves(name, deps[name])) {
+      unresolved.push(name + "@" + deps[name]);
+    }
+  }
+  return unresolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +501,10 @@ function main() {
       writeVersion(pkg, version);
     }
     try {
+      const unresolved = unresolvedRuntimeInternalDeps(pkg, publishedVersions);
+      if (unresolved.length > 0) {
+        throw new Error("runtime internal dependency is not available from npm: " + unresolved.join(", "));
+      }
       run("npm", ["publish", "--access", "public"], { cwd: pkg.dir });
       published.push({ name: pkg.name, dirName: pkg.dirName, version: version, prevVersion: prevVersion });
       publishedVersions[pkg.name] = version;

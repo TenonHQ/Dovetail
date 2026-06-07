@@ -16,6 +16,12 @@ developer runs `npm publish`, and there is no follow-up version-bump PR.
 4. **Publish** — `node Scripts/publish-on-merge.js` publishes the packages that
    changed in the merge, commits the version bumps, and cuts releases.
 
+Before publishing each package, the orchestrator checks runtime internal
+`@tenonhq/dovetail-*` dependencies against the public npm registry, unless that
+dependency was already published earlier in the same run. If an internal runtime
+dependency cannot be resolved, the consumer package is skipped and the publish
+run fails instead of shipping a tarball that clean npm projects cannot install.
+
 ## Versioning
 
 Versioning is automatic patch bumps, layered on the repo's existing
