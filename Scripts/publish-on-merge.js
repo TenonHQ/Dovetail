@@ -506,8 +506,9 @@ function main() {
   } else if (published.length > 0 && failed.length === 0) {
     // Only finalize the release (version-bump commit + GitHub Releases) when
     // every package published. On a partial failure we abort without committing
-    // bumps or cutting releases — a human investigates, and the version
-    // reconcile re-publishes any already-shipped package on the next clean run.
+    // bumps or cutting releases — a human investigates. Any package that did
+    // publish before the abort stays at that npm version (no tag / source bump)
+    // until its next change re-publishes it via the version reconcile.
     const manifestFiles = emitReleaseManifest(published, range, range.head);
     commitVersionBumps(published, manifestFiles);
     createReleases(published, range.head);
