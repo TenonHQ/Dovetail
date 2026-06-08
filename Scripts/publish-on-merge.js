@@ -478,6 +478,15 @@ function main() {
     } catch (err) {
       console.error("  FAILED to publish " + pkg.name + ": " + err.message + "\n");
       failed.push(pkg.name);
+      // Abort on the first failure. Packages publish in dependency order, so
+      // continuing would publish DEPENDENTS of the failed package — they would
+      // ship pinned (via ~0.0.x) to a version that never reached the registry,
+      // breaking a fresh `npm i`. This is exactly what happened when the new
+      // @tenonhq/dovetail-mcp-kit failed its first publish (no Trusted Publisher
+      // configured for a brand-new package name) yet its consumers shipped
+      // anyway. Stop here; the version reconcile heals anything that did
+      // publish on the next run.
+      break;
     }
   }
 
@@ -494,7 +503,11 @@ function main() {
       const ev = previewEvents[i];
       console.log("  - " + ev.event_id + " (" + ev.semver_bump + ", " + ev.commits.length + " commit(s))");
     }
-  } else if (published.length > 0) {
+  } else if (published.length > 0 && failed.length === 0) {
+    // Only finalize the release (version-bump commit + GitHub Releases) when
+    // every package published. On a partial failure we abort without committing
+    // bumps or cutting releases — a human investigates, and the version
+    // reconcile re-publishes any already-shipped package on the next clean run.
     const manifestFiles = emitReleaseManifest(published, range, range.head);
     commitVersionBumps(published, manifestFiles);
     createReleases(published, range.head);
