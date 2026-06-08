@@ -16,6 +16,16 @@ developer runs `npm publish`, and there is no follow-up version-bump PR.
 4. **Publish** — `node Scripts/publish-on-merge.js` publishes the packages that
    changed in the merge, commits the version bumps, and cuts releases.
 
+Before publishing each package, the orchestrator checks its consumer-facing
+internal `@tenonhq/dovetail-*` dependencies (`dependencies` + `peerDependencies`)
+against the public npm registry, unless that dependency was already published
+earlier in the same run. If an internal dependency cannot be resolved, the run
+aborts before shipping a tarball that clean npm projects cannot install — no
+dependent of the unresolved package publishes. This guard runs in `--dry-run`
+too, so a preview surfaces the same stop. A transient registry error counts as
+unresolved on purpose: a failed run is recoverable on the next clean run, a
+broken tarball is not.
+
 ## Versioning
 
 Versioning is automatic patch bumps, layered on the repo's existing
