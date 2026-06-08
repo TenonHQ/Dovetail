@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "test": "jest",
-    "prepack": "tsc",
+    "prepack": "tsc -p tsconfig.build.json",
     "version:bump": "node ./../../Scripts/bump-version.js ./package.json",
     "postpublish": "npm run version:bump"
   },
