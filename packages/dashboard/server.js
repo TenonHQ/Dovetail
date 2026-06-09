@@ -1075,7 +1075,7 @@ app.get("/claude-plans", function (req, res) {
 
 // Multi-tab HTML prompt editor. Drafts persist to the claude-plans store so a
 // Claude Code session can read the active tab and write an enhanced prompt back.
-app.get("/prompt-editor", function (req, res) {
+app.get("/prompt-editor", claudePlansLimiter, function (req, res) {
   res.sendFile(path.join(__dirname, "public", "prompt-editor.html"));
 });
 
@@ -1418,7 +1418,7 @@ app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
 // Claude session's enhance write) refresh every connected tab automatically.
 
 // GET /api/prompt-drafts — list all drafts (oldest-first) + the active id.
-app.get("/api/prompt-drafts", function (req, res) {
+app.get("/api/prompt-drafts", claudePlansLimiter, function (req, res) {
   try {
     res.json(claudePlansLib.listPromptDraftsWithActive());
   } catch (e) {
@@ -1454,7 +1454,7 @@ app.post("/api/prompt-drafts/active", claudePlansLimiter, express.json(), functi
 });
 
 // GET /api/prompt-drafts/:id — read one draft.
-app.get("/api/prompt-drafts/:id", function (req, res) {
+app.get("/api/prompt-drafts/:id", claudePlansLimiter, function (req, res) {
   try {
     var id = req.params.id;
     if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
