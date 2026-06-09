@@ -210,3 +210,29 @@ export var restorePlanVersionSchema = z.object({
   slug: z.string().min(1).max(64),
   version: z.number().int().positive()
 });
+
+// ---- Prompt drafts (dashboard Prompt Editor) -------------------------------
+
+export var DRAFT_ID_PATTERN = /^pd_[0-9a-f]{8}$/;
+
+// 60k chars is generous for a prompt body while bounding a single JSON record.
+var draftContent = z.string().max(60000);
+
+export var createPromptDraftSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: draftContent.optional(),
+  session_id: z.string().min(1).max(128).nullable().optional()
+});
+
+export var getPromptDraftSchema = z.object({
+  id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>")
+});
+
+// Plain object (not .refine()-wrapped) so registry.ts can read .shape for the
+// MCP input schema. The "at least one of title/content" rule is enforced in the
+// tool handler, which can return an actionable error.
+export var updatePromptDraftSchema = z.object({
+  id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>"),
+  title: z.string().min(1).max(200).optional(),
+  content: draftContent.optional()
+});
