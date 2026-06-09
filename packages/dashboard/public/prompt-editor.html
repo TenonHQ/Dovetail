@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dovetail — Prompt Editor</title>
+  <script>
+    /* Apply saved theme before first paint to avoid a flash of light. */
+    (function () {
+      try {
+        var t = localStorage.getItem("cp-theme");
+        if (t === "dark" || t === "light") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/tokens.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .pe-body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+    .pe-toolbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; border-bottom: 1px solid var(--border, #d8dad7);
+      background: var(--bg-paper, #fff);
+    }
+    .pe-toolbar h2 { font-size: 14px; margin: 0; font-weight: 650; color: var(--fg, #1f2320); }
+    .pe-spacer { flex: 1; }
+    .pe-hint { font-size: 12px; color: var(--fg-muted, #6b6f6b); }
+    .pe-hint code {
+      background: var(--bg-subtle, #f1f2f0); padding: 1px 5px; border-radius: 4px;
+      font-size: 11px;
+    }
+    .pe-btn {
+      font: inherit; font-size: 13px; cursor: pointer;
+      border: 1px solid var(--border, #d8dad7); background: var(--bg-paper, #fff);
+      color: var(--fg, #1f2320); padding: 5px 11px; border-radius: 7px;
+    }
+    .pe-btn:hover { background: var(--bg-subtle, #f1f2f0); }
+    .pe-btn-accent { background: var(--accent, #00663c); color: var(--accent-fg, #fff); border-color: transparent; }
+    .pe-btn-accent:hover { background: var(--accent-hover, #00552f); }
+
+    /* Tab bar */
+    .pe-tabs {
+      display: flex; align-items: stretch; gap: 2px; overflow-x: auto;
+      background: var(--bg-subtle, #f1f2f0); border-bottom: 1px solid var(--border, #d8dad7);
+      padding: 0 8px; min-height: 40px;
+    }
+    .pe-tab {
+      display: flex; align-items: center; gap: 7px; cursor: pointer;
+      padding: 0 12px; font-size: 13px; color: var(--fg-muted, #6b6f6b);
+      border: 1px solid transparent; border-bottom: none; white-space: nowrap;
+      max-width: 240px; position: relative; top: 1px;
+    }
+    .pe-tab:hover { color: var(--fg, #1f2320); }
+    .pe-tab.is-open {
+      background: var(--bg-paper, #fff); color: var(--fg, #1f2320);
+      border-color: var(--border, #d8dad7); border-top-left-radius: 8px; border-top-right-radius: 8px;
+      font-weight: 600;
+    }
+    .pe-tab-title { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+    .pe-tab-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #00663c);
+      flex: none; visibility: hidden;
+    }
+    .pe-tab.is-active .pe-tab-dot { visibility: visible; }
+    .pe-tab-close {
+      border: none; background: none; cursor: pointer; color: var(--fg-subtle, #999);
+      font-size: 15px; line-height: 1; padding: 0 2px; border-radius: 4px;
+    }
+    .pe-tab-close:hover { background: var(--bg-subtle, #e6e8e5); color: var(--danger, #b3261e); }
+    .pe-newtab {
+      border: none; background: none; cursor: pointer; font-size: 18px; line-height: 1;
+      color: var(--fg-muted, #6b6f6b); padding: 0 12px; align-self: center;
+    }
+    .pe-newtab:hover { color: var(--accent, #00663c); }
+
+    /* Editor row */
+    .pe-editrow { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+      border-bottom: 1px solid var(--border-subtle, #e6e8e5); background: var(--bg-paper, #fff); }
+    .pe-title-input {
+      font: inherit; font-size: 14px; font-weight: 600; color: var(--fg, #1f2320);
+      border: 1px solid transparent; background: transparent; padding: 4px 6px; border-radius: 6px;
+      min-width: 220px; flex: 1; max-width: 460px;
+    }
+    .pe-title-input:hover { border-color: var(--border, #d8dad7); }
+    .pe-title-input:focus { border-color: var(--accent, #00663c); outline: none; background: var(--bg-subtle, #f7f8f6); }
+    .pe-save-state { font-size: 12px; color: var(--fg-subtle, #999); min-width: 70px; }
+    .pe-view-toggle { display: flex; border: 1px solid var(--border, #d8dad7); border-radius: 7px; overflow: hidden; }
+    .pe-view-toggle button {
+      font: inherit; font-size: 12px; cursor: pointer; border: none; background: var(--bg-paper, #fff);
+      color: var(--fg-muted, #6b6f6b); padding: 4px 10px;
+    }
+    .pe-view-toggle button.is-on { background: var(--accent, #00663c); color: var(--accent-fg, #fff); }
+
+    /* Editor body — split */
+    .pe-main { flex: 1; display: flex; min-height: 0; }
+    .pe-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .pe-pane.is-hidden { display: none; }
+    .pe-pane-label {
+      font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--fg-subtle, #999); padding: 6px 14px 2px;
+    }
+    #pe-source {
+      flex: 1; resize: none; border: none; outline: none; padding: 12px 16px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; line-height: 1.55;
+      color: var(--fg, #1f2320); background: var(--bg, #fff); tab-size: 2;
+    }
+    .pe-preview {
+      flex: 1; overflow: auto; padding: 12px 18px; border-left: 1px solid var(--border-subtle, #e6e8e5);
+      background: var(--bg-paper, #fff); color: var(--fg, #1f2320); font-size: 14px; line-height: 1.6;
+    }
+    .pe-preview pre { background: var(--bg-subtle, #f1f2f0); padding: 10px 12px; border-radius: 8px; overflow: auto; }
+    .pe-empty { margin: auto; text-align: center; color: var(--fg-muted, #6b6f6b); padding: 40px; }
+
+    /* Toast for Claude live-enhance */
+    .pe-toast {
+      position: fixed; bottom: 18px; right: 18px; z-index: 50;
+      background: var(--accent, #00663c); color: var(--accent-fg, #fff);
+      padding: 10px 14px; border-radius: 9px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.2);
+      display: flex; gap: 10px; align-items: center; opacity: 0; transform: translateY(8px);
+      transition: opacity .2s, transform .2s; pointer-events: none;
+    }
+    .pe-toast.is-show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .pe-toast button {
+      font: inherit; font-size: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,.5);
+      background: transparent; color: inherit; padding: 3px 9px; border-radius: 6px;
+    }
+  </style>
+</head>
+<body class="cp-body pe-body">
+  <header>
+    <div class="header-left">
+      <svg class="brand-mark" viewBox="0 0 55 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M34.3254 13.7847H48.0563H54.9235V0H48.0563H34.3254H20.5946H6.8637H0V13.7847H6.8637H20.5946V27.5693H34.3254V13.7847Z" fill="#00663C"></path>
+        <path d="M54.9235 41.354V27.5693H48.0563H34.3254V41.354H20.5946V27.5693H6.8637H0V41.354V55.1387H20.5946H34.3254H54.9235V41.354Z" fill="#00663C"></path>
+      </svg>
+      <h1><span>Dovetail</span> Prompt Editor</h1>
+    </div>
+    <div class="header-right">
+      <a class="cp-nav-link" href="/">&larr; Update Sets</a>
+      <a class="cp-nav-link" href="/claude-plans">Claude Plans &rarr;</a>
+      <button class="cp-theme-toggle" id="cp-theme-toggle" type="button"
+        aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+    </div>
+  </header>
+
+  <div class="pe-toolbar">
+    <h2>Prompts</h2>
+    <span class="pe-spacer"></span>
+    <span class="pe-hint">The open tab is what Claude edits — ask a session: <code>enhance the prompt I'm working on</code></span>
+  </div>
+
+  <nav class="pe-tabs" id="pe-tabs" aria-label="Prompt tabs"></nav>
+
+  <div class="pe-editrow" id="pe-editrow" hidden>
+    <input class="pe-title-input" id="pe-title" type="text" placeholder="Untitled prompt"
+      aria-label="Prompt title" maxlength="200" />
+    <span class="pe-save-state" id="pe-save-state"></span>
+    <span class="pe-spacer"></span>
+    <div class="pe-view-toggle" role="group" aria-label="View mode">
+      <button id="pe-view-edit" type="button">Edit</button>
+      <button id="pe-view-split" type="button" class="is-on">Split</button>
+      <button id="pe-view-preview" type="button">Preview</button>
+    </div>
+  </div>
+
+  <div class="pe-main" id="pe-main">
+    <div class="pe-pane" id="pe-pane-source">
+      <div class="pe-pane-label">HTML source</div>
+      <textarea id="pe-source" spellcheck="false"
+        placeholder="Write your prompt here — HTML/XML prompt-template markup is fine.&#10;&#10;Then ask a Claude Code session to enhance it; the result appears here live."></textarea>
+    </div>
+    <div class="pe-pane" id="pe-pane-preview">
+      <div class="pe-pane-label">Preview</div>
+      <div class="pe-preview" id="pe-preview"></div>
+    </div>
+  </div>
+
+  <div class="pe-toast" id="pe-toast" role="status">
+    <span id="pe-toast-msg">Claude updated this prompt</span>
+    <button id="pe-toast-load" type="button">Load it</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+  <script src="/prompt-editor.js"></script>
+</body>
+</html>

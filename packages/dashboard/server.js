@@ -823,6 +823,14 @@ function isValidSlug(slug) {
   return typeof slug === "string" && CLAUDE_PLAN_SLUG.test(slug);
 }
 
+// Prompt-draft ids are pd_<8-hex>, written by @tenonhq/dovetail-claude-plans.
+// Re-validated on the read side so a crafted id can't escape the store dir.
+const PROMPT_DRAFT_ID = /^pd_[0-9a-f]{8}$/;
+
+function isValidDraftId(id) {
+  return typeof id === "string" && PROMPT_DRAFT_ID.test(id);
+}
+
 function planFilePath(slug) {
   return path.join(CLAUDE_PLANS_DIR, slug + ".json");
 }
@@ -938,6 +946,10 @@ function classifyPath(filePath) {
   if (parts.length === 2 && parts[0] === "_lint-events" && parts[1].endsWith(".json")) {
     return { kind: "lint", id: parts[1].slice(0, -5) };
   }
+  if (parts.length === 2 && parts[0] === "_prompt-drafts" && parts[1].endsWith(".json")) {
+    if (parts[1] === "_active.json") return { kind: "draft-active" };
+    return { kind: "draft", id: parts[1].slice(0, -5) };
+  }
   if (parts.length === 1 && parts[0].endsWith(".json")) {
     return { kind: "plan", slug: parts[0].slice(0, -5) };
   }
@@ -1015,6 +1027,24 @@ function handleWatcherChange(event, filePath) {
     }
     const lint = safeReadJson(filePath);
     if (lint) broadcastClaudePlanEvent("lint:upsert", { lint: lint });
+    return;
+  }
+  if (info.kind === "draft-active") {
+    // The active-tab pointer changed (a draft was made active, or the active
+    // one was deleted and focus advanced). Tell editors which tab is active.
+    const ptr = safeReadJson(filePath);
+    broadcastClaudePlanEvent("draft:active", { active_id: ptr ? ptr.active_id : null });
+    return;
+  }
+  if (info.kind === "draft") {
+    if (event === "unlink") {
+      broadcastClaudePlanEvent("draft:delete", { id: info.id });
+      return;
+    }
+    // Fires when a Claude session writes an enhanced prompt back, or another
+    // editor instance autosaves — the editor merges it into the matching tab.
+    const draft = safeReadJson(filePath);
+    if (draft) broadcastClaudePlanEvent("draft:upsert", { draft: draft });
   }
 }
 
@@ -1041,6 +1071,12 @@ function startClaudePlanWatcher() {
 
 app.get("/claude-plans", function (req, res) {
   res.sendFile(path.join(__dirname, "public", "claude-plans.html"));
+});
+
+// Multi-tab HTML prompt editor. Drafts persist to the claude-plans store so a
+// Claude Code session can read the active tab and write an enhanced prompt back.
+app.get("/prompt-editor", function (req, res) {
+  res.sendFile(path.join(__dirname, "public", "prompt-editor.html"));
 });
 
 // Legacy path-segment deep links (/claude-plans/:slug) redirect to the
@@ -1239,8 +1275,8 @@ function sendTypedError(res, err) {
       message: err.message
     });
   }
-  if (err && /plan not found/.test(err.message || "")) {
-    return res.status(404).json({ error: "plan_not_found", message: err.message });
+  if (err && /not found/i.test(err.message || "")) {
+    return res.status(404).json({ error: "not_found", message: err.message });
   }
   return res.status(500).json({ error: "internal", message: (err && err.message) || String(err) });
 }
@@ -1371,6 +1407,88 @@ app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
     res.json({ deleted: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Prompt Editor (multi-tab HTML prompt drafts) ---
+// All writes go through @tenonhq/dovetail-claude-plans' storage layer so the
+// draft/active-pointer rules live in exactly one place. Each write lands a file
+// under <root>/_prompt-drafts/, which the chokidar watcher turns into a
+// draft:upsert / draft:delete / draft:active SSE frame — so the editor (and a
+// Claude session's enhance write) refresh every connected tab automatically.
+
+// GET /api/prompt-drafts — list all drafts (oldest-first) + the active id.
+app.get("/api/prompt-drafts", function (req, res) {
+  try {
+    res.json(claudePlansLib.listPromptDraftsWithActive());
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// POST /api/prompt-drafts — create a new draft (tab). Body: { title?, content? }
+app.post("/api/prompt-drafts", claudePlansLimiter, express.json(), function (req, res) {
+  try {
+    var body = req.body || {};
+    var draft = claudePlansLib.createPromptDraft({
+      title: body.title,
+      content: body.content,
+      session_id: body.session_id
+    });
+    res.json(draft);
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// POST /api/prompt-drafts/active — set the active tab. Body: { id }
+// Declared before "/:id" so Express doesn't treat "active" as an id.
+app.post("/api/prompt-drafts/active", claudePlansLimiter, express.json(), function (req, res) {
+  try {
+    var body = req.body || {};
+    if (!isValidDraftId(body.id)) return res.status(400).json({ error: "invalid draft id" });
+    res.json(claudePlansLib.setActivePromptDraft(body.id));
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// GET /api/prompt-drafts/:id — read one draft.
+app.get("/api/prompt-drafts/:id", function (req, res) {
+  try {
+    var id = req.params.id;
+    if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
+    var draft = claudePlansLib.getPromptDraft(id);
+    if (!draft) return res.status(404).json({ error: "draft not found" });
+    res.json(draft);
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// PUT /api/prompt-drafts/:id — autosave title/content. Body: { title?, content? }
+app.put("/api/prompt-drafts/:id", claudePlansLimiter, express.json(), function (req, res) {
+  try {
+    var id = req.params.id;
+    if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
+    var body = req.body || {};
+    if (body.title === undefined && body.content === undefined) {
+      return res.status(400).json({ error: "nothing to update" });
+    }
+    res.json(claudePlansLib.updatePromptDraft({ id: id, title: body.title, content: body.content }));
+  } catch (e) {
+    sendTypedError(res, e);
+  }
+});
+
+// DELETE /api/prompt-drafts/:id — close a tab. Returns the new active id.
+app.delete("/api/prompt-drafts/:id", claudePlansLimiter, function (req, res) {
+  try {
+    var id = req.params.id;
+    if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
+    res.json(claudePlansLib.deletePromptDraft(id));
+  } catch (e) {
+    sendTypedError(res, e);
   }
 });
 
