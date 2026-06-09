@@ -37,7 +37,10 @@ import {
   dispatchStageSchema,
   listPlanVersionsSchema,
   getPlanVersionSchema,
-  restorePlanVersionSchema
+  restorePlanVersionSchema,
+  createPromptDraftSchema,
+  getPromptDraftSchema,
+  updatePromptDraftSchema
 } from "./schemas";
 import {
   pushPlan,
@@ -60,6 +63,11 @@ import {
   listVersions,
   getVersion,
   restoreVersion,
+  createPromptDraft,
+  getPromptDraft,
+  listPromptDraftsWithActive,
+  updatePromptDraft,
+  getActivePromptDraft,
   StorageOptions
 } from "./storage";
 import { scorePlanFeatures } from "./score";
@@ -84,7 +92,12 @@ export var TOOL_NAMES = [
   "dispatch_stage",
   "list_plan_versions",
   "get_plan_version",
-  "restore_plan_version"
+  "restore_plan_version",
+  "list_prompt_drafts",
+  "get_active_prompt_draft",
+  "get_prompt_draft",
+  "create_prompt_draft",
+  "update_prompt_draft"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -673,6 +686,86 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var parsed = restorePlanVersionSchema.parse(args);
         var plan = restoreVersion(parsed.slug, parsed.version, storageOpts);
         return Object.assign({}, plan, { url: planDashboardUrl(plan.slug) });
+      }
+    },
+    {
+      name: "list_prompt_drafts",
+      annotations: READ_ONLY,
+      description:
+        "List the prompt drafts open in the dashboard's Prompt Editor (one per tab), oldest " +
+        "first, plus which one is active. Output: { drafts: PromptDraft[], active_id: string|null }. " +
+        "Each draft has { id, title, content, created_at, updated_at }. Use this to see what the " +
+        "user is drafting before enhancing.",
+      shape: {},
+      handler: async function () {
+        return listPromptDraftsWithActive(storageOpts);
+      }
+    },
+    {
+      name: "get_active_prompt_draft",
+      annotations: READ_ONLY,
+      description:
+        "Get the prompt draft the user is currently working in (the active tab in the dashboard " +
+        "Prompt Editor). This is the canonical 'the prompt I'm working on' read — call it when the " +
+        "user asks you to enhance/improve the prompt they're editing. Returns the PromptDraft, or " +
+        "{ draft: null } when no draft is active. After enhancing, write the result back with " +
+        "update_prompt_draft using the returned id; the editor updates live.",
+      shape: {},
+      handler: async function () {
+        var draft = getActivePromptDraft(storageOpts);
+        return draft ? draft : { draft: null };
+      }
+    },
+    {
+      name: "get_prompt_draft",
+      annotations: READ_ONLY,
+      description:
+        "Get one prompt draft by id (pd_<8-hex>). Output: the PromptDraft, or { draft: null } if " +
+        "not found. Prefer get_active_prompt_draft unless you already hold a specific id.",
+      shape: getPromptDraftSchema.shape,
+      handler: async function (args: any) {
+        var parsed = getPromptDraftSchema.parse(args);
+        var draft = getPromptDraft(parsed.id, storageOpts);
+        return draft ? draft : { draft: null };
+      }
+    },
+    {
+      name: "create_prompt_draft",
+      annotations: WRITE_CREATE,
+      description:
+        "Create a new prompt draft (a new tab in the dashboard Prompt Editor). All inputs optional: " +
+        "title (defaults to 'Untitled prompt'), content (the prompt body — may contain HTML/XML " +
+        "prompt-template markup), session_id. The first draft on a fresh store becomes active " +
+        "automatically. Returns the created PromptDraft. The new tab appears live in the editor.",
+      shape: createPromptDraftSchema.shape,
+      handler: async function (args: any) {
+        var parsed = createPromptDraftSchema.parse(args || {});
+        return createPromptDraft(
+          {
+            title: parsed.title,
+            content: parsed.content,
+            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id
+          },
+          storageOpts
+        );
+      }
+    },
+    {
+      name: "update_prompt_draft",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Overwrite a prompt draft's title and/or content by id (pd_<8-hex>). This is how you write an " +
+        "ENHANCED prompt back into the tab the user is editing: read with get_active_prompt_draft, " +
+        "improve the prompt, then update_prompt_draft with the same id and the rewritten content. " +
+        "At least one of title/content is required. The editor reflects the change live via SSE. " +
+        "Returns the updated PromptDraft.",
+      shape: updatePromptDraftSchema.shape,
+      handler: async function (args: any) {
+        var parsed = updatePromptDraftSchema.parse(args);
+        return updatePromptDraft(
+          { id: parsed.id, title: parsed.title, content: parsed.content },
+          storageOpts
+        );
       }
     }
   ];

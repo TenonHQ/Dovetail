@@ -33,6 +33,8 @@ import {
   PlanWithArtifacts,
   PromptCyclePayload,
   PromptLintEvent,
+  PromptDraft,
+  ActiveDraftPointer,
   StageTransition,
   StageTransitionSource
 } from "./types";
@@ -1263,4 +1265,185 @@ export function dispatchStage(
     pid: spawned.pid,
     event: liveEvent
   };
+}
+
+// ---- Prompt drafts (global, plan-independent) ------------------------------
+//
+// Drafts back the dashboard's multi-tab Prompt Editor. They live under
+// <root>/_prompt-drafts/, sibling to _lint-events/; the leading underscore
+// keeps the directory out of listPlans(). Exactly one draft is "active" at a
+// time, tracked by the _active.json pointer file. A Claude Code session reads
+// the active draft, enhances it, and writes it back via update_prompt_draft.
+
+function promptDraftsDir(root: string): string {
+  return path.join(root, "_prompt-drafts");
+}
+
+// id is the only path segment we interpolate, so it must be shape-validated to
+// prevent traversal (same barrier form as assertSafeSlug). pd_<8-hex>.
+var SAFE_DRAFT_ID = /^pd_[0-9a-f]{8}$/;
+
+function assertSafeDraftId(id: string): string {
+  if (!SAFE_DRAFT_ID.test(id)) throw new Error("invalid prompt-draft id: " + id);
+  return id;
+}
+
+function promptDraftPath(root: string, id: string): string {
+  return path.join(promptDraftsDir(root), assertSafeDraftId(id) + ".json");
+}
+
+// The active pointer is named with a leading underscore so it never collides
+// with a pd_<hex> draft file and is easy to skip when listing drafts.
+function activePointerPath(root: string): string {
+  return path.join(promptDraftsDir(root), "_active.json");
+}
+
+function readActivePointer(root: string): ActiveDraftPointer {
+  var ptr = readJson<ActiveDraftPointer>(activePointerPath(root));
+  if (ptr && typeof ptr.active_id !== "undefined") return ptr;
+  return { active_id: null, updated_at: nowIso() };
+}
+
+function writeActivePointer(root: string, activeId: string | null): ActiveDraftPointer {
+  var ptr: ActiveDraftPointer = { active_id: activeId, updated_at: nowIso() };
+  atomicWriteJson(activePointerPath(root), ptr);
+  return ptr;
+}
+
+export interface CreatePromptDraftInput {
+  title?: string;
+  content?: string;
+  session_id?: string | null;
+}
+
+export function createPromptDraft(
+  input: CreatePromptDraftInput = {},
+  options: StorageOptions = {}
+): PromptDraft {
+  var root = storageRoot(options);
+  var id = "pd_" + crypto.randomBytes(4).toString("hex");
+  var now = nowIso();
+  var draft: PromptDraft = {
+    id: id,
+    title: (input.title && input.title.trim()) || "Untitled prompt",
+    content: input.content || "",
+    created_at: now,
+    updated_at: now
+  };
+  if (input.session_id !== undefined) draft.session_id = input.session_id;
+  atomicWriteJson(promptDraftPath(root, id), draft);
+  // First draft on a fresh store becomes active automatically — there is always
+  // something for get_active_prompt_draft to return once a draft exists.
+  if (readActivePointer(root).active_id === null) writeActivePointer(root, id);
+  return draft;
+}
+
+export function getPromptDraft(id: string, options: StorageOptions = {}): PromptDraft | null {
+  var root = storageRoot(options);
+  if (!SAFE_DRAFT_ID.test(id)) return null;
+  return readJson<PromptDraft>(promptDraftPath(root, id));
+}
+
+export function listPromptDrafts(options: StorageOptions = {}): PromptDraft[] {
+  var root = storageRoot(options);
+  var dir = promptDraftsDir(root);
+  if (!fs.existsSync(dir)) return [];
+  var entries = fs.readdirSync(dir);
+  var drafts: PromptDraft[] = [];
+  for (var i = 0; i < entries.length; i++) {
+    var name = entries[i];
+    if (!name.endsWith(".json")) continue;
+    if (!/^pd_[0-9a-f]{8}\.json$/.test(name)) continue; // skip _active.json
+    var d = readJson<PromptDraft>(path.join(dir, name));
+    if (d) drafts.push(d);
+  }
+  // Stable tab order: oldest-first by creation, tiebroken by id.
+  drafts.sort(function (a, b) {
+    var c = (a.created_at || "").localeCompare(b.created_at || "");
+    if (c !== 0) return c;
+    return (a.id || "").localeCompare(b.id || "");
+  });
+  return drafts;
+}
+
+export interface ListPromptDraftsResult {
+  drafts: PromptDraft[];
+  active_id: string | null;
+}
+
+export function listPromptDraftsWithActive(options: StorageOptions = {}): ListPromptDraftsResult {
+  var root = storageRoot(options);
+  return { drafts: listPromptDrafts(options), active_id: readActivePointer(root).active_id };
+}
+
+export interface UpdatePromptDraftInput {
+  id: string;
+  title?: string;
+  content?: string;
+}
+
+export function updatePromptDraft(
+  input: UpdatePromptDraftInput,
+  options: StorageOptions = {}
+): PromptDraft {
+  var root = storageRoot(options);
+  var existing = readJson<PromptDraft>(promptDraftPath(root, input.id));
+  if (!existing) throw new Error("prompt draft not found: " + input.id);
+  var next: PromptDraft = Object.assign({}, existing, { updated_at: nowIso() });
+  if (input.title !== undefined) next.title = input.title.trim() || existing.title;
+  if (input.content !== undefined) next.content = input.content;
+  atomicWriteJson(promptDraftPath(root, input.id), next);
+  return next;
+}
+
+export interface DeletePromptDraftResult {
+  id: string;
+  deleted: boolean;
+  active_id: string | null;
+}
+
+export function deletePromptDraft(
+  id: string,
+  options: StorageOptions = {}
+): DeletePromptDraftResult {
+  var root = storageRoot(options);
+  var p = promptDraftPath(root, id);
+  var existed = fs.existsSync(p);
+  if (existed) {
+    try { fs.unlinkSync(p); } catch (_e) { /* best effort */ }
+  }
+  // If the deleted draft was active, advance the pointer to the next remaining
+  // draft (or null) so "active" never dangles at a deleted id.
+  var ptr = readActivePointer(root);
+  var activeId = ptr.active_id;
+  if (activeId === id) {
+    var remaining = listPromptDrafts(options);
+    activeId = remaining.length ? remaining[0].id : null;
+    writeActivePointer(root, activeId);
+  }
+  return { id: id, deleted: existed, active_id: activeId };
+}
+
+export interface SetActivePromptDraftResult {
+  active_id: string | null;
+}
+
+export function setActivePromptDraft(
+  id: string,
+  options: StorageOptions = {}
+): SetActivePromptDraftResult {
+  var root = storageRoot(options);
+  // Guard: only point at a draft that actually exists.
+  if (!fs.existsSync(promptDraftPath(root, id))) {
+    throw new Error("prompt draft not found: " + id);
+  }
+  var ptr = writeActivePointer(root, id);
+  return { active_id: ptr.active_id };
+}
+
+export function getActivePromptDraft(options: StorageOptions = {}): PromptDraft | null {
+  var root = storageRoot(options);
+  var activeId = readActivePointer(root).active_id;
+  if (!activeId) return null;
+  return getPromptDraft(activeId, options);
 }

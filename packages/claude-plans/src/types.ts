@@ -250,3 +250,30 @@ export var ALLOWED_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   APPROVED: ["EXITED"],
   EXITED: []
 };
+
+/**
+ * A standalone prompt draft authored in the dashboard's Prompt Editor. Like
+ * PromptLintEvent, drafts are GLOBAL — not owned by a plan. They live in
+ * <root>/_prompt-drafts/<id>.json so the editor can host several at once (one
+ * per tab). `content` is the prompt body the user is writing (free-form text,
+ * which may contain HTML/XML prompt-template markup).
+ *
+ * Exactly one draft is "active" at a time — the one the user is working in —
+ * tracked by a sibling pointer file (ActiveDraftPointer). A Claude Code session
+ * reads the active draft (get_active_prompt_draft), enhances it, and writes the
+ * result back (update_prompt_draft); the editor live-reloads via SSE.
+ */
+export interface PromptDraft {
+  id: string; // pd_<8-hex>
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  session_id?: string | null;
+}
+
+/** Pointer to the active draft. Stored at <root>/_prompt-drafts/_active.json. */
+export interface ActiveDraftPointer {
+  active_id: string | null;
+  updated_at: string;
+}
