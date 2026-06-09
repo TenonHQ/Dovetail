@@ -120,6 +120,11 @@ function npmPublishedVersion(name) {
   return captureSafe("npm", ["view", name, "version"], { stdio: ["ignore", "pipe", "ignore"] });
 }
 
+/** True when npm can resolve this exact package spec from the public registry. */
+function npmSpecResolves(name, range) {
+  return captureSafe("npm", ["view", name + "@" + range, "version"], { stdio: ["ignore", "pipe", "ignore"] }) !== null;
+}
+
 /** The version to publish: never at or below npm's latest. */
 function resolvePublishVersion(pkg) {
   const published = npmPublishedVersion(pkg.name);
@@ -172,6 +177,50 @@ function pinPublishedDeps(pkg, publishedVersions, write) {
     pkg.manifest = manifest;
   }
   return changed;
+}
+
+// Dependency groups a clean `npm install <pkg>` must be able to satisfy.
+// `dependencies` and `peerDependencies` both break a consumer install when an
+// internal range can't resolve (npm 7+ installs peers and errors on a missing
+// one). `devDependencies` are not installed by consumers, and
+// `optionalDependencies` are tolerated when absent — checking either would only
+// produce false aborts, so both are intentionally excluded.
+const CONSUMER_DEP_GROUPS = ["dependencies", "peerDependencies"];
+
+/**
+ * Internal @tenonhq/dovetail-* deps a consumer must be able to install must be
+ * resolvable before we publish a package. A dep is OK if this run already
+ * published it, or if its current manifest range resolves from npm. Otherwise
+ * the package would publish successfully but fail for clean npm consumers with
+ * E404/ETARGET. `resolves` is injectable for testing; it defaults to a real
+ * `npm view` probe. Returns a de-duplicated list of "<name>@<range>" specs.
+ */
+function unresolvedInternalDeps(pkg, publishedVersions, resolves) {
+  const resolveSpec = resolves || npmSpecResolves;
+  const seen = {};
+  const unresolved = [];
+  for (let g = 0; g < CONSUMER_DEP_GROUPS.length; g++) {
+    const deps = pkg.manifest[CONSUMER_DEP_GROUPS[g]] || {};
+    const names = Object.keys(deps);
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      if (name.indexOf("@tenonhq/dovetail-") !== 0) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(publishedVersions, name)) {
+        continue;
+      }
+      const spec = name + "@" + deps[name];
+      if (Object.prototype.hasOwnProperty.call(seen, spec)) {
+        continue;
+      }
+      seen[spec] = true;
+      if (!resolveSpec(name, deps[name])) {
+        unresolved.push(spec);
+      }
+    }
+  }
+  return unresolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +509,25 @@ function main() {
     const reason = isDirect ? "changed" : "cascade";
     console.log("▶ " + pkg.name + "  source=" + pkg.version + "  ->  publish " + version + "  [" + reason + "]");
 
+    // Guard before publishing: a consumer-facing internal dep that can't be
+    // installed would ship a tarball clean npm projects can't resolve (the #156
+    // incident, where dovetail-claude-plans shipped a dep on a dovetail-mcp-kit
+    // version that never reached npm). Abort the whole run — like a publish
+    // failure below, continuing would ship dependents pinned to a version that
+    // never reached the registry. This check runs in dry-run too, so a preview
+    // surfaces the same stop a real run would hit. A transient npm error is
+    // treated as unresolved on purpose: aborting a run is recoverable (the next
+    // clean run heals via the version reconcile); shipping a broken tarball is
+    // not.
+    const unresolved = unresolvedInternalDeps(pkg, publishedVersions);
+    if (unresolved.length > 0) {
+      console.error(
+        "  cannot publish " + pkg.name + " — internal dependency not available from npm: " + unresolved.join(", ") + "\n",
+      );
+      failed.push(pkg.name);
+      break;
+    }
+
     if (args.dryRun) {
       published.push({ name: pkg.name, dirName: pkg.dirName, version: version, prevVersion: prevVersion });
       publishedVersions[pkg.name] = version;
@@ -524,9 +592,16 @@ function main() {
   return 0;
 }
 
-try {
-  process.exit(main());
-} catch (err) {
-  console.error("\nFATAL: " + (err && err.message ? err.message : err));
-  process.exit(1);
+// Pure helpers are exported for unit tests; the orchestrator only auto-runs
+// when invoked directly (not when required by a test), so requiring this file
+// defines functions without publishing anything.
+module.exports = { unresolvedInternalDeps: unresolvedInternalDeps, npmSpecResolves: npmSpecResolves };
+
+if (require.main === module) {
+  try {
+    process.exit(main());
+  } catch (err) {
+    console.error("\nFATAL: " + (err && err.message ? err.message : err));
+    process.exit(1);
+  }
 }
