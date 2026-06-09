@@ -762,6 +762,9 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: updatePromptDraftSchema.shape,
       handler: async function (args: any) {
         var parsed = updatePromptDraftSchema.parse(args);
+        if (parsed.title === undefined && parsed.content === undefined) {
+          throw new Error("update_prompt_draft requires at least one of title or content");
+        }
         return updatePromptDraft(
           { id: parsed.id, title: parsed.title, content: parsed.content },
           storageOpts

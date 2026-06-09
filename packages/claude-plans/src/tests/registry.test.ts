@@ -16,7 +16,7 @@ function descByName(deps: any, name: string) {
 
 describe("registry", function () {
   it("exposes exactly the v1+v2 tool set", function () {
-    expect(TOOL_NAMES.length).toBe(20); // v1=12 + lint(2) + Phase C (set_stage, pull_plan) + Phase D (dispatch_stage) + versions(3)
+    expect(TOOL_NAMES.length).toBe(25); // v1=12 + lint(2) + Phase C (set_stage, pull_plan) + Phase D (dispatch_stage) + versions(3) + prompt-drafts(5)
     var built = buildDescriptors({}).map(function (d) { return d.name; });
     expect(built.sort()).toEqual([...TOOL_NAMES].sort());
     expect((TOOL_NAMES as readonly string[]).indexOf("get_handoff_bundle")).toBeGreaterThan(-1);

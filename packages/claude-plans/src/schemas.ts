@@ -228,12 +228,11 @@ export var getPromptDraftSchema = z.object({
   id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>")
 });
 
-export var updatePromptDraftSchema = z
-  .object({
-    id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>"),
-    title: z.string().min(1).max(200).optional(),
-    content: draftContent.optional()
-  })
-  .refine(function (v) { return v.title !== undefined || v.content !== undefined; }, {
-    message: "update_prompt_draft requires at least one of title or content"
-  });
+// Plain object (not .refine()-wrapped) so registry.ts can read .shape for the
+// MCP input schema. The "at least one of title/content" rule is enforced in the
+// tool handler, which can return an actionable error.
+export var updatePromptDraftSchema = z.object({
+  id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>"),
+  title: z.string().min(1).max(200).optional(),
+  content: draftContent.optional()
+});
