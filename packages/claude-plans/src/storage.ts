@@ -1289,7 +1289,17 @@ function assertSafeDraftId(id: string): string {
 }
 
 function promptDraftPath(root: string, id: string): string {
-  return path.join(promptDraftsDir(root), assertSafeDraftId(id) + ".json");
+  // Two barriers, belt and suspenders: assertSafeDraftId() rejects anything that
+  // isn't pd_<8-hex> (traversal is already impossible), and a resolve +
+  // startsWith containment check confirms the path stays inside the drafts dir.
+  // The latter is the form static analysis (CodeQL js/path-injection) recognizes
+  // at the downstream fs sink, matching the dashboard's delete-route guard.
+  var dir = path.resolve(promptDraftsDir(root));
+  var resolved = path.resolve(dir, assertSafeDraftId(id) + ".json");
+  if (!resolved.startsWith(dir + path.sep)) {
+    throw new Error("invalid prompt-draft path: " + id);
+  }
+  return resolved;
 }
 
 // The active pointer is named with a leading underscore so it never collides
