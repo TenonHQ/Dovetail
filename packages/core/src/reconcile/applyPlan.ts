@@ -11,27 +11,28 @@
 //                              since baseline; refresh to keep them or --force.
 //   - Clean, or --force      -> apply.
 //
-// What applies, in Phase 2:
+// What applies:
+//   - CREATE  every branch-only record (created on the instance with the
+//             branch's own sys_id — the server honors it via setNewGuidValue).
 //   - UPDATE  every diff update (branch content overwrites the instance).
 //   - DELETE  only "tracked" instance-only records (the branch deleted them).
 //             "local-new" / "no-baseline" records are the dev's own creations —
 //             NEVER deleted, not even with --force (force discards edits to the
 //             branch's records, it does not reap records the branch never owned).
-//   - CREATE  deferred to Phase 3 — reported, never applied here.
 
 import { DirtyRecord, RecordChange, RecordDiff } from "./types";
 
 export interface ApplyPlan {
   refuse: boolean;
   refuseReason: string;
+  /** Branch-only records to create on the instance (with the branch's sys_id). */
+  creates: RecordChange[];
   /** Updates eligible to apply (branch -> instance). */
   updates: RecordChange[];
   /** Tracked instance-only deletes eligible to apply. */
   deletes: RecordChange[];
   /** Instance-only records kept (local-new / no-baseline) — reported, never deleted. */
   skippedDeletes: RecordChange[];
-  /** Creates deferred to Phase 3 — reported, never applied here. */
-  deferredCreates: RecordChange[];
 }
 
 export interface BuildApplyPlanOptions {
@@ -72,9 +73,9 @@ export function buildApplyPlan(options: BuildApplyPlanOptions): ApplyPlan {
   return {
     refuse,
     refuseReason,
+    creates: diff.creates.slice(),
     updates: diff.updates.slice(),
     deletes,
     skippedDeletes,
-    deferredCreates: diff.creates.slice(),
   };
 }
