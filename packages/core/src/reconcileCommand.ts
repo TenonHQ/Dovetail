@@ -1,15 +1,17 @@
 // `dove reconcile` — make a developer's personal ServiceNow instance match the
 // git branch they just checked out: the deliberate, diff-gated inverse of
-// `dove watch`. THIS BUILD IS PHASE 1: read-only. It snapshots the branch
-// (on-disk) and the live instance, classifies every tracked record into
-// create / update / delete, surfaces drift (the dev's own edits since
-// baseline), reports schema drift (report-only — a ServiceNow ceiling), and
-// prints a grouped, deep-linked dry-run report. It writes nothing.
+// `dove watch`.
 //
-// The apply phases (record UPDATE/DELETE in Phase 2, CREATE in Phase 3) land in
-// follow-up Draft PRs; an `--apply` / `CONFIRM=1` invocation is rejected here
-// with a clear "not in this build" notice so the surface is forward-compatible
-// without ever performing an unimplemented write.
+// Modes:
+//   (default)          read-only dry run — snapshot branch (on-disk) + live
+//                      instance, classify create/update/delete, surface drift,
+//                      report schema drift (report-only), print the report.
+//   --write-baseline   establish the per-instance merge-base from current live
+//                      state (no record changes). Run this once before --apply.
+//   --apply [--force]  apply the safe subset: record UPDATE (branch -> instance)
+//                      and tracked DELETE. Refuses if the instance drifted since
+//                      baseline (unless --force). CREATE is deferred to Phase 3;
+//                      schema stays report-only (a ServiceNow ceiling).
 
 import { Sinc, TSFIXME } from "@tenonhq/dovetail-types";
 import path from "path";
@@ -29,11 +31,23 @@ import { logger } from "./Logger";
 import { fileLogger } from "./FileLogger";
 import { setLogLevel } from "./commands";
 import * as ConfigManager from "./config";
+import { defaultClient } from "./snClient";
+import { getAppFileList, pushFiles } from "./appUtils";
 import { loadBranchRecords, loadLiveRecords } from "./reconcile/recordSource";
 import { diffRecords } from "./reconcile/recordDiff";
-import { readBaseline, baselineSysIds, computeDirty } from "./reconcile/baseline";
+import {
+  readBaseline,
+  baselineSysIds,
+  computeDirty,
+  writeBaseline,
+  baselineFromLive,
+  BASELINE_FILENAME,
+} from "./reconcile/baseline";
 import { formatReconcileReport, ReconcileScopeResult } from "./reconcile/report";
-import { ReconcileRecord } from "./reconcile/types";
+import { buildApplyPlan, ApplyPlan } from "./reconcile/applyPlan";
+import { runMultiPassDeletes, DeleteOutcome } from "./reconcile/deleteOrder";
+import { ensureGitignored } from "./reconcile/gitignore";
+import { DirtyRecord, ReconcileRecord, RecordChange, RecordDiff } from "./reconcile/types";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,6 +55,8 @@ interface ReconcileArgs {
   scope?: string;
   schema?: boolean;
   apply?: boolean;
+  force?: boolean;
+  writeBaseline?: boolean;
   logLevel: string;
 }
 
@@ -48,6 +64,13 @@ interface Creds {
   SN_USER: string;
   SN_PASSWORD: string;
   SN_INSTANCE: string;
+}
+
+interface ScopeData {
+  scope: string;
+  live: ReconcileRecord[];
+  diff: RecordDiff;
+  dirty: DirtyRecord[];
 }
 
 function requireCreds(): Creds {
@@ -88,11 +111,7 @@ function resolveScopes(args: ReconcileArgs): string[] {
 
 async function currentBranch(): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("git", [
-      "rev-parse",
-      "--abbrev-ref",
-      "HEAD",
-    ]);
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
     return stdout.trim();
   } catch (e) {
     return "";
@@ -100,7 +119,6 @@ async function currentBranch(): Promise<string> {
 }
 
 // Best-effort schema arm: only runs when a snapshot exists for this instance.
-// Returns a per-scope SchemaDiff map plus a skip reason when it could not run.
 async function buildSchemaDiffs(options: {
   creds: Creds;
   instance: string;
@@ -156,17 +174,137 @@ async function buildSchemaDiffs(options: {
   return { diffs, skipped: null };
 }
 
+// Collect the on-disk field file paths for the records an apply will UPDATE, so
+// the existing build + update-set push pipeline can overwrite the instance with
+// branch content.
+async function collectUpdateFilePaths(
+  scope: string,
+  updates: RecordChange[],
+): Promise<string[]> {
+  const sourcePath = ConfigManager.getSourcePathForScope(scope);
+  const paths: string[] = [];
+  for (const change of updates) {
+    const recordDir = path.join(sourcePath, change.table, change.name);
+    let entries: string[];
+    try {
+      entries = await fsp.readdir(recordDir);
+    } catch (e) {
+      fileLogger.debug("reconcile: update record dir missing " + recordDir);
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry === "metaData.json") {
+        continue;
+      }
+      const full = path.join(recordDir, entry);
+      try {
+        const stat = await fsp.stat(full);
+        if (stat.isFile()) {
+          paths.push(full);
+        }
+      } catch (e) {
+        // ignore unreadable entry
+      }
+    }
+  }
+  return paths;
+}
+
+async function applyUpdates(
+  scope: string,
+  updates: RecordChange[],
+): Promise<{ pushed: number; failures: string[] }> {
+  if (updates.length === 0) {
+    return { pushed: 0, failures: [] };
+  }
+  const paths = await collectUpdateFilePaths(scope, updates);
+  if (paths.length === 0) {
+    return { pushed: 0, failures: [] };
+  }
+  const recs = await getAppFileList(paths);
+  const results = await pushFiles(recs);
+  const failures: string[] = [];
+  let pushed = 0;
+  for (const result of results) {
+    if (result.success) {
+      pushed++;
+    } else {
+      failures.push(result.message);
+    }
+  }
+  return { pushed, failures };
+}
+
+async function applyDeletes(
+  scope: string,
+  deletes: RecordChange[],
+): Promise<DeleteOutcome[]> {
+  if (deletes.length === 0) {
+    return [];
+  }
+  const client = defaultClient();
+  return runMultiPassDeletes(deletes, async (change) => {
+    try {
+      const response = await client.deleteRecord({
+        table: change.table,
+        sys_id: change.sys_id,
+        scope,
+      });
+      let data = response.data as TSFIXME;
+      if (data && data.result) {
+        data = data.result;
+      }
+      if (data && (data.error || data.success === false)) {
+        return { ok: false, error: data.error || "delete rejected" };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+}
+
+// Capture current live state across every scope into a fresh baseline + ensure
+// the baseline file is gitignored in the consumer project.
+async function recaptureBaseline(options: {
+  rootDir: string;
+  instance: string;
+  scopes: string[];
+}): Promise<number> {
+  const all: ReconcileRecord[] = [];
+  for (const scope of options.scopes) {
+    try {
+      const live = await loadLiveRecords(scope);
+      for (const record of live) {
+        all.push(record);
+      }
+    } catch (e) {
+      logger.warn("Baseline capture failed for scope " + scope + " — skipped.");
+    }
+  }
+  writeBaseline(options.rootDir, baselineFromLive(options.instance, all));
+  const update = ensureGitignored(options.rootDir, BASELINE_FILENAME);
+  if (update.changed) {
+    logger.info("Added " + BASELINE_FILENAME + " to .gitignore.");
+  }
+  return all.length;
+}
+
+async function writeBaselineMode(options: {
+  rootDir: string;
+  instance: string;
+  scopes: string[];
+}): Promise<void> {
+  logger.info("Establishing reconcile baseline for " + options.instance + "...");
+  const count = await recaptureBaseline(options);
+  logger.success(
+    "Baseline established: " + count + " record(s) captured to " + BASELINE_FILENAME + ".",
+  );
+}
+
 export async function reconcileCommand(args: TSFIXME): Promise<void> {
   setLogLevel(args as Sinc.SharedCmdArgs);
   const typedArgs = args as ReconcileArgs;
-
-  if (typedArgs.apply || process.env.CONFIRM === "1") {
-    logger.warn(
-      "reconcile apply is not available in this build. This is Phase 1 " +
-        "(read-only diff + report); record UPDATE/DELETE (Phase 2) and CREATE " +
-        "(Phase 3) ship in follow-up releases. Showing the dry-run report only.",
-    );
-  }
 
   let creds: Creds;
   try {
@@ -180,8 +318,14 @@ export async function reconcileCommand(args: TSFIXME): Promise<void> {
   const instance = normalizeInstance(creds.SN_INSTANCE);
   const scopes = resolveScopes(typedArgs);
   const rootDir = ConfigManager.getRootDir();
-  const branchRef = await currentBranch();
 
+  // --write-baseline: establish the merge-base and stop.
+  if (typedArgs.writeBaseline) {
+    await writeBaselineMode({ rootDir, instance, scopes });
+    return;
+  }
+
+  const branchRef = await currentBranch();
   const baseline = readBaseline(rootDir, instance);
   const baselineIds = baselineSysIds(baseline);
 
@@ -196,9 +340,10 @@ export async function reconcileCommand(args: TSFIXME): Promise<void> {
     schemaSkippedReason = schemaResult.skipped;
   }
 
+  const scopeData: ScopeData[] = [];
   const scopeResults: ReconcileScopeResult[] = [];
   for (const scope of scopes) {
-    logger.info("Reconciling scope: " + scope + " (read-only)...");
+    logger.info("Reconciling scope: " + scope + "...");
     let branch: ReconcileRecord[];
     let live: ReconcileRecord[];
     try {
@@ -217,6 +362,7 @@ export async function reconcileCommand(args: TSFIXME): Promise<void> {
     const diff = diffRecords({ branch, live, baselineSysIds: baselineIds });
     const dirty = computeDirty({ baseline, live });
 
+    scopeData.push({ scope, live, diff, dirty });
     scopeResults.push({
       scope,
       diff,
@@ -232,7 +378,100 @@ export async function reconcileCommand(args: TSFIXME): Promise<void> {
     scopes: scopeResults,
     schemaSkippedReason,
   });
-
   // console.log so the report's own layout survives the winston line-wrapper.
   console.log(report);
+
+  if (!typedArgs.apply) {
+    return;
+  }
+
+  await applyMode({ typedArgs, scopeData, baseline: baseline !== null, rootDir, instance, scopes });
+}
+
+async function applyMode(options: {
+  typedArgs: ReconcileArgs;
+  scopeData: ScopeData[];
+  baseline: boolean;
+  rootDir: string;
+  instance: string;
+  scopes: string[];
+}): Promise<void> {
+  const { typedArgs, scopeData } = options;
+  const force = typedArgs.force === true;
+
+  const plans: { scope: string; plan: ApplyPlan }[] = scopeData.map((data) => ({
+    scope: data.scope,
+    plan: buildApplyPlan({
+      diff: data.diff,
+      dirty: data.dirty,
+      hasBaseline: options.baseline,
+      force,
+    }),
+  }));
+
+  const refused = plans.filter((entry) => entry.plan.refuse);
+  if (refused.length > 0) {
+    logger.error("Apply refused:");
+    for (const entry of refused) {
+      logger.error("  [" + entry.scope + "] " + entry.plan.refuseReason);
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  logger.info("");
+  logger.info("Applying reconcile (branch -> instance)...");
+
+  let totalUpdated = 0;
+  let totalDeleted = 0;
+  const failures: string[] = [];
+
+  for (const entry of plans) {
+    const { scope, plan } = entry;
+    if (plan.deferredCreates.length > 0) {
+      logger.info(
+        "  [" +
+          scope +
+          "] " +
+          plan.deferredCreates.length +
+          " create(s) deferred — CREATE ships in Phase 3.",
+      );
+    }
+
+    const updateResult = await applyUpdates(scope, plan.updates);
+    totalUpdated += updateResult.pushed;
+    for (const failure of updateResult.failures) {
+      failures.push("[" + scope + "] update: " + failure);
+    }
+
+    const deleteOutcomes = await applyDeletes(scope, plan.deletes);
+    for (const outcome of deleteOutcomes) {
+      if (outcome.ok) {
+        totalDeleted++;
+      } else {
+        failures.push(
+          "[" + scope + "] delete " + outcome.change.table + "/" + outcome.change.name + ": " + (outcome.error || "failed"),
+        );
+      }
+    }
+  }
+
+  // Re-capture the baseline from the now-converged instance.
+  await recaptureBaseline({
+    rootDir: options.rootDir,
+    instance: options.instance,
+    scopes: options.scopes,
+  });
+
+  logger.info("");
+  logger.success(
+    "Applied: " + totalUpdated + " updated, " + totalDeleted + " deleted.",
+  );
+  if (failures.length > 0) {
+    logger.error(failures.length + " operation(s) failed:");
+    for (const failure of failures) {
+      logger.error("  " + failure);
+    }
+    process.exitCode = 1;
+  }
 }

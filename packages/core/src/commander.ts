@@ -529,7 +529,7 @@ export async function initCommands() {
     )
     .command(
       "reconcile",
-      "Make your personal instance match the checked-out branch (Phase 1: read-only diff + report)",
+      "Make your personal instance match the checked-out branch (diff/report by default; --apply to apply UPDATE + DELETE)",
       (cmdArgs) => {
         cmdArgs.options({
           ...sharedOptions,
@@ -544,11 +544,23 @@ export async function initCommands() {
             describe:
               "Include schema drift (report-only). --no-schema to skip. Requires a `dove schema pull --snapshot`.",
           },
+          "write-baseline": {
+            type: "boolean",
+            default: false,
+            describe:
+              "Establish the per-instance baseline (merge-base) from current live state. Run once before --apply.",
+          },
           apply: {
             type: "boolean",
             default: false,
             describe:
-              "Reserved for the apply phase — not available in this build (read-only).",
+              "Apply the safe subset: record UPDATE (branch -> instance) + tracked DELETE. Refuses on drift unless --force. CREATE is Phase 3.",
+          },
+          force: {
+            type: "boolean",
+            default: false,
+            describe:
+              "With --apply: discard instance drift (edits to tracked records since baseline). Never deletes the dev's own local records.",
           },
         });
         return cmdArgs;
