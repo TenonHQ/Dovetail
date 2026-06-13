@@ -8,15 +8,18 @@
 //                      report schema drift (report-only), print the report.
 //   --write-baseline   establish the per-instance merge-base from current live
 //                      state (no record changes). Run this once before --apply.
-//   --apply [--force]  apply the safe subset: record UPDATE (branch -> instance)
-//                      and tracked DELETE. Refuses if the instance drifted since
-//                      baseline (unless --force). CREATE is deferred to Phase 3;
-//                      schema stays report-only (a ServiceNow ceiling).
+//   --apply [--force]  apply records branch -> instance: CREATE net-new (with
+//                      the branch's own sys_id, which the server honors),
+//                      UPDATE changed records, DELETE tracked instance-only
+//                      records. Refuses if the instance drifted since baseline
+//                      (unless --force). Schema stays report-only (a SN ceiling).
+//                      Updates for a scope with no configured update set are
+//                      skipped, not pushed — a raw PATCH would re-parent scope.
 
 import { Sinc, TSFIXME } from "@tenonhq/dovetail-types";
 import path from "path";
 import os from "os";
-import { promises as fsp } from "fs";
+import fs, { promises as fsp } from "fs";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import {
@@ -33,8 +36,10 @@ import { setLogLevel } from "./commands";
 import * as ConfigManager from "./config";
 import { defaultClient } from "./snClient";
 import { getAppFileList, pushFiles } from "./appUtils";
+import { getUpdateSetsConfigPath } from "./projectFiles";
 import { loadBranchRecords, loadLiveRecords } from "./reconcile/recordSource";
 import { diffRecords } from "./reconcile/recordDiff";
+import { isComparableField } from "./reconcile/fields";
 import {
   readBaseline,
   baselineSysIds,
@@ -45,9 +50,32 @@ import {
 } from "./reconcile/baseline";
 import { formatReconcileReport, ReconcileScopeResult } from "./reconcile/report";
 import { buildApplyPlan, ApplyPlan } from "./reconcile/applyPlan";
-import { runMultiPassDeletes, DeleteOutcome } from "./reconcile/deleteOrder";
+import { runMultiPassOps, OpOutcome } from "./reconcile/multiPass";
 import { ensureGitignored } from "./reconcile/gitignore";
 import { DirtyRecord, ReconcileRecord, RecordChange, RecordDiff } from "./reconcile/types";
+
+interface UpdateSetSelection {
+  sys_id: string;
+  name: string;
+}
+
+// Per-scope update-set routing, read from the same .dove-update-sets.json the
+// push pipeline uses. Missing/parse errors degrade to {} (treated as "no update
+// set configured"), never throw.
+function getUpdateSetConfig(): Record<string, UpdateSetSelection> {
+  try {
+    const configPath = getUpdateSetsConfigPath();
+    if (fs.existsSync(configPath)) {
+      const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, UpdateSetSelection>;
+      }
+    }
+  } catch (e) {
+    fileLogger.debug("reconcile: could not read update-set config");
+  }
+  return {};
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -238,12 +266,12 @@ async function applyUpdates(
 async function applyDeletes(
   scope: string,
   deletes: RecordChange[],
-): Promise<DeleteOutcome[]> {
+): Promise<OpOutcome[]> {
   if (deletes.length === 0) {
     return [];
   }
   const client = defaultClient();
-  return runMultiPassDeletes(deletes, async (change) => {
+  return runMultiPassOps(deletes, async (change) => {
     try {
       const response = await client.deleteRecord({
         table: change.table,
@@ -256,6 +284,126 @@ async function applyDeletes(
       }
       if (data && (data.error || data.success === false)) {
         return { ok: false, error: data.error || "delete rejected" };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+}
+
+// Reconstruct the full field set for a CREATE from the record's on-disk
+// representation: the metaData.json snapshot supplies every captured field
+// value, then the canonical field files (script.js, etc.) override their own
+// fields. Volatile bookkeeping and identity columns are excluded — sys_id is
+// passed separately (and honored by the server), sys_scope comes from `scope`.
+async function buildCreateFields(
+  scope: string,
+  change: RecordChange,
+): Promise<Record<string, string>> {
+  const sourcePath = ConfigManager.getSourcePathForScope(scope);
+  const recordDir = path.join(sourcePath, change.table, change.name);
+  const fields: Record<string, string> = {};
+
+  // 1. metaData snapshot — short/non-file fields (active, order, name, ...).
+  try {
+    const metaRaw = await fsp.readFile(path.join(recordDir, "metaData.json"), "utf8");
+    const meta = JSON.parse(metaRaw) as Record<string, unknown>;
+    for (const key of Object.keys(meta)) {
+      if (key.charAt(0) === "_" || key === "sys_id" || key === "sys_scope") {
+        continue;
+      }
+      if (key.indexOf("sys_") === 0) {
+        // sys_created_on/by, sys_updated_on/by, sys_mod_count, sys_class_name, ...
+        // Skipped: server-managed. (sys_class_name on a base table defaults fine.)
+        continue;
+      }
+      const value = meta[key];
+      if (typeof value === "string") {
+        fields[key] = value;
+      } else if (
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as Record<string, unknown>).value === "string"
+      ) {
+        fields[key] = (value as Record<string, string>).value;
+      }
+    }
+  } catch (e) {
+    fileLogger.debug("reconcile: no metaData for create " + recordDir);
+  }
+
+  // 2. Canonical field files override (the authoritative large-field content).
+  let entries: string[] = [];
+  try {
+    entries = await fsp.readdir(recordDir);
+  } catch (e) {
+    fileLogger.debug("reconcile: create record dir missing " + recordDir);
+  }
+  for (const entry of entries) {
+    if (entry === "metaData.json") {
+      continue;
+    }
+    const dot = entry.lastIndexOf(".");
+    if (dot <= 0) {
+      continue;
+    }
+    const name = entry.slice(0, dot);
+    const type = entry.slice(dot + 1);
+    if (!isComparableField({ name, type })) {
+      continue;
+    }
+    try {
+      const stat = await fsp.stat(path.join(recordDir, entry));
+      if (stat.isFile()) {
+        fields[name] = await fsp.readFile(path.join(recordDir, entry), "utf8");
+      }
+    } catch (e) {
+      // ignore unreadable entry
+    }
+  }
+
+  // Ensure a name is present (some tables require it).
+  if (!fields.name && change.name) {
+    fields.name = change.name;
+  }
+  return fields;
+}
+
+async function applyCreates(
+  scope: string,
+  creates: RecordChange[],
+  updateSetSysId: string | undefined,
+): Promise<OpOutcome[]> {
+  if (creates.length === 0) {
+    return [];
+  }
+  const client = defaultClient();
+  return runMultiPassOps(creates, async (change) => {
+    try {
+      const fields = await buildCreateFields(scope, change);
+      const response = await client.createRecord({
+        table: change.table,
+        fields,
+        sys_id: change.sys_id,
+        scope,
+        update_set_sys_id: updateSetSysId,
+      });
+      let data = response.data as TSFIXME;
+      if (data && data.result) {
+        data = data.result;
+      }
+      if (data && data.error) {
+        return { ok: false, error: data.error };
+      }
+      if (data && data.sys_id && data.sys_id !== change.sys_id) {
+        // The server reassigned the sys_id — identity would diverge and the
+        // diff would never converge. Surface it loudly rather than silently
+        // creating a phantom.
+        return {
+          ok: false,
+          error: "server reassigned sys_id (" + data.sys_id + " != " + change.sys_id + ")",
+        };
       }
       return { ok: true };
     } catch (e) {
@@ -422,28 +570,51 @@ async function applyMode(options: {
   logger.info("");
   logger.info("Applying reconcile (branch -> instance)...");
 
+  const updateSetConfig = getUpdateSetConfig();
+  let totalCreated = 0;
   let totalUpdated = 0;
   let totalDeleted = 0;
   const failures: string[] = [];
 
   for (const entry of plans) {
     const { scope, plan } = entry;
-    if (plan.deferredCreates.length > 0) {
-      logger.info(
-        "  [" +
+    const updateSet = updateSetConfig[scope];
+    const updateSetSysId = updateSet ? updateSet.sys_id : undefined;
+
+    // CREATE — scope-correct via the `scope` param; routed into the update set
+    // when one is configured.
+    const createOutcomes = await applyCreates(scope, plan.creates, updateSetSysId);
+    for (const outcome of createOutcomes) {
+      if (outcome.ok) {
+        totalCreated++;
+      } else {
+        failures.push(
+          "[" + scope + "] create " + outcome.change.table + "/" + outcome.change.name + ": " + (outcome.error || "failed"),
+        );
+      }
+    }
+
+    // UPDATE — guard against the re-parenting trap: pushFiles falls back to a
+    // raw PATCH (which adopts session scope) when no update set is configured.
+    // Refuse to push updates for such a scope rather than silently re-parent.
+    if (plan.updates.length > 0 && !updateSetSysId) {
+      failures.push(
+        "[" +
           scope +
           "] " +
-          plan.deferredCreates.length +
-          " create(s) deferred — CREATE ships in Phase 3.",
+          plan.updates.length +
+          " update(s) skipped — no update set configured for this scope. " +
+          "Set one (e.g. `dove switchUpdateSet`) before applying updates, to avoid re-parenting scope.",
       );
+    } else {
+      const updateResult = await applyUpdates(scope, plan.updates);
+      totalUpdated += updateResult.pushed;
+      for (const failure of updateResult.failures) {
+        failures.push("[" + scope + "] update: " + failure);
+      }
     }
 
-    const updateResult = await applyUpdates(scope, plan.updates);
-    totalUpdated += updateResult.pushed;
-    for (const failure of updateResult.failures) {
-      failures.push("[" + scope + "] update: " + failure);
-    }
-
+    // DELETE — tracked instance-only records.
     const deleteOutcomes = await applyDeletes(scope, plan.deletes);
     for (const outcome of deleteOutcomes) {
       if (outcome.ok) {
@@ -465,7 +636,13 @@ async function applyMode(options: {
 
   logger.info("");
   logger.success(
-    "Applied: " + totalUpdated + " updated, " + totalDeleted + " deleted.",
+    "Applied: " +
+      totalCreated +
+      " created, " +
+      totalUpdated +
+      " updated, " +
+      totalDeleted +
+      " deleted.",
   );
   if (failures.length > 0) {
     logger.error(failures.length + " operation(s) failed:");

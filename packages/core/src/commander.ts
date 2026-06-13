@@ -529,7 +529,7 @@ export async function initCommands() {
     )
     .command(
       "reconcile",
-      "Make your personal instance match the checked-out branch (diff/report by default; --apply to apply UPDATE + DELETE)",
+      "Make your personal instance match the checked-out branch (diff/report by default; --apply to apply CREATE + UPDATE + DELETE)",
       (cmdArgs) => {
         cmdArgs.options({
           ...sharedOptions,
@@ -554,7 +554,7 @@ export async function initCommands() {
             type: "boolean",
             default: false,
             describe:
-              "Apply the safe subset: record UPDATE (branch -> instance) + tracked DELETE. Refuses on drift unless --force. CREATE is Phase 3.",
+              "Apply records branch -> instance: CREATE + UPDATE + tracked DELETE. Refuses on drift unless --force.",
           },
           force: {
             type: "boolean",
