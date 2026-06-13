@@ -2,7 +2,7 @@
 
 ## Overview
 
-This plugin allows you to run the [ESLint](https://eslint.org/) checker on files.
+Runs [ESLint](https://eslint.org/) on files as part of the Dovetail build pipeline.
 
 ## Requirements
 
