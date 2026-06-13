@@ -4,7 +4,14 @@
  * live-validation caveat.
  */
 
-export { createTable, projectTableGraph, DEFAULT_SUPER_CLASS, DEFAULT_SAVE_ACTION } from "./createTable";
+export {
+  createTable,
+  projectTableGraph,
+  parseSysIdFromLocation,
+  DEFAULT_SUPER_CLASS,
+  DEFAULT_SAVE_ACTION,
+  DEFAULT_COLUMNS_REL_ID
+} from "./createTable";
 export type { CreateTableParams, CreateTableResult, TableGraph } from "./createTable";
 
 export { buildColumnXml, xmlEscape } from "./buildColumnXml";
@@ -24,6 +31,7 @@ export type { ColumnSpec, AccessFlags, OverlaySpec } from "./buildTableSave";
 export {
   resolveFormAuth,
   openFormSession,
+  setCurrentApplication,
   getNewRecordForm,
   parseFormInputs,
   postForm,

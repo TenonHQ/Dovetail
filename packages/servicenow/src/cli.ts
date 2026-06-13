@@ -738,7 +738,10 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
   if (us) params.updateSetSysId = us;
   var sa = flags["save-action"] || spec.saveActionSysId;
   if (sa) params.saveActionSysId = sa;
+  var relId = flags["columns-rel-id"] || spec.columnsRelId;
+  if (relId) params.columnsRelId = relId;
   if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
+  if (flags.debug === "true" || spec.debug === true) params.debug = true;
 
   var result = await createTable(params);
   if (flags.json === "true") {

@@ -118,6 +118,15 @@ export interface OverlaySpec {
   superClassLabel: string;
   scopeSysId: string;
   scopeLabel: string;
+  /**
+   * Scope sys_id to stamp the transaction with. A new table's scope is governed
+   * by the form transaction's scope, NOT the `sys_db_object.sys_scope` field — and
+   * a form-login session can't reliably switch its current application. Setting
+   * `sysparm_transaction_scope` / `sysparm_record_scope` explicitly is the same
+   * lever createFlow.ts uses to scope cross-scope writes. Without it the table,
+   * ACLs, and module land in the session user's default app. Normally === scopeSysId.
+   */
+  transactionScopeSysId: string;
   numberPrefix: string;
   userRoleSysId: string;
   userRoleLabel: string;
@@ -177,6 +186,17 @@ export function applyTableSaveOverlay(
   f["sys_db_object.sys_scope_label"] = o.scopeLabel;
   f["sys_display.sys_db_object.sys_scope"] = o.scopeLabel;
   f["sys_display.original.sys_db_object.sys_scope"] = o.scopeLabel;
+
+  // NOTE: do NOT set sysparm_transaction_scope / sysparm_record_scope here. Setting
+  // them on a cross-scope POST triggers ServiceNow's scope-switch interstitial, which
+  // bounces the save to welcome.do (nothing created). The session's current app —
+  // switched via setCurrentApplication() before the POST — is what scopes the table.
+  // transactionScopeSysId is retained on OverlaySpec for callers that genuinely need
+  // it, but the orchestrator leaves it empty.
+  if (o.transactionScopeSysId) {
+    f["sysparm_transaction_scope"] = o.transactionScopeSysId;
+    f["sysparm_record_scope"] = o.transactionScopeSysId;
+  }
 
   f["sys_db_object.number_ref.prefix"] = o.numberPrefix;
 

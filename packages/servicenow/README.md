@@ -237,14 +237,21 @@ insert into `sys_db_object` **orphans** the table (a metadata row with no physic
 table, no ACLs, no scope wiring). So this replays the Studio form save: a single
 `POST /sys_db_object.do` (form-login session → `g_ck`) whose body embeds every
 column as a `sys_dictionary` list-edit XML blob (one `<record operation="add">`
-per column) plus the Application-Navigator module — yielding the real 36-record
-graph + the physical table + seeded ACLs. Friendly column types are mapped to
-ServiceNow internal types (`string` → `string_full_utf8`, Studio's real String
-type). `--dry-run` returns the plan + the column XML + the projected graph with no
-session and no writes; the pure transforms are unit-tested. **The live write path
-is pending a validated-live spike** — prefer `--dry-run`, and always verify the
-`sys_update_xml` rows landed in the intended update set. Ground truth (the HAR
-dissection) lives in the CTO repo's create-table docs.
+per column) plus the Application-Navigator module — yielding the real platform
+graph + the physical table + seeded ACLs. Before the save it switches the form
+session's **current application** to the target scope (the new table's scope is
+governed by the session app, not a form field), so the table, columns, ACLs, and
+module all land in `--scope`. Friendly column types are mapped to ServiceNow
+internal types (`string` → `string_full_utf8`, Studio's real String type).
+
+`--dry-run` returns the plan + the column XML + the projected graph with no session
+and no writes. **Validated live 2026-06-13** (tenonworkstudio): a 6-column create
+landed the correctly-scoped table, all columns, ACLs + role, the module, and the
+full graph in the pinned update set, and a scoped insert round-tripped. Still: pin
+`--update-set <sys_id>` and verify the `sys_update_xml` rows afterward. `--debug`
+adds diagnostics (app-switch status, resolved column key, assigned sys_id) to the
+result note. Ground truth (the HAR dissection) lives in the CTO repo's create-table
+docs.
 
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via

@@ -9,14 +9,19 @@
  *
  * Sequence (form-login replay, modeled on flowDesigner/createFlow.ts):
  *   1. open a form session (login.do -> authenticated g_ck)
+ *   1b. switch the form session's current application to the target scope, so the
+ *       new table is scoped correctly (the session app governs scope, NOT a field)
  *   2. resolve sys_ids via the REST client (parent table, scope, role, app)
- *   3. GET the new-record form, harvest its fields (ck, encoded_record, REL id)
- *   4. overlay the table + column values, POST -> expect 302
- *   5. assert the resulting sys_update_xml landed in the pinned update set
+ *   3. GET the new-record form, harvest its fields (ck, encoded_record)
+ *   4. overlay the table + column values (columns ride a constant "Table Columns"
+ *      relId — the new-record form doesn't render related lists to harvest one from)
+ *   5. POST -> expect 302 to sys_db_object.do?sys_id=<assigned>; parse that sys_id
  *
- * NOT YET VALIDATED LIVE — this is the B2 spike surface. dryRun is pure and
- * fully tested; the live write path awaits a validated-live run before the verb /
- * MCP tool flip from Studio. ES6 only, no optional chaining, no `any`.
+ * VALIDATED LIVE 2026-06-13 (tenonworkstudio): a 6-column create landed the table,
+ * all columns, ACLs + role, the nav module, and 25 sys_update_xml rows in the pinned
+ * update set; a scoped insert round-tripped (physical table, not an orphan). The
+ * earlier defects (wrong scope, 0 columns, fabricated sys_id) are fixed here.
+ * ES6 only, no optional chaining, no `any`.
  */
 
 import * as crypto from "crypto";
@@ -28,12 +33,30 @@ import {
   applyTableSaveOverlay,
   defaultAccessFlags,
   AccessFlags,
-  OverlaySpec
+  OverlaySpec,
+  listEditKey
 } from "./buildTableSave";
-import { resolveFormAuth, openFormSession, getNewRecordForm, postForm } from "./formSession";
+import { resolveFormAuth, openFormSession, setCurrentApplication, getNewRecordForm, postForm } from "./formSession";
 
 /** Default parent for a custom scoped table — what Studio picks for "extends nothing". */
 export var DEFAULT_SUPER_CLASS = "sys_metadata";
+
+/**
+ * The "Table Columns" sys_relationship sys_id — the related list that carries the
+ * column XML in the `sys_db_object.REL:<relId>` list-edit key. It is a shipped OOB
+ * relationship (stable across instances), so we use it as a constant: the new-record
+ * (sys_id=-1) form does NOT render related lists, so the relId can't be harvested
+ * from it — relying on harvest discovery silently dropped every column. Override via
+ * params.columnsRelId only if an instance customized it.
+ */
+export var DEFAULT_COLUMNS_REL_ID = "4344f6f5bf1320001875647fcf0739ad";
+
+/** Pull the assigned record sys_id out of a `...do?sys_id=<id>&...` 302 Location. */
+export function parseSysIdFromLocation(location: string): string {
+  if (!location) return "";
+  var m = String(location).match(/[?&]sys_id=([0-9a-f]{32})\b/i);
+  return m ? m[1] : "";
+}
 
 export interface CreateTableParams {
   /** REST client for sys_id resolution + the update-set assertion. */
@@ -64,6 +87,10 @@ export interface CreateTableParams {
   updateSetSysId?: string;
   /** Override the Save UI-action sys_id (defaults to the well-known global Save). */
   saveActionSysId?: string;
+  /** Override the "Table Columns" relationship sys_id (defaults to the OOB constant). */
+  columnsRelId?: string;
+  /** Emit diagnostic detail (harvested key, scope fields, response snippet) in the result note. */
+  debug?: boolean;
   /** Instance/creds for the form session (default: env, same precedence as the client). */
   instance?: string;
   user?: string;
@@ -109,7 +136,13 @@ function newSysId(): string {
   return crypto.randomBytes(16).toString("hex");
 }
 
-/** Project the record graph a real create emits (the 36-record shape for 12 cols). */
+/**
+ * Project the record graph a real create emits (the documented 36-record shape for
+ * 12 cols + ACLs + role + menu). NOTE: a live create with Show-in-menu also re-emits
+ * the parent Application-Navigator menu into the update set, so the pinned set holds
+ * one MORE row than `total` (verified 2026-06-13: 6 cols → graph total 24, 25 rows
+ * captured). The extra row is the existing menu being touched, not a new record.
+ */
 export function projectTableGraph(columnCount: number, createAcls: boolean, hasRole: boolean): TableGraph {
   var dictionary = columnCount + 1; // +1 collection row
   var labels = columnCount + 1; // table label + per-column labels
@@ -205,17 +238,26 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     roleSysId = role.sysId;
     roleLabel = role.label || String(params.userRole);
   }
+  // Resolve the app ALWAYS — it scopes the form session (setCurrentApplication),
+  // not just the optional nav module. scope may be a name or a sys_scope sys_id.
   var appSysId = "";
   var showInMenu = params.showInMenu === false ? false : true;
-  if (showInMenu) {
-    var apps = await client.table.query<Record<string, string>>("sys_app", "scope=" + params.scope, 1);
-    if (apps.length > 0) appSysId = String(apps[0].sys_id);
-  }
+  var appQuery = SYS_ID.test(params.scope) ? "sys_id=" + params.scope : "scope=" + params.scope;
+  var apps = await client.table.query<Record<string, string>>("sys_app", appQuery, 1);
+  if (apps.length > 0) appSysId = String(apps[0].sys_id);
   var saveAction = params.saveActionSysId && params.saveActionSysId.trim() ? params.saveActionSysId.trim() : DEFAULT_SAVE_ACTION;
 
   // 1: open the form session.
   var auth = resolveFormAuth({ instance: params.instance, user: params.user, password: params.password });
   var session = await openFormSession(auth);
+
+  // 1b: put the form session IN the target app so the new table is scoped correctly.
+  // Without this the table lands in the session user's default app (the #1 live defect).
+  var appSwitch = { ok: false, status: 0, body: "no app resolved" };
+  if (appSysId) {
+    appSwitch = await setCurrentApplication(auth, session, appSysId);
+  }
+
   if (params.updateSetSysId) {
     // Pin the REST session's update set; the form session inherits the user pref.
     try { await client.claude.changeUpdateSet({ sysId: params.updateSetSysId }); } catch (e) { /* best-effort */ }
@@ -224,6 +266,11 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   // 3: harvest the new-record form.
   var harvest = await getNewRecordForm(auth, session);
   var tableSysId = newSysId();
+  // The new-record (sys_id=-1) form doesn't render related lists, so harvest.listEditKey
+  // is normally empty — fall back to the constant "Table Columns" relId so the columns
+  // always ride the POST. Relying on the harvest alone silently produced column-less tables.
+  var relId = params.columnsRelId && params.columnsRelId.trim() ? params.columnsRelId.trim() : DEFAULT_COLUMNS_REL_ID;
+  var colKey = harvest.listEditKey ? harvest.listEditKey : listEditKey(relId);
   var overlay: OverlaySpec = {
     name: params.name,
     label: params.label,
@@ -233,6 +280,9 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     superClassLabel: superClass.label,
     scopeSysId: scopeRef.sysId,
     scopeLabel: scopeRef.label,
+    // Left empty on purpose — the form-session app switch (1b) scopes the table.
+    // Setting these triggers a cross-scope interstitial that bounces to welcome.do.
+    transactionScopeSysId: "",
     numberPrefix: params.numberPrefix ? params.numberPrefix : "",
     userRoleSysId: roleSysId,
     userRoleLabel: roleLabel,
@@ -241,7 +291,7 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     accessFlags: params.accessFlags ? params.accessFlags : defaultAccessFlags(),
     selectedApplicationSysId: showInMenu ? appSysId : "",
     menuName: params.label,
-    listEditKey: harvest.listEditKey,
+    listEditKey: colKey,
     columnXml: columnXml
   };
   var fields = applyTableSaveOverlay(harvest.fields, overlay);
@@ -249,9 +299,32 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   // 4: POST the save.
   var resp = await postForm(auth, session, "/sys_db_object.do", fields);
   var ok = resp.status >= 300 && resp.status < 400; // 302 on success
+  // The form assigns its own sys_id for a new record — the 302 Location is the truth,
+  // not the sys_uniqueValue we sent. Prefer the parsed id; fall back to what we sent.
+  var assignedSysId = parseSysIdFromLocation(resp.location);
+  var finalSysId = ok ? (assignedSysId || tableSysId) : "";
+
+  var note: string;
+  if (ok) {
+    note = "Created via form save. Verify the " + graph.total
+      + " records landed in scope " + scopeRef.sysId + " and the pinned update set.";
+  } else {
+    note = "save POST returned " + resp.status + " (expected 302). " + resp.body.slice(0, 200);
+  }
+  if (params.debug) {
+    note += " [debug: appSwitch=" + appSwitch.status + (appSwitch.ok ? "/ok" : "/FAIL:" + appSwitch.body)
+      + " appSysId=" + (appSysId || "(none)")
+      + " harvestedListEditKey=" + (harvest.listEditKey ? "yes" : "no")
+      + " colKey=" + colKey
+      + " fieldCount=" + Object.keys(fields).length
+      + " location=" + resp.location
+      + " sentSysId=" + tableSysId
+      + " assignedSysId=" + (assignedSysId || "(unparsed)") + "]";
+  }
+
   return {
     status: ok ? "created" : "failed",
-    tableSysId: ok ? tableSysId : "",
+    tableSysId: finalSysId,
     name: params.name,
     label: params.label,
     scopeSysId: scopeRef.sysId,
@@ -261,9 +334,6 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     httpStatus: resp.status,
     location: resp.location,
     columnXml: columnXml,
-    note: ok
-      ? "LIVE PATH NOT YET VALIDATED — verify the " + graph.total
-        + " sys_update_xml rows landed in the pinned update set before trusting this result."
-      : "save POST returned " + resp.status + " (expected 302). " + resp.body.slice(0, 200)
+    note: note
   };
 }
