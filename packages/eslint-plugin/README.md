@@ -15,7 +15,7 @@ This plugin allows you to run the [ESLint](https://eslint.org/) checker on files
 npm i -D @tenonhq/dovetail-eslint-plugin
 ```
 
-### Order of Configurations
+### Configuration Order
 
 1. Load from `dove.config.js` options.
 2. Check for `.eslintrc` file or generate one.
