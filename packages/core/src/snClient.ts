@@ -642,8 +642,8 @@ export const snClient = (
           "Refusing to insert sys_db_object via createRecord: a bare insert " +
             "orphans the table (no physical table or ACLs are created). " +
             "Create tables via the dove-sn create-table capability (in build), " +
-            "or in Studio then run `dove refresh -s <scope>`. " +
-            "See docs/servicenow-create-table-lifecycle.md.",
+            "or in Studio then run `dove refresh -s <scope>` to materialise " +
+            "the new records locally.",
         ),
       );
     }
