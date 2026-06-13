@@ -1332,7 +1332,19 @@ export function createPromptDraft(
 ): PromptDraft {
   var root = storageRoot(options);
   var id = "pd_" + crypto.randomBytes(4).toString("hex");
+  // Strictly-monotonic created_at. listPromptDrafts is "oldest-first by
+  // created_at, tiebroken by id" — but ids are random, so two drafts created in
+  // the same millisecond sorted in random order (a flaky-test + wrong-UI-order
+  // bug). Bump created_at past the newest existing draft so creation order is
+  // always preserved and the random-id tiebreak never decides ordering.
   var now = nowIso();
+  var existing = listPromptDrafts(options);
+  for (var e = 0; e < existing.length; e += 1) {
+    var prior = existing[e].created_at || "";
+    if (now.localeCompare(prior) <= 0) {
+      now = new Date(new Date(prior).getTime() + 1).toISOString();
+    }
+  }
   var draft: PromptDraft = {
     id: id,
     title: (input.title && input.title.trim()) || "Untitled prompt",
