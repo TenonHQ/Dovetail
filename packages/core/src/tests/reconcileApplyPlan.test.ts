@@ -64,7 +64,7 @@ describe("buildApplyPlan — refusal gating", () => {
 });
 
 describe("buildApplyPlan — what applies", () => {
-  it("includes updates and defers creates", () => {
+  it("includes updates and creates", () => {
     const plan = buildApplyPlan({
       diff: diff({
         updates: [change({ sys_id: "u", kind: "update" })],
@@ -75,7 +75,7 @@ describe("buildApplyPlan — what applies", () => {
       force: false,
     });
     expect(plan.updates.map((u) => u.sys_id)).toEqual(["u"]);
-    expect(plan.deferredCreates.map((c) => c.sys_id)).toEqual(["c"]);
+    expect(plan.creates.map((c) => c.sys_id)).toEqual(["c"]);
   });
 
   it("applies only tracked deletes; keeps local-new and no-baseline", () => {
