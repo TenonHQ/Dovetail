@@ -6,12 +6,11 @@ name: Publish packages
 # changed in the merge -> commit the version bumps back to main -> tag + cut a
 # GitHub Release. Orchestration lives in Scripts/publish-on-merge.js.
 #
-# Branch protection on main requires a PR + review for all pushes. GITHUB_TOKEN
-# has `administration: write` so it can delete and restore the protection rule
-# around the postpublish version-bump push. The protection is always restored via
-# an `if: always()` step. The release commit is tagged [skip ci] and the job's
-# if-guard matches 'chore(release):' as a second fence so the postpublish push
-# never re-triggers this workflow.
+# Branch protection on main is enforced by a Repository Ruleset that grants
+# GitHub Actions (GITHUB_TOKEN) bypass permission for direct pushes, while still
+# requiring a PR + review for all human-authored changes. The release commit is
+# tagged [skip ci] and the job's if-guard matches 'chore(release):' as a second
+# fence so the postpublish push never re-triggers this workflow.
 
 on:
   push:
@@ -41,9 +40,8 @@ jobs:
     # tag in the commit message already prevents the trigger.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     permissions:
-      contents: write      # push the release commit, create tags + Releases
-      id-token: write      # OIDC token for npm Trusted Publishing
-      administration: write # temporarily disable/restore branch protection for the release push
+      contents: write # push the release commit, create tags + Releases
+      id-token: write # OIDC token for npm Trusted Publishing
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -79,16 +77,6 @@ jobs:
           node --test Scripts/normalize-internal-deps.test.js
           node Scripts/normalize-internal-deps.js --check
 
-      # Temporarily remove branch protection so the postpublish version-bump
-      # commit can be pushed directly to main by GITHUB_TOKEN. Protection is
-      # always restored in the next step regardless of outcome.
-      - name: Disable branch protection for release push
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api -X DELETE repos/TenonHQ/Dovetail/branches/main/protection
-          echo "Branch protection disabled for postpublish push."
-
       - name: Publish changed packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -105,27 +93,3 @@ jobs:
           args=(--base="$base" --head="${{ github.sha }}")
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           node Scripts/publish-on-merge.js "${args[@]}"
-
-      # Always re-apply branch protection even when the publish step fails,
-      # so the repo is never left in an unprotected state.
-      - name: Restore branch protection
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api -X PUT repos/TenonHQ/Dovetail/branches/main/protection \
-            --header 'Accept: application/vnd.github+json' \
-            --input - << 'PROTECTION_EOF'
-          {
-            "required_status_checks": null,
-            "enforce_admins": false,
-            "required_pull_request_reviews": {
-              "dismiss_stale_reviews": true,
-              "require_code_owner_reviews": false,
-              "require_last_push_approval": false,
-              "required_approving_review_count": 1
-            },
-            "restrictions": null
-          }
-          PROTECTION_EOF
-          echo "Branch protection restored."
