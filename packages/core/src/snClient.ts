@@ -632,6 +632,21 @@ export const snClient = (
         error?: string;
       };
     };
+    // Guard: a bare record insert into sys_db_object creates only an orphaned
+    // metadata row — no physical table and no ACLs. Table creation is a
+    // privileged platform operation that must run through the proper lifecycle,
+    // never a generic createRecord call.
+    if (params && params.table === "sys_db_object") {
+      return Promise.reject(
+        new Error(
+          "Refusing to insert sys_db_object via createRecord: a bare insert " +
+            "orphans the table (no physical table or ACLs are created). " +
+            "Create tables via the dove-sn create-table capability (in build), " +
+            "or in Studio then run `dove refresh -s <scope>`. " +
+            "See docs/servicenow-create-table-lifecycle.md.",
+        ),
+      );
+    }
     return _callDovetailApi<CreateRecordResponse>("createRecord", (endpoint) =>
       client.post<CreateRecordResponse>(endpoint, params),
     );
