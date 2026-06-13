@@ -23,6 +23,7 @@
  */
 
 import * as fs from "fs";
+import * as path from "path";
 import { loadEnvFile } from "./loadEnv";
 import { createClient } from "./client";
 import { addChoicesToField } from "./choices";
@@ -43,6 +44,8 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
+import { createTable } from "./table";
+import type { ColumnSpec, CreateTableParams } from "./table";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
@@ -659,6 +662,11 @@ function printHelp(): void {
     "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
     "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
     "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
+    "  create-table       Create a NEW table (sys_db_object) WITH columns, via the Studio form save\n" +
+    "                     (--name <x_scope_t> --label <l> --scope <s>\n" +
+    "                      --columns \"Label:type:max, ...\"  OR  --from-json <spec.json>\n" +
+    "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
+    "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
     "  test-flow          Validate (default) or run a flow/subflow\n" +
     "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
     "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
@@ -668,6 +676,83 @@ function printHelp(): void {
     "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
     "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n"
   );
+}
+
+/** Parse inline `--columns "Label:type:max, Other:choice, ..."` into ColumnSpec[]. */
+function parseColumnsInline(input: string): Array<ColumnSpec> {
+  var out: Array<ColumnSpec> = [];
+  if (!input) return out;
+  var parts = input.split(",");
+  for (var i = 0; i < parts.length; i += 1) {
+    var piece = parts[i].trim();
+    if (!piece) continue;
+    var seg = piece.split(":");
+    var label = (seg[0] || "").trim();
+    var type = (seg[1] || "string").trim();
+    var max = (seg[2] || "").trim();
+    if (!label) continue;
+    var col: ColumnSpec = { label: label, type: type };
+    if (max) col.max_length = max;
+    out.push(col);
+  }
+  return out;
+}
+
+/**
+ * dove-sn create-table:
+ *   --name x_cadso_core_error --label Error --scope x_cadso_core
+ *   --columns "Key:string:255, Severity:choice:50, Occurence Count:integer:5"
+ *   [--extends sys_metadata] [--number-prefix ERR] [--user-role x_cadso_core.user]
+ *   [--no-acls] [--no-menu] [--update-set <sys_id>] [--save-action <sys_id>]
+ *   [--from-json <spec.json>] [--dry-run] [--json]
+ */
+async function runCreateTable(flags: Record<string, string>): Promise<number> {
+  var spec: Partial<CreateTableParams> = {};
+  if (flags["from-json"]) {
+    spec = JSON.parse(fs.readFileSync(path.resolve(flags["from-json"]), "utf8")) as Partial<CreateTableParams>;
+  }
+  var name = flags.name || spec.name;
+  var label = flags.label || spec.label;
+  var scope = flags.scope || spec.scope;
+  var columns: Array<ColumnSpec> = flags.columns ? parseColumnsInline(flags.columns) : (spec.columns || []);
+  if (!name || !label || !scope || columns.length === 0) {
+    process.stderr.write("create-table: --name, --label, --scope and --columns (or --from-json) are required\n");
+    return 1;
+  }
+  var params: CreateTableParams = {
+    client: createClient({}),
+    name: name,
+    label: label,
+    scope: scope,
+    columns: columns
+  };
+  var ext = flags.extends || spec.extendsTable;
+  if (ext) params.extendsTable = ext;
+  var prefix = flags["number-prefix"] || spec.numberPrefix;
+  if (prefix) params.numberPrefix = prefix;
+  var role = flags["user-role"] || spec.userRole;
+  if (role) params.userRole = role;
+  if (flags["no-acls"] === "true" || spec.createAccessControls === false) params.createAccessControls = false;
+  if (flags["no-menu"] === "true" || spec.showInMenu === false) params.showInMenu = false;
+  var us = flags["update-set"] || spec.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  var sa = flags["save-action"] || spec.saveActionSysId;
+  if (sa) params.saveActionSysId = sa;
+  if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
+
+  var result = await createTable(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] " + result.name + " (" + result.label + ") scope=" + result.scopeSysId
+        + " — " + result.columns + " columns, projected graph " + result.graph.total + " records"
+        + (result.tableSysId ? " — sys_id " + result.tableSysId : "")
+        + "\n" + result.note + "\n"
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
 }
 
 async function main(): Promise<number> {
@@ -697,6 +782,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-flow") {
     return await runCreateFlow(parsed.flags);
+  }
+  if (parsed.command === "create-table") {
+    return await runCreateTable(parsed.flags);
   }
   if (parsed.command === "test-flow") {
     return await runTestFlow(parsed.flags);

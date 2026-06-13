@@ -110,3 +110,25 @@ export type {
   SetListLayoutParams,
   SetRelatedListsParams
 } from "./types";
+
+export {
+  createTable,
+  projectTableGraph,
+  buildColumnXml,
+  normalizeColumns,
+  resolveType,
+  applyTableSaveOverlay,
+  defaultAccessFlags,
+  TYPE_MAP,
+  DEFAULT_SUPER_CLASS,
+  DEFAULT_SAVE_ACTION
+} from "./table";
+export type {
+  CreateTableParams,
+  CreateTableResult,
+  TableGraph,
+  NormalizedColumn,
+  ColumnSpec,
+  AccessFlags,
+  OverlaySpec
+} from "./table";

@@ -34,6 +34,7 @@ import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
+import { createTable } from "../table";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -46,7 +47,8 @@ import {
   copyFlowSchema,
   createFlowSchema,
   testFlowSchema,
-  editFlowSchema
+  editFlowSchema,
+  createTableSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -61,7 +63,8 @@ export var TOOL_NAMES = [
   "flow_copy",
   "flow_create",
   "flow_test",
-  "flow_edit"
+  "flow_edit",
+  "create_table"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -277,6 +280,41 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
           apply: p.apply,
           scopeSysId: p.scopeSysId,
           updateSetSysId: p.updateSetSysId
+        });
+      }
+    },
+    {
+      name: "create_table",
+      annotations: WRITE_CREATE,
+      description:
+        "Create a NEW ServiceNow table (sys_db_object) WITH its columns, headless and faithfully. "
+        + "A table create is a privileged platform op — a REST/createRecord insert ORPHANS the table "
+        + "(metadata row, no physical table, no ACLs). This replays the Studio form save "
+        + "(POST /sys_db_object.do) so the real 36-record graph + the physical table + seeded ACLs "
+        + "are created. name (x_scope_*), label, scope, and columns[] are required; extendsTable "
+        + "defaults to sys_metadata; friendly column types are mapped to internal types "
+        + "(string -> string_full_utf8). dryRun:true returns the plan + the column XML + the projected "
+        + "graph with no session and no writes. NOTE: the live write path is pending a validated-live "
+        + "spike — prefer dryRun until confirmed, and always verify the sys_update_xml landed in the "
+        + "intended update set.",
+      shape: createTableSchema.shape,
+      handler: async function (args: any) {
+        var p = createTableSchema.parse(args);
+        return createTable({
+          client: client(),
+          name: p.name,
+          label: p.label,
+          scope: p.scope,
+          columns: p.columns,
+          extendsTable: p.extendsTable,
+          numberPrefix: p.numberPrefix,
+          userRole: p.userRole,
+          createAccessControls: p.createAccessControls,
+          access: p.access,
+          showInMenu: p.showInMenu,
+          updateSetSysId: p.updateSetSysId,
+          saveActionSysId: p.saveActionSysId,
+          dryRun: p.dryRun
         });
       }
     }
