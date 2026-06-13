@@ -6,8 +6,11 @@ name: Publish packages
 # changed in the merge -> commit the version bumps back to main -> tag + cut a
 # GitHub Release. Orchestration lives in Scripts/publish-on-merge.js.
 #
-# The release commit is tagged [skip ci] and pushed with GITHUB_TOKEN, so it
-# never re-triggers this workflow.
+# The release commit is tagged [skip ci] (and matched by the job's if-guard) so
+# it never re-triggers this workflow. Branch protection blocks direct pushes to
+# main, so the version-bump commit is delivered via a self-approved squash PR
+# that auto-merges. The PR title carries [skip ci]; the squash commit subject
+# inherits it, preventing the merge from re-triggering this workflow.
 
 on:
   push:
