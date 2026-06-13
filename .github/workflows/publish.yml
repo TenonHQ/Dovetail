@@ -40,8 +40,9 @@ jobs:
     # tag in the commit message already prevents the trigger.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     permissions:
-      contents: write # push the release commit, create tags + Releases
-      id-token: write # OIDC token for npm Trusted Publishing
+      contents: write       # push the release commit, create tags + Releases
+      id-token: write       # OIDC token for npm Trusted Publishing
+      pull-requests: write  # create + approve + merge the postpublish version-bump PR
     steps:
       - name: Checkout
         uses: actions/checkout@v5
