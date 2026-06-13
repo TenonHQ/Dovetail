@@ -16,7 +16,7 @@
   "license": "GPL-3.0",
   "dependencies": {
     "@googleapis/gmail": "^5.0.0",
-    "sanitize-html": "^2.17.2"
+    "sanitize-html": "^2.17.4"
   },
   "peerDependencies": {
     "@tenonhq/dovetail-google-auth": "~0.0.12"
