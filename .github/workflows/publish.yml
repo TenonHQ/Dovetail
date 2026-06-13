@@ -6,11 +6,13 @@ name: Publish packages
 # changed in the merge -> commit the version bumps back to main -> tag + cut a
 # GitHub Release. Orchestration lives in Scripts/publish-on-merge.js.
 #
-# Branch protection on main is enforced by a Repository Ruleset that grants
-# GitHub Actions (GITHUB_TOKEN) bypass permission for direct pushes, while still
-# requiring a PR + review for all human-authored changes. The release commit is
-# tagged [skip ci] and the job's if-guard matches 'chore(release):' as a second
-# fence so the postpublish push never re-triggers this workflow.
+# Branch protection on main is enforced by a Repository Ruleset that requires a
+# PR + review for human-authored changes. The postpublish version-bump commit
+# bypasses the ruleset via a deploy key (RELEASE_SSH_KEY secret) — an SSH
+# keypair that is repo-scoped, not tied to any individual, and listed as a
+# DeployKey bypass actor in the ruleset. The release commit is tagged [skip ci]
+# and the job's if-guard matches 'chore(release):' as a second fence so the
+# postpublish push never re-triggers this workflow.
 
 on:
   push:
@@ -76,6 +78,29 @@ jobs:
         run: |
           node --test Scripts/normalize-internal-deps.test.js
           node Scripts/normalize-internal-deps.js --check
+
+      # The postpublish version-bump commit pushes directly to main, bypassing
+      # the Repository Ruleset as a registered deploy key. The key is stored as
+      # the RELEASE_SSH_KEY repo secret and added as a DeployKey bypass actor.
+      - name: Wire release key for branch push
+        env:
+          RELEASE_SSH_KEY: ${{ secrets.RELEASE_SSH_KEY }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run — skipping release key wire"
+            exit 0
+          fi
+          if [ -z "$RELEASE_SSH_KEY" ]; then
+            echo "::error::RELEASE_SSH_KEY secret is not configured — add the deploy key private key; see Scripts/PUBLISHING.md"
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          printf '%s\n' "$RELEASE_SSH_KEY" > /tmp/release_key
+          chmod 600 /tmp/release_key
+          echo "GIT_SSH_COMMAND=ssh -i /tmp/release_key" >> "$GITHUB_ENV"
+          git remote set-url origin git@github.com:TenonHQ/Dovetail.git
 
       - name: Publish changed packages
         env:
