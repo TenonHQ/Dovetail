@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-eslint-plugin@0.0.12",
+  "package": "@tenonhq/dovetail-eslint-plugin",
+  "version": "0.0.12",
+  "prev_version": "0.0.11",
+  "published_at": "2026-06-13T22:59:03.709Z",
+  "git": {
+    "sha": "71c69473c21daad0dba3a030762808a9f8741bba",
+    "tag": "dovetail-eslint-plugin@0.0.12"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "71c69473c",
+      "subject": "docs(eslint-plugin): add requirements section to README (#170)",
+      "pr": 170
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
