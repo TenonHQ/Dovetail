@@ -6,12 +6,12 @@ name: Publish packages
 # changed in the merge -> commit the version bumps back to main -> tag + cut a
 # GitHub Release. Orchestration lives in Scripts/publish-on-merge.js.
 #
-# Branch protection on main requires a PR + review for most actors, but the
-# "Wire release token" step below rewires the git remote to use RELEASE_GITHUB_TOKEN
-# (a fine-grained admin PAT stored as a repo secret). Admin accounts bypass
-# branch protection when enforce_admins is false. The release commit is tagged
-# [skip ci] and the job's if-guard matches 'chore(release):' as a second fence
-# so the postpublish push never re-triggers this workflow.
+# Branch protection on main requires a PR + review for all pushes. GITHUB_TOKEN
+# has `administration: write` so it can delete and restore the protection rule
+# around the postpublish version-bump push. The protection is always restored via
+# an `if: always()` step. The release commit is tagged [skip ci] and the job's
+# if-guard matches 'chore(release):' as a second fence so the postpublish push
+# never re-triggers this workflow.
 
 on:
   push:
@@ -41,8 +41,9 @@ jobs:
     # tag in the commit message already prevents the trigger.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     permissions:
-      contents: write # push the release commit, create tags + Releases
-      id-token: write # OIDC token for npm Trusted Publishing
+      contents: write      # push the release commit, create tags + Releases
+      id-token: write      # OIDC token for npm Trusted Publishing
+      administration: write # temporarily disable/restore branch protection for the release push
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -78,21 +79,15 @@ jobs:
           node --test Scripts/normalize-internal-deps.test.js
           node Scripts/normalize-internal-deps.js --check
 
-      # Rewire the git remote to use the admin PAT so the postpublish version-bump
-      # commit can be pushed directly to main, bypassing branch protection.
-      # RELEASE_GITHUB_TOKEN must be a fine-grained PAT from a repo admin with
-      # contents:write on TenonHQ/Dovetail. GITHUB_TOKEN cannot push to main
-      # because it is not in the branch protection bypass list.
-      - name: Wire release token for branch push
+      # Temporarily remove branch protection so the postpublish version-bump
+      # commit can be pushed directly to main by GITHUB_TOKEN. Protection is
+      # always restored in the next step regardless of outcome.
+      - name: Disable branch protection for release push
         env:
-          RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -z "$RELEASE_GITHUB_TOKEN" ]; then
-            echo "::error::RELEASE_GITHUB_TOKEN is not set. Create a fine-grained admin PAT (contents:write on TenonHQ/Dovetail) and store it as the RELEASE_GITHUB_TOKEN repo secret."
-            exit 1
-          fi
-          git remote set-url origin \
-            "https://x-access-token:${RELEASE_GITHUB_TOKEN}@github.com/TenonHQ/Dovetail.git"
+          gh api -X DELETE repos/TenonHQ/Dovetail/branches/main/protection
+          echo "Branch protection disabled for postpublish push."
 
       - name: Publish changed packages
         env:
@@ -110,3 +105,27 @@ jobs:
           args=(--base="$base" --head="${{ github.sha }}")
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           node Scripts/publish-on-merge.js "${args[@]}"
+
+      # Always re-apply branch protection even when the publish step fails,
+      # so the repo is never left in an unprotected state.
+      - name: Restore branch protection
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X PUT repos/TenonHQ/Dovetail/branches/main/protection \
+            --header 'Accept: application/vnd.github+json' \
+            --input - << 'PROTECTION_EOF'
+          {
+            "required_status_checks": null,
+            "enforce_admins": false,
+            "required_pull_request_reviews": {
+              "dismiss_stale_reviews": true,
+              "require_code_owner_reviews": false,
+              "require_last_push_approval": false,
+              "required_approving_review_count": 1
+            },
+            "restrictions": null
+          }
+          PROTECTION_EOF
+          echo "Branch protection restored."
