@@ -221,6 +221,31 @@ live). The
 POST silently no-ops (stays draft). Sequence reverse-engineered from Workflow
 Studio HARs and validated live (2026-06-02, tenonworkstudio). Exit `0` published
 or dry-run; `2` created-but-not-published.
+### Create a table (with columns)
+
+```bash
+npx dove-sn create-table \
+  --name x_cadso_core_error --label Error --scope x_cadso_core \
+  --columns "Key:string:255, Severity:choice:50, First Seen On:datetime, Occurence Count:integer:5" \
+  --number-prefix ERR --user-role x_cadso_core.user --update-set <sys_id> --dry-run --json
+npx dove-sn create-table --from-json ./table.json   # full spec from a file
+```
+
+`create-table` mints a **brand-new** table (`sys_db_object`) **with its columns**.
+A table create is a privileged platform op — a REST / Dovetail `createRecord`
+insert into `sys_db_object` **orphans** the table (a metadata row with no physical
+table, no ACLs, no scope wiring). So this replays the Studio form save: a single
+`POST /sys_db_object.do` (form-login session → `g_ck`) whose body embeds every
+column as a `sys_dictionary` list-edit XML blob (one `<record operation="add">`
+per column) plus the Application-Navigator module — yielding the real 36-record
+graph + the physical table + seeded ACLs. Friendly column types are mapped to
+ServiceNow internal types (`string` → `string_full_utf8`, Studio's real String
+type). `--dry-run` returns the plan + the column XML + the projected graph with no
+session and no writes; the pure transforms are unit-tested. **The live write path
+is pending a validated-live spike** — prefer `--dry-run`, and always verify the
+`sys_update_xml` rows landed in the intended update set. Ground truth (the HAR
+dissection) lives in the CTO repo's create-table docs.
+
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).

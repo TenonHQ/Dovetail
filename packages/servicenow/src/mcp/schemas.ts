@@ -126,3 +126,27 @@ export var editFlowSchema = z.object({
   scopeSysId: z.string().optional(),
   updateSetSysId: z.string().optional()
 });
+
+export var columnSpecSchema = z.object({
+  label: z.string().min(1),
+  type: z.string().min(1),
+  name: z.string().optional(),
+  max_length: z.union([z.string(), z.number()]).optional(),
+  reference: z.string().optional()
+});
+
+export var createTableSchema = z.object({
+  name: z.string().min(1),
+  label: z.string().min(1),
+  scope: z.string().min(1),
+  columns: z.array(columnSpecSchema).min(1),
+  extendsTable: z.string().optional(),
+  numberPrefix: z.string().optional(),
+  userRole: z.string().optional(),
+  createAccessControls: z.boolean().optional(),
+  access: z.string().optional(),
+  showInMenu: z.boolean().optional(),
+  updateSetSysId: z.string().optional(),
+  saveActionSysId: z.string().optional(),
+  dryRun: z.boolean().optional()
+});
