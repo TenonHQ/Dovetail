@@ -21,13 +21,13 @@ This example takes `.ts` files and runs eslint on them. The output with errors a
 is printed on the console. If there are any errors the code is not pushed.
 
 ```javascript
-//dove.config.js
-module.exports={
-  rules:{
-    match:/\.ts$/,
-    plugins:[
-      name:"@tenonhq/dovetail-eslint-plugin",
-    ]
-  }
-}; 
+// dove.config.js
+module.exports = {
+  rules: {
+    match: /\.ts$/,
+    plugins: [
+      { name: "@tenonhq/dovetail-eslint-plugin" },
+    ],
+  },
+};
 ```
