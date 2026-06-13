@@ -4,6 +4,11 @@
 
 This plugin allows you to run the [ESLint](https://eslint.org/) checker on files.
 
+## Requirements
+
+- Node.js >= 22
+- ESLint 8.x (the plugin ships `eslint@8.51.0` as a dependency)
+
 ## Installation
 
 ```bash
