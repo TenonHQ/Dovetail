@@ -148,5 +148,7 @@ export var createTableSchema = z.object({
   showInMenu: z.boolean().optional(),
   updateSetSysId: z.string().optional(),
   saveActionSysId: z.string().optional(),
-  dryRun: z.boolean().optional()
+  columnsRelId: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  debug: z.boolean().optional()
 });

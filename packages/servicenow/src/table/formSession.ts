@@ -8,8 +8,8 @@
  * buildColumnXml.ts. Uses Node 18+ global fetch (the package targets Node >=22).
  * ES6 only, no optional chaining.
  *
- * NOT YET VALIDATED LIVE — pending the create-table spike (B2). The HTML harvest
- * in getNewRecordForm is the documented "112-field fidelity" risk surface.
+ * VALIDATED LIVE 2026-06-13 (tenonworkstudio). setCurrentApplication() puts the
+ * session in the target scope before the save (the scope-correctness lever).
  */
 
 /** Resolved instance + credentials for a form session. */
@@ -105,6 +105,42 @@ export async function openFormSession(auth: FormAuth): Promise<FormSession> {
   return { ck: ck, jar: jar };
 }
 
+/**
+ * Switch the form session's CURRENT APPLICATION to `appSysId`. A new table's scope
+ * is governed by the session's current app, not a form field — and setting
+ * `sysparm_transaction_scope` on the POST triggers a cross-scope interstitial that
+ * bounces the save to welcome.do. The faithful lever is the same app-picker the UI
+ * drives: PUT the Next-Experience concourse picker, which updates both the session's
+ * in-memory current app and the `apps.current_app` user preference. Returns true if
+ * the picker accepted the switch. Best-effort: a non-2xx is reported, not thrown.
+ */
+export async function setCurrentApplication(
+  auth: FormAuth,
+  session: FormSession,
+  appSysId: string
+): Promise<{ ok: boolean; status: number; body: string }> {
+  if (!appSysId) return { ok: false, status: 0, body: "no appSysId" };
+  var B = base(auth);
+  var res = await fetch(B + "/api/now/ui/concoursepicker/application", {
+    method: "PUT",
+    headers: {
+      "X-UserToken": session.ck,
+      Cookie: cookieHeader(session.jar),
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    // The picker's ApplicationProcessor expects `app_id` (a `value` body returns
+    // 400 "Missing Application Id").
+    body: JSON.stringify({ app_id: appSysId }),
+    redirect: "manual"
+  });
+  jarFrom(res, session.jar);
+  var body = "";
+  try { body = await res.text(); } catch (e) { body = ""; }
+  var ok = res.status >= 200 && res.status < 300;
+  return { ok: ok, status: res.status, body: body.slice(0, 200) };
+}
+
 /** The fields harvested from the new-record form, plus the discovered list-edit key. */
 export interface HarvestedForm {
   fields: Record<string, string>;
@@ -115,11 +151,10 @@ export interface HarvestedForm {
 /**
  * GET the new sys_db_object form and harvest every hidden/input field the browser
  * would submit (sysparm_ck, sysparm_encoded_record, the dynamic `<sysid>_text`
- * field, every sys_original.* default, and the list-edit formatter key). The
- * caller overlays capability params onto `fields` before POSTing.
- *
- * NOT YET VALIDATED LIVE — the HTML parse is a best-effort harvest of the
- * documented field set; confirm against a real form during the spike.
+ * field, every sys_original.* default). The caller overlays capability params onto
+ * `fields` before POSTing. NOTE: the new-record (sys_id=-1) form does NOT render
+ * related lists, so `listEditKey` is normally empty — the caller falls back to the
+ * constant "Table Columns" relId. Validated live 2026-06-13.
  */
 export async function getNewRecordForm(auth: FormAuth, session: FormSession): Promise<HarvestedForm> {
   var B = base(auth);

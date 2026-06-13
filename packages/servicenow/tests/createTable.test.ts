@@ -9,6 +9,7 @@ import {
   listEditKey,
   showInMenuKey,
   parseFormInputs,
+  parseSysIdFromLocation,
   type OverlaySpec,
   type NormalizedColumn
 } from "../src/table";
@@ -123,7 +124,7 @@ describe("applyTableSaveOverlay", function () {
     return {
       name: "x_cadso_core_error", label: "Error", tableSysId: "TBL", saveActionSysId: "SAVE",
       superClassSysId: "SUP", superClassLabel: "Application File", scopeSysId: "SCOPE",
-      scopeLabel: "Tenon - Core", numberPrefix: "ERR", userRoleSysId: "ROLE",
+      scopeLabel: "Tenon - Core", transactionScopeSysId: "SCOPE", numberPrefix: "ERR", userRoleSysId: "ROLE",
       userRoleLabel: "x_cadso_core.user", createAccessControls: true, access: "public",
       accessFlags: defaultAccessFlags(), selectedApplicationSysId: "APP", menuName: "Error",
       listEditKey: listEditKey("REL1"), columnXml: "<record_update/>"
@@ -145,6 +146,18 @@ describe("applyTableSaveOverlay", function () {
     expect(f["sys_db_object.create_access"]).toBe("true");
     expect(f["ni.sys_db_object.create_access"]).toBe("true");
   });
+  it("stamps the transaction scope so the table lands in the target scope", function () {
+    var f = applyTableSaveOverlay({}, overlay());
+    expect(f["sysparm_transaction_scope"]).toBe("SCOPE");
+    expect(f["sysparm_record_scope"]).toBe("SCOPE");
+  });
+  it("omits the transaction-scope fields when none is supplied", function () {
+    var o = overlay();
+    o.transactionScopeSysId = "";
+    var f = applyTableSaveOverlay({}, o);
+    expect(f["sysparm_transaction_scope"]).toBeUndefined();
+    expect(f["sysparm_record_scope"]).toBeUndefined();
+  });
   it("omits the nav module when no application sys_id is supplied", function () {
     var o = overlay();
     o.selectedApplicationSysId = "";
@@ -155,6 +168,17 @@ describe("applyTableSaveOverlay", function () {
     var base: Record<string, string> = { sysparm_ck: "CK" };
     applyTableSaveOverlay(base, overlay());
     expect(Object.keys(base)).toEqual(["sysparm_ck"]);
+  });
+});
+
+describe("parseSysIdFromLocation", function () {
+  it("extracts the assigned sys_id from a 302 Location", function () {
+    var loc = "sys_db_object.do?sys_id=1e539858c3ad4bd0d4ddf1db05013151&sysparm_view=";
+    expect(parseSysIdFromLocation(loc)).toBe("1e539858c3ad4bd0d4ddf1db05013151");
+  });
+  it("returns empty string when no sys_id is present", function () {
+    expect(parseSysIdFromLocation("sys_db_object_list.do")).toBe("");
+    expect(parseSysIdFromLocation("")).toBe("");
   });
 });
 
