@@ -28,6 +28,7 @@ import {
 import { initClaudeCommand } from "./claudeCommand";
 import { createRecordCommand } from "./createRecordCommand";
 import { deleteRecordCommand } from "./deleteRecordCommand";
+import { reconcileCommand } from "./reconcileCommand";
 import { migrateCommand } from "./migrateCommand";
 import {
   clickupTasksCommand,
@@ -524,6 +525,36 @@ export async function initCommands() {
         } else if (args.subcommand === "snapshots") {
           await schemaSnapshotsCommand(args);
         }
+      },
+    )
+    .command(
+      "reconcile",
+      "Make your personal instance match the checked-out branch (Phase 1: read-only diff + report)",
+      (cmdArgs) => {
+        cmdArgs.options({
+          ...sharedOptions,
+          scope: {
+            alias: "s",
+            type: "string",
+            describe: "Single scope (default: all scopes from dove.config.js)",
+          },
+          schema: {
+            type: "boolean",
+            default: true,
+            describe:
+              "Include schema drift (report-only). --no-schema to skip. Requires a `dove schema pull --snapshot`.",
+          },
+          apply: {
+            type: "boolean",
+            default: false,
+            describe:
+              "Reserved for the apply phase — not available in this build (read-only).",
+          },
+        });
+        return cmdArgs;
+      },
+      async (args: TSFIXME) => {
+        await reconcileCommand(args);
       },
     )
     .command(
