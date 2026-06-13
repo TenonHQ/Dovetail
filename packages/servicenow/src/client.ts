@@ -384,6 +384,19 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     },
     claude: {
       createRecord: async function (params) {
+        // Guard: a bare record insert into sys_db_object creates only an
+        // orphaned metadata row — no physical table and no ACLs. Table creation
+        // is a privileged platform operation that must run through the proper
+        // lifecycle, never a generic createRecord call.
+        if (params && params.table === "sys_db_object") {
+          throw new Error(
+            "Refusing to insert sys_db_object via createRecord: a bare insert " +
+              "orphans the table (no physical table or ACLs are created). " +
+              "Create tables via the dove-sn create-table capability (in build), " +
+              "or in Studio then run `dove refresh -s <scope>` to materialise " +
+              "the new records locally.",
+          );
+        }
         var data = await dovetailRequest<{ result: any }>(
           "POST",
           "createRecord",
