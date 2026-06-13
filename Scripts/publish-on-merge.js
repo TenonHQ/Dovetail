@@ -393,42 +393,26 @@ function commitVersionBumps(published, extraFiles) {
   }
   run("git", ["commit", "-m", message]);
 
-  // Direct push to the protected branch is blocked (GH006 — branch protection
-  // requires a PR). Push to a side branch, open a self-approved squash PR, and
-  // enable auto-merge. The PR title carries [skip ci] so the resulting squash
-  // commit never re-triggers this workflow; the job's if-guard is a second line
-  // of defence. Requires repo settings: allow_auto_merge + Actions can approve
-  // pull requests (both set by the initial fix commit).
-  const runId = process.env.GITHUB_RUN_ID || Date.now().toString();
-  const releaseBranch = "release/bump-" + runId;
-  run("git", ["push", "origin", "HEAD:" + releaseBranch]);
-  console.log("  pushed version-bump commit to " + releaseBranch);
-
-  const subject = message.split("\n")[0];
-  const prUrl = captureSafe("gh", [
-    "pr", "create",
-    "--base", branch,
-    "--head", releaseBranch,
-    "--title", subject,
-    "--body", "Automated postpublish version-bump. The `[skip ci]` in the title ensures the squash merge commit does not re-trigger the publish workflow.",
-    "--repo", "TenonHQ/Dovetail"
-  ]);
-  if (!prUrl) {
-    throw new Error("Failed to create release PR — version bumps will not land in " + branch);
+  // Push with up to 3 retries to handle the rare concurrent-publish race where
+  // another run merged its own release commit between our fetch and our push.
+  let pushed = false;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      run("git", ["push", "origin", "HEAD:" + branch]);
+      pushed = true;
+      console.log("  pushed version bumps to " + branch + (attempt > 1 ? " (attempt " + attempt + ")" : ""));
+      break;
+    } catch (e) {
+      if (attempt < 3) {
+        console.log("  push failed (attempt " + attempt + "); rebasing onto latest " + branch + " and retrying...");
+        run("git", ["fetch", "origin", branch]);
+        run("git", ["rebase", "origin/" + branch]);
+      }
+    }
   }
-  const prNumber = prUrl.trim().split("/").pop();
-  console.log("  created PR #" + prNumber + ": " + prUrl.trim());
-
-  run("gh", ["pr", "review", prNumber, "--approve",
-    "--body", "Auto-approved by publish workflow.",
-    "--repo", "TenonHQ/Dovetail"
-  ]);
-  console.log("  approved PR #" + prNumber);
-
-  run("gh", ["pr", "merge", prNumber, "--squash", "--auto", "--delete-branch",
-    "--repo", "TenonHQ/Dovetail"
-  ]);
-  console.log("  auto-merge enabled for PR #" + prNumber + " (squash; merges asynchronously).");
+  if (!pushed) {
+    throw new Error("Failed to push version bumps to " + branch + " after 3 attempts");
+  }
 }
 
 /** Create a git tag + GitHub Release for each published package. */
