@@ -1,7 +1,28 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-06T02:17:14.103Z",
+  "generated_at": "2026-06-14T00:02:00.647Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-eslint-plugin@0.0.13",
+      "package": "@tenonhq/dovetail-eslint-plugin",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-06-14T00:02:00.641Z",
+      "git": {
+        "sha": "ff9d18fd2c1a7305862cefdc942bbbf35ee155e8",
+        "tag": "dovetail-eslint-plugin@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "ff9d18fd2",
+          "subject": "docs(eslint-plugin): tighten overview wording"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-claude-plans@0.0.23",
@@ -1377,32 +1398,6 @@
         {
           "sha": "5f14a3421",
           "subject": "chore(release): @tenonhq/dovetail-claude-plans@0.0.18 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.31",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.31",
-      "prev_version": "0.0.30",
-      "published_at": "2026-05-28T15:54:22.483Z",
-      "git": {
-        "sha": "0247ef6e75093c95359413725977df07bd5bff70",
-        "tag": "dovetail-dashboard@0.0.31"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "0247ef6e7",
-          "subject": "feat(dashboard): Prompt Lints filters + merged-PR filter for Claude Plans (#116)",
-          "pr": 116
-        },
-        {
-          "sha": "c35d549c4",
-          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.30 [skip ci]"
         }
       ],
       "exports_delta": null,

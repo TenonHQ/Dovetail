@@ -1,0 +1,21 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-eslint-plugin@0.0.13",
+  "package": "@tenonhq/dovetail-eslint-plugin",
+  "version": "0.0.13",
+  "prev_version": "0.0.12",
+  "published_at": "2026-06-14T00:02:00.641Z",
+  "git": {
+    "sha": "ff9d18fd2c1a7305862cefdc942bbbf35ee155e8",
+    "tag": "dovetail-eslint-plugin@0.0.13"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "ff9d18fd2",
+      "subject": "docs(eslint-plugin): tighten overview wording"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
