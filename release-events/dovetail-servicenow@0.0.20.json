@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.20",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.20",
+  "prev_version": "0.0.19",
+  "published_at": "2026-06-14T00:08:21.397Z",
+  "git": {
+    "sha": "41295667a526f32eb7a5763ec1b416c19ef49bee",
+    "tag": "dovetail-servicenow@0.0.20"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "41295667a",
+      "subject": "chore(servicenow): release 0.0.20 — ship create-table fix to npm (#179)",
+      "pr": 179
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

@@ -1,7 +1,45 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-14T00:02:00.647Z",
+  "generated_at": "2026-06-14T00:08:21.409Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.20",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.20",
+      "prev_version": "0.0.19",
+      "published_at": "2026-06-14T00:08:21.397Z",
+      "git": {
+        "sha": "41295667a526f32eb7a5763ec1b416c19ef49bee",
+        "tag": "dovetail-servicenow@0.0.20"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "41295667a",
+          "subject": "chore(servicenow): release 0.0.20 — ship create-table fix to npm (#179)",
+          "pr": 179
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.15",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.15",
+      "prev_version": "0.0.14",
+      "published_at": "2026-06-14T00:08:21.397Z",
+      "git": {
+        "sha": "41295667a526f32eb7a5763ec1b416c19ef49bee",
+        "tag": "dovetail-mcp@0.0.15"
+      },
+      "semver_bump": "patch",
+      "commits": [],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-eslint-plugin@0.0.13",
@@ -1342,62 +1380,6 @@
         {
           "sha": "578d6fb2a",
           "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-core@0.0.94",
-      "package": "@tenonhq/dovetail-core",
-      "version": "0.0.94",
-      "prev_version": "0.0.93",
-      "published_at": "2026-05-28T23:46:03.175Z",
-      "git": {
-        "sha": "8a76deffc38892321c92ae538fee3bc6b8f90d76",
-        "tag": "dovetail-core@0.0.94"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "8a76deffc",
-          "subject": "fix: filesystem-safe record folder names (sys_id fallback for Windows) (#117)",
-          "pr": 117
-        },
-        {
-          "sha": "578d6fb2a",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        },
-        {
-          "sha": "3faeec43f",
-          "subject": "chore(release): @tenonhq/dovetail-core@0.0.93 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-claude-plans@0.0.19",
-      "package": "@tenonhq/dovetail-claude-plans",
-      "version": "0.0.19",
-      "prev_version": "0.0.18",
-      "published_at": "2026-05-28T15:54:22.483Z",
-      "git": {
-        "sha": "0247ef6e75093c95359413725977df07bd5bff70",
-        "tag": "dovetail-claude-plans@0.0.19"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "0247ef6e7",
-          "subject": "feat(dashboard): Prompt Lints filters + merged-PR filter for Claude Plans (#116)",
-          "pr": 116
-        },
-        {
-          "sha": "5f14a3421",
-          "subject": "chore(release): @tenonhq/dovetail-claude-plans@0.0.18 [skip ci]"
         }
       ],
       "exports_delta": null,
