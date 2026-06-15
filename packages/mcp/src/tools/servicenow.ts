@@ -9,7 +9,8 @@
  * are rejected unless the operator opts in via SINC_MCP_SN_TABLE_OVERRIDE.
  */
 
-import { createClient } from "@tenonhq/dovetail-servicenow";
+import path from "path";
+import { createClient, createClientFromEnvFile } from "@tenonhq/dovetail-servicenow";
 import type { ServiceNowClient } from "@tenonhq/dovetail-servicenow";
 import type { ServiceNowSafetyConfig } from "../config";
 import { ServicenowQueryTableInput } from "../schemas/servicenow";
@@ -17,9 +18,42 @@ import { ServicenowQueryTableInput } from "../schemas/servicenow";
 export interface ServiceNowDeps {
   safety: ServiceNowSafetyConfig;
   clientFactory?: () => ServiceNowClient;
+  /** Injectable for tests — defaults to the real createClientFromEnvFile. */
+  clientFromEnvFile?: (envPath: string) => ServiceNowClient;
 }
 
-function resolveClient(deps: ServiceNowDeps): ServiceNowClient {
+/**
+ * Resolve the caller-supplied `env` token to an absolute env-file path inside
+ * the server's working directory. The token is untrusted tool input, so this
+ * is defense-in-depth on top of the schema regex: reject anything with a path
+ * separator or traversal, accept only a `.env` basename (or a bare token that
+ * maps to `.env.<token>`), and confirm the resolved path stays within cwd.
+ */
+export function resolveEnvFilePath(env: string): string {
+  if (typeof env !== "string" || env.length === 0) {
+    throw new Error("env must be a non-empty string.");
+  }
+  if (/[\\/]/.test(env) || env.indexOf("..") !== -1) {
+    throw new Error(
+      "env '" + env + "' is invalid — no path separators or '..'; " +
+      "pass a name like 'prod' or '.env.prod'."
+    );
+  }
+  var basename = env.indexOf(".env") === 0 ? env : ".env." + env;
+  var cwd = process.cwd();
+  var resolved = path.resolve(cwd, basename);
+  // path.resolve collapses any residual traversal; verify containment.
+  if (resolved !== path.join(cwd, basename) || path.dirname(resolved) !== cwd) {
+    throw new Error("env '" + env + "' resolves outside the working directory.");
+  }
+  return resolved;
+}
+
+function resolveClient(deps: ServiceNowDeps, env?: string): ServiceNowClient {
+  if (env) {
+    var fromEnvFile = deps.clientFromEnvFile || createClientFromEnvFile;
+    return fromEnvFile(resolveEnvFilePath(env));
+  }
   if (deps.clientFactory) {
     return deps.clientFactory();
   }
@@ -43,7 +77,7 @@ export async function servicenowQueryTable(
       "Set SINC_MCP_SN_TABLE_OVERRIDE=" + args.table + " (comma-separated for multiple) to enable."
     );
   }
-  var client = resolveClient(deps);
+  var client = resolveClient(deps, args.env);
   var limit = args.limit !== undefined ? args.limit : 100;
   var records: any[];
   if (args.fields && args.fields.length > 0) {

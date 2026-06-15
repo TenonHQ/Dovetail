@@ -263,7 +263,7 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
     },
     {
       name: "servicenow_query_table",
-      description: "Read-only GET against the ServiceNow Table API. Required: table (lower-case identifier), sysparm_query (ServiceNow encoded query). Optional: fields[] limits the columns returned, limit caps row count (default 100, max 1000). Tables on the deny list (sys_user_password, sys_credential, etc.) are rejected unless SINC_MCP_SN_TABLE_OVERRIDE=<table> is set.",
+      description: "Read-only GET against the ServiceNow Table API. Required: table (lower-case identifier), sysparm_query (ServiceNow encoded query). Optional: fields[] limits the columns returned, limit caps row count (default 100, max 1000), env retargets a single call to a different instance by naming an env file in the server's working directory ('prod' or '.env.prod' → reads creds from .env.prod; omit to use the startup instance). Tables on the deny list (sys_user_password, sys_credential, etc.) are rejected unless SINC_MCP_SN_TABLE_OVERRIDE=<table> is set.",
       shape: servicenowQueryTableSchema.shape,
       annotations: READ_ONLY,
       handler: function (args: any) {
