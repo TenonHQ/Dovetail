@@ -6,6 +6,7 @@
  */
 
 export { createClient } from "./client";
+export { createClientFromEnvFile, resolveConfigFromEnvFile } from "./createClientFromEnvFile";
 export type {
   ServiceNowClient,
   TableQueryOptions,

@@ -2,11 +2,14 @@ jest.mock("@tenonhq/dovetail-servicenow", function () {
   return {
     createClient: jest.fn(function () {
       return { table: { query: jest.fn() } };
+    }),
+    createClientFromEnvFile: jest.fn(function () {
+      return { table: { query: jest.fn() } };
     })
   };
 });
 
-import { servicenowQueryTable } from "../tools/servicenow";
+import { servicenowQueryTable, resolveEnvFilePath } from "../tools/servicenow";
 
 function makeDeps(safety: { denyTables: string[]; overrideTables: string[] }, queryImpl: any) {
   return {
@@ -91,5 +94,54 @@ describe("servicenow_query_table", function () {
       deps
     );
     expect(out).toEqual({ table: "incident", count: 2, records: rows });
+  });
+
+  it("retargets to a per-call env file via clientFromEnvFile, bypassing the default client", async function () {
+    var envQuery = jest.fn().mockResolvedValue([{ sys_id: "env" }]);
+    var defaultQuery = jest.fn().mockResolvedValue([{ sys_id: "default" }]);
+    var fromEnvFile = jest.fn(function (_envPath: string) {
+      return { table: { query: envQuery } } as any;
+    });
+    var deps = {
+      safety: { denyTables: [], overrideTables: [] },
+      clientFactory: function () {
+        return { table: { query: defaultQuery } } as any;
+      },
+      clientFromEnvFile: fromEnvFile
+    };
+    var out = await servicenowQueryTable(
+      { table: "incident", sysparm_query: "active=true", env: "workshop" } as any,
+      deps
+    );
+    expect(fromEnvFile).toHaveBeenCalledTimes(1);
+    // resolved to an absolute .env.workshop path in cwd
+    expect(String(fromEnvFile.mock.calls[0][0])).toMatch(/[\\/]\.env\.workshop$/);
+    expect(defaultQuery).not.toHaveBeenCalled();
+    expect(out.records).toEqual([{ sys_id: "env" }]);
+  });
+});
+
+describe("resolveEnvFilePath", function () {
+  it("maps a bare token to .env.<token> in cwd", function () {
+    expect(resolveEnvFilePath("prod")).toBe(require("path").resolve(process.cwd(), ".env.prod"));
+  });
+
+  it("accepts a full .env.<name> basename", function () {
+    expect(resolveEnvFilePath(".env.workshop")).toBe(
+      require("path").resolve(process.cwd(), ".env.workshop")
+    );
+  });
+
+  it("accepts a bare .env", function () {
+    expect(resolveEnvFilePath(".env")).toBe(require("path").resolve(process.cwd(), ".env"));
+  });
+
+  it("rejects path separators", function () {
+    expect(function () { resolveEnvFilePath("../secrets/.env"); }).toThrow(/no path separators/);
+    expect(function () { resolveEnvFilePath("sub/dir"); }).toThrow(/no path separators/);
+  });
+
+  it("rejects traversal tokens", function () {
+    expect(function () { resolveEnvFilePath(".env..prod"); }).toThrow();
   });
 });
