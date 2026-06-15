@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.21",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.21",
+  "prev_version": "0.0.20",
+  "published_at": "2026-06-15T17:59:30.698Z",
+  "git": {
+    "sha": "51e4e4592d491cd337f5bc1aa93d04f582f555a1",
+    "tag": "dovetail-servicenow@0.0.21"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "51e4e4592",
+      "subject": "feat(mcp): per-call instance retarget for servicenow_query_table (#180)",
+      "pr": 180
+    },
+    {
+      "sha": "c5d9106c4",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
