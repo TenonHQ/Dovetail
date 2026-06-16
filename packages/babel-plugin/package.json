@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-babel-plugin",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "engines": {
     "node": ">=22"
   },
@@ -29,7 +29,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@babel/core": "^7.23.2",
+    "@babel/core": "^7.29.6",
     "@babel/types": "^7.23.0"
   },
   "devDependencies": {

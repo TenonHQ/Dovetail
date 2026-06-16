@@ -1,24 +1,24 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-16T01:13:10.209Z",
+  "generated_at": "2026-06-16T01:18:07.747Z",
   "events": [
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-gmail@0.0.12",
-      "package": "@tenonhq/dovetail-gmail",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:13:10.196Z",
+      "event_id": "dovetail-babel-plugin@0.0.11",
+      "package": "@tenonhq/dovetail-babel-plugin",
+      "version": "0.0.11",
+      "prev_version": "0.0.10",
+      "published_at": "2026-06-16T01:18:07.728Z",
       "git": {
-        "sha": "2a9dd47facde2011d3b19faf27ad80f73ad15469",
-        "tag": "dovetail-gmail@0.0.12"
+        "sha": "edabc263bd89f08b5c7a075f270c2172e82da4da",
+        "tag": "dovetail-babel-plugin@0.0.11"
       },
       "semver_bump": "patch",
       "commits": [
         {
-          "sha": "2a9dd47fa",
-          "subject": "chore(deps): bump sanitize-html from 2.17.3 to 2.17.4 (#167)",
-          "pr": 167
+          "sha": "edabc263b",
+          "subject": "chore(deps): bump @babel/core from 7.29.0 to 7.29.6 (#181)",
+          "pr": 181
         },
         {
           "sha": "de9d77971",
@@ -30,20 +30,51 @@
     },
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.17",
-      "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.17",
-      "prev_version": "0.0.16",
-      "published_at": "2026-06-16T01:13:10.196Z",
+      "event_id": "dovetail-babel-plugin-remove-modules@0.0.11",
+      "package": "@tenonhq/dovetail-babel-plugin-remove-modules",
+      "version": "0.0.11",
+      "prev_version": "0.0.10",
+      "published_at": "2026-06-16T01:18:07.728Z",
       "git": {
-        "sha": "2a9dd47facde2011d3b19faf27ad80f73ad15469",
-        "tag": "dovetail-mcp@0.0.17"
+        "sha": "edabc263bd89f08b5c7a075f270c2172e82da4da",
+        "tag": "dovetail-babel-plugin-remove-modules@0.0.11"
       },
       "semver_bump": "patch",
       "commits": [
         {
-          "sha": "9035f969b",
-          "subject": "chore(release): publish 2 packages [skip ci]"
+          "sha": "edabc263b",
+          "subject": "chore(deps): bump @babel/core from 7.29.0 to 7.29.6 (#181)",
+          "pr": 181
+        },
+        {
+          "sha": "de9d77971",
+          "subject": "chore(release): publish 14 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-babel-preset-servicenow@0.0.11",
+      "package": "@tenonhq/dovetail-babel-preset-servicenow",
+      "version": "0.0.11",
+      "prev_version": "0.0.10",
+      "published_at": "2026-06-16T01:18:07.728Z",
+      "git": {
+        "sha": "edabc263bd89f08b5c7a075f270c2172e82da4da",
+        "tag": "dovetail-babel-preset-servicenow@0.0.11"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "edabc263b",
+          "subject": "chore(deps): bump @babel/core from 7.29.0 to 7.29.6 (#181)",
+          "pr": 181
+        },
+        {
+          "sha": "de9d77971",
+          "subject": "chore(release): publish 14 packages [skip ci]"
         }
       ],
       "exports_delta": null,
@@ -1329,36 +1360,6 @@
           "sha": "1e949a308",
           "subject": "docs: Dovetail adoption pack (Claude operating guide, onboarding, INDEX, drift fix) (#121)",
           "pr": 121
-        },
-        {
-          "sha": "9332fdf7a",
-          "subject": "chore(release): publish 20 packages [skip ci]"
-        },
-        {
-          "sha": "9046da774",
-          "subject": "chore(release): publish 19 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-schema@0.0.9",
-      "package": "@tenonhq/dovetail-schema",
-      "version": "0.0.9",
-      "prev_version": "0.0.8",
-      "published_at": "2026-05-29T21:30:43.647Z",
-      "git": {
-        "sha": "dac76cc7b8e6a346aa54a84c7b50c442323301fb",
-        "tag": "dovetail-schema@0.0.9"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "dac76cc7b",
-          "subject": "feat(schema): snapshots + structured drift diff for dove schema (#122)",
-          "pr": 122
         },
         {
           "sha": "9332fdf7a",
