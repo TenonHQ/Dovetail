@@ -1,0 +1,21 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-eslint-plugin@0.0.14",
+  "package": "@tenonhq/dovetail-eslint-plugin",
+  "version": "0.0.14",
+  "prev_version": "0.0.13",
+  "published_at": "2026-06-16T01:30:04.619Z",
+  "git": {
+    "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
+    "tag": "dovetail-eslint-plugin@0.0.14"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "d9ffb6f9a",
+      "subject": "chore(release): @tenonhq/dovetail-eslint-plugin@0.0.13 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

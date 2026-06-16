@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-prettier-plugin",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "engines": {
     "node": ">=22"
   },
@@ -14,7 +14,7 @@
   "author": "Multiple",
   "license": "GPL-3.0",
   "devDependencies": {
-    "@tenonhq/dovetail-types": "~0.0.19",
+    "@tenonhq/dovetail-types": "~0.0.20",
     "@types/prettier": "^2.7.3",
     "typescript": "^5.2.2"
   },

@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.107",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.107",
+  "prev_version": "0.0.106",
+  "published_at": "2026-06-16T01:30:04.619Z",
+  "git": {
+    "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
+    "tag": "dovetail-core@0.0.107"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "6ddaaf257",
+      "subject": "fix: dove push honors the activated update set via routing file (#182) (#184)",
+      "pr": 182
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

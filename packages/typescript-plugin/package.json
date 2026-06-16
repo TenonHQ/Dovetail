@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-typescript-plugin",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "engines": {
     "node": ">=22"
   },
@@ -17,7 +17,7 @@
     "typescript": "^5.2.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "~0.0.19"
+    "@tenonhq/dovetail-types": "~0.0.20"
   },
   "files": [
     "dist"
