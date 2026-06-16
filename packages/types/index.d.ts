@@ -282,6 +282,9 @@ export namespace SN {
 
   interface ScopeRecord {
     sys_id: string;
+    // Scope name (e.g. "x_cadso_core"). Present when the read selects it; used
+    // to reverse-resolve a scope sys_id back to its name for push routing.
+    scope?: string;
   }
 
   interface UpdateSetRecord {

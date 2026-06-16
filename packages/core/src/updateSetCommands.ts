@@ -10,6 +10,7 @@ import {
   formatTaskSummary,
 } from "@tenonhq/dovetail-clickup";
 import { refineUpdateSetName } from "./clickupCommands";
+import { writeUpdateSetRouting } from "./updateSetConfig";
 
 interface UpdateSetDetails {
   sys_id: string;
@@ -238,6 +239,32 @@ export async function createUpdateSetCommand(args: any): Promise<void> {
       logger.info(`Scope: ${scope}`);
     }
 
+    // Keep .dove-update-sets.json in sync with the set we just activated.
+    // `dove push` routes captures by this file (per scope), not by the
+    // instance's active update set — so without this write the new set would
+    // stay empty and pushes would land in whatever stale set the file still
+    // points at (TenonHQ/Dovetail#182).
+    if (scope) {
+      const routed = writeUpdateSetRouting({
+        scope,
+        sysId: updateSetSysId,
+        name,
+      });
+      if (routed) {
+        logger.info(
+          chalk.green(
+            `✓ Push routing updated: ${scope} -> ${name} (${updateSetSysId})`,
+          ),
+        );
+      }
+    } else {
+      logger.warn(
+        "No scope provided, so .dove-update-sets.json was not updated. " +
+          "`dove push` routes captures by scope via that file — pass -s <scope> " +
+          "so pushes target this set, or edit .dove-update-sets.json directly.",
+      );
+    }
+
     // If created from a ClickUp task, offer to post a comment back
     if (args._clickupTaskId) {
       try {
@@ -295,13 +322,33 @@ export async function switchUpdateSetCommand(args: any): Promise<void> {
     
     // Switch to the selected update set
     await switchToUpdateSet(sysId, name, args.scope || applicationScope);
-    
+
     logger.info(chalk.green(`✓ Switched to update set: ${name}`));
     logger.info(`Update Set ID: ${sysId}`);
     if (applicationName) {
       logger.info(`Scope: ${applicationName}`);
     }
-    
+
+    // Keep .dove-update-sets.json in sync so `dove push` routes captures to the
+    // set we just switched to (it routes by this file per scope, not by the
+    // instance's active set — TenonHQ/Dovetail#182). `applicationScope` is the
+    // scope's sys_id, so resolve it back to the scope name the file is keyed on.
+    const scopeName = args.scope || (await resolveScopeName(applicationScope));
+    if (scopeName) {
+      const routed = writeUpdateSetRouting({ scope: scopeName, sysId, name });
+      if (routed) {
+        logger.info(
+          chalk.green(`✓ Push routing updated: ${scopeName} -> ${name} (${sysId})`),
+        );
+      }
+    } else {
+      logger.warn(
+        "Could not resolve the scope name, so .dove-update-sets.json was not " +
+          "updated. `dove push` routes captures by scope via that file — pass " +
+          "--scope <scope> so pushes target this set.",
+      );
+    }
+
   } catch (e) {
     logger.error("Failed to switch update set");
     if (e instanceof Error) logger.error(e.message);
@@ -532,6 +579,33 @@ async function getActiveUpdateSetName(client: ReturnType<typeof defaultClient>, 
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * Resolves a scope's sys_id back to its scope name (e.g. "x_cadso_core"), used
+ * to key the .dove-update-sets.json push-routing entry. Returns undefined when
+ * the input is missing or the lookup fails so the caller can warn instead.
+ */
+async function resolveScopeName(
+  applicationSysId?: string,
+): Promise<string | undefined> {
+  if (!applicationSysId || applicationSysId.trim() === "") return undefined;
+  try {
+    const client = defaultClient();
+    const rows = await unwrapSNResponse(client.getScopeById(applicationSysId));
+    if (rows && rows.length > 0) {
+      const resolved = rows[0].scope;
+      if (resolved && typeof resolved === "string" && resolved.trim() !== "") {
+        return resolved;
+      }
+    }
+  } catch (e) {
+    logger.debug(
+      "Could not resolve scope name from application sys_id: " +
+        (e instanceof Error ? e.message : String(e)),
+    );
+  }
+  return undefined;
 }
 
 /**

@@ -384,6 +384,17 @@ export const snClient = (
     });
   };
 
+  const getScopeById = (scopeSysId: string) => {
+    const endpoint = "api/now/table/sys_scope";
+    type ScopeResponse = Sinc.SNAPIResponse<SN.ScopeRecord[]>;
+    return client.get<ScopeResponse>(endpoint, {
+      params: {
+        sysparm_query: `sys_id=${scopeSysId}`,
+        sysparm_fields: "scope",
+      },
+    });
+  };
+
   const getUserSysId = (userName: string = process.env.SN_USER as string) => {
     const endpoint = "api/now/table/sys_user";
     type UserResponse = Sinc.SNAPIResponse<SN.UserRecord[]>;
@@ -675,6 +686,7 @@ export const snClient = (
     getAppList,
     updateRecord,
     getScopeId,
+    getScopeById,
     getUserSysId,
     getCurrentAppUserPrefSysId,
     updateCurrentAppUserPref,
