@@ -1,7 +1,54 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-06-15T17:59:30.712Z",
+  "generated_at": "2026-06-16T01:13:10.209Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-gmail@0.0.12",
+      "package": "@tenonhq/dovetail-gmail",
+      "version": "0.0.12",
+      "prev_version": "0.0.11",
+      "published_at": "2026-06-16T01:13:10.196Z",
+      "git": {
+        "sha": "2a9dd47facde2011d3b19faf27ad80f73ad15469",
+        "tag": "dovetail-gmail@0.0.12"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "2a9dd47fa",
+          "subject": "chore(deps): bump sanitize-html from 2.17.3 to 2.17.4 (#167)",
+          "pr": 167
+        },
+        {
+          "sha": "de9d77971",
+          "subject": "chore(release): publish 14 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.17",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.17",
+      "prev_version": "0.0.16",
+      "published_at": "2026-06-16T01:13:10.196Z",
+      "git": {
+        "sha": "2a9dd47facde2011d3b19faf27ad80f73ad15469",
+        "tag": "dovetail-mcp@0.0.17"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "9035f969b",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.21",
@@ -1320,66 +1367,6 @@
         {
           "sha": "9046da774",
           "subject": "chore(release): publish 19 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-core@0.0.95",
-      "package": "@tenonhq/dovetail-core",
-      "version": "0.0.95",
-      "prev_version": "0.0.94",
-      "published_at": "2026-05-29T21:30:43.647Z",
-      "git": {
-        "sha": "dac76cc7b8e6a346aa54a84c7b50c442323301fb",
-        "tag": "dovetail-core@0.0.95"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "dac76cc7b",
-          "subject": "feat(schema): snapshots + structured drift diff for dove schema (#122)",
-          "pr": 122
-        },
-        {
-          "sha": "da705804d",
-          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.33 [skip ci]"
-        },
-        {
-          "sha": "92213e1f8",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        },
-        {
-          "sha": "1d43f9122",
-          "subject": "chore(release): @tenonhq/dovetail-core@0.0.94 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.33",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.33",
-      "prev_version": "0.0.32",
-      "published_at": "2026-05-29T16:55:37.729Z",
-      "git": {
-        "sha": "3aaef1ba92364c119ece69369c5cc3379da0ed73",
-        "tag": "dovetail-dashboard@0.0.33"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "3aaef1ba9",
-          "subject": "fix: legible inline code in Claude Plans dark mode (#120)",
-          "pr": 120
-        },
-        {
-          "sha": "92213e1f8",
-          "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
       "exports_delta": null,

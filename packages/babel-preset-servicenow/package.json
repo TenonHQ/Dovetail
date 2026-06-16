@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/tenonhq/dovetail#readme",
   "dependencies": {
-    "@babel/core": "^7.29.6",
+    "@babel/core": "^7.23.2",
     "@babel/types": "^7.23.0"
   },
   "devDependencies": {
