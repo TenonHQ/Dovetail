@@ -62,6 +62,12 @@ Launches at `http://localhost:3456` (configurable via `DASHBOARD_PORT` in `.env`
 
 The dashboard reads scopes from `dove.config.js` and stores selections in `.dove-update-sets.json`.
 
+### How `dove push` chooses an update set (precedence)
+
+`dove push` routes each record's capture by the per-scope map in **`.dove-update-sets.json`**, keyed on the record's scope — **not** by the instance's currently-active update set. When a scope has an entry, the push captures into that set via `pushWithUpdateSet`; when it has none, the push falls back to a plain update that lands in whatever set is active on the instance.
+
+`createUpdateSet`, `switchUpdateSet`, and `push --updateSet` now write the affected scope's entry into `.dove-update-sets.json` as part of activating the set, so the routing file, the active set, and the push destination stay consistent. Each prints the resolved destination, e.g. `Push routing updated: x_cadso_core -> FEAT-123 (sys_id)`, and every push prints `Update set routing (from .dove-update-sets.json): <scope> -> <name> (<sys_id>)` so you can see exactly where captures land. If you edit `.dove-update-sets.json` by hand, that entry wins until you switch sets again.
+
 ### Multi-Scope Update Set Monitoring
 
 When using `npx dove watchAllScopes`, update set status is automatically checked every 2 minutes. It warns if any scope is using the DEFAULT update set (a common mistake that puts changes in the wrong place).

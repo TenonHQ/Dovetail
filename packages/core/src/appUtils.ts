@@ -13,7 +13,7 @@ import {
 } from "./constants";
 import PluginManager from "./PluginManager";
 import { fileLogger } from "./FileLogger";
-import { getUpdateSetsConfigPath } from "./projectFiles";
+import { readUpdateSetConfig, writeUpdateSetRouting } from "./updateSetConfig";
 import {
   defaultClient,
   processPushResponse,
@@ -35,17 +35,9 @@ interface UpdateSetSelection {
 
 type UpdateSetConfig = Record<string, UpdateSetSelection>;
 
-const getUpdateSetConfig = (): UpdateSetConfig => {
-  const configPath = getUpdateSetsConfigPath();
-  try {
-    if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, "utf8"));
-    }
-  } catch (e) {
-    logger.warn(`Failed to parse update set config at ${configPath}: ${e instanceof Error ? e.message : String(e)}`);
-  }
-  return {};
-};
+// Delegate to the shared reader so the push hot-path and the
+// createUpdateSet/switchUpdateSet writers stay on one parse contract.
+const getUpdateSetConfig = (): UpdateSetConfig => readUpdateSetConfig();
 
 // Strip the ServiceNow instance host from an absolute _record_link, leaving the
 // instance-relative path. The CADSO metadata endpoint returns an absolute URL
@@ -936,9 +928,13 @@ export const pushFiles = async (
   const hasUpdateSets = Object.keys(updateSetConfig).length > 0;
   if (hasUpdateSets) {
     const activeScopes = Object.entries(updateSetConfig)
-      .map(([scope, us]) => `${scope} -> ${us.name}`)
+      .map(([scope, us]) => `${scope} -> ${us.name} (${us.sys_id})`)
       .join(", ");
-    logger.info(`Update set routing active: ${activeScopes}`);
+    // Name the source file and show the sys_id so the operator can see exactly
+    // where captures land — push routes by this file, not the active set (#182).
+    logger.info(
+      `Update set routing (from .dove-update-sets.json): ${activeScopes}`,
+    );
   }
 
   // Pre-resolve read-only table sets for every scope present in this batch.
@@ -1210,6 +1206,24 @@ export const createAndAssignUpdateSet = async (updateSetName = "", scope?: strin
   } else {
     await client.createCurrentUpdateSetUserPref(updateSetSysId, userSysId);
   }
+
+  // Route this scope's captures to the new set. pushFiles() routes by
+  // .dove-update-sets.json, not the active set, so without this a `dove push
+  // --updateSet` could create+activate a set yet capture into a stale one
+  // (TenonHQ/Dovetail#182). Only possible when the scope name is known.
+  if (scope) {
+    const routed = writeUpdateSetRouting({
+      scope,
+      sysId: updateSetSysId,
+      name: updateSetName,
+    });
+    if (routed) {
+      logger.info(
+        `Push routing updated: ${scope} -> ${updateSetName} (${updateSetSysId})`,
+      );
+    }
+  }
+
   return {
     name: updateSetName,
     id: updateSetSysId,
