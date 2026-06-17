@@ -17,6 +17,7 @@ Start here. Docs are tagged by audience — **🤖 Claude** (a Claude Code sessi
 |---|---|---|
 | [`dovetail-platform-spec.md`](dovetail-platform-spec.md) | 🛠 Developer | Complete platform spec — implement the system from zero context |
 | [`downstream-propagation-plan.md`](downstream-propagation-plan.md) | 🛠 Developer | Proposal: propagating package changes downstream (not yet implemented) |
+| [`servicenow-schema-crud-rfc.md`](servicenow-schema-crud-rfc.md) | 🛠 Developer | RFC (proposed): schema-side CRUD — tables/fields/choices — to code-side parity; surface, context-gated destructive ops, the update-set deploy seam |
 
 ## Migration (Sincronia → Dovetail)
 
@@ -40,4 +41,4 @@ Each `packages/<pkg>/README.md` documents that package. Notables: [`packages/mcp
 
 ---
 
-*Last updated: 2026-05-29.*
+*Last updated: 2026-06-16.*
