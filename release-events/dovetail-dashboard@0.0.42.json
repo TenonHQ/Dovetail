@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.42",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.42",
+  "prev_version": "0.0.41",
+  "published_at": "2026-06-17T00:36:24.117Z",
+  "git": {
+    "sha": "81da56249cdf05ab663ee93ae1d7e1fef5510205",
+    "tag": "dovetail-dashboard@0.0.42"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "81da56249",
+      "subject": "fix(dashboard): stop mermaid multi-line node labels clipping (#187)",
+      "pr": 187
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

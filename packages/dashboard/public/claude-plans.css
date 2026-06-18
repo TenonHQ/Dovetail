@@ -383,6 +383,18 @@
   justify-content: center;
 }
 .cp-mermaid svg { max-width: 100%; height: auto; }
+/* Mermaid sizes each node/label box by measuring its text at line-height: normal.
+   The dashboard's global unitless line-height (1.65) cascades as a multiplier into
+   the SVG's foreignObject HTML labels, so they render taller than mermaid measured —
+   multi-line node labels then overflow their boxes and the lower lines get clipped.
+   Reset the inherited line-height inside mermaid SVGs so rendered text matches the
+   measurement and boxes contain their labels. */
+.cp-mermaid svg foreignObject,
+.cp-mermaid svg foreignObject div,
+.cp-mermaid svg foreignObject span,
+.cp-mermaid svg foreignObject p {
+  line-height: normal;
+}
 .cp-mermaid-error {
   color: var(--error-700);
   font-size: 12px;
