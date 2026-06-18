@@ -26,8 +26,8 @@
     "@types/jest": "^29.5.5",
     "@types/node": ">=20.8.4",
     "@types/sanitize-html": "^2.16.1",
-    "jest": "^30.4.2",
-    "ts-jest": "^29.4.11",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
     "typescript": "^5.2.2"
   },
   "files": [

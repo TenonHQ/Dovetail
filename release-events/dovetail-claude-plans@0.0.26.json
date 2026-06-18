@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-claude-plans@0.0.26",
+  "package": "@tenonhq/dovetail-claude-plans",
+  "version": "0.0.26",
+  "prev_version": "0.0.25",
+  "published_at": "2026-06-18T06:28:59.910Z",
+  "git": {
+    "sha": "2bca2a07378185911d3b141f3be781bfa9720b2e",
+    "tag": "dovetail-claude-plans@0.0.26"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "2bca2a073",
+      "subject": "feat: named pipelines in claude-plans state machine (grain panel backend) (#189)",
+      "pr": 189
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
