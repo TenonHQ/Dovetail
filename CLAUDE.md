@@ -4,7 +4,7 @@ Guidance for Claude Code when working in the Dovetail repo. Read [`docs/dovetail
 
 ## What Dovetail Is
 
-Integration platform + Claude Code's action layer for ServiceNow. Bidirectional sync between local files and ServiceNow instances, layered with build pipelines (TypeScript, Babel, Webpack, SASS) and a small action layer (helpers, MCP server, dashboard). npm-workspaces monorepo, 20 packages published under `@tenonhq/dovetail-*`.
+Integration platform + Claude Code's action layer for ServiceNow. Bidirectional sync between local files and ServiceNow instances, layered with build pipelines (TypeScript, Babel, Webpack, SASS) and a small action layer (helpers, MCP server, dashboard). npm-workspaces monorepo; packages published under `@tenonhq/dovetail-*`.
 
 ## Quick Start
 
@@ -19,12 +19,13 @@ Full command reference: see `Essential Commands` further down, or `npx dove --he
 
 ## Releasing — Critical Rules
 
-> **All PRs in this repo MUST be opened as DRAFT, unless the user explicitly asks otherwise.** Merge-to-`main` auto-publishes changed `packages/**` to npm immediately, and a bad version cannot be unpublished cleanly. Open every PR as Draft, convert to *Ready for review* only after sign-off, then merge. The rule applies uniformly (even docs-only) so reviewers never have to guess whether a PR is safe. The only override is an explicit user instruction for a specific PR (e.g. "open it as ready", "automerge it") — never decide on your own that a change is "safe enough" to skip Draft.
+> **All PRs in this repo MUST be opened as DRAFT, unless the user explicitly asks otherwise.** Merge-to-`main` auto-publishes changed `packages/**` to npm immediately, and a bad version cannot be unpublished cleanly. Open every PR as Draft, convert to _Ready for review_ only after sign-off, then merge. The rule applies uniformly (even docs-only) so reviewers never have to guess whether a PR is safe. The only override is an explicit user instruction for a specific PR (e.g. "open it as ready", "automerge it") — never decide on your own that a change is "safe enough" to skip Draft.
 
 How publishing works:
+
 - **Trigger** — merge to `main` touching `packages/**` runs `.github/workflows/publish.yml`.
 - **Scope** — packages with changed files, **plus every package that transitively depends on a changed one** (the cascade), built and published in dependency order.
-- **Internal ranges** — inter-package `@tenonhq/dovetail-*` deps MUST be floating `~0.0.x`, never `^0.0.x`. On a pre-1.0 package `^0.0.x` is a *hard pin* (`^0.0.10` = `0.0.10` only), which forces consumers to set an `overrides` block / `--legacy-peer-deps` (ERESOLVE). CI enforces this via `node Scripts/normalize-internal-deps.js --check`; run `--write` to fix a violation.
+- **Internal ranges** — inter-package `@tenonhq/dovetail-*` deps MUST be floating `~0.0.x`, never `^0.0.x`. On a pre-1.0 package `^0.0.x` is a _hard pin_ (`^0.0.10` = `0.0.10` only), which forces consumers to set an `overrides` block / `--legacy-peer-deps` (ERESOLVE). CI enforces this via `node Scripts/normalize-internal-deps.js --check`; run `--write` to fix a violation.
 - **Gate** — full monorepo must build (`tsc`) and pass tests, and the internal-range guard must be clean; any failure publishes nothing.
 - **Versioning** — patch-bumped automatically: `max(package.json version, npm-latest + 1 patch)`. For a minor/major release, edit the package's `version` in your PR; CI honors it.
 - **After publish** — CI commits `postpublish` version bumps back to `main` as `chore(release): … [skip ci]` and cuts git tags + GitHub Releases per package.
@@ -54,48 +55,34 @@ module.exports = {
   sourceDirectory: "src",
   buildDirectory: "build",
   includes: {
-    _tables: ["sys_script_include", "sys_script", /* ... */],
+    _tables: ["sys_script_include", "sys_script" /* ... */],
     sys_ux_macroponent: { composition: { type: "json" } },
     _scopes: {
-      x_cadso_automate: { _tables: ["x_cadso_core_setting"] }
-    }
+      x_cadso_automate: { _tables: ["x_cadso_core_setting"] },
+    },
   },
   excludes: { _tables: [] },
   scopes: {
-    x_cadso_core: { sourceDirectory: "src/x_cadso_core" }
-  }
+    x_cadso_core: { sourceDirectory: "src/x_cadso_core" },
+  },
 };
 ```
 
-### Synced Table Types (16)
+### Synced Table Types
 
-`sys_script_include`, `sys_script`, `sys_ui_script`, `sys_ui_page`, `sys_ux_client_script`, `sys_processor`, `sys_ws_operation`, `sys_rest_message_fn`, `sys_ui_action`, `sys_security_acl`, `sysevent_script_action`, `sys_ux_macroponent`, `sys_ux_event`, `sys_ux_client_script_include`, `sys_ux_screen`, `sys_script_fix`. Full inventory: [`../ServiceNow/CLAUDE.md`](../ServiceNow/CLAUDE.md).
+Script-bearing `sys_*` / `sys_ux_*` record types (script includes, business rules, UI actions, ACLs, macroponents, screens, etc.). Full inventory: [`../ServiceNow/CLAUDE.md`](../ServiceNow/CLAUDE.md).
 
-## Package Inventory (20)
+## Packages
 
-**Core + types**
-- `dovetail-core` — CLI (`dove` binary) + sync engine
-- `dovetail-types` — TypeScript definitions
+Each is published as `@tenonhq/dovetail-*`. Grouped by role (no frozen counts — `package.json` workspaces is the source of truth):
 
-**Build pipeline**
-- `dovetail-babel-plugin`, `dovetail-babel-plugin-remove-modules`, `dovetail-babel-preset-servicenow`
-- `dovetail-typescript-plugin`, `dovetail-webpack-plugin`, `dovetail-sass-plugin`
-- `dovetail-eslint-plugin`, `dovetail-prettier-plugin`
+- **Core + types** — `dovetail-core` (the `dove` CLI binary + sync engine), `dovetail-types`.
+- **Build pipeline** — Babel / TypeScript / Webpack / SASS / ESLint / Prettier plugins that compile component source for ServiceNow.
+- **Action layer** — `dovetail-servicenow` (platform helpers + `dove-sn` binary), `dovetail-sawmill` (cross-instance update-set retrieve/preview/commit), `dovetail-schema` (table schema fetcher), `dovetail-mcp` (read-mostly MCP stdio server; ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`, dry-run unless `confirm:true`; telemetry at `~/.dovetail-mcp/telemetry.jsonl`, redacted), `dovetail-claude-plans` (MCP server + CLI for the plans dashboard).
+- **Integrations** — ClickUp, Google auth, Google Calendar, Gmail.
+- **UI** — `dovetail-dashboard` (Update Set Dashboard web UI).
 
-**Action layer**
-- `dovetail-servicenow` — platform helpers (`addChoicesToField`, `buildFlow` CLI / `dove-sn` binary)
-- `dovetail-sawmill` — update-set retrieve/preview/commit across instances
-- `dovetail-schema` — ServiceNow table schema fetcher
-- `dovetail-mcp` — MCP stdio server, **read-mostly: 16 tools** (4 ClickUp read, 4 Gmail, 3 Calendar, 1 `servicenow_query_table`, + **4 ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`**, dry-run unless `confirm:true`). Telemetry at `~/.dovetail-mcp/telemetry.jsonl` (redacted).
-- `dovetail-claude-plans` — MCP server (25 tools: plans, Q&A, pipeline stages, lint events, version history, handoff, prompt-editor drafts) + CLI for plans surfaced in the dashboard
-
-> **Full MCP catalog (46 tools across 3 servers — `dovetail-mcp`, `dovetail-claude-plans`, and the `dovetail-servicenow` authoring server) + when-to-use each tool: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).** That doc is the canonical source of truth for what Claude can do here.
-
-**Integrations**
-- `dovetail-clickup`, `dovetail-google-auth`, `dovetail-google-calendar`, `dovetail-gmail`
-
-**UI**
-- `dovetail-dashboard` — Update Set Dashboard web UI
+> **Canonical catalog of MCP servers, every tool, and when to use each: [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md).** That doc is the source of truth for what Claude can do here — counts and tool lists drift, so don't restate them.
 
 ### Reach-for-these subsystems
 
@@ -107,64 +94,29 @@ module.exports = {
 
 Dovetail's server operations live in a **global-scoped Scripted REST API** named **"Dovetail"** (legacy name: "Claude").
 
-- **Base path:** `/api/cadso/dovetail/` (client falls back to legacy `/api/cadso/claude/` — see [`../docs/dovetail-servicenow-migration.md`](../docs/dovetail-servicenow-migration.md))
-- **Web service definition sys_id:** `b8a9db8d33d7a6107b18bc534d5c7b7b`
+- **Base path:** `/api/cadso/dovetail/` (client falls back to legacy `/api/cadso/claude/` — see [`docs/dovetail-servicenow-migration.md`](docs/dovetail-servicenow-migration.md))
+- **Web service definition sys_id:** look up by name ("Dovetail") on the target instance — don't hardcode; the value differs per instance and can drift.
 - **Auth:** authenticated + `snc_internal_role`
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/changeScope` | Switch app scope. `?scope=x_cadso_core` |
-| GET | `/currentUpdateSet` | Read current update set. Optional `?scope=...` |
-| GET | `/changeUpdateSet` | Switch active update set. `?sysId=...` or `?name=...&scope=...` |
-| POST | `/pushWithUpdateSet` | Update a record within a specified update set. Body: `{ update_set_sys_id, table, record_sys_id, fields }` |
-| POST | `/createRecord` | Create a record. Body: `{ table, fields }` (+ optional `sys_id`, `scope`, `update_set_sys_id`). Supports cross-instance moves via explicit `sys_id`. |
-| POST | `/deleteRecord` | Delete a record. Body: `{ table, sys_id }` |
+| Method | Path                 | Purpose                                                                                                                                              |
+| ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/changeScope`       | Switch app scope. `?scope=x_cadso_core`                                                                                                              |
+| GET    | `/currentUpdateSet`  | Read current update set. Optional `?scope=...`                                                                                                       |
+| GET    | `/changeUpdateSet`   | Switch active update set. `?sysId=...` or `?name=...&scope=...`                                                                                      |
+| POST   | `/pushWithUpdateSet` | Update a record within a specified update set. Body: `{ update_set_sys_id, table, record_sys_id, fields }`                                           |
+| POST   | `/createRecord`      | Create a record. Body: `{ table, fields }` (+ optional `sys_id`, `scope`, `update_set_sys_id`). Supports cross-instance moves via explicit `sys_id`. |
+| POST   | `/deleteRecord`      | Delete a record. Body: `{ table, sys_id }`                                                                                                           |
 
-All POSTs are `application/json`. Update-set ops save/restore the previous update set. Source XML: `Downloads/sys_ws_operation (web_service_definition=b8a9db8d33d7a6107b18bc534d5c7b7b)*.xml`.
+All POSTs are `application/json`. Update-set ops save/restore the previous update set. Source XML lives under `Downloads/sys_ws_operation (web_service_definition=<Dovetail def sys_id>)*.xml`.
 
-## Essential Commands
+## Commands — the non-obvious bits
 
-```bash
-# Watch / sync
-npx dove watch [--port 3457] [--noDashboard]
-npx dove push                 # push local changes
-npx dove refresh              # refresh manifest, pull new files
-npx dove download <scope>     # full scope download
-npx dove status               # sync status + instance info
-# No `dove diff` command — `--diff <branch>` is a FLAG on push/build that scopes
-# the op to files changed vs a git branch, e.g. `npx dove push --diff main`.
+Full CLI via `npx dove --help`. The common verbs (`watch`, `push`, `pull`, `refresh`, `status`, `build`, `deploy`, update-set + scope ops) are self-describing there. The few that trip people up:
 
-# Build / deploy
-npx dove build
-npx dove deploy
-
-# Scopes & update sets
-npx dove initScopes
-npx dove createUpdateSet
-npx dove switchUpdateSet
-npx dove listUpdateSets
-npx dove currentUpdateSet
-npx dove changeScope
-npx dove currentScope
-
-# Records
-npx dove create <table>
-npx dove delete <table>
-
-# Tools
-npx dove dashboard [--port 3457]
-npx dove schema pull
-npx dove init-claude          # install Claude Code skills
-npx dove task clear           # deselect active task (avoid stale update set pushes)
-npx dove migrate              # Sincronia → Dovetail (default dry-run; --apply to execute)
-npx dove clickup              # subcommands: tasks, task, create, update, comment, teams, setup, spaces, lists
-
-# Target a different instance per command (global flag on every command)
-npx dove push --env .env.prod         # alias: -e, --env-file
-npx dove status -e ../envs/workshop.env
-```
-
-**Per-command `.env` selection.** Every `dove` command accepts a global `--env <path>` flag (alias `-e` / `--env-file`) that loads credentials from a specific file instead of the project-root `.env` — so one checkout can target multiple instances. `dove login --env .env.prod` also *writes* to that file. The same applies to `dove-sn` (`--env` / `DOVETAIL_ENV_FILE`) and the MCP servers (`--env` arg / `DOVETAIL_ENV_FILE`). Variables already in the environment are never overridden, so an exported `SN_INSTANCE` still wins (useful in CI).
+- **`--diff <branch>` is a FLAG, not a `dove diff` command.** There is no `dove diff`. `--diff` scopes a `push`/`build` to files changed vs a git branch, e.g. `npx dove push --diff main`.
+- **`--env <path>` targets a different instance per command** (alias `-e` / `--env-file`) — loads creds from a specific file instead of the project-root `.env`, so one checkout can hit multiple instances. `dove login --env <path>` also _writes_ to that file. Applies to `dove-sn` and the MCP servers too (`--env` / `DOVETAIL_ENV_FILE`). Already-exported vars (e.g. `SN_INSTANCE`) are never overridden — useful in CI, a footgun otherwise.
+- **`npx dove task clear`** — deselect the active task so a `push` doesn't land in a stale update set.
+- **`npx dove migrate`** — Sincronia → Dovetail; dry-run by default, `--apply` to execute.
 
 First-time setup: `npm i -D @tenonhq/dovetail-core` → `npx dove init` → `npx dove configure` (creates `.env`, do not commit) → `npx dove watch`.
 
@@ -173,7 +125,7 @@ First-time setup: `npm i -D @tenonhq/dovetail-core` → `npx dove init` → `npx
 ```javascript
 module.exports = {
   name: "my-plugin",
-  transform: async (source, path) => transformedSource
+  transform: async (source, path) => transformedSource,
 };
 ```
 
@@ -198,16 +150,16 @@ Don't hand-edit. Use `npx dove refresh` to rebuild from ServiceNow.
 
 ## Troubleshooting
 
-| Symptom | First check |
-|---|---|
-| Auth failure | `.env` credentials, instance URL format, user role (or pass `--env <path>` to load a different file) |
+| Symptom                    | First check                                                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Auth failure               | `.env` credentials, instance URL format, user role (or pass `--env <path>` to load a different file)                        |
 | Hitting the wrong instance | A stray `.env` in cwd, or shell-exported `SN_INSTANCE` overriding the file — pass `--env <path>` and unset conflicting vars |
-| Nothing syncs | `includes._tables` is defined and non-empty |
-| Field corrupted on push | Add field type override under non-prefixed `includes.<table>` |
-| Manifest drift | `npx dove refresh` |
-| Build error | Node 22 LTS, plugin config |
-| Sync conflict | `npx dove status` (or the dashboard), then `npx dove refresh` |
-| Wrong scope on writes | Use Dovetail REST endpoints, not raw Table API |
+| Nothing syncs              | `includes._tables` is defined and non-empty                                                                                 |
+| Field corrupted on push    | Add field type override under non-prefixed `includes.<table>`                                                               |
+| Manifest drift             | `npx dove refresh`                                                                                                          |
+| Build error                | Node 22 LTS, plugin config                                                                                                  |
+| Sync conflict              | `npx dove status` (or the dashboard), then `npx dove refresh`                                                               |
+| Wrong scope on writes      | Use Dovetail REST endpoints, not raw Table API                                                                              |
 
 Debug logs: `dovetail-debug-*.log`.
 
@@ -225,3 +177,7 @@ Debug logs: `dovetail-debug-*.log`.
 - [`../ServiceNowTypes/CLAUDE.md`](../ServiceNowTypes/CLAUDE.md) — TS definitions for SN APIs
 - [`../Tables/CLAUDE.md`](../Tables/CLAUDE.md) — table schemas
 - [`../CLAUDE.md`](../CLAUDE.md) — Craftsman monorepo conventions (coding standards, git/worktree workflow, branch naming)
+
+---
+
+_Last updated: 2026-06-15 — lean pass: dropped rot-prone counts/enumerations (point to [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md) as canonical), trimmed the CLI catalog to non-obvious flags._
