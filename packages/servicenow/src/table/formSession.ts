@@ -38,7 +38,13 @@ export function resolveFormAuth(cfg: {
       "ServiceNow instance not configured. Set SN_INSTANCE or pass { instance }.",
     );
   }
-  var host = rawHost.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  // Strip the scheme, then trim trailing slashes by index. NOT /\/+$/ — an
+  // anchored one-or-more quantifier is a polynomial-ReDoS on a host with many
+  // trailing slashes (CodeQL js/polynomial-redos); the index walk is O(n).
+  var host = rawHost.replace(/^https?:\/\//, "");
+  var hostEnd = host.length;
+  while (hostEnd > 0 && host.charAt(hostEnd - 1) === "/") hostEnd -= 1;
+  host = host.slice(0, hostEnd);
   if (host.indexOf(".") === -1) host = host.toLowerCase() + ".service-now.com";
   var user =
     c.user ||
