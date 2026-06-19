@@ -152,3 +152,14 @@ export var createTableSchema = z.object({
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional()
 });
+
+export var addColumnSchema = z.object({
+  table: z.string().min(1),
+  column: columnSpecSchema,
+  scope: z.string().optional(),
+  updateSetSysId: z.string().optional(),
+  saveActionSysId: z.string().optional(),
+  columnsRelId: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  debug: z.boolean().optional()
+});

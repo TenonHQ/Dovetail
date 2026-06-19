@@ -44,8 +44,8 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable } from "./table";
-import type { ColumnSpec, CreateTableParams } from "./table";
+import { createTable, addColumn } from "./table";
+import type { ColumnSpec, CreateTableParams, AddColumnParams } from "./table";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
@@ -667,6 +667,10 @@ function printHelp(): void {
     "                      --columns \"Label:type:max, ...\"  OR  --from-json <spec.json>\n" +
     "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
     "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
+    "  add-column         Add ONE column to an EXISTING table via the Studio form save, then verify\n" +
+    "                     (--table <name|sys_id> --label <l> --type <t>\n" +
+    "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
+    "                      [--scope <s>] [--update-set <sys_id>] [--dry-run] [--json])\n" +
     "  test-flow          Validate (default) or run a flow/subflow\n" +
     "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
     "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
@@ -758,6 +762,60 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn add-column:
+ *   --table x_cadso_journey --label URL --type url
+ *   [--name url] [--max-length 1024] [--reference <table>]
+ *   [--scope x_cadso_journey] [--update-set <sys_id>] [--save-action <sys_id>]
+ *   [--columns-rel-id <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ */
+async function runAddColumn(flags: Record<string, string>): Promise<number> {
+  var spec: Partial<AddColumnParams> = {};
+  if (flags["from-json"]) {
+    spec = JSON.parse(fs.readFileSync(path.resolve(flags["from-json"]), "utf8")) as Partial<AddColumnParams>;
+  }
+  var table = flags.table || spec.table;
+  var column: ColumnSpec | undefined = spec.column;
+  if (flags.label || flags.type) {
+    column = { label: flags.label || "", type: flags.type || "string" };
+    if (flags.name) column.name = flags.name;
+    if (flags["max-length"]) column.max_length = flags["max-length"];
+    if (flags.reference) column.reference = flags.reference;
+  }
+  if (!table || !column || !column.label) {
+    process.stderr.write("add-column: --table and --label (with --type) are required (or --from-json)\n");
+    return 1;
+  }
+  var params: AddColumnParams = {
+    client: createClient({}),
+    table: table,
+    column: column
+  };
+  var scope = flags.scope || spec.scope;
+  if (scope) params.scope = scope;
+  var us = flags["update-set"] || spec.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  var sa = flags["save-action"] || spec.saveActionSysId;
+  if (sa) params.saveActionSysId = sa;
+  var relId = flags["columns-rel-id"] || spec.columnsRelId;
+  if (relId) params.columnsRelId = relId;
+  if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
+  if (flags.debug === "true" || spec.debug === true) params.debug = true;
+
+  var result = await addColumn(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] " + result.table + "." + result.element + " (" + result.internalType + ")"
+        + (result.verified ? " — verified" : "")
+        + "\n" + result.note + "\n"
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -788,6 +846,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-table") {
     return await runCreateTable(parsed.flags);
+  }
+  if (parsed.command === "add-column") {
+    return await runAddColumn(parsed.flags);
   }
   if (parsed.command === "test-flow") {
     return await runTestFlow(parsed.flags);
