@@ -117,11 +117,29 @@ export interface AddColumnResult {
  */
 export function deriveElement(label: string, explicit?: string): string {
   if (explicit && explicit.trim()) return explicit.trim();
-  var e = String(label || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+  // Single linear pass: lower-case, collapse each run of non-alphanumerics to one
+  // underscore, then trim leading/trailing underscores. Deliberately NOT a regex —
+  // an anchored-quantifier trim (/^_+|_+$/) is a polynomial-ReDoS on attacker-shaped
+  // input (CodeQL js/polynomial-redos); a char scan is O(n).
+  var lower = String(label || "").toLowerCase();
+  var collapsed = "";
+  var prevUnderscore = false;
+  for (var i = 0; i < lower.length; i += 1) {
+    var ch = lower.charAt(i);
+    var isAlnum = (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9");
+    if (isAlnum) {
+      collapsed += ch;
+      prevUnderscore = false;
+    } else if (!prevUnderscore) {
+      collapsed += "_";
+      prevUnderscore = true;
+    }
+  }
+  var start = 0;
+  var end = collapsed.length;
+  while (start < end && collapsed.charAt(start) === "_") start += 1;
+  while (end > start && collapsed.charAt(end - 1) === "_") end -= 1;
+  var e = collapsed.slice(start, end);
   if (!e)
     throw new Error(
       "addColumn: cannot derive a column name from label '" +
