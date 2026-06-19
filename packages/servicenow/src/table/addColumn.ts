@@ -16,19 +16,45 @@
  * Then it READS THE COLUMN BACK from sys_dictionary to prove it landed — a write
  * that 302s but didn't create the field is reported as failed, never "created".
  *
- * The live POST path is NOT yet validated end-to-end (see the create-table caveat);
- * prefer dryRun until a live run on a sandbox confirms it. ES6 only, no optional
- * chaining, no `any`.
+ * Validated live 2026-06-19 on tenonworkstudio (a smoke-test scoped table): the
+ * form save creates the column (HTTP 200 re-render, not a 302), the before/after
+ * sys_dictionary diff confirms it, and a scoped insert into the new column
+ * round-trips — proving the physical column, not just the dictionary row. ES6
+ * only, no optional chaining, no `any`.
  */
 
 import * as crypto from "crypto";
 import type { ServiceNowClient } from "../client";
 import { buildColumnXml, NormalizedColumn } from "./buildColumnXml";
 import { ColumnSpec, normalizeColumns, listEditKey } from "./buildTableSave";
-import { resolveFormAuth, openFormSession, setCurrentApplication, getRecordForm, postForm } from "./formSession";
-import { DEFAULT_SAVE_ACTION, DEFAULT_COLUMNS_REL_ID, parseSysIdFromLocation } from "./createTable";
+import {
+  resolveFormAuth,
+  openFormSession,
+  setCurrentApplication,
+  getRecordForm,
+  postForm,
+} from "./formSession";
+import {
+  DEFAULT_SAVE_ACTION,
+  DEFAULT_COLUMNS_REL_ID,
+  parseSysIdFromLocation,
+} from "./createTable";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
+
+/**
+ * Read a ServiceNow Table API field value. Reference fields (e.g. sys_scope) come
+ * back as a { link, value } object — the API includes the reference link unless
+ * excluded — so a bare String() would yield "[object Object]". Returns the
+ * sys_id/value for a reference object, the string otherwise.
+ */
+function fieldValue(v: unknown): string {
+  if (v && typeof v === "object") {
+    var o = v as { value?: unknown };
+    return o.value === undefined || o.value === null ? "" : String(o.value);
+  }
+  return v === undefined || v === null ? "" : String(v);
+}
 
 export interface AddColumnParams {
   /** REST client for table/scope resolution + the read-back verify. */
@@ -96,7 +122,12 @@ export function deriveElement(label: string, explicit?: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-  if (!e) throw new Error("addColumn: cannot derive a column name from label '" + label + "' — pass column.name.");
+  if (!e)
+    throw new Error(
+      "addColumn: cannot derive a column name from label '" +
+        label +
+        "' — pass column.name.",
+    );
   return e;
 }
 
@@ -109,7 +140,12 @@ export function deriveElement(label: string, explicit?: string): string {
  */
 export function applyAddColumnOverlay(
   base: Record<string, string>,
-  o: { tableSysId: string; saveActionSysId: string; listEditKey: string; columnXml: string }
+  o: {
+    tableSysId: string;
+    saveActionSysId: string;
+    listEditKey: string;
+    columnXml: string;
+  },
 ): Record<string, string> {
   var f: Record<string, string> = Object.assign({}, base);
   f["sys_target"] = "sys_db_object";
@@ -131,38 +167,79 @@ function newSysId(): string {
 }
 
 function validate(params: AddColumnParams): void {
-  if (!params || typeof params !== "object") throw new Error("addColumn: params object required.");
+  if (!params || typeof params !== "object")
+    throw new Error("addColumn: params object required.");
   if (!params.client) throw new Error("addColumn: client is required.");
-  if (!params.table || !String(params.table).trim()) throw new Error("addColumn: table is required.");
-  if (!params.column || typeof params.column !== "object") throw new Error("addColumn: column is required.");
+  if (!params.table || !String(params.table).trim())
+    throw new Error("addColumn: table is required.");
+  if (!params.column || typeof params.column !== "object")
+    throw new Error("addColumn: column is required.");
+}
+
+/**
+ * Map every existing column on a table to its internal_type, via sys_dictionary.
+ * Used to snapshot before/after the save so the new column is found by diff —
+ * robust against ServiceNow's server-side element derivation (trailing-digit
+ * underscoring, cross-scope prefixing) that makes predicting the element brittle.
+ */
+async function elementTypeMap(
+  client: ServiceNowClient,
+  tableName: string,
+): Promise<Record<string, string>> {
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_dictionary",
+    "name=" + tableName + "^element!=NULL",
+    1000,
+  );
+  var map: Record<string, string> = {};
+  for (var i = 0; i < rows.length; i += 1) {
+    var el = fieldValue(rows[i].element);
+    if (el) map[el] = fieldValue(rows[i].internal_type);
+  }
+  return map;
 }
 
 /** Resolve the table by name or sys_id; returns its name, sys_id, and sys_scope. */
 async function resolveTable(
   client: ServiceNowClient,
-  table: string
+  table: string,
 ): Promise<{ name: string; sysId: string; scopeSysId: string }> {
   var query = SYS_ID.test(table) ? "sys_id=" + table : "name=" + table;
-  var rows = await client.table.query<Record<string, string>>("sys_db_object", query, 1);
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_db_object",
+    query,
+    1,
+  );
   if (rows.length === 0) {
-    throw new Error("addColumn: table '" + table + "' not found in sys_db_object.");
+    throw new Error(
+      "addColumn: table '" + table + "' not found in sys_db_object.",
+    );
   }
   return {
-    name: String(rows[0].name || table),
-    sysId: String(rows[0].sys_id || ""),
-    scopeSysId: String(rows[0].sys_scope || "")
+    name: fieldValue(rows[0].name) || table,
+    sysId: fieldValue(rows[0].sys_id),
+    scopeSysId: fieldValue(rows[0].sys_scope),
   };
 }
 
 /** Resolve a scope name-or-sysid to the sys_app sys_id used by setCurrentApplication. */
-async function resolveAppSysId(client: ServiceNowClient, scope: string): Promise<string> {
+async function resolveAppSysId(
+  client: ServiceNowClient,
+  scope: string,
+): Promise<string> {
   if (!scope) return "";
   var query = SYS_ID.test(scope) ? "sys_id=" + scope : "scope=" + scope;
-  var apps = await client.table.query<Record<string, string>>("sys_app", query, 1);
-  return apps.length > 0 ? String(apps[0].sys_id) : "";
+  var apps = await client.table.query<Record<string, unknown>>(
+    "sys_app",
+    query,
+    1,
+  );
+  return apps.length > 0 ? fieldValue(apps[0].sys_id) : "";
 }
 
-export async function addColumn(params: AddColumnParams): Promise<AddColumnResult> {
+export async function addColumn(
+  params: AddColumnParams,
+): Promise<AddColumnResult> {
   validate(params);
   var client = params.client;
 
@@ -188,88 +265,169 @@ export async function addColumn(params: AddColumnParams): Promise<AddColumnResul
       location: "",
       columnXml: columnXml,
       verified: false,
-      note: "dry-run: no session opened, no writes. Would add column '" + element
-        + "' (" + col.type + ") to '" + params.table + "' via the table form save, then read it back from sys_dictionary."
+      note:
+        "dry-run: no session opened, no writes. Would add column '" +
+        element +
+        "' (" +
+        col.type +
+        ") to '" +
+        params.table +
+        "' via the table form save, then read it back from sys_dictionary.",
     };
   }
 
   // ---- LIVE PATH (NOT YET VALIDATED END-TO-END) -----------------------------
   // Resolve the existing table + its scope.
   var resolved = await resolveTable(client, params.table);
-  var scopeForApp = params.scope && params.scope.trim() ? params.scope.trim() : resolved.scopeSysId;
+  var scopeForApp =
+    params.scope && params.scope.trim()
+      ? params.scope.trim()
+      : resolved.scopeSysId;
   var appSysId = await resolveAppSysId(client, scopeForApp);
-  var saveAction = params.saveActionSysId && params.saveActionSysId.trim()
-    ? params.saveActionSysId.trim()
-    : DEFAULT_SAVE_ACTION;
+  var saveAction =
+    params.saveActionSysId && params.saveActionSysId.trim()
+      ? params.saveActionSysId.trim()
+      : DEFAULT_SAVE_ACTION;
 
   // Open the form session and put it in the table's scope before the save.
-  var auth = resolveFormAuth({ instance: params.instance, user: params.user, password: params.password });
+  var auth = resolveFormAuth({
+    instance: params.instance,
+    user: params.user,
+    password: params.password,
+  });
   var session = await openFormSession(auth);
   var appSwitch = { ok: false, status: 0, body: "no app resolved" };
   if (appSysId) {
     appSwitch = await setCurrentApplication(auth, session, appSysId);
   }
   if (params.updateSetSysId) {
-    try { await client.claude.changeUpdateSet({ sysId: params.updateSetSysId }); } catch (e) { /* best-effort */ }
+    try {
+      await client.claude.changeUpdateSet({ sysId: params.updateSetSysId });
+    } catch (e) {
+      /* best-effort */
+    }
   }
 
   // Harvest the EXISTING table form — its rendered related list yields the real key.
   var harvest = await getRecordForm(auth, session, resolved.sysId);
-  var relId = params.columnsRelId && params.columnsRelId.trim() ? params.columnsRelId.trim() : DEFAULT_COLUMNS_REL_ID;
+  var relId =
+    params.columnsRelId && params.columnsRelId.trim()
+      ? params.columnsRelId.trim()
+      : DEFAULT_COLUMNS_REL_ID;
   var colKey = harvest.listEditKey ? harvest.listEditKey : listEditKey(relId);
   var fields = applyAddColumnOverlay(harvest.fields, {
     tableSysId: resolved.sysId,
     saveActionSysId: saveAction,
     listEditKey: colKey,
-    columnXml: columnXml
+    columnXml: columnXml,
   });
 
-  var resp = await postForm(auth, session, "/sys_db_object.do", fields);
-  var posted = resp.status >= 300 && resp.status < 400; // 302 on success
+  // Snapshot the table's columns BEFORE the save so the new column is found by diff.
+  // ServiceNow derives the element from the column label server-side (the element
+  // field is sent empty), and normalizes it — a trailing digit gains an underscore,
+  // a cross-scope add gets a scope prefix — so predicting the element name is
+  // unreliable. The diff reports whatever element SN actually assigned.
+  var beforeMap = await elementTypeMap(client, resolved.name);
 
-  // Read the column back — the done gate. A 302 that didn't create the field is a failure.
+  var resp = await postForm(auth, session, "/sys_db_object.do", fields);
+  // A form save's HTTP status does NOT prove the column landed: an EXISTING-record
+  // save re-renders the form with 200 on success (only a NEW record 302s to its
+  // assigned sys_id). So the sys_dictionary diff is the source of truth; only a hard
+  // HTTP error (4xx/5xx) skips it.
+  var hardError = resp.status >= 400;
+
   var verified = false;
+  var actualElement = "";
   var readBackType = "";
-  if (posted) {
-    var dictRows = await client.table.query<Record<string, string>>(
-      "sys_dictionary",
-      "name=" + resolved.name + "^element=" + element,
-      1
-    );
-    if (dictRows.length > 0) {
+  var added: Array<string> = [];
+  if (!hardError) {
+    var afterMap = await elementTypeMap(client, resolved.name);
+    added = Object.keys(afterMap).filter(function (e) {
+      return !Object.prototype.hasOwnProperty.call(beforeMap, e);
+    });
+    if (added.length > 0) {
       verified = true;
-      readBackType = String(dictRows[0].internal_type || "");
+      // Prefer the new element that matches our derived guess; else take the first.
+      var exact = added.filter(function (e) {
+        return e === element || e.indexOf(element) !== -1;
+      });
+      actualElement = exact.length > 0 ? exact[0] : added[0];
+      readBackType = afterMap[actualElement];
     }
   }
+  var reportElement = actualElement || element;
 
-  var status: "created" | "failed" = posted && verified ? "created" : "failed";
+  var status: "created" | "failed" = verified ? "created" : "failed";
   var note: string;
   if (status === "created") {
-    note = "Added column '" + element + "' (" + col.type + ") to " + resolved.name
-      + " — verified present in sys_dictionary"
-      + (readBackType && readBackType !== col.type ? " (NOTE: internal_type read back as '" + readBackType + "')" : "")
-      + ". Confirm a scoped insert + the sys_update_xml landed in the update set.";
-  } else if (posted && !verified) {
-    note = "save POST returned " + resp.status + " but column '" + element + "' was not found in sys_dictionary on "
-      + resolved.name + " — the form may have rejected the column. " + resp.body.slice(0, 200);
+    note =
+      "Added column '" +
+      reportElement +
+      "' (" +
+      col.type +
+      ") to " +
+      resolved.name +
+      " — verified present in sys_dictionary (HTTP " +
+      resp.status +
+      ")" +
+      (actualElement && actualElement !== element
+        ? " (NOTE: ServiceNow assigned element '" +
+          actualElement +
+          "', not the requested '" +
+          element +
+          "')"
+        : "") +
+      (readBackType && readBackType !== col.type
+        ? " (NOTE: internal_type read back as '" + readBackType + "')"
+        : "") +
+      (added.length > 1
+        ? " (NOTE: " +
+          added.length +
+          " new columns appeared: " +
+          added.join(", ") +
+          ")"
+        : "") +
+      ". Confirm a scoped insert + the sys_update_xml landed in the update set.";
+  } else if (!hardError) {
+    note =
+      "save POST returned " +
+      resp.status +
+      " but no new column appeared on " +
+      resolved.name +
+      " — the form likely rejected the column. " +
+      resp.body.slice(0, 300);
   } else {
-    note = "save POST returned " + resp.status + " (expected 302). " + resp.body.slice(0, 200);
+    note =
+      "save POST returned " +
+      resp.status +
+      " (HTTP error). " +
+      resp.body.slice(0, 300);
   }
   if (params.debug) {
-    note += " [debug: appSwitch=" + appSwitch.status + (appSwitch.ok ? "/ok" : "/FAIL:" + appSwitch.body)
-      + " appSysId=" + (appSysId || "(none)")
-      + " harvestedListEditKey=" + (harvest.listEditKey ? "yes" : "no")
-      + " colKey=" + colKey
-      + " fieldCount=" + Object.keys(fields).length
-      + " location=" + resp.location
-      + " readBackType=" + (readBackType || "(none)") + "]";
+    note +=
+      " [debug: appSwitch=" +
+      appSwitch.status +
+      (appSwitch.ok ? "/ok" : "/FAIL:" + appSwitch.body) +
+      " appSysId=" +
+      (appSysId || "(none)") +
+      " harvestedListEditKey=" +
+      (harvest.listEditKey ? "yes" : "no") +
+      " colKey=" +
+      colKey +
+      " fieldCount=" +
+      Object.keys(fields).length +
+      " location=" +
+      resp.location +
+      " readBackType=" +
+      (readBackType || "(none)") +
+      "]";
   }
 
   return {
     status: status,
     table: resolved.name,
     tableSysId: resolved.sysId,
-    element: element,
+    element: reportElement,
     label: col.label,
     internalType: col.type,
     columnSysId: columnSysId,
@@ -278,6 +436,6 @@ export async function addColumn(params: AddColumnParams): Promise<AddColumnResul
     location: resp.location,
     columnXml: columnXml,
     verified: verified,
-    note: note
+    note: note,
   };
 }
