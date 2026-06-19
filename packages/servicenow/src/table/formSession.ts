@@ -21,22 +21,41 @@ export interface FormAuth {
 }
 
 /** Env precedence mirrors client.ts: explicit > SN_* > SN_DEV_* > SN_PROD_*. */
-export function resolveFormAuth(cfg: { instance?: string; user?: string; password?: string }): FormAuth {
+export function resolveFormAuth(cfg: {
+  instance?: string;
+  user?: string;
+  password?: string;
+}): FormAuth {
   var c = cfg || {};
-  var rawHost = c.instance
-    || process.env.SN_INSTANCE
-    || process.env.SN_DEV_INSTANCE
-    || process.env.SN_PROD_INSTANCE
-    || "";
+  var rawHost =
+    c.instance ||
+    process.env.SN_INSTANCE ||
+    process.env.SN_DEV_INSTANCE ||
+    process.env.SN_PROD_INSTANCE ||
+    "";
   if (!rawHost) {
-    throw new Error("ServiceNow instance not configured. Set SN_INSTANCE or pass { instance }.");
+    throw new Error(
+      "ServiceNow instance not configured. Set SN_INSTANCE or pass { instance }.",
+    );
   }
   var host = rawHost.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   if (host.indexOf(".") === -1) host = host.toLowerCase() + ".service-now.com";
-  var user = c.user || process.env.SN_USER || process.env.SN_DEV_USERNAME || process.env.SN_PROD_USERNAME || "";
-  var password = c.password || process.env.SN_PASSWORD || process.env.SN_DEV_PASSWORD || process.env.SN_PROD_PASSWORD || "";
+  var user =
+    c.user ||
+    process.env.SN_USER ||
+    process.env.SN_DEV_USERNAME ||
+    process.env.SN_PROD_USERNAME ||
+    "";
+  var password =
+    c.password ||
+    process.env.SN_PASSWORD ||
+    process.env.SN_DEV_PASSWORD ||
+    process.env.SN_PROD_PASSWORD ||
+    "";
   if (!user || !password) {
-    throw new Error("ServiceNow credentials missing — set SN_USER/SN_PASSWORD (or SN_DEV_*/SN_PROD_*).");
+    throw new Error(
+      "ServiceNow credentials missing — set SN_USER/SN_PASSWORD (or SN_DEV_*/SN_PROD_*).",
+    );
   }
   return { host: host, user: user, password: password };
 }
@@ -48,11 +67,18 @@ export interface FormSession {
 
 type Jar = Record<string, string>;
 
-function base(auth: FormAuth): string { return "https://" + auth.host; }
+function base(auth: FormAuth): string {
+  return "https://" + auth.host;
+}
 
 function jarFrom(res: Response, jar: Jar): Jar {
-  var anyHeaders = res.headers as unknown as { getSetCookie?: () => Array<string> };
-  var setCookies: Array<string> = typeof anyHeaders.getSetCookie === "function" ? anyHeaders.getSetCookie() : [];
+  var anyHeaders = res.headers as unknown as {
+    getSetCookie?: () => Array<string>;
+  };
+  var setCookies: Array<string> =
+    typeof anyHeaders.getSetCookie === "function"
+      ? anyHeaders.getSetCookie()
+      : [];
   for (var i = 0; i < setCookies.length; i += 1) {
     var kv = setCookies[i].split(";")[0];
     var eq = kv.indexOf("=");
@@ -62,14 +88,19 @@ function jarFrom(res: Response, jar: Jar): Jar {
 }
 
 function cookieHeader(jar: Jar): string {
-  return Object.keys(jar).map(function (k) { return k + "=" + jar[k]; }).join("; ");
+  return Object.keys(jar)
+    .map(function (k) {
+      return k + "=" + jar[k];
+    })
+    .join("; ");
 }
 
 /** Scrape an authenticated g_ck (or form sysparm_ck) out of a page's HTML. */
 export function scrapeCk(html: string): string {
-  var m = html.match(/var g_ck = ['"]([0-9a-f]{40,})['"]/)
-    || html.match(/window\.g_ck = ['"]([0-9a-f]{40,})['"]/)
-    || html.match(/name="sysparm_ck"\s+value="([0-9a-f]{40,})"/);
+  var m =
+    html.match(/var g_ck = ['"]([0-9a-f]{40,})['"]/) ||
+    html.match(/window\.g_ck = ['"]([0-9a-f]{40,})['"]/) ||
+    html.match(/name="sysparm_ck"\s+value="([0-9a-f]{40,})"/);
   return m ? m[1] : "";
 }
 
@@ -77,31 +108,51 @@ export function scrapeCk(html: string): string {
 export async function openFormSession(auth: FormAuth): Promise<FormSession> {
   var B = base(auth);
   var jar: Jar = {};
-  var res = await fetch(B + "/login.do", { headers: { Accept: "text/html" }, redirect: "manual" });
+  var res = await fetch(B + "/login.do", {
+    headers: { Accept: "text/html" },
+    redirect: "manual",
+  });
   jarFrom(res, jar);
   var formCk = scrapeCk(await res.text());
   var body = new URLSearchParams({
-    user_name: auth.user, user_password: auth.password, sysparm_ck: formCk,
-    not_important: "", sys_action: "sysverb_login"
+    user_name: auth.user,
+    user_password: auth.password,
+    sysparm_ck: formCk,
+    not_important: "",
+    sys_action: "sysverb_login",
   }).toString();
   res = await fetch(B + "/login.do", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookieHeader(jar), Accept: "text/html" },
-    body: body, redirect: "manual"
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Cookie: cookieHeader(jar),
+      Accept: "text/html",
+    },
+    body: body,
+    redirect: "manual",
   });
   jarFrom(res, jar);
   var loc = res.headers.get("location");
   if (loc) {
-    var url = loc.indexOf("http") === 0 ? loc : B + (loc.indexOf("/") === 0 ? loc : "/" + loc);
-    res = await fetch(url, { headers: { Cookie: cookieHeader(jar), Accept: "text/html" }, redirect: "manual" });
+    var url =
+      loc.indexOf("http") === 0
+        ? loc
+        : B + (loc.indexOf("/") === 0 ? loc : "/" + loc);
+    res = await fetch(url, {
+      headers: { Cookie: cookieHeader(jar), Accept: "text/html" },
+      redirect: "manual",
+    });
     jarFrom(res, jar);
   }
   res = await fetch(B + "/sys_db_object.do?sys_id=-1&sysparm_stack=no", {
-    headers: { Cookie: cookieHeader(jar), Accept: "text/html" }
+    headers: { Cookie: cookieHeader(jar), Accept: "text/html" },
   });
   jarFrom(res, jar);
   var ck = scrapeCk(await res.text());
-  if (!ck) throw new Error("form login failed (no authenticated g_ck) — check SN_USER/SN_PASSWORD.");
+  if (!ck)
+    throw new Error(
+      "form login failed (no authenticated g_ck) — check SN_USER/SN_PASSWORD.",
+    );
   return { ck: ck, jar: jar };
 }
 
@@ -117,7 +168,7 @@ export async function openFormSession(auth: FormAuth): Promise<FormSession> {
 export async function setCurrentApplication(
   auth: FormAuth,
   session: FormSession,
-  appSysId: string
+  appSysId: string,
 ): Promise<{ ok: boolean; status: number; body: string }> {
   if (!appSysId) return { ok: false, status: 0, body: "no appSysId" };
   var B = base(auth);
@@ -127,16 +178,20 @@ export async function setCurrentApplication(
       "X-UserToken": session.ck,
       Cookie: cookieHeader(session.jar),
       "Content-Type": "application/json",
-      Accept: "application/json"
+      Accept: "application/json",
     },
     // The picker's ApplicationProcessor expects `app_id` (a `value` body returns
     // 400 "Missing Application Id").
     body: JSON.stringify({ app_id: appSysId }),
-    redirect: "manual"
+    redirect: "manual",
   });
   jarFrom(res, session.jar);
   var body = "";
-  try { body = await res.text(); } catch (e) { body = ""; }
+  try {
+    body = await res.text();
+  } catch (e) {
+    body = "";
+  }
   var ok = res.status >= 200 && res.status < 300;
   return { ok: ok, status: res.status, body: body.slice(0, 200) };
 }
@@ -161,12 +216,22 @@ export interface HarvestedForm {
  * empty, the create-table caller falls back to the constant relId). Validated live
  * 2026-06-13 for the new-record path.
  */
-export async function getRecordForm(auth: FormAuth, session: FormSession, sysId: string): Promise<HarvestedForm> {
+export async function getRecordForm(
+  auth: FormAuth,
+  session: FormSession,
+  sysId: string,
+): Promise<HarvestedForm> {
   var B = base(auth);
   var id = sysId && String(sysId).trim() ? String(sysId).trim() : "-1";
-  var res = await fetch(B + "/sys_db_object.do?sys_id=" + encodeURIComponent(id) + "&sysparm_stack=no", {
-    headers: { Cookie: cookieHeader(session.jar), Accept: "text/html" }
-  });
+  var res = await fetch(
+    B +
+      "/sys_db_object.do?sys_id=" +
+      encodeURIComponent(id) +
+      "&sysparm_stack=no",
+    {
+      headers: { Cookie: cookieHeader(session.jar), Accept: "text/html" },
+    },
+  );
   jarFrom(res, session.jar);
   var html = await res.text();
   var fields = parseFormInputs(html);
@@ -175,7 +240,10 @@ export async function getRecordForm(auth: FormAuth, session: FormSession, sysId:
   var listEditKey = "";
   var keys = Object.keys(fields);
   for (var i = 0; i < keys.length; i += 1) {
-    if (keys[i].indexOf("ListEditFormatterAction[sys_db_object.REL:") !== -1) { listEditKey = keys[i]; break; }
+    if (keys[i].indexOf("ListEditFormatterAction[sys_db_object.REL:") !== -1) {
+      listEditKey = keys[i];
+      break;
+    }
   }
   return { fields: fields, listEditKey: listEditKey };
 }
@@ -186,7 +254,10 @@ export async function getRecordForm(auth: FormAuth, session: FormSession, sysId:
  * lists, so `listEditKey` is normally empty — the caller falls back to the constant
  * "Table Columns" relId. Validated live 2026-06-13.
  */
-export async function getNewRecordForm(auth: FormAuth, session: FormSession): Promise<HarvestedForm> {
+export async function getNewRecordForm(
+  auth: FormAuth,
+  session: FormSession,
+): Promise<HarvestedForm> {
   return getRecordForm(auth, session, "-1");
 }
 
@@ -217,12 +288,15 @@ function attr(tag: string, name: string): string | null {
 }
 
 function decodeHtml(s: string): string {
+  // Unescape &amp; LAST. Doing it first double-unescapes inputs like "&amp;lt;"
+  // ("&amp;lt;" -> "&lt;" -> "<"), the js/double-escaping vulnerability. With the
+  // ampersand handled last, each entity is unescaped exactly once.
   return s
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 export interface PostResult {
@@ -236,7 +310,7 @@ export async function postForm(
   auth: FormAuth,
   session: FormSession,
   path: string,
-  fields: Record<string, string>
+  fields: Record<string, string>,
 ): Promise<PostResult> {
   var B = base(auth);
   var params = new URLSearchParams();
@@ -250,14 +324,18 @@ export async function postForm(
       "X-UserToken": session.ck,
       Cookie: cookieHeader(session.jar),
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      Accept: "text/html"
+      Accept: "text/html",
     },
     body: params.toString(),
-    redirect: "manual"
+    redirect: "manual",
   });
   jarFrom(res, session.jar);
   var location = res.headers.get("location") || "";
   var body = "";
-  try { body = await res.text(); } catch (e) { body = ""; }
+  try {
+    body = await res.text();
+  } catch (e) {
+    body = "";
+  }
   return { status: res.status, location: location, body: body };
 }
