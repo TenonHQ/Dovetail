@@ -34,7 +34,7 @@ import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable } from "../table";
+import { createTable, addColumn } from "../table";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -48,7 +48,8 @@ import {
   createFlowSchema,
   testFlowSchema,
   editFlowSchema,
-  createTableSchema
+  createTableSchema,
+  addColumnSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -64,7 +65,8 @@ export var TOOL_NAMES = [
   "flow_create",
   "flow_test",
   "flow_edit",
-  "create_table"
+  "create_table",
+  "add_column"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -315,6 +317,36 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
           updateSetSysId: p.updateSetSysId,
           saveActionSysId: p.saveActionSysId,
           dryRun: p.dryRun
+        });
+      }
+    },
+    {
+      name: "add_column",
+      annotations: WRITE_CREATE,
+      description:
+        "Add ONE column to an EXISTING ServiceNow table, headless and faithfully. Creating a column is a "
+        + "sys_dictionary insert; a REST/createRecord insert reliably 500s for a scoped-app column. This "
+        + "replays the Studio table-form save (POST /sys_db_object.do) against the existing table record, "
+        + "embedding the new column as list-edit XML, then READS THE COLUMN BACK from sys_dictionary to prove "
+        + "it landed (a 302 that did not create the field is reported failed, not created). table is the table "
+        + "name or its sys_db_object sys_id; column is { label, type, name?, max_length?, reference? } with "
+        + "friendly types mapped to internal types (string -> string_full_utf8); element is derived from label "
+        + "unless column.name is given. dryRun:true returns the plan + column XML with no session and no writes. "
+        + "NOTE: the live write path is pending a validated-live spike — prefer dryRun until confirmed, and "
+        + "always verify the sys_update_xml landed in the intended update set.",
+      shape: addColumnSchema.shape,
+      handler: async function (args: any) {
+        var p = addColumnSchema.parse(args);
+        return addColumn({
+          client: client(),
+          table: p.table,
+          column: p.column,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          saveActionSysId: p.saveActionSysId,
+          columnsRelId: p.columnsRelId,
+          dryRun: p.dryRun,
+          debug: p.debug
         });
       }
     }

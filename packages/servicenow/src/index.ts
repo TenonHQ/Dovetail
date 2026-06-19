@@ -122,11 +122,16 @@ export {
   defaultAccessFlags,
   TYPE_MAP,
   DEFAULT_SUPER_CLASS,
-  DEFAULT_SAVE_ACTION
+  DEFAULT_SAVE_ACTION,
+  addColumn,
+  deriveElement,
+  applyAddColumnOverlay
 } from "./table";
 export type {
   CreateTableParams,
   CreateTableResult,
+  AddColumnParams,
+  AddColumnResult,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,

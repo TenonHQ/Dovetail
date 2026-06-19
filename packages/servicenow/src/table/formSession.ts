@@ -149,16 +149,22 @@ export interface HarvestedForm {
 }
 
 /**
- * GET the new sys_db_object form and harvest every hidden/input field the browser
- * would submit (sysparm_ck, sysparm_encoded_record, the dynamic `<sysid>_text`
- * field, every sys_original.* default). The caller overlays capability params onto
- * `fields` before POSTing. NOTE: the new-record (sys_id=-1) form does NOT render
- * related lists, so `listEditKey` is normally empty — the caller falls back to the
- * constant "Table Columns" relId. Validated live 2026-06-13.
+ * GET a sys_db_object form (record `sysId`) and harvest every hidden/input field
+ * the browser would submit (sysparm_ck, sysparm_encoded_record, the dynamic
+ * `<sysid>_text` field, every sys_original.* default) plus the discovered list-edit
+ * key. The caller overlays capability params onto `fields` before POSTing.
+ *
+ * `sysId = "-1"` is the new-record form (table create). An EXISTING record's form
+ * renders the "Columns" related list inline, so for add-column the real
+ * `ListEditFormatterAction[sys_db_object.REL:<relId>]` key IS present and harvested
+ * here — unlike the new-record form, which renders no related lists (listEditKey
+ * empty, the create-table caller falls back to the constant relId). Validated live
+ * 2026-06-13 for the new-record path.
  */
-export async function getNewRecordForm(auth: FormAuth, session: FormSession): Promise<HarvestedForm> {
+export async function getRecordForm(auth: FormAuth, session: FormSession, sysId: string): Promise<HarvestedForm> {
   var B = base(auth);
-  var res = await fetch(B + "/sys_db_object.do?sys_id=-1&sysparm_stack=no", {
+  var id = sysId && String(sysId).trim() ? String(sysId).trim() : "-1";
+  var res = await fetch(B + "/sys_db_object.do?sys_id=" + encodeURIComponent(id) + "&sysparm_stack=no", {
     headers: { Cookie: cookieHeader(session.jar), Accept: "text/html" }
   });
   jarFrom(res, session.jar);
@@ -172,6 +178,16 @@ export async function getNewRecordForm(auth: FormAuth, session: FormSession): Pr
     if (keys[i].indexOf("ListEditFormatterAction[sys_db_object.REL:") !== -1) { listEditKey = keys[i]; break; }
   }
   return { fields: fields, listEditKey: listEditKey };
+}
+
+/**
+ * GET the new-record (sys_id=-1) sys_db_object form. Thin wrapper over getRecordForm
+ * preserved for the create-table caller. The new-record form renders no related
+ * lists, so `listEditKey` is normally empty — the caller falls back to the constant
+ * "Table Columns" relId. Validated live 2026-06-13.
+ */
+export async function getNewRecordForm(auth: FormAuth, session: FormSession): Promise<HarvestedForm> {
+  return getRecordForm(auth, session, "-1");
 }
 
 /**
