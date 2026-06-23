@@ -99,38 +99,62 @@ var snClient = wrapper(axios.create({
   withCredentials: true,
 }));
 
-// Dovetail Scripted REST API rebrand: the API path moved from /api/cadso/claude/*
-// to /api/cadso/dovetail/*. snApi rewrites legacy /api/cadso/claude/* URLs to the
-// new path on first call; if that 404s (instance hasn't been re-imported yet) we
-// latch back to the legacy path for the rest of the session and warn once.
-var _dovetailApiUseLegacyClaudePath = false;
+// Dovetail's core Scripted REST API now lives in the Dovetail scoped application
+// at /api/cadso/dovetail_core/*. Older instances still expose the previous
+// global-scope path /api/cadso/dovetail/*. Dashboard call sites still pass the
+// original /api/cadso/claude/* paths; snApi maps them to dovetail_core first and,
+// on a missing-endpoint error (404, or the 400 "Requested URI does not represent
+// any resource" SN returns for an absent Scripted REST resource), latches to the
+// legacy /api/cadso/dovetail/* path for the rest of the session and warns once.
+// Mirrors packages/core/src/snClient.ts so the dashboard and the dove CLI agree.
+var _dovetailApiUseLegacyPath = false;
+var _SN_MISSING_ENDPOINT_BODY = "Requested URI does not represent any resource";
+
+// True when an error means the Dovetail Scripted REST endpoint is absent on this
+// instance: a 404, or the 400 body SN returns for an unknown scripted-REST URI.
+function isMissingDovetailEndpoint(e) {
+  var status = e && e.response && e.response.status;
+  if (status === 404) return true;
+  if (status === 400) {
+    var data = e && e.response && e.response.data;
+    var body = "";
+    try {
+      body = typeof data === "string" ? data : JSON.stringify(data || "");
+    } catch (_e) {
+      body = "";
+    }
+    return body.indexOf(_SN_MISSING_ENDPOINT_BODY) !== -1;
+  }
+  return false;
+}
+
+// Map a dashboard call-site path (api/cadso/{claude,dovetail,dovetail_core}/<op>)
+// to the active Dovetail scoped-API path. Returns null for non-scoped endpoints
+// (e.g. api/now/table/*), which pass through unchanged.
+function dovetailScopedPath(endpoint) {
+  var match = endpoint.match(
+    /^\/?api\/cadso\/(?:dovetail_core|dovetail|claude)\/(.*)$/
+  );
+  if (!match) return null;
+  var service = _dovetailApiUseLegacyPath ? "dovetail" : "dovetail_core";
+  return "api/cadso/" + service + "/" + match[1];
+}
 
 async function snApi(method, endpoint, data) {
   await waitForRateLimit();
-  // Rewrite legacy /api/cadso/claude/* call sites to the new dovetail path,
-  // unless we've already discovered this instance only speaks the legacy path.
-  var rewritten = endpoint;
-  var isDovetailScopedApi = endpoint.indexOf("api/cadso/claude/") === 0
-    || endpoint.indexOf("/api/cadso/claude/") === 0
-    || endpoint.indexOf("api/cadso/dovetail/") === 0
-    || endpoint.indexOf("/api/cadso/dovetail/") === 0;
-  if (isDovetailScopedApi) {
-    rewritten = _dovetailApiUseLegacyClaudePath
-      ? endpoint.replace("api/cadso/dovetail/", "api/cadso/claude/")
-      : endpoint.replace("api/cadso/claude/", "api/cadso/dovetail/");
-  }
+  var scopedPath = dovetailScopedPath(endpoint);
+  var url = scopedPath || endpoint;
   try {
-    return await snClient({ method: method, url: rewritten, data: data });
+    return await snClient({ method: method, url: url, data: data });
   } catch (e) {
-    var status = e && e.response && e.response.status;
-    if (isDovetailScopedApi && !_dovetailApiUseLegacyClaudePath && status === 404) {
+    if (scopedPath && !_dovetailApiUseLegacyPath && isMissingDovetailEndpoint(e)) {
       // eslint-disable-next-line no-console
       console.warn(
-        "[deprecation] " + rewritten +
-          " returned 404. Falling back to legacy /api/cadso/claude/* path. Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+        "[deprecation] " + url +
+          " not found. Falling back to legacy /api/cadso/dovetail/* path. Install the Dovetail application's Scripted REST APIs to silence this warning.",
       );
-      _dovetailApiUseLegacyClaudePath = true;
-      var legacyUrl = rewritten.replace("api/cadso/dovetail/", "api/cadso/claude/");
+      _dovetailApiUseLegacyPath = true;
+      var legacyUrl = dovetailScopedPath(endpoint);
       return await snClient({ method: method, url: legacyUrl, data: data });
     }
     throw e;
