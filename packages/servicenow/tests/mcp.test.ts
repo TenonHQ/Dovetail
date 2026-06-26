@@ -5,7 +5,7 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 14 expected tools", function () {
+  it("registers exactly the 15 expected tools", function () {
     var names = buildDescriptors().map(function (d) { return d.name; });
     expect(names.slice().sort()).toEqual(
       [
@@ -20,12 +20,13 @@ describe("MCP registry", function () {
         "flow_publish",
         "flow_test",
         "flow_view",
+        "host_assets",
         "set_form_layout",
         "set_list_layout",
         "set_related_lists"
       ]
     );
-    expect(TOOL_NAMES).toHaveLength(14);
+    expect(TOOL_NAMES).toHaveLength(15);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -90,7 +91,7 @@ describe("MCP registry", function () {
     }) as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (14)");
+    expect(out).toContain("Registered tools (15)");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");
@@ -136,7 +137,7 @@ describe("MCP registry — annotations", function () {
     });
 
     // destructive-but-idempotent overwrites (prune/recompile/in-place edit)
-    ["set_list_layout", "set_form_layout", "set_related_lists", "flow_publish", "flow_edit"].forEach(function (name) {
+    ["set_list_layout", "set_form_layout", "set_related_lists", "flow_publish", "flow_edit", "host_assets"].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);
       expect(map[name].annotations.idempotentHint).toBe(true);

@@ -25,6 +25,11 @@ function mockClient(getResponses: Array<any>, postResponse?: any): { client: Ser
       changeUpdateSet: async function (p: { sysId: string }) { cap.updateSets.push(p.sysId); return {}; },
       deleteRecord: async function () { return {}; },
     },
+    attachment: {
+      listFor: async function () { return []; },
+      upload: async function () { return { sys_id: "att", file_name: "", content_type: "" }; },
+      remove: async function () { return undefined; }
+    },
     now: {
       get: async function <T>(path: string): Promise<T> {
         cap.gets.push(path);

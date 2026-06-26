@@ -35,6 +35,7 @@ import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
 import { createTable, addColumn } from "../table";
+import { hostAssets } from "../hostAssets";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -49,7 +50,8 @@ import {
   testFlowSchema,
   editFlowSchema,
   createTableSchema,
-  addColumnSchema
+  addColumnSchema,
+  hostAssetsSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -66,7 +68,8 @@ export var TOOL_NAMES = [
   "flow_test",
   "flow_edit",
   "create_table",
-  "add_column"
+  "add_column",
+  "host_assets"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -348,6 +351,25 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
           dryRun: p.dryRun,
           debug: p.debug
         });
+      }
+    },
+    {
+      name: "host_assets",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Deploy a pre-built front-end dist/ bundle to ServiceNow. For each chunk (index.html + "
+        + "assets/*.{js,css}) upserts a carrier sys_ui_script named app_shell_asset:<vite-relative-path> "
+        + "(the rotating hash is part of the name on purpose — the Scripted REST serving resource resolves "
+        + "an asset by this exact name), stores the chunk bytes as a sys_attachment (the script field caps "
+        + "at 65 KB), and wires an x_cadso_app_shell_m2m_app_script row (application, script, chunk_role, "
+        + "order). PRUNES carriers + m2m rows for chunks no longer in the build (hashes rotate per build). "
+        + "Idempotent — identical bytes (by SHA-256) are left in place. Fails fast on any chunk at/over the "
+        + "~5 MB serve cap (glide.scriptable.excel.max_file_size) unless allowOversize. app is the application "
+        + "record sys_id; dir is a local dist path on the server running this tool; script + m2m writes are "
+        + "captured in the update set; dryRun previews without writing.",
+      shape: hostAssetsSchema.shape,
+      handler: async function (args: any) {
+        return hostAssets(client(), hostAssetsSchema.parse(args));
       }
     }
   ];

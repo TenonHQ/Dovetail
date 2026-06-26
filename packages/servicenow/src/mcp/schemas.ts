@@ -127,6 +127,16 @@ export var editFlowSchema = z.object({
   updateSetSysId: z.string().optional()
 });
 
+export var hostAssetsSchema = z.object({
+  dir: z.string().min(1),
+  app: z.string().min(1),
+  scope: z.string().min(1),
+  updateSetSysId: z.string().min(1).optional(),
+  maxBytes: z.number().int().positive().optional(),
+  allowOversize: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});
+
 export var columnSpecSchema = z.object({
   label: z.string().min(1),
   type: z.string().min(1),

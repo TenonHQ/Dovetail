@@ -46,6 +46,7 @@ import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
 import { createTable, addColumn } from "./table";
 import type { ColumnSpec, CreateTableParams, AddColumnParams } from "./table";
+import { hostAssets, formatHostAssetsResult } from "./hostAssets";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
@@ -53,7 +54,8 @@ import type {
   CreateViewParams,
   SetListLayoutParams,
   SetFormLayoutParams,
-  SetRelatedListsParams
+  SetRelatedListsParams,
+  HostAssetsParams
 } from "./types";
 
 interface ParsedArgs {
@@ -671,6 +673,9 @@ function printHelp(): void {
     "                     (--table <name|sys_id> --label <l> --type <t>\n" +
     "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
     "                      [--scope <s>] [--update-set <sys_id>] [--dry-run] [--json])\n" +
+    "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
+    "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
+    "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
     "  test-flow          Validate (default) or run a flow/subflow\n" +
     "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
     "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
@@ -816,6 +821,45 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn host-assets:
+ *   --dir <dist>            Required. Path to the pre-built dist/ directory.
+ *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
+ *   --scope <namespace>     Required. Carrier scope, e.g. x_cadso_app_shell.
+ *   --update-set <sys_id>   Optional. Defaults to the scope's current update set.
+ *   --max-bytes <n>         Optional. Per-chunk serve cap (default ~5 MB).
+ *   --allow-oversize        Optional. Warn instead of failing on an oversize chunk.
+ *   --dry-run               Optional. Plan only; no writes/uploads/prunes.
+ *   --json                  Optional. Emit the structured HostAssetsResult.
+ *
+ * Exit codes: 0 done/dry-run, 1 bad args, 2 a write landed but read-back is unverified.
+ */
+async function runHostAssets(flags: Record<string, string>): Promise<number> {
+  var dir = flags.dir;
+  var app = flags.app;
+  var scope = flags.scope;
+  if (!dir || !app || !scope) {
+    process.stderr.write("host-assets: --dir, --app and --scope are required\n");
+    return 1;
+  }
+  var params: HostAssetsParams = { dir: path.resolve(dir), app: app, scope: scope };
+  var us = flags["update-set"] || flags.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  if (flags["max-bytes"]) params.maxBytes = Number(flags["max-bytes"]);
+  if (flags["allow-oversize"] === "true") params.allowOversize = true;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var client = createClient({});
+  var result = await hostAssets(client, params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatHostAssetsResult(result) + "\n");
+  }
+  var unverified = !result.dryRun && result.chunks.some(function (c) { return !c.verified; });
+  return unverified ? 2 : 0;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -849,6 +893,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
+  }
+  if (parsed.command === "host-assets") {
+    return await runHostAssets(parsed.flags);
   }
   if (parsed.command === "test-flow") {
     return await runTestFlow(parsed.flags);

@@ -11,10 +11,13 @@ export type {
   ServiceNowClient,
   TableQueryOptions,
   TableSchema,
-  TableSchemaField
+  TableSchemaField,
+  AttachmentMeta
 } from "./client";
 
 export { addChoicesToField } from "./choices";
+
+export { hostAssets, classifyChunks, formatHostAssetsResult } from "./hostAssets";
 
 export { formatAddChoicesResult } from "./formatter";
 
@@ -109,7 +112,13 @@ export type {
   FormSectionSpec,
   SetFormLayoutParams,
   SetListLayoutParams,
-  SetRelatedListsParams
+  SetRelatedListsParams,
+  ChunkRole,
+  ChunkInfo,
+  ChunkResult,
+  PrunedResult,
+  HostAssetsParams,
+  HostAssetsResult
 } from "./types";
 
 export {
