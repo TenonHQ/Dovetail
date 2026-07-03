@@ -161,7 +161,7 @@ Don't hand-edit. Use `npx dove refresh` to rebuild from ServiceNow.
 | Sync conflict              | `npx dove status` (or the dashboard), then `npx dove refresh`                                                               |
 | Wrong scope on writes      | Use Dovetail REST endpoints, not raw Table API                                                                              |
 
-Debug logs: `dovetail-debug-*.log`.
+Debug logs: opt-in only. Re-run the command with `--debug` (or set `DOVETAIL_DEBUG=1`) to write a `dovetail-debug-*.log` file in the cwd; without it, no log file is created.
 
 ## Notes
 

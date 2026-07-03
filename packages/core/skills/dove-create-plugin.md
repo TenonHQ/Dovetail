@@ -171,4 +171,4 @@ module.exports = {
 - Return `{ success: false, output: "" }` to stop the build for that file
 - Throw an exception for unexpected errors (caught by PluginManager)
 - Log useful error messages -- they appear in the Dovetail console output
-- Check `dovetail-debug-*.log` for detailed error traces
+- Re-run with `--debug` (or `DOVETAIL_DEBUG=1`) to capture detailed error traces in a `dovetail-debug-*.log` (opt-in; off by default)
