@@ -79,11 +79,16 @@ function renderScopes() {
 
   scopesData.forEach(function (scope) {
     var card = document.createElement("div");
-    card.className = "scope-card" + (scope.selected_update_set ? " has-selection" : "");
+    card.className =
+      "scope-card" + (scope.selected_update_set ? " has-selection" : "");
     card.id = "card-" + scope.scope;
 
-    var selectedName = scope.selected_update_set ? scope.selected_update_set.name : "None";
-    var selectedId = scope.selected_update_set ? scope.selected_update_set.sys_id : "";
+    var selectedName = scope.selected_update_set
+      ? scope.selected_update_set.name
+      : "None";
+    var selectedId = scope.selected_update_set
+      ? scope.selected_update_set.sys_id
+      : "";
 
     // Build activate button HTML if there's an active task
     var activateHtml = "";
@@ -95,8 +100,12 @@ function renderScopes() {
       } else {
         activateHtml =
           '<button class="btn-activate" onclick="activateScope(\'' +
-          scope.scope + "', '" + scope.sys_id +
-          "')\">Activate CU-" + activeTask.taskId + "</button>";
+          scope.scope +
+          "', '" +
+          scope.sys_id +
+          "')\">Activate " +
+          (activeTask.customId || activeTask.taskId) +
+          "</button>";
       }
     }
 
@@ -104,30 +113,72 @@ function renderScopes() {
     var taskBadgeHtml = "";
     if (activeTask && activeTask.scopes && activeTask.scopes[scope.scope]) {
       taskBadgeHtml =
-        '<div class="scope-task-badge">CU-' + activeTask.taskId + "</div>";
+        '<div class="scope-task-badge">' +
+        (activeTask.customId || activeTask.taskId) +
+        "</div>";
     }
 
     card.innerHTML =
       '<div class="scope-header">' +
-        '<span class="scope-name">' + scope.scope + "</span>" +
-        '<span class="scope-id">' + (scope.sys_id ? scope.sys_id.substring(0, 8) + "..." : "not found") + "</span>" +
+      '<span class="scope-name">' +
+      scope.scope +
+      "</span>" +
+      '<span class="scope-id">' +
+      (scope.sys_id ? scope.sys_id.substring(0, 8) + "..." : "not found") +
+      "</span>" +
       "</div>" +
-      '<div class="display-name">' + scope.display_name + "</div>" +
-      '<select class="update-set-select" id="select-' + scope.scope + '" onchange="onSelectChange(\'' + scope.scope + '\')">' +
-        '<option value="">-- No Update Set --</option>' +
-        '<option value="__loading" disabled>Loading...</option>' +
+      '<div class="display-name">' +
+      scope.display_name +
+      "</div>" +
+      '<select class="update-set-select" id="select-' +
+      scope.scope +
+      '" onchange="onSelectChange(\'' +
+      scope.scope +
+      "')\">" +
+      '<option value="">-- No Update Set --</option>' +
+      '<option value="__loading" disabled>Loading...</option>' +
       "</select>" +
       '<div class="card-actions">' +
-        '<button class="btn btn-primary" onclick="openCreateModal(\'' + scope.scope + "', '" + scope.sys_id + "')\" " + (!scope.sys_id ? "disabled" : "") + ">New</button>" +
-        '<button class="btn btn-danger" id="close-btn-' + scope.scope + '" onclick="closeUpdateSet(\'' + scope.scope + '\')" disabled>Close</button>' +
-        '<button class="btn btn-clear" id="clear-btn-' + scope.scope + '" onclick="clearSelection(\'' + scope.scope + '\')" ' + (!scope.selected_update_set ? "disabled" : "") + ">Clear</button>" +
-        activateHtml +
+      '<button class="btn btn-primary" onclick="openCreateModal(\'' +
+      scope.scope +
+      "', '" +
+      scope.sys_id +
+      "')\" " +
+      (!scope.sys_id ? "disabled" : "") +
+      ">New</button>" +
+      '<button class="btn btn-danger" id="close-btn-' +
+      scope.scope +
+      '" onclick="closeUpdateSet(\'' +
+      scope.scope +
+      "')\" disabled>Close</button>" +
+      '<button class="btn btn-clear" id="clear-btn-' +
+      scope.scope +
+      '" onclick="clearSelection(\'' +
+      scope.scope +
+      "')\" " +
+      (!scope.selected_update_set ? "disabled" : "") +
+      ">Clear</button>" +
+      activateHtml +
       "</div>" +
       '<div class="quick-create">' +
-        '<input type="text" id="quick-name-' + scope.scope + '" placeholder="Update set name..." class="quick-create-input" onkeydown="if(event.key===\'Enter\')quickCreateUpdateSet(\'' + scope.scope + "', '" + scope.sys_id + "')\" />" +
-        '<button class="btn btn-primary btn-small" onclick="quickCreateUpdateSet(\'' + scope.scope + "', '" + scope.sys_id + "')\" " + (!scope.sys_id ? "disabled" : "") + ">Create</button>" +
+      '<input type="text" id="quick-name-' +
+      scope.scope +
+      '" placeholder="Update set name..." class="quick-create-input" onkeydown="if(event.key===\'Enter\')quickCreateUpdateSet(\'' +
+      scope.scope +
+      "', '" +
+      scope.sys_id +
+      "')\" />" +
+      '<button class="btn btn-primary btn-small" onclick="quickCreateUpdateSet(\'' +
+      scope.scope +
+      "', '" +
+      scope.sys_id +
+      "')\" " +
+      (!scope.sys_id ? "disabled" : "") +
+      ">Create</button>" +
       "</div>" +
-      (scope.selected_update_set ? '<div class="selected-badge">Active for push</div>' : "") +
+      (scope.selected_update_set
+        ? '<div class="selected-badge">Active for push</div>'
+        : "") +
       taskBadgeHtml;
 
     grid.appendChild(card);
@@ -166,7 +217,9 @@ async function loadUpdateSets(scope, selectedId) {
 async function onSelectChange(scope) {
   var select = document.getElementById("select-" + scope);
   var sysId = select.value;
-  var name = select.options[select.selectedIndex] ? select.options[select.selectedIndex].textContent : "";
+  var name = select.options[select.selectedIndex]
+    ? select.options[select.selectedIndex].textContent
+    : "";
 
   try {
     await api("POST", "/api/select-update-set", {
@@ -175,9 +228,13 @@ async function onSelectChange(scope) {
       update_set_name: sysId ? name : null,
     });
 
-    var scopeData = scopesData.find(function (s) { return s.scope === scope; });
+    var scopeData = scopesData.find(function (s) {
+      return s.scope === scope;
+    });
     if (scopeData) {
-      scopeData.selected_update_set = sysId ? { sys_id: sysId, name: name } : null;
+      scopeData.selected_update_set = sysId
+        ? { sys_id: sysId, name: name }
+        : null;
     }
 
     var card = document.getElementById("card-" + scope);
@@ -221,8 +278,10 @@ async function closeUpdateSet(scope) {
   var sysId = select ? select.value : "";
   if (!sysId) return;
 
-  var name = select.options[select.selectedIndex] ? select.options[select.selectedIndex].textContent : "";
-  if (!confirm("Close update set \"" + name + "\"?")) return;
+  var name = select.options[select.selectedIndex]
+    ? select.options[select.selectedIndex].textContent
+    : "";
+  if (!confirm('Close update set "' + name + '"?')) return;
 
   try {
     await api("PATCH", "/api/update-set/" + sysId + "/close");
@@ -233,7 +292,9 @@ async function closeUpdateSet(scope) {
       update_set_name: null,
     });
 
-    var scopeData = scopesData.find(function (s) { return s.scope === scope; });
+    var scopeData = scopesData.find(function (s) {
+      return s.scope === scope;
+    });
     if (scopeData) scopeData.selected_update_set = null;
 
     toast("Closed: " + name);
@@ -260,8 +321,12 @@ function openCreateModal(scope, scopeSysId) {
   modalScopeKey = scope;
   modalScopeSysId = scopeSysId;
   document.getElementById("modal-scope").value = scope;
-  document.getElementById("modal-name").value = activeTask ? activeTask.updateSetName : "";
-  document.getElementById("modal-description").value = activeTask ? activeTask.description : "";
+  document.getElementById("modal-name").value = activeTask
+    ? activeTask.updateSetName
+    : "";
+  document.getElementById("modal-description").value = activeTask
+    ? activeTask.description
+    : "";
   document.getElementById("create-modal").classList.add("active");
   document.getElementById("modal-name").focus();
 }
@@ -299,7 +364,9 @@ async function createUpdateSet() {
       update_set_name: name,
     });
 
-    var scopeData = scopesData.find(function (s) { return s.scope === modalScopeKey; });
+    var scopeData = scopesData.find(function (s) {
+      return s.scope === modalScopeKey;
+    });
     if (scopeData) {
       scopeData.selected_update_set = { sys_id: newSysId, name: name };
     }
@@ -366,7 +433,9 @@ async function quickCreateUpdateSet(scope, scopeSysId) {
       update_set_name: name,
     });
 
-    var scopeData = scopesData.find(function (s) { return s.scope === scope; });
+    var scopeData = scopesData.find(function (s) {
+      return s.scope === scope;
+    });
     if (scopeData) {
       scopeData.selected_update_set = { sys_id: newSysId, name: name };
     }
@@ -468,7 +537,10 @@ async function loadClickUpTasks() {
 
   try {
     var statusParam = activeStatuses.join(",");
-    var data = await api("GET", "/api/clickup/tasks?statuses=" + encodeURIComponent(statusParam));
+    var data = await api(
+      "GET",
+      "/api/clickup/tasks?statuses=" + encodeURIComponent(statusParam)
+    );
     clickupTasks = data.byStatus || {};
 
     // Merge discovered statuses with what we know
@@ -505,7 +577,8 @@ function renderStatusFilters() {
   container.innerHTML = "";
   availableStatuses.forEach(function (status) {
     var chip = document.createElement("button");
-    chip.className = "filter-chip" + (activeStatuses.indexOf(status) !== -1 ? " active" : "");
+    chip.className =
+      "filter-chip" + (activeStatuses.indexOf(status) !== -1 ? " active" : "");
     chip.textContent = status;
     chip.onclick = function () {
       var idx = activeStatuses.indexOf(status);
@@ -535,9 +608,12 @@ function filterTasks(tasks) {
   }
   if (myTasksOnly && clickupUserId) {
     filtered = filtered.filter(function (task) {
-      return task.assignees && task.assignees.some(function (a) {
-        return String(a.id) === String(clickupUserId);
-      });
+      return (
+        task.assignees &&
+        task.assignees.some(function (a) {
+          return String(a.id) === String(clickupUserId);
+        })
+      );
     });
   }
   return filtered;
@@ -571,7 +647,9 @@ function renderTaskList() {
 
     tasks.forEach(function (task) {
       var card = document.createElement("div");
-      card.className = "task-card" + (activeTask && activeTask.taskId === task.id ? " selected" : "");
+      card.className =
+        "task-card" +
+        (activeTask && activeTask.taskId === task.id ? " selected" : "");
       card.onclick = function () {
         selectTask(task);
       };
@@ -579,25 +657,44 @@ function renderTaskList() {
       var priorityHtml = "";
       if (task.priority) {
         // Tenon tertiary + status palette (see tokens.css)
-        var colors = { urgent: "#d92b2b", high: "#f16b19", normal: "#f4dc00", low: "#76d6ff" };
+        var colors = {
+          urgent: "#d92b2b",
+          high: "#f16b19",
+          normal: "#f4dc00",
+          low: "#76d6ff",
+        };
         var color = colors[task.priority] || "#9caaa1";
-        priorityHtml = '<span class="task-priority-dot" style="background:' + color + '"></span>';
+        priorityHtml =
+          '<span class="task-priority-dot" style="background:' +
+          color +
+          '"></span>';
       }
 
       var assigneeHtml = "";
       if (task.assignees && task.assignees.length > 0) {
-        var initials = task.assignees.map(function (a) {
-          return a.initials || (a.username || "?").substring(0, 2).toUpperCase();
-        }).join(", ");
-        assigneeHtml = '<span class="task-card-assignee">' + escapeHtml(initials) + "</span>";
+        var initials = task.assignees
+          .map(function (a) {
+            return (
+              a.initials || (a.username || "?").substring(0, 2).toUpperCase()
+            );
+          })
+          .join(", ");
+        assigneeHtml =
+          '<span class="task-card-assignee">' +
+          escapeHtml(initials) +
+          "</span>";
       }
 
       card.innerHTML =
-        '<div class="task-card-name">' + escapeHtml(task.name) + "</div>" +
+        '<div class="task-card-name">' +
+        escapeHtml(task.name) +
+        "</div>" +
         '<div class="task-card-meta">' +
-          '<span class="task-card-id">' + (task.customId || task.id) + "</span>" +
-          priorityHtml +
-          assigneeHtml +
+        '<span class="task-card-id">' +
+        (task.customId || task.id) +
+        "</span>" +
+        priorityHtml +
+        assigneeHtml +
         "</div>";
 
       group.appendChild(card);
@@ -607,7 +704,8 @@ function renderTaskList() {
   });
 
   if (totalVisible === 0) {
-    container.innerHTML = '<div class="sidebar-loading">No matching tasks</div>';
+    container.innerHTML =
+      '<div class="sidebar-loading">No matching tasks</div>';
   }
 }
 
@@ -623,6 +721,7 @@ async function selectTask(task) {
   try {
     var data = await api("POST", "/api/clickup/select-task", {
       taskId: task.id,
+      customId: task.customId || "",
       taskName: task.name,
       taskDescription: task.description || "",
       taskUrl: task.url || "",
@@ -676,14 +775,22 @@ function renderActiveTaskBanner() {
   banner.style.display = "";
 
   var scopeKeys = activeTask.scopes ? Object.keys(activeTask.scopes) : [];
-  var scopeText = scopeKeys.length > 0
-    ? "<span>" + scopeKeys.join(", ") + "</span>"
-    : "None activated yet";
+  var scopeText =
+    scopeKeys.length > 0
+      ? "<span>" + scopeKeys.join(", ") + "</span>"
+      : "None activated yet";
 
   banner.innerHTML =
-    '<div class="active-task-name">' + escapeHtml(activeTask.taskName) + "</div>" +
-    '<div class="active-task-us-name">' + escapeHtml(activeTask.updateSetName) + "</div>" +
-    '<div class="active-task-scopes">Scopes: ' + scopeText + "</div>" +
+    '<div class="active-task-name">' +
+    escapeHtml(activeTask.taskName) +
+    "</div>" +
+    '<div class="active-task-us-name">' +
+    escapeHtml(activeTask.updateSetName) +
+    "</div>" +
+    '<div class="active-task-scopes">Scopes: ' +
+    scopeText +
+    "</div>" +
+    '<button class="btn-start-task" onclick="startTask()">Start Task</button>' +
     '<button class="btn-deselect" onclick="deselectTask()">Deselect</button>';
 }
 
@@ -698,7 +805,7 @@ function renderActiveTaskChip() {
   }
 
   chip.style.display = "";
-  chip.textContent = "CU-" + activeTask.taskId;
+  chip.textContent = activeTask.customId || activeTask.taskId;
   chip.title = activeTask.updateSetName;
   chip.onclick = function () {
     if (!sidebarOpen) toggleSidebar();
@@ -736,7 +843,9 @@ async function activateScope(scope, scopeSysId) {
     activeTask.scopes[scope] = { sys_id: us.sys_id, name: us.name };
 
     // Update scopesData so the dropdown reflects the new selection
-    var scopeData = scopesData.find(function (s) { return s.scope === scope; });
+    var scopeData = scopesData.find(function (s) {
+      return s.scope === scope;
+    });
     if (scopeData) {
       scopeData.selected_update_set = { sys_id: us.sys_id, name: us.name };
     }
@@ -748,7 +857,80 @@ async function activateScope(scope, scopeSysId) {
     toast("Failed to activate scope: " + e.message, "error");
     if (activateBtn) {
       activateBtn.disabled = false;
-      activateBtn.textContent = "Activate CU-" + activeTask.taskId;
+      activateBtn.textContent =
+        "Activate " + (activeTask.customId || activeTask.taskId);
+    }
+  }
+}
+
+// --- Start task: ClickUp status -> in progress, per-scope update sets, branch ---
+
+async function startTask() {
+  if (!activeTask) return;
+
+  var btn = document.querySelector(".btn-start-task");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Starting...";
+  }
+
+  try {
+    var data = await api("POST", "/api/clickup/start-task");
+    var scopeResults = data.scopes || [];
+
+    if (data.activeTask) {
+      activeTask = data.activeTask;
+    }
+
+    var created = 0;
+    var found = 0;
+    var errors = 0;
+    scopeResults.forEach(function (r) {
+      if (r.error) {
+        errors++;
+      } else if (r.created) {
+        created++;
+      } else {
+        found++;
+      }
+      var scopeData = scopesData.find(function (s) {
+        return s.scope === r.scope;
+      });
+      if (scopeData && r.update_set) {
+        scopeData.selected_update_set = {
+          sys_id: r.update_set.sys_id,
+          name: r.update_set.name,
+        };
+      }
+    });
+
+    var parts = ["status: in progress"];
+    var setParts = [];
+    if (created > 0) setParts.push(created + " created");
+    if (found > 0) setParts.push(found + " found");
+    if (errors > 0) setParts.push(errors + " failed");
+    if (setParts.length) parts.push("update sets: " + setParts.join(", "));
+
+    if (data.branch && data.branch.branch) {
+      parts.push(
+        (data.branch.created ? "branch created: " : "switched to branch: ") +
+          data.branch.branch
+      );
+    } else if (data.branch && data.branch.error) {
+      parts.push("branch failed: " + data.branch.error);
+    }
+
+    toast(parts.join(" — "));
+
+    renderActiveTaskBanner();
+    renderScopes();
+  } catch (e) {
+    toast("Failed to start task: " + e.message, "error");
+  } finally {
+    var refreshedBtn = document.querySelector(".btn-start-task");
+    if (refreshedBtn) {
+      refreshedBtn.disabled = false;
+      refreshedBtn.textContent = "Start Task";
     }
   }
 }
@@ -793,9 +975,14 @@ async function autoActivateAllScopes() {
       }
 
       // Update scopesData
-      var scopeData = scopesData.find(function (s) { return s.scope === r.scope; });
+      var scopeData = scopesData.find(function (s) {
+        return s.scope === r.scope;
+      });
       if (scopeData) {
-        scopeData.selected_update_set = { sys_id: r.update_set.sys_id, name: r.update_set.name };
+        scopeData.selected_update_set = {
+          sys_id: r.update_set.sys_id,
+          name: r.update_set.name,
+        };
       }
     });
 
@@ -879,7 +1066,10 @@ async function loadRecentEdits() {
           );
         });
         if (recentSave) {
-          toast(edit.name + " was already saved less than 30 minutes ago.", "warn");
+          toast(
+            edit.name + " was already saved less than 30 minutes ago.",
+            "warn"
+          );
         }
       }
     });
@@ -893,7 +1083,10 @@ async function loadRecentEdits() {
 
 async function dismissRecentEdit(sys_id, tableName) {
   try {
-    await api("POST", "/api/recent-edits/dismiss", { sys_id: sys_id, tableName: tableName });
+    await api("POST", "/api/recent-edits/dismiss", {
+      sys_id: sys_id,
+      tableName: tableName,
+    });
     recentEdits = recentEdits.filter(function (e) {
       return !(e.sys_id === sys_id && e.tableName === tableName);
     });
@@ -951,8 +1144,10 @@ function renderRecentEdits() {
     var updateSetEl = document.createElement("span");
     var isDefault = edit.updateSet.toLowerCase().indexOf("default") !== -1;
     var expected = expectedUpdateSets[edit.scope];
-    var isMismatch = expected && edit.updateSet !== expected && edit.updateSet !== "unknown";
-    updateSetEl.className = "recent-edit-update-set" + (isDefault || isMismatch ? " warning" : "");
+    var isMismatch =
+      expected && edit.updateSet !== expected && edit.updateSet !== "unknown";
+    updateSetEl.className =
+      "recent-edit-update-set" + (isDefault || isMismatch ? " warning" : "");
     updateSetEl.textContent = edit.updateSet;
     if (isMismatch && expected) {
       updateSetEl.title = "Expected: " + expected;
@@ -1031,9 +1226,15 @@ loadClickUpStatus();
 recentEditsInterval = setInterval(loadRecentEdits, 60000);
 
 // Wire up sidebar toggle and close buttons
-document.getElementById("sidebar-toggle").addEventListener("click", toggleSidebar);
-document.getElementById("sidebar-close").addEventListener("click", toggleSidebar);
-document.getElementById("refresh-btn").addEventListener("click", refreshDashboard);
+document
+  .getElementById("sidebar-toggle")
+  .addEventListener("click", toggleSidebar);
+document
+  .getElementById("sidebar-close")
+  .addEventListener("click", toggleSidebar);
+document
+  .getElementById("refresh-btn")
+  .addEventListener("click", refreshDashboard);
 
 // Render initial status filter chips
 renderStatusFilters();
@@ -1050,7 +1251,9 @@ renderTaskToggles();
 // --- Theme toggle ---
 
 function currentTheme() {
-  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  return document.documentElement.getAttribute("data-theme") === "dark"
+    ? "dark"
+    : "light";
 }
 
 function applyTheme(theme) {
@@ -1061,7 +1264,8 @@ function applyTheme(theme) {
   var btn = document.getElementById("cp-theme-toggle");
   if (btn) {
     btn.textContent = theme === "dark" ? "☀︎" : "☾";
-    btn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    btn.title =
+      theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
   }
 }
 

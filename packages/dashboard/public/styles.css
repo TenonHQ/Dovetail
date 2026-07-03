@@ -312,6 +312,28 @@ header h1 span {
   font-weight: var(--weight-semibold);
 }
 
+.btn-start-task {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  padding: 4px 10px;
+  margin-right: 6px;
+  background: var(--success);
+  color: var(--fg-on-dark);
+  border: 1px solid var(--success);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.btn-start-task:hover {
+  filter: brightness(1.1);
+}
+
+.btn-start-task:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .btn-deselect {
   font-family: inherit;
   font-size: 11px;
