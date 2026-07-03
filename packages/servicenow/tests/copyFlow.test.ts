@@ -18,6 +18,11 @@ function mockClient(opts: { getResponse?: any; postResponse?: any }): { client: 
       changeUpdateSet: async function () { return {}; },
       deleteRecord: async function () { return {}; },
     },
+    attachment: {
+      listFor: async function () { return []; },
+      upload: async function () { return { sys_id: "att", file_name: "", content_type: "" }; },
+      remove: async function () { return undefined; }
+    },
     now: {
       get: async function <T>(path: string): Promise<T> { cap.gets.push(path); return opts.getResponse as T; },
       post: async function <T>(path: string, body: any): Promise<T> { cap.posts.push({ path: path, body: body }); return opts.postResponse as T; },

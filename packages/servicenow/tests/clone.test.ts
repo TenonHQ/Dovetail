@@ -34,6 +34,11 @@ function makeClient(scripted: Array<{ match: (table: string, query: string) => b
       changeUpdateSet: async function () { return {}; },
       deleteRecord: async function () { return {}; },
     },
+    attachment: {
+      listFor: async function () { return []; },
+      upload: async function () { return { sys_id: "att", file_name: "", content_type: "" }; },
+      remove: async function () { return undefined; }
+    },
     now: {
       get: async function () { return {} as any; },
       post: async function () { return {} as any; },
