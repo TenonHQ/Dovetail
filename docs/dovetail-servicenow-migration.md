@@ -2,6 +2,32 @@
 
 This document describes the changes needed **on the ServiceNow instance** (and in the separate ServiceNow source-of-truth repo where the API definition is exported) to complete the Sincronia → Dovetail rebrand. The npm-package side of this rebrand lives in the main Dovetail repo (`tenonhq/dovetail`); this file enumerates the changes that must happen elsewhere.
 
+---
+
+## ⚠️ Current state (verified 2026-07-02) — the rebrand steps below are HISTORICAL
+
+The live topology has moved past what the steps further down describe. As deployed today (verified on `tenonworkstudio`), the client (`packages/core/src/snClient.ts`) targets these global-scope defs:
+
+| Def | Base path | Role | Client uses |
+|---|---|---|---|
+| Dovetail Core | `/api/cadso/dovetail_core` | write / action ops | ✅ primary |
+| Dovetail | `/api/cadso/dovetail` | write ops | ✅ 404-fallback only |
+| Dovetail Sync | `/api/cadso/dovetail_sync` | `getAppList` / `getManifest` / `bulkDownload` / `getCurrentScope` / `pushATFfile` | ✅ |
+| Dovetail Promote | `/api/cadso/dovetail_promote` | cross-instance promotion | ✅ |
+| **Sincronia** | `/api/sinc/sincronia` | (all of the above, legacy) | ❌ **none — orphaned** |
+
+The "recommended rename `/api/sinc/sincronia/` → `/api/sinc/dovetail/`" in the section at the bottom **never happened** — the sync ops moved to `/api/cadso/dovetail_sync/` instead. **Sincronia is dead** and slated for removal.
+
+### Sincronia decommission checklist
+
+1. **Verify no remaining consumer** calls `/api/sinc/sincronia/*` — i.e. every install runs a `@tenonhq/dovetail-core` new enough to target `/api/cadso/dovetail*`. (Internal repos are on `0.0.107`+; confirm any external / old installs.)
+2. **Confirm `SincUtils` / `SincUtilsMS` are not reused** by the live `Dovetail Sync` / `Dovetail Core` op handlers. If they are, keep the script includes and retire only the def + its ops.
+3. **Deactivate** the Sincronia def (`active=false`; name "Sincronia", `/api/sinc/sincronia`) on each instance — reversible; a resulting 404 surfaces any lingering caller.
+4. **After a soak with no breakage, delete** the def + its 5 ops (and `SincUtils*` if step 2 clears them) on each instance, in order: studio → shop → prod.
+5. **Repo:** delete the now-dead Sincronia source under `servicenow/` once the instance side is gone. The live API source is captured in [`../servicenow/dovetail/`](../servicenow/dovetail/README.md).
+
+> The rebrand steps below predate the `dovetail_core` / `dovetail_sync` split and are retained only for history.
+
 ## What is changing on the ServiceNow side
 
 The Dovetail CLI talks to a Scripted REST API on every connected ServiceNow instance. Today that API is named **"Claude"** with base path `/api/cadso/claude/`. After this rebrand:
