@@ -49,6 +49,30 @@ const getUpdateSetConfig = (): UpdateSetConfig => readUpdateSetConfig();
 const stripRecordLinkHost = (link: string): string =>
   link.replace(/^https?:\/\/[^/]+\.service-now\.com/i, "");
 
+// Strip the derived `display_value` from every field pair, keeping only `value`.
+// A ServiceNow field is serialized as a { value, display_value } pair. The
+// display_value is the *current* display name of the field's value — for a
+// reference field, the referenced record's name, resolved live on the server at
+// pull time. That makes it non-deterministic on disk: rename a referenced record
+// on the instance and every metaData.json pointing at it re-churns its
+// display_value on the next pull, even though the pointing record is unchanged.
+// `value` (the sys_id / raw value) is the stable identity; display_value is a
+// convenience the mirror does not need. Reconcile already ignores metaData.json
+// content and pushes key off `value` / the manifest, so no consumer depends on
+// the persisted display_value. Dropping it keeps re-pulls byte-identical.
+const stripFieldDisplayValues = (metadata: Record<string, unknown>): void => {
+  for (const key of Object.keys(metadata)) {
+    const field = metadata[key];
+    if (
+      field !== null &&
+      typeof field === "object" &&
+      "display_value" in field
+    ) {
+      delete (field as { display_value?: unknown }).display_value;
+    }
+  }
+};
+
 // Merge _lastUpdatedOn into the server-provided metadata content. Preserves all
 // record fields (sys_id, sys_scope, field value/display_value pairs, etc.) so
 // the local metaData.json is a full snapshot of the record, not just a stub.
@@ -68,6 +92,7 @@ export const stampMetadataContent = (file: SN.File): SN.File => {
     if (typeof metadata._record_link === "string") {
       metadata._record_link = stripRecordLinkHost(metadata._record_link);
     }
+    stripFieldDisplayValues(metadata);
     return { ...file, content: JSON.stringify(metadata, null, 2) };
   } catch (e) {
     // Content isn't JSON — leave as-is, it will be written verbatim.

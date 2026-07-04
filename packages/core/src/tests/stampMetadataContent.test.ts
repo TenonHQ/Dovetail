@@ -82,3 +82,59 @@ describe("stampMetadataContent — _record_link host stripping", () => {
     expect(stampMetadataContent(script)).toEqual(script);
   });
 });
+
+describe("stampMetadataContent — display_value stripping", () => {
+  it("drops display_value from field pairs, keeping value", () => {
+    const out = stampMetadataContent(
+      metaFile({
+        sys_updated_on: { value: "2025-08-21 17:09:02" },
+        action: {
+          value: "85de623c33ef2a107b18bc534d5c7b92",
+          display_value: "Parse hashes for to_addresses",
+        },
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed.action).toEqual({
+      value: "85de623c33ef2a107b18bc534d5c7b92",
+    });
+    expect(parsed.action.display_value).toBeUndefined();
+  });
+
+  it("strips every field's display_value in one pass", () => {
+    const out = stampMetadataContent(
+      metaFile({
+        a: { value: "1", display_value: "One" },
+        b: { value: "2", display_value: "Two" },
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed.a).toEqual({ value: "1" });
+    expect(parsed.b).toEqual({ value: "2" });
+  });
+
+  it("leaves value-only fields and string keys untouched", () => {
+    const out = stampMetadataContent(
+      metaFile({
+        sys_updated_on: { value: "2025-08-21 17:09:02" },
+        _record_link: "/incident.do?sys_id=1",
+        name: { value: "plain" },
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed.sys_updated_on).toEqual({ value: "2025-08-21 17:09:02" });
+    expect(parsed.name).toEqual({ value: "plain" });
+    expect(parsed._record_link).toBe("/incident.do?sys_id=1");
+  });
+
+  it("is idempotent — a display-value-free record stays byte-identical", () => {
+    const clean = {
+      sys_updated_on: { value: "2025-08-21 17:09:02" },
+      action: { value: "abc" },
+      _record_link: "/incident.do?sys_id=1",
+    };
+    const first = stampMetadataContent(metaFile(clean));
+    const second = stampMetadataContent(first);
+    expect(second.content).toBe(first.content);
+  });
+});
