@@ -973,12 +973,12 @@ function execFilePromise(cmd, args, opts) {
 }
 
 // Cut (or switch to, if it already exists) the working branch for a task in
-// the repo this dashboard process is running from: dev/{git-username}/{DEV-ID}/{short-desc}
-async function createTaskBranch(activeTask) {
+// the given target folder: dev/{git-username}/{DEV-ID}/{short-desc}
+async function createTaskBranch(activeTask, targetFolder) {
   var username = "";
   try {
     username = await execFilePromise("git", ["config", "user.name"], {
-      cwd: PROJECT_ROOT,
+      cwd: targetFolder,
     });
   } catch (userErr) {
     // Fall through to the "dev" fallback below
@@ -990,22 +990,40 @@ async function createTaskBranch(activeTask) {
 
   try {
     await execFilePromise("git", ["checkout", "-b", branchName], {
-      cwd: PROJECT_ROOT,
+      cwd: targetFolder,
     });
-    return { branch: branchName, cwd: PROJECT_ROOT, created: true };
+    return { branch: branchName, cwd: targetFolder, created: true };
   } catch (createErr) {
     // Branch may already exist from a prior Start Task click on this ticket.
     await execFilePromise("git", ["checkout", branchName], {
-      cwd: PROJECT_ROOT,
+      cwd: targetFolder,
     });
-    return { branch: branchName, cwd: PROJECT_ROOT, created: false };
+    return { branch: branchName, cwd: targetFolder, created: false };
   }
 }
 
+// Compute (without creating anything) the scope-aware update-set name for
+// every scope in dove.config.js. No ServiceNow API calls — used by Start Task
+// to prefill the quick-create inputs rather than creating update sets outright.
+function computeScopeNames(activeTask) {
+  delete require.cache[require.resolve(DOVE_CONFIG_PATH)];
+  var config = require(DOVE_CONFIG_PATH);
+  var scopeKeys = Object.keys(config.scopes || {});
+  return scopeKeys.map(function (scope) {
+    return {
+      scope: scope,
+      name: buildScopedUpdateSetName(activeTask, scopeLabel(scope)),
+    };
+  });
+}
+
 // POST /api/clickup/start-task — mark the active task in-progress in ClickUp,
-// create/find the per-scope update sets, and cut the working branch in the
-// repo this dashboard is running from. One deliberate action, not tied to
-// mere task selection.
+// compute (but do not create) the per-scope update-set names, and cut the
+// working branch in an explicitly-chosen target folder. One deliberate
+// action, not tied to mere task selection. Body: { targetFolder? } — an
+// absolute path, or a path relative to PROJECT_ROOT (wherever this dashboard
+// process was launched from) to a git checkout; branch creation is skipped
+// if omitted.
 app.post("/api/clickup/start-task", async function (req, res) {
   try {
     var activeTask = readActiveTask();
@@ -1028,20 +1046,40 @@ app.post("/api/clickup/start-task", async function (req, res) {
         .json({ error: "Failed to set ClickUp status: " + msg });
     }
 
-    var outcome = await activateAllConfiguredScopes(activeTask);
+    var scopeNames = computeScopeNames(activeTask);
 
-    var branchResult = null;
-    try {
-      branchResult = await createTaskBranch(outcome.activeTask);
-    } catch (branchErr) {
-      branchResult = { error: branchErr.message };
+    var branchResult = { skipped: true };
+    var rawTargetFolder = req.body && req.body.targetFolder;
+    if (rawTargetFolder) {
+      // path.resolve leaves an already-absolute path untouched and resolves
+      // a relative one (e.g. "../Mortise") against PROJECT_ROOT.
+      var targetFolder = path.resolve(PROJECT_ROOT, rawTargetFolder);
+      var invalid =
+        !fs.existsSync(targetFolder) ||
+        !fs.statSync(targetFolder).isDirectory();
+      if (invalid) {
+        branchResult = {
+          error:
+            "Target folder does not exist: " +
+            targetFolder +
+            " (from input: " +
+            rawTargetFolder +
+            ")",
+        };
+      } else {
+        try {
+          branchResult = await createTaskBranch(activeTask, targetFolder);
+        } catch (branchErr) {
+          branchResult = { error: branchErr.message };
+        }
+      }
     }
 
     res.json({
       status: "in progress",
-      scopes: outcome.results,
+      scopeNames: scopeNames,
       branch: branchResult,
-      activeTask: outcome.activeTask,
+      activeTask: activeTask,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
