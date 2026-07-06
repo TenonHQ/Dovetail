@@ -863,10 +863,31 @@ async function activateScope(scope, scopeSysId) {
   }
 }
 
-// --- Start task: ClickUp status -> in progress, per-scope update sets, branch ---
+// --- Start task: ClickUp status -> in progress, prefill update-set names, branch ---
+
+var START_TASK_FOLDER_KEY = "dt-start-task-folder";
 
 async function startTask() {
   if (!activeTask) return;
+
+  var remembered = "";
+  try {
+    remembered = localStorage.getItem(START_TASK_FOLDER_KEY) || "";
+  } catch (e) {}
+  var targetFolder = prompt(
+    "Which folder should the branch be created in? (absolute path, or relative to where this dashboard was launched from, e.g. ../Mortise; leave blank to skip branch creation)",
+    remembered
+  );
+  if (targetFolder === null) {
+    // User cancelled the whole prompt dialog — abort Start Task entirely.
+    return;
+  }
+  targetFolder = targetFolder.trim();
+  if (targetFolder) {
+    try {
+      localStorage.setItem(START_TASK_FOLDER_KEY, targetFolder);
+    } catch (e) {}
+  }
 
   var btn = document.querySelector(".btn-start-task");
   if (btn) {
@@ -875,41 +896,15 @@ async function startTask() {
   }
 
   try {
-    var data = await api("POST", "/api/clickup/start-task");
-    var scopeResults = data.scopes || [];
+    var data = await api("POST", "/api/clickup/start-task", {
+      targetFolder: targetFolder,
+    });
 
     if (data.activeTask) {
       activeTask = data.activeTask;
     }
 
-    var created = 0;
-    var found = 0;
-    var errors = 0;
-    scopeResults.forEach(function (r) {
-      if (r.error) {
-        errors++;
-      } else if (r.created) {
-        created++;
-      } else {
-        found++;
-      }
-      var scopeData = scopesData.find(function (s) {
-        return s.scope === r.scope;
-      });
-      if (scopeData && r.update_set) {
-        scopeData.selected_update_set = {
-          sys_id: r.update_set.sys_id,
-          name: r.update_set.name,
-        };
-      }
-    });
-
     var parts = ["status: in progress"];
-    var setParts = [];
-    if (created > 0) setParts.push(created + " created");
-    if (found > 0) setParts.push(found + " found");
-    if (errors > 0) setParts.push(errors + " failed");
-    if (setParts.length) parts.push("update sets: " + setParts.join(", "));
 
     if (data.branch && data.branch.branch) {
       parts.push(
@@ -918,12 +913,22 @@ async function startTask() {
       );
     } else if (data.branch && data.branch.error) {
       parts.push("branch failed: " + data.branch.error);
+    } else if (data.branch && data.branch.skipped) {
+      parts.push("branch skipped");
     }
 
     toast(parts.join(" — "));
 
     renderActiveTaskBanner();
     renderScopes();
+
+    // Fill each scope's quick-create input with its generated name — after
+    // renderScopes() so the freshly-built inputs aren't overwritten. Nothing
+    // is created; the dev reviews/edits and clicks Create per scope.
+    (data.scopeNames || []).forEach(function (entry) {
+      var input = document.getElementById("quick-name-" + entry.scope);
+      if (input) input.value = entry.name;
+    });
   } catch (e) {
     toast("Failed to start task: " + e.message, "error");
   } finally {
