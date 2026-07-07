@@ -22,43 +22,54 @@ function readerReturning(rows: Array<Record<string, unknown>>): SnReader {
 }
 
 describe("nameMatchesTaskId", function () {
-  it("matches at a word boundary but not a longer id", function () {
+  it("matches the id as a delimited token anywhere, but not a longer id", function () {
     expect(
       nameMatchesTaskId({ name: "DEV-847 — Foo", taskId: "DEV-847" }),
     ).toBe(true);
     expect(nameMatchesTaskId({ name: "DEV-847-foo", taskId: "DEV-847" })).toBe(
       true,
     );
+    // Team convention: the id is embedded mid-name.
+    expect(
+      nameMatchesTaskId({
+        name: "WM | DEV-847 | Core | Test Automation Ticket",
+        taskId: "DEV-847",
+      }),
+    ).toBe(true);
+    expect(nameMatchesTaskId({ name: "Foo DEV-847", taskId: "DEV-847" })).toBe(
+      true,
+    );
+    // A longer id must NOT match, prefixed or embedded.
     expect(
       nameMatchesTaskId({ name: "DEV-8470 — Bar", taskId: "DEV-847" }),
     ).toBe(false);
-    expect(nameMatchesTaskId({ name: "Foo DEV-847", taskId: "DEV-847" })).toBe(
-      false,
-    );
+    expect(
+      nameMatchesTaskId({ name: "WM | DEV-8470 | Core", taskId: "DEV-847" }),
+    ).toBe(false);
   });
 });
 
 describe("buildUpdateSetQuery", function () {
-  it("anchors on STARTSWITH and defaults to complete", function () {
+  it("uses LIKE (contains) and defaults to complete", function () {
     expect(buildUpdateSetQuery({ taskId: "DEV-847" })).toBe(
-      "nameSTARTSWITHDEV-847^state=complete",
+      "nameLIKEDEV-847^state=complete",
     );
   });
 });
 
 describe("resolveUpdateSets", function () {
-  it("returns one set per scope (multi-set is the norm)", async function () {
+  it("returns one set per scope (multi-set, embedded id convention)", async function () {
     var reader = readerReturning([
       {
         sys_id: "a",
-        name: "DEV-847 — Core",
+        name: "WM | DEV-847 | Core | Test Automation Ticket",
         application: { value: "scopeCore" },
         state: "complete",
       },
       {
         sys_id: "b",
-        name: "DEV-847 — Cloud",
-        application: { value: "scopeCloud" },
+        name: "WM | DEV-847 | Work | Test Automation Ticket",
+        application: { value: "scopeWork" },
         state: "complete",
       },
     ]);

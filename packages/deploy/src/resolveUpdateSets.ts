@@ -26,24 +26,29 @@ function escapeRegExp(value: string): string {
 }
 
 /**
- * True when `name` begins with `taskId` at a word boundary — so "DEV-847"
- * matches "DEV-847 — Foo" and "DEV-847-foo" but NOT "DEV-8470 — Bar".
+ * True when `name` contains `taskId` as a delimited token — so "DEV-847"
+ * matches "DEV-847 — Foo", "DEV-847-foo", and the team's embedded convention
+ * "WM | DEV-847 | Core | …", but NOT "DEV-8470 — Bar" (a longer id).
  */
 export function nameMatchesTaskId(params: {
   name: string;
   taskId: string;
 }): boolean {
-  var re = new RegExp("^" + escapeRegExp(params.taskId) + "\\b");
+  var re = new RegExp("\\b" + escapeRegExp(params.taskId) + "\\b");
   return re.test(params.name);
 }
 
-/** The encoded query used to fetch candidate update sets on the source. */
+/**
+ * The encoded query used to fetch candidate update sets on the source. Uses
+ * LIKE (contains) because the team embeds the id mid-name ("WM | DEV-847 | …");
+ * `nameMatchesTaskId` then applies the exact word-boundary filter in JS.
+ */
 export function buildUpdateSetQuery(params: {
   taskId: string;
   state?: string;
 }): string {
   var state = params.state || "complete";
-  return "nameSTARTSWITH" + params.taskId + "^state=" + state;
+  return "nameLIKE" + params.taskId + "^state=" + state;
 }
 
 /** Read a plain string field from a raw Table API row. */
