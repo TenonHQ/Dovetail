@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tenonhq.dev/schemas/promotion.schema.json",
+  "title": "Promotion ladder",
+  "description": "Structural schema for the `promotion` block of automation-config.json. Semantic checks (cross-consistency, enabled-vs-provisioned) live in validatePromotionLadder, which is authoritative.",
+  "type": "object",
+  "required": ["taskIdPattern", "instances", "statusMap"],
+  "additionalProperties": false,
+  "properties": {
+    "taskIdPattern": { "type": "string", "minLength": 1 },
+    "promotePath": { "type": "string" },
+    "skipPreviewErrors": { "type": "array", "items": { "type": "string" } },
+    "instances": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["url", "environment", "enabled"],
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": ["string", "null"] },
+          "environment": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "role": { "type": "string" },
+          "todo": { "type": "string" }
+        }
+      }
+    },
+    "statusMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "clickupStatusId",
+          "sourceInstance",
+          "targetInstance",
+          "transport",
+          "enabled"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "clickupStatusId": { "type": "string", "minLength": 1 },
+          "sourceInstance": { "type": "string", "minLength": 1 },
+          "targetInstance": { "type": "string", "minLength": 1 },
+          "transport": {
+            "type": "string",
+            "enum": ["sawmill", "company-repo", "manual"]
+          },
+          "enabled": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}
