@@ -1,6 +1,6 @@
 # @tenonhq/dovetail-sawmill
 
-Cross-instance **update-set promotion** client for Dovetail. A thin, typed wrapper around the Sawmill Scripted REST API (`POST /api/cadso/sawmill/promote`) that retrieves, previews, and (optionally) commits an update set from a **source** ServiceNow instance onto a **target** instance.
+Cross-instance **update-set promotion** client for Dovetail. A thin, typed wrapper around the Dovetail Promote Scripted REST API (`POST /api/cadso/dovetail_promote/promote`) that retrieves, previews, and (optionally) commits an update set from a **source** ServiceNow instance onto a **target** instance.
 
 > Library only — **no CLI, no MCP tool**. Import it from Node tooling that promotes update sets between Tenon instances (e.g. dev → shared → prod).
 
@@ -62,4 +62,4 @@ if (result.previewErrors.length) {
 
 ## Source
 
-`src/client.ts` (client + retry/backoff), `src/types.ts` (request/response shapes). Server endpoint: `/api/cadso/sawmill/promote`.
+`src/client.ts` (client + retry/backoff), `src/types.ts` (request/response shapes). Server endpoint: `/api/cadso/dovetail_promote/promote`.
