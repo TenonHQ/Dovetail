@@ -1,10 +1,10 @@
 # RFC: ServiceNow Schema-Side CRUD for Dovetail
 
-> **Status:** Draft / Proposed — design for hand-off; build not yet scheduled.
+> **Status:** Draft / Proposed — build partially underway. **S0 (field-CREATE spike) and S2 (field CREATE) are DONE** — shipped as `dove-sn add-column` / `add_column` ([PR #191](https://github.com/TenonHQ/Dovetail/pull/191), merged 2026-06-19; update-set assertion closed 2026-07-07). S1, S3–S8 remain unbuilt. See §6, §10 R1, and Appendix A for details.
 > **Purpose:** Bring Dovetail's _schema_ control of a ServiceNow instance (tables, fields, choices) up to parity with its _code/record_ control, behind one coherent CRUD surface that packages every change into an update set and hands cross-instance promotion to the deploy layer.
 > **Audience:** A developer who will build this without further design input, plus reviewers of the surface and the destructive-ops policy.
 > **Scope of v1:** `sys_db_object` (tables), `sys_dictionary` (fields), `sys_choice` (choices). **Out of v1** (deferred follow-ons, not designed here): views (`sys_ui_view`), ACLs (`sys_security_acl`), relationships (`sys_relationship`), dictionary overrides (`sys_dictionary_override`).
-> **Last updated:** 2026-06-16
+> **Last updated:** 2026-07-07
 
 ---
 
@@ -32,19 +32,19 @@ Status legend: **Ships** (works today) · **Partial** (reachable but not a first
 | Object                        | CREATE                                                                                                                                                                  | READ                                                                                              | UPDATE                                                                                                                                                       | DELETE                                                                                                               |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | **Table** `sys_db_object`     | **Ships** — `dove-sn create-table` / MCP `create_table`; form-replay (`packages/servicenow/src/table/createTable.ts`), validated live 2026-06-13 (`createTable.ts:20`)  | **Ships** — `dove schema pull\|diff\|snapshots` (`packages/core/src/commander.ts:482`) + read MCP | **Missing** — no verb for table attributes (label, access flags, `super_class`)                                                                              | **Missing / platform-gated** — drop is ACL-blocked headless                                                          |
-| **Field** `sys_dictionary`    | **Missing** ⭐ — no add-column-to-existing-table; a REST/`createRecord` insert adopts session scope and won't materialise the physical column (§4.2)                    | **Ships** — `dove schema` + read MCP                                                              | **Partial** — `pushWithUpdateSet` patches a dict row today (`packages/servicenow/src/choices.ts:191`), `read_only` lock exists; no unified field-update verb | **Partial / platform-gated** — headless column drop is ACL-blocked; the change can be _captured_ after a manual drop |
+| **Field** `sys_dictionary`    | **Ships** (as of 2026-06-19) — `dove-sn add-column` / MCP `add_column`; form-replay (`packages/servicenow/src/table/addColumn.ts`), validated live 2026-06-19 + update-set assertion closed 2026-07-07 (see [`servicenow-add-column-har-analysis.md`](servicenow-add-column-har-analysis.md))                    | **Ships** — `dove schema` + read MCP                                                              | **Partial** — `pushWithUpdateSet` patches a dict row today (`packages/servicenow/src/choices.ts:191`), `read_only` lock exists; no unified field-update verb | **Partial / platform-gated** — headless column drop is ACL-blocked; the change can be _captured_ after a manual drop |
 | **Choice** `sys_choice`       | **Ships** — `dove-sn add-choices` / MCP `add_choices_to_field`; idempotent upsert, update-set-aware (`packages/servicenow/src/choices.ts:166`)                          | **Ships** — read MCP + schema                                                                     | **Ships** — `add-choices` upserts label/sequence/inactive                                                                                                    | **Missing** — upsert-only; no remove/deactivate                                                                      |
 | **Packaging** (cross-cutting) | `pushWithUpdateSet` (`packages/core/src/snClient.ts:615`) routes a write into a named, scope-correct update set; the create-table lifecycle pins + captures → **Ships** | —                                                                                                 | —                                                                                                                                                            | —                                                                                                                    |
 
-**Reads are fully covered.** The gaps cluster in **CREATE (fields)**, **UPDATE (fields/tables)**, and **DELETE (uniform — a ServiceNow ACL ceiling, not a Dovetail gap)**.
+**Reads are fully covered.** The remaining gaps cluster in **UPDATE (fields/tables)** and **DELETE (uniform — a ServiceNow ACL ceiling, not a Dovetail gap)**. Field CREATE — the RFC's original marquee gap — shipped 2026-06-19.
 
 ### 2.1 Build verdict per capability
 
 | Verdict                                                               | Capabilities                                                                                                                                                                                                                                   |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **already-covered** (absorb into the unified surface; do not rebuild) | table CREATE; all READs; choice CREATE/UPDATE; update-set packaging; the promotion _consumer_ (`@tenonhq/dovetail-sawmill`)                                                                                                                    |
+| **already-covered** (absorb into the unified surface; do not rebuild) | table CREATE; **field CREATE** (shipped 2026-06-19, see §6); all READs; choice CREATE/UPDATE; update-set packaging; the promotion _consumer_ (`@tenonhq/dovetail-sawmill`)                                                                                                                    |
 | **extend-existing** (generalise a primitive that already exists)      | field UPDATE (generalise the `sys_dictionary` patch already used by `addChoicesToField` + the `read_only` lock); choice soft-DELETE (`inactive=true` via `pushWithUpdateSet`); field DELETE _capture_ (capture-after-manual-drop)              |
-| **build-new**                                                         | **field CREATE** ⭐ (extend the `createTable` form-replay to an existing table; **spike-gated**, §6); table UPDATE; table/field hard-DELETE (context-gated + platform-step handoff, §7); execution-context detection (none exists today, §7.2) |
+| **build-new**                                                         | table UPDATE; table/field hard-DELETE (context-gated + platform-step handoff, §7); execution-context detection (none exists today, §7.2)                                                                                                       |
 
 ---
 
@@ -136,15 +136,28 @@ Every write verb follows the pattern the repo already uses (`create_table`'s `dr
 
 ---
 
-## 6. Field CREATE — the marquee build (spike-gated)
+## 6. Field CREATE — the marquee build — **SHIPPED**
 
-Adding a column to an **existing** table is the central missing capability. The design **extends the `createTable` form-replay**, because the platform creates a column the same way whether the table is new or existing — a list-edit `<record operation="add">` against the `sys_db_object → sys_dictionary` related list (§4.1).
+Adding a column to an **existing** table was the RFC's central missing capability at write-time.
+The design **extends the `createTable` form-replay**, because the platform creates a column the
+same way whether the table is new or existing — a list-edit `<record operation="add">` against the
+`sys_db_object → sys_dictionary` related list (§4.1). It shipped as `addColumn()` /
+`dove-sn add-column` / `add_column` ([PR #191](https://github.com/TenonHQ/Dovetail/pull/191),
+merged 2026-06-19).
 
-**Why this is _more_ tractable than table-create, not less:** `createTable` notes that a _new-record_ form "doesn't render related lists to harvest one from," so it rides a **constant** "Table Columns" relId (`createTable.ts:17`). For an **existing** table, the form **does** render the dictionary related list — so the relId and the form session are harvestable directly from the table's own form, removing the one hardcoded constant.
+**Why this is _more_ tractable than table-create, not less:** `createTable` notes that a _new-record_ form "doesn't render related lists to harvest one from," so it rides a **constant** "Table Columns" relId (`createTable.ts:17`). For an **existing** table, the form _can_ render the dictionary related list, making the relId harvestable directly — though the 2026-07-07 spike found this isn't guaranteed on every table (see below), so `addColumn()` keeps the constant as a working fallback, not a vestige.
 
 **Why not a `createRecord` insert into `sys_dictionary`:** it adopts session scope (§4.2) and, more fundamentally, a bare metadata insert does not trigger the physical column add — the same class of failure the `sys_db_object` guard exists to prevent.
 
-**Spike gate (Story S0).** Before declaring this shipped, capture a single column-add against an existing table in Studio, confirm the list-edit request shape, and prove a headless replay lands the **physical** column plus pinned `sys_update_xml`. This mirrors exactly how table-create was de-risked. **Fallback if not replayable:** field-CREATE degrades to the same capture-intent + manual-step handoff as DELETE (§7.3), and this RFC's "full parity" claim is explicitly qualified to _"create via faithful replay where the platform permits; capture + manual step where it does not."_
+**Spike gate (Story S0) — resolved.** A single column-add against an existing table was captured
+and analysed (endpoint, list-edit key, `<record operation="add">` XML — see
+[`servicenow-add-column-har-analysis.md`](servicenow-add-column-har-analysis.md)), and a headless
+replay proved twice to land the **physical** column with pinned `sys_update_xml`: PR #191
+(tenonworkstudio, 2026-06-19) and a follow-up spike (tenonworkloft, 2026-07-07) that additionally
+closed the one thing PR #191 didn't prove by query — that the `sys_update_xml` row lands in the
+*named* update set. **Decision: replayable.** This RFC's parity claim for field CREATE is
+unqualified: it creates via faithful replay, full stop — the capture-intent + manual-step fallback
+(§7.3) was not needed for CREATE.
 
 ---
 
@@ -227,7 +240,7 @@ Rejected: the promotion orchestrator is not built, and coupling schema-CRUD to i
 
 ## 10. Risks & open questions
 
-- **R1 — Field-CREATE replay (the gating risk).** Until S0 proves the single-column list-edit replay lands a physical column, field-CREATE is a hypothesis. Mitigation: S0 first; documented UI-handoff fallback (§6).
+- **R1 — Field-CREATE replay (the gating risk). RESOLVED — replayable, confirmed.** `addColumn()` ([PR #191](https://github.com/TenonHQ/Dovetail/pull/191), merged 2026-06-19) proved the single-column list-edit replay lands a physical column: live-validated on tenonworkstudio (before/after `sys_dictionary` diff + a round-tripped scoped insert). On 2026-07-07 the one gap that validation left open — that the resulting `sys_update_xml` row lands in the *named* update set, not just some set — was closed by a direct query against a fresh spike on tenonworkloft. Full trace + decision write-up: [`servicenow-add-column-har-analysis.md`](servicenow-add-column-har-analysis.md). One nuance the spike surfaced: the harvested-relId hypothesis in §6 doesn't hold on every table — the 2026-07-07 run fell back to the constant `DEFAULT_COLUMNS_REL_ID`, same as `create-table` always does. The fallback is load-bearing on some tables, not just insurance for the new-record case.
 - **R2 — Physical-vs-metadata field UPDATE.** Some `sys_dictionary` attribute changes (e.g. `max_length`, `internal_type`) trigger a physical `ALTER COLUMN` and may need the form-replay rather than a plain `pushWithUpdateSet` patch; non-physical attributes (label, `mandatory`, `default`, `read_only`) do not. S3 must split these two classes.
 - **R3 — Stale `create_table` MCP annotation.** The `create_table` tool annotation still reads "the live write path is pending a validated-live spike — prefer dryRun" (`packages/servicenow/src/mcp/registry.ts`), although `createTable.ts:20` records the 2026-06-13 live validation. S7 reconciles the annotation with the validated state.
 - **R4 — Merged-PR signal fidelity.** The automation gate is only as good as the merge signal the workflow passes. S1 must define that contract explicitly and fail closed.
@@ -247,23 +260,23 @@ The build slices into nine ordered, independently-reviewable stories — **Appen
 ### Dependency graph
 
 ```
-S0 (spike) ─┐
-            ├─→ S2 (field CREATE) ─┐
-S1 (gate) ──┼─→ S3 (field UPDATE)  ├─→ S7 (skill + surface) ─→ S8 (seam test)
-            ├─→ S4 (table UPDATE)  │
-            ├─→ S5 (choice soft-del)│
-            └─→ S6 (hard DELETE) ──┘
+S0 (spike, DONE) ─┐
+                   ├─→ S2 (field CREATE, DONE) ─┐
+S1 (gate) ─────────┼─→ S3 (field UPDATE)        ├─→ S7 (skill + surface) ─→ S8 (seam test)
+                   ├─→ S4 (table UPDATE)        │
+                   ├─→ S5 (choice soft-del)     │
+                   └─→ S6 (hard DELETE) ────────┘
 ```
 
-### S0 — Field-CREATE replay spike · Pkg: dovetail-servicenow · Deps: none · ~5pts
+### S0 — Field-CREATE replay spike · Pkg: dovetail-servicenow · Deps: none · ~5pts · **DONE**
 
 **Goal:** Prove (or disprove) that adding a single column to an _existing_ table can be done headlessly by replaying the Studio list-edit form transaction.
 **Acceptance criteria**
 
-- A captured request trace of a one-column add to an existing table in Studio is analysed and its exact shape documented (endpoint, the `ListEditFormatterAction[…REL:<dict-relId>]` field, the `<record operation="add">` XML, the update-set pin).
-- A throwaway script replays that request headlessly against a sandbox and **the physical column exists** afterward — verified by reading the table schema and inserting a scoped row that sets the column (round-trips, not an orphan).
-- The resulting `sys_update_xml` rows land in a named, scope-correct update set (asserted by query).
-- **Decision recorded in the RFC:** replayable → S2 is a faithful form-replay; not replayable → S2 degrades to the capture-intent + manual-step model (§7.3) and the parity claim is qualified.
+- ✅ A captured request trace of a one-column add to an existing table in Studio is analysed and its exact shape documented (endpoint, the `ListEditFormatterAction[…REL:<dict-relId>]` field, the `<record operation="add">` XML, the update-set pin). See [`servicenow-add-column-har-analysis.md`](servicenow-add-column-har-analysis.md) — reconstructed from the shipped `addColumn.ts` implementation (no `.har` file was ever committed for either this or the original create-table spike).
+- ✅ A throwaway script replays that request headlessly against a sandbox and **the physical column exists** afterward — verified by reading the table schema and inserting a scoped row that sets the column (round-trips, not an orphan). Proved twice: PR #191 (tenonworkstudio, 2026-06-19) and the 2026-07-07 follow-up spike (tenonworkloft).
+- ✅ The resulting `sys_update_xml` rows land in a named, scope-correct update set (asserted by query). Closed 2026-07-07 — see the analysis doc §7.
+- ✅ **Decision recorded in the RFC:** **replayable** — S2 is a faithful form-replay, and it already shipped (see R1 above and S2 below).
 
 ### S1 — Execution-context detection + two-phase gate · Pkg: dovetail-servicenow (+ core helper) · Deps: none · ~5pts
 
@@ -276,17 +289,17 @@ S1 (gate) ──┼─→ S3 (field UPDATE)  ├─→ S7 (skill + surface) ─�
 - Unit tests: local-no-confirm refuses; automation-without-merge-signal refuses; explicit override beats auto-detect.
 - A new `WRITE_DESTRUCTIVE` mcp-kit annotation tier exists, distinct from `WRITE_OVERWRITE`.
 
-### S2 — Field CREATE (`add-field` / `add_field_to_table`) · Pkg: dovetail-servicenow · Deps: S0, S1 · ~8pts
+### S2 — Field CREATE (`add-field` / `add_field_to_table`) · Pkg: dovetail-servicenow · Deps: S0, S1 · ~8pts · **DONE** (ahead of S1)
 
 **Goal:** Add a column to an existing table faithfully, landing in a scope-correct update set.
 **Acceptance criteria**
 
-- New `dove-sn add-field` verb + `add_field_to_table` MCP tool (`WRITE_CREATE`): table, column (label, type, max_length, reference, mandatory, default), scope, update-set.
-- Implementation extends the `createTable` form-replay (`packages/servicenow/src/table/createTable.ts`) and harvests the dictionary related-list relId from the _existing_ table's form (no hardcoded relId).
-- `dryRun` returns the plan + the column XML with no session and no writes.
-- Live path creates the **physical** column; `sys_update_xml` rows asserted in the named set; friendly types mapped to internal types (`string`→`string_full_utf8`).
-- Cross-scope correctness: column created in the target scope, no session-scope rename (§4.2).
-- (If S0 disproved replay: this story ships the capture-intent + manual-step path instead and is re-pointed.)
+- ✅ New verb + MCP tool (`WRITE_CREATE`): table, column (label, type, max_length, reference), scope, update-set. **Naming drift from this RFC:** shipped as `dove-sn add-column` / `add_column`, not `add-field` / `add_field_to_table` — a naming choice made during implementation, not a capability gap. (`mandatory`/`default` are not yet exposed as column-spec params — a small gap for a future pass, not blocking.)
+- ✅ Implementation extends the `createTable` form-replay (`packages/servicenow/src/table/addColumn.ts`) and attempts to harvest the dictionary related-list relId from the _existing_ table's form, falling back to the same constant `create-table` uses when the harvest comes back empty (observed live 2026-07-07 — see the analysis doc's nuance note).
+- ✅ `dryRun` returns the plan + the column XML with no session and no writes.
+- ✅ Live path creates the **physical** column; `sys_update_xml` rows asserted in the named set (closed 2026-07-07); friendly types mapped to internal types (`string`→`string_full_utf8`).
+- ✅ Cross-scope correctness: column created in the target scope, no session-scope rename (§4.2) — confirmed both on tenonworkstudio (PR #191) and tenonworkloft (2026-07-07, `x_cadso_automate`).
+- **Note:** S2 shipped *before* S1 (the execution-context gate) landed — it went through manual two-phase dry-run/confirm discipline in practice, but doesn't yet run through a formal `WRITE_DESTRUCTIVE`-style gate helper. Not a problem for `add-column` itself (it's a CREATE, not a DELETE), but worth flagging: S1 should still land before S5/S6 (which *are* destructive) reuse this pattern.
 
 ### S3 — Field UPDATE (`set-field` / `set_field`) · Pkg: dovetail-servicenow · Deps: S1 · ~5pts
 
