@@ -130,12 +130,59 @@ describe("getTask", function () {
     expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/abc123", {});
   });
 
+  it("sends custom_task_ids + team_id when customTaskIds is set", async function () {
+    var mockTask = makeClickUpTask({ id: "abc123" });
+    mockAxiosInstance.get.mockResolvedValue({ data: mockTask });
+
+    await getTask({
+      client: mockAxiosInstance as any,
+      taskId: "DEV-506",
+      customTaskIds: true,
+      teamId: "team9",
+    });
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/DEV-506", {
+      params: { custom_task_ids: true, team_id: "team9" },
+    });
+  });
+
   it("throws on 404 with task context", async function () {
     mockAxiosInstance.get.mockRejectedValue(makeAxiosError(404));
 
     await expect(
       getTask({ client: mockAxiosInstance as any, taskId: "missing123" })
     ).rejects.toThrow("not found");
+  });
+
+  it("gives a truthful (non-token) 401 message on a custom-id lookup", async function () {
+    mockAxiosInstance.get.mockRejectedValue(makeAxiosError(401));
+
+    await expect(
+      getTask({
+        client: mockAxiosInstance as any,
+        taskId: "DEV-506",
+        customTaskIds: true,
+        teamId: "team9",
+      })
+    ).rejects.toThrow(/first verify the custom id and team_id/);
+  });
+
+  it("fails fast when a custom-id lookup is missing a team_id", async function () {
+    await expect(
+      getTask({
+        client: mockAxiosInstance as any,
+        taskId: "DEV-506",
+        customTaskIds: true,
+      })
+    ).rejects.toThrow(/teamId is required/);
+    expect(mockAxiosInstance.get).not.toHaveBeenCalled();
+  });
+
+  it("still reports a plain 401 as an authentication failure", async function () {
+    mockAxiosInstance.get.mockRejectedValue(makeAxiosError(401));
+
+    await expect(
+      getTask({ client: mockAxiosInstance as any, taskId: "abc123" })
+    ).rejects.toThrow("authentication failed");
   });
 
   it("throws on 429 rate limit", async function () {

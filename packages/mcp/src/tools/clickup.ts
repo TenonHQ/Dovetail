@@ -64,12 +64,30 @@ export async function clickupListTasks(
   };
 }
 
+// A ClickUp custom id looks like "DEV-506": a letter-led prefix, a hyphen, then
+// digits. Internal ids (e.g. "86e1xmmpp") are hyphen-free lowercase alphanumerics,
+// so a match is an unambiguous signal to take the custom-id path.
+var CUSTOM_TASK_ID_PATTERN = /^[A-Za-z][A-Za-z0-9]*-\d+$/;
+
 export async function clickupGetTask(
   args: ClickupGetTaskInput,
   deps: ClickUpDeps
 ): Promise<any> {
   var client = resolveClient(deps);
-  return await getTask({ client: client, taskId: args.taskId });
+  // Explicit customTaskIds wins; otherwise infer from the id shape. Without this,
+  // a custom id like "DEV-506" hits ClickUp's internal-id endpoint and 401s —
+  // which the client used to mislabel as an auth failure.
+  var useCustomId =
+    args.customTaskIds !== undefined
+      ? args.customTaskIds
+      : CUSTOM_TASK_ID_PATTERN.test(args.taskId);
+  var teamId = useCustomId ? requireTeamId(deps, args.teamId) : args.teamId;
+  return await getTask({
+    client: client,
+    taskId: args.taskId,
+    customTaskIds: useCustomId,
+    teamId: teamId
+  });
 }
 
 export async function clickupSearchTasks(

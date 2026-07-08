@@ -5,8 +5,14 @@ export var clickupListTasksSchema = z.object({
   statuses: z.array(z.string()).optional()
 }).strict();
 
+// taskId may be a ClickUp internal id (e.g. "86e1xmmpp") OR a custom id
+// (e.g. "DEV-506"). Custom-id lookups require custom_task_ids=true + a team_id;
+// the tool auto-detects the custom-id shape and defaults the team, so callers
+// normally pass only taskId. customTaskIds overrides the auto-detection.
 export var clickupGetTaskSchema = z.object({
-  taskId: z.string().min(1)
+  taskId: z.string().min(1),
+  customTaskIds: z.boolean().optional(),
+  teamId: z.string().min(1).optional()
 }).strict();
 
 export var clickupSearchTasksSchema = z.object({
