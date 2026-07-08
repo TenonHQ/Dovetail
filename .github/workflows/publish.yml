@@ -117,4 +117,29 @@ jobs:
           if [ -n "$INPUT_BASE" ]; then base="$INPUT_BASE"; fi
           args=(--base="$base" --head="${{ github.sha }}")
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
-          node Scripts/publish-on-merge.js "${args[@]}"
+          # Tee stdout so the Slack notifier can report which packages reached
+          # npm even if a later stage (the bump-push to main) fails. pipefail is
+          # on by default in GitHub's bash shell, so the script's exit code — not
+          # tee's — determines this step's success.
+          node Scripts/publish-on-merge.js "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+
+      # Post the publish outcome (success OR failure) to Slack #deployment so a
+      # red run is never silent. The common silent failure is npm publishing
+      # fine but the post-publish bump-push to main being rejected by branch
+      # protection (GH006/GH013) — which leaves npm ahead of main. Reads the
+      # SLACK_WEBHOOK_URL repo secret; if it is unset the notifier logs a warning
+      # and exits 0, so it never fails the release. Skipped on dry runs.
+      - name: Notify Slack (#deployment)
+        if: ${{ always() }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          IS_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          PUBLISH_LOG: ${{ runner.temp }}/publish.log
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+        run: node Scripts/notify-slack-publish.js
