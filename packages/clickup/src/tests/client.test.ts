@@ -163,7 +163,18 @@ describe("getTask", function () {
         customTaskIds: true,
         teamId: "team9",
       })
-    ).rejects.toThrow(/bad id\/team, not a bad token/);
+    ).rejects.toThrow(/first verify the custom id and team_id/);
+  });
+
+  it("fails fast when a custom-id lookup is missing a team_id", async function () {
+    await expect(
+      getTask({
+        client: mockAxiosInstance as any,
+        taskId: "DEV-506",
+        customTaskIds: true,
+      })
+    ).rejects.toThrow(/teamId is required/);
+    expect(mockAxiosInstance.get).not.toHaveBeenCalled();
   });
 
   it("still reports a plain 401 as an authentication failure", async function () {
