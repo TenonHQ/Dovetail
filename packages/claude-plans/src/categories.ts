@@ -47,16 +47,16 @@ export var CURATED_VOCAB: VocabEntry[] = [
       /\bx_cadso_/i,
       /\bscoped app\b/i,
       /\bupdate set\b/i,
-      /\bnow experience\b/i
-    ]
+      /\bnow experience\b/i,
+    ],
   },
   {
     label: "Mortise",
-    patterns: [/\bmortise\b/i, /\bmortise\//i]
+    patterns: [/\bmortise\b/i, /\bmortise\//i],
   },
   {
     label: "Sashimono",
-    patterns: [/\bsashimono\b/i]
+    patterns: [/\bsashimono\b/i],
   },
   {
     label: "Journey",
@@ -64,24 +64,24 @@ export var CURATED_VOCAB: VocabEntry[] = [
       /\bjourney\b/i,
       /\bjourney-/i,
       /\bcadso[_-]journey/i,
-      /\bjourney builder\b/i
-    ]
+      /\bjourney builder\b/i,
+    ],
   },
   {
     label: "Dovetail",
-    patterns: [/\bdovetail\b/i, /\bdove[_-](?:watch|push|pull|config|init)\b/i]
+    patterns: [/\bdovetail\b/i, /\bdove[_-](?:watch|push|pull|config|init)\b/i],
   },
   {
     label: "ClickUp",
-    patterns: [/\bclickup\b/i]
+    patterns: [/\bclickup\b/i],
   },
   {
     label: "Mailgun",
-    patterns: [/\bmailgun\b/i]
+    patterns: [/\bmailgun\b/i],
   },
   {
     label: "Email",
-    patterns: [/\bemail\b/i, /\bemail-spok\b/i, /\bemail metrics\b/i]
+    patterns: [/\bemail\b/i, /\bemail-spok\b/i, /\bemail metrics\b/i],
   },
   {
     label: "SMS",
@@ -90,24 +90,24 @@ export var CURATED_VOCAB: VocabEntry[] = [
       /\btext[\s-]?spoke\b/i,
       /\btextspoke\b/i,
       /\bdlr\b/i,
-      /\boptin\b/i
-    ]
+      /\boptin\b/i,
+    ],
   },
   {
     label: "Sinch",
-    patterns: [/\bsinch\b/i]
+    patterns: [/\bsinch\b/i],
   },
   {
     label: "Sawmill",
-    patterns: [/\bsawmill\b/i]
+    patterns: [/\bsawmill\b/i],
   },
   {
     label: "React",
-    patterns: [/\breact\b/i, /\breact[_-]spa\b/i, /\breactapp\b/i]
+    patterns: [/\breact\b/i, /\breact[_-]spa\b/i, /\breactapp\b/i],
   },
   {
     label: "MCP",
-    patterns: [/\bmcp\b/i, /\b@modelcontextprotocol\b/i]
+    patterns: [/\bmcp\b/i, /\b@modelcontextprotocol\b/i],
   },
   {
     label: "Prompting",
@@ -115,8 +115,8 @@ export var CURATED_VOCAB: VocabEntry[] = [
       /\bprompting\b/i,
       /\bprompt[_-]?(?:cycle|tab|template|playbook)\b/i,
       /\bimprove[_-]prompt\b/i,
-      /\bxml prompting\b/i
-    ]
+      /\bxml prompting\b/i,
+    ],
   },
   {
     label: "Tooling",
@@ -126,45 +126,60 @@ export var CURATED_VOCAB: VocabEntry[] = [
       /\bclaude[_-]plans\b/i,
       /\bskill\b/i,
       /\bworkflow\b/i,
-      /\bcli\b/i
-    ]
+      /\bcli\b/i,
+    ],
   },
   {
     label: "Dashboard",
-    patterns: [/\bdashboard\b/i]
+    patterns: [/\bdashboard\b/i],
   },
   {
     label: "Docs",
-    patterns: [/\bdocumentation\b/i, /\bclaude\.md\b/i, /\bonboarding\b/i, /\bdocs\b/i]
+    patterns: [
+      /\bdocumentation\b/i,
+      /\bclaude\.md\b/i,
+      /\bonboarding\b/i,
+      /\bdocs\b/i,
+    ],
   },
   {
     label: "Retrospective",
-    patterns: [/\bretrospective\b/i]
+    patterns: [/\bretrospective\b/i],
   },
   {
     label: "Voice Brief",
-    patterns: [/\bvoice[_-]brief\b/i]
+    patterns: [/\bvoice[_-]brief\b/i],
   },
   {
     label: "DEV ticket",
-    patterns: [/\bdev[- ]?\d{2,4}\b/i, /\bclickup task\b/i]
+    patterns: [/\bdev[- ]?\d{2,4}\b/i, /\bclickup task\b/i],
   },
   {
     label: "Billing",
-    patterns: [/\bbilling\b/i, /\binvoice\b/i, /\bsubscription\b/i, /\bpricing\b/i]
+    patterns: [
+      /\bbilling\b/i,
+      /\binvoice\b/i,
+      /\bsubscription\b/i,
+      /\bpricing\b/i,
+    ],
   },
   {
     label: "Testing",
-    patterns: [/\b(?:jest|mocha|chai|sinon|jsdom)\b/i, /\btest suite\b/i]
+    patterns: [/\b(?:jest|mocha|chai|sinon|jsdom)\b/i, /\btest suite\b/i],
   },
   {
     label: "Release",
-    patterns: [/\brelease\b/i, /\bdeploy(?:ment)?\b/i, /\bpublish\b/i, /\bchangelog\b/i]
+    patterns: [
+      /\brelease\b/i,
+      /\bdeploy(?:ment)?\b/i,
+      /\bpublish\b/i,
+      /\bchangelog\b/i,
+    ],
   },
   {
     label: "Cert",
-    patterns: [/\bcertification\b/i, /\bcert[\s-]?stability\b/i]
-  }
+    patterns: [/\bcertification\b/i, /\bcert[\s-]?stability\b/i],
+  },
 ];
 
 // Generic English stop words.
@@ -178,7 +193,7 @@ var STOP_WORDS = new Set<string>(
     "more most other some only same than then them through during about " +
     "after before above below up down out off over under again further " +
     "into onto upon between because both each few how very own"
-  ).split(/\s+/)
+  ).split(/\s+/),
 );
 
 // Words specific to the plan-genre that always show up and never name a topic.
@@ -205,7 +220,7 @@ var PLAN_NOISE = new Set<string>(
     "see see deployed lint pan exit existing tail follow followed open " +
     "discovery api env collection committed template handoff capture " +
     "feature event approach removed save"
-  ).split(/\s+/)
+  ).split(/\s+/),
 );
 
 // Strip wrapped HTML to plain text — naive but adequate for our content_html
@@ -232,7 +247,9 @@ function curatedMatches(text: string): CategoryHit[] {
     var entry = CURATED_VOCAB[i];
     var total = 0;
     for (var p = 0; p < entry.patterns.length; p++) {
-      var matches = text.match(new RegExp(entry.patterns[p].source, entry.patterns[p].flags + "g"));
+      var matches = text.match(
+        new RegExp(entry.patterns[p].source, entry.patterns[p].flags + "g"),
+      );
       if (matches) total += matches.length;
     }
     if (total > 0) hits.push({ label: entry.label, count: total });
@@ -240,7 +257,11 @@ function curatedMatches(text: string): CategoryHit[] {
   return hits;
 }
 
-function frequencyFallback(text: string, exclude: Set<string>, limit: number): CategoryHit[] {
+function frequencyFallback(
+  text: string,
+  exclude: Set<string>,
+  limit: number,
+): CategoryHit[] {
   var tokens = text.toLowerCase().match(/[a-z][a-z0-9_-]{2,15}/g) || [];
   var counts = new Map<string, number>();
   for (var i = 0; i < tokens.length; i++) {
@@ -266,9 +287,13 @@ export interface ExtractOptions {
   fallbackThreshold?: number;
 }
 
-export function extractCategories(input: ExtractInput, opts: ExtractOptions = {}): string[] {
+export function extractCategories(
+  input: ExtractInput,
+  opts: ExtractOptions = {},
+): string[] {
   var maxOut = opts.maxCategories || 8;
-  var fallbackBelow = opts.fallbackThreshold === undefined ? 3 : opts.fallbackThreshold;
+  var fallbackBelow =
+    opts.fallbackThreshold === undefined ? 3 : opts.fallbackThreshold;
 
   var text = buildHaystack(input);
   var curated = curatedMatches(text);
@@ -276,7 +301,8 @@ export function extractCategories(input: ExtractInput, opts: ExtractOptions = {}
   // Vocab-first ordering: curated hits first (in CURATED_VOCAB order),
   // then frequency fallback fills remaining slots.
   curated.sort(function (a, b) {
-    var ai = -1, bi = -1;
+    var ai = -1,
+      bi = -1;
     for (var i = 0; i < CURATED_VOCAB.length; i++) {
       if (CURATED_VOCAB[i].label === a.label) ai = i;
       if (CURATED_VOCAB[i].label === b.label) bi = i;
@@ -314,7 +340,9 @@ export function extractCategories(input: ExtractInput, opts: ExtractOptions = {}
  * Reduce a list of plans into a topic-count list, sorted by count desc.
  * Each plan's `categories` array contributes 1 per label.
  */
-export function aggregateCategories(plans: { categories?: string[] }[]): CategoryHit[] {
+export function aggregateCategories(
+  plans: { categories?: string[] }[],
+): CategoryHit[] {
   var counts = new Map<string, number>();
   for (var i = 0; i < plans.length; i++) {
     var cats = plans[i].categories || [];

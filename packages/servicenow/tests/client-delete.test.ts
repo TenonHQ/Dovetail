@@ -7,8 +7,14 @@ var mockHttp = {
 
 jest.mock("axios", function () {
   return {
-    default: { create: jest.fn(function () { return mockHttp; }) },
-    create: jest.fn(function () { return mockHttp; }),
+    default: {
+      create: jest.fn(function () {
+        return mockHttp;
+      }),
+    },
+    create: jest.fn(function () {
+      return mockHttp;
+    }),
   };
 });
 
@@ -31,7 +37,10 @@ describe("servicenow client — deleteRecord & changeUpdateSet", function () {
     mockHttp.request.mockResolvedValueOnce(ok({ name: "Old Element" }));
     var client = createClient();
 
-    var result = await client.claude.deleteRecord({ table: "sys_ui_element", sys_id: "el1" });
+    var result = await client.claude.deleteRecord({
+      table: "sys_ui_element",
+      sys_id: "el1",
+    });
 
     expect(result).toEqual({ name: "Old Element" });
     expect(mockHttp.request).toHaveBeenCalledTimes(1);
@@ -56,15 +65,25 @@ describe("servicenow client — deleteRecord & changeUpdateSet", function () {
 
   it("deleteRecord falls back to /api/cadso/dovetail/deleteRecord on a 404", async function () {
     mockHttp.request
-      .mockResolvedValueOnce({ status: 404, data: { error: { message: "not found" } } })
+      .mockResolvedValueOnce({
+        status: 404,
+        data: { error: { message: "not found" } },
+      })
       .mockResolvedValueOnce(ok({ name: "Old Element" }));
-    var warnSpy = jest.spyOn(console, "warn").mockImplementation(function () { /* swallow */ });
+    var warnSpy = jest.spyOn(console, "warn").mockImplementation(function () {
+      /* swallow */
+    });
     var client = createClient();
 
-    await client.claude.deleteRecord({ table: "sys_ui_element", sys_id: "el1" });
+    await client.claude.deleteRecord({
+      table: "sys_ui_element",
+      sys_id: "el1",
+    });
 
     expect(mockHttp.request).toHaveBeenCalledTimes(2);
-    expect(mockHttp.request.mock.calls[1][0].url).toBe("/api/cadso/dovetail/deleteRecord");
+    expect(mockHttp.request.mock.calls[1][0].url).toBe(
+      "/api/cadso/dovetail/deleteRecord",
+    );
     warnSpy.mockRestore();
   });
 });

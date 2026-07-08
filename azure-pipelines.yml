@@ -1,20 +1,20 @@
 trigger:
-- dev
-- master
+  - dev
+  - master
 
 pool:
-  vmImage: 'macOs-latest'
+  vmImage: "macOs-latest"
 
 steps:
-- task: NodeTool@0
-  inputs:
-    versionSpec: '20.x'
-  displayName: 'Install Node.js'
+  - task: NodeTool@0
+    inputs:
+      versionSpec: "20.x"
+    displayName: "Install Node.js"
 
-- script: |
-    npm install -g typescript
-  displayName: 'install typescript'
+  - script: |
+      npm install -g typescript
+    displayName: "install typescript"
 
-- script: |
-    npm install
-  displayName: 'npm install workspaces'
+  - script: |
+      npm install
+    displayName: "npm install workspaces"

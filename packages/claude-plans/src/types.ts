@@ -248,7 +248,7 @@ export interface PlanVersionMeta {
 export var ALLOWED_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   DRAFT: ["APPROVED", "EXITED"],
   APPROVED: ["EXITED"],
-  EXITED: []
+  EXITED: [],
 };
 
 /**

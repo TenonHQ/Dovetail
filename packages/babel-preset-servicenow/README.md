@@ -42,5 +42,5 @@ test.default;
 **becomes...**
 
 ```javascript
-test["default"]
+test["default"];
 ```

@@ -56,19 +56,34 @@ function flowGetPath(sysId: string): string {
 }
 
 function flowSnapshotPath(sysId: string, scopeSysId: string): string {
-  return "/api/now/processflow/flow/" + encodeURIComponent(sysId) + "/snapshot"
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/flow/" +
+    encodeURIComponent(sysId) +
+    "/snapshot" +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 
 /** Normalize `{ result: { data } }` / `{ data }` / `{ result }` / bare to the model. */
 function unwrapModel(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     if (data.result.data && typeof data.result.data === "object") {
       return data.result.data;
     }
     return data.result;
   }
-  if (data && typeof data === "object" && data.data && typeof data.data === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.data &&
+    typeof data.data === "object"
+  ) {
     return data.data;
   }
   return data;
@@ -78,8 +93,12 @@ function extractSnapshotSysId(body: any): string | undefined {
   if (!body || typeof body !== "object") {
     return undefined;
   }
-  var snap = body.latestSnapshot || body.masterSnapshot
-    || body.latest_snapshot || body.master_snapshot || body.snapshot;
+  var snap =
+    body.latestSnapshot ||
+    body.masterSnapshot ||
+    body.latest_snapshot ||
+    body.master_snapshot ||
+    body.snapshot;
   if (snap && typeof snap === "object") {
     return typeof snap.sys_id === "string" ? snap.sys_id : undefined;
   }
@@ -89,7 +108,9 @@ function extractSnapshotSysId(body: any): string | undefined {
   return undefined;
 }
 
-export async function publishFlow(params: PublishFlowParams): Promise<PublishFlowResult> {
+export async function publishFlow(
+  params: PublishFlowParams,
+): Promise<PublishFlowResult> {
   var client = params.client;
   var sysId = params.sysId;
 
@@ -105,8 +126,9 @@ export async function publishFlow(params: PublishFlowParams): Promise<PublishFlo
   }
   if (!model || typeof model !== "object") {
     throw new Error(
-      "publishFlow: could not resolve a model object for flow " + sysId
-        + " — pass params.model or ensure the flow GET returns one."
+      "publishFlow: could not resolve a model object for flow " +
+        sysId +
+        " — pass params.model or ensure the flow GET returns one.",
     );
   }
 
@@ -117,18 +139,21 @@ export async function publishFlow(params: PublishFlowParams): Promise<PublishFlo
   }
   if (!scopeSysId) {
     throw new Error(
-      "publishFlow: scopeSysId is required and the model carried no `scope` to default from."
+      "publishFlow: scopeSysId is required and the model carried no `scope` to default from.",
     );
   }
 
   // 3. POST the model to /snapshot — compiles the snapshot. request() throws on
   //    non-2xx, so reaching past this is a success.
-  var snapResp = await client.now.post<any>(flowSnapshotPath(sysId, scopeSysId), model);
+  var snapResp = await client.now.post<any>(
+    flowSnapshotPath(sysId, scopeSysId),
+    model,
+  );
   var snapBody = unwrapModel(snapResp);
 
   return {
     status: "published",
     httpStatus: 200,
-    snapshotSysId: extractSnapshotSysId(snapBody)
+    snapshotSysId: extractSnapshotSysId(snapBody),
   };
 }

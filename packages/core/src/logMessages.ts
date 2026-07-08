@@ -5,7 +5,6 @@ import chalk from "chalk";
 
 export const log = console.log;
 
-
 function parseError(err: Error): string {
   return `${err.name}:
  ${err.message}
@@ -27,12 +26,19 @@ export function logFilePush(
 
   if (success) {
     logger.info(
-      chalk.green("Pushed") + " " + fileLabel + " to " + instance +
-      " at " + timestamp,
+      chalk.green("Pushed") +
+        " " +
+        fileLabel +
+        " to " +
+        instance +
+        " at " +
+        timestamp,
     );
     // Persist every push to the session log file (file-only, no console echo).
     // The log file rotates every 200 writes (see FileLogger) so it never grows huge.
-    fileLogger.debug("Pushed " + fileLabel + " to " + instance + " at " + timestamp);
+    fileLogger.debug(
+      "Pushed " + fileLabel + " to " + instance + " at " + timestamp,
+    );
   } else {
     logger.error("Failed to push " + fileLabel + " to " + instance);
     logger.error(message);

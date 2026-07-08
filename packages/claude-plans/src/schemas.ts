@@ -9,7 +9,7 @@ var planStatus = z.enum(["DRAFT", "APPROVED", "EXITED"]);
 var artifactKind = z.enum(["markdown", "mermaid", "prompt-cycle"]);
 
 var structuredPlanSchema = z.object({
-  sections: z.array(z.any())
+  sections: z.array(z.any()),
 });
 
 export var linkRelation = z.enum([
@@ -17,14 +17,14 @@ export var linkRelation = z.enum([
   "improves",
   "supersedes",
   "depends-on",
-  "see-also"
+  "see-also",
 ]);
 
 export var planLinkSchema = z.object({
   plan_slug: z.string().min(1).max(64),
   artifact_slug: z.string().min(1).max(64).optional(),
   relation: linkRelation,
-  note: z.string().max(280).optional()
+  note: z.string().max(280).optional(),
 });
 
 export var pushPlanSchema = z.object({
@@ -39,21 +39,21 @@ export var pushPlanSchema = z.object({
   pr_url: z.string().url().optional(),
   pr_title: z.string().max(200).optional(),
   linked_artifacts: z.array(planLinkSchema).max(10).optional(),
-  categories: z.array(z.string().min(1).max(40)).max(12).optional()
+  categories: z.array(z.string().min(1).max(40)).max(12).optional(),
 });
 
 var lintReportSchema = z.object({
   score: z.number().int().min(0).max(100),
   missing: z.array(z.string()).default([]),
   antipatterns: z.array(z.string()).default([]).optional(),
-  ceremony: z.array(z.string()).default([]).optional()
+  ceremony: z.array(z.string()).default([]).optional(),
 });
 
 var openQuestionSchema = z.object({
   question: z.string().min(1),
   header: z.string().optional(),
   options: z.array(z.string()).default([]),
-  answer: z.string().default("")
+  answer: z.string().default(""),
 });
 
 export var promptCyclePayloadSchema = z.object({
@@ -63,25 +63,25 @@ export var promptCyclePayloadSchema = z.object({
   open_questions: z.array(openQuestionSchema).default([]),
   rewritten_prompt: z.string(),
   lint_after: lintReportSchema,
-  source_plan_slug: z.string().min(1).max(64).optional()
+  source_plan_slug: z.string().min(1).max(64).optional(),
 });
 
 export var deletePlanSchema = z.object({
-  slug: z.string().min(1).max(64)
+  slug: z.string().min(1).max(64),
 });
 
 export var updatePlanStatusSchema = z.object({
   slug: z.string().min(1).max(64),
-  to: planStatus
+  to: planStatus,
 });
 
 export var getPlanSchema = z.object({
-  slug: z.string().min(1).max(64)
+  slug: z.string().min(1).max(64),
 });
 
 export var listRecentPlansSchema = z.object({
   limit: z.number().int().positive().max(200).optional(),
-  status: planStatus.optional()
+  status: planStatus.optional(),
 });
 
 export var pushArtifactSchema = z.object({
@@ -89,14 +89,14 @@ export var pushArtifactSchema = z.object({
   slug: z.string().min(1).max(64).optional(),
   kind: artifactKind,
   title: z.string().min(1).max(200),
-  content: z.string().min(1)
+  content: z.string().min(1),
 });
 
 export var pushDiagramSchema = z.object({
   plan_slug: z.string().min(1).max(64),
   slug: z.string().min(1).max(64).optional(),
   title: z.string().min(1).max(200),
-  mermaid_source: z.string().min(1)
+  mermaid_source: z.string().min(1),
 });
 
 export var pushPromptSchema = z.object({
@@ -106,7 +106,7 @@ export var pushPromptSchema = z.object({
   content: z.string().min(1),
   source_draft: z.string().optional(),
   score_before: z.number().int().min(0).max(100).optional(),
-  score_after: z.number().int().min(0).max(100).optional()
+  score_after: z.number().int().min(0).max(100).optional(),
 });
 
 export var getHandoffBundleSchema = z.object({
@@ -114,7 +114,7 @@ export var getHandoffBundleSchema = z.object({
   follow_links: z.boolean().optional().default(false),
   include_artifact_kinds: z
     .array(z.enum(["markdown", "mermaid", "prompt-cycle"]))
-    .optional()
+    .optional(),
 });
 
 export var QUESTION_ID_PATTERN = /^q_[0-9a-f]{8}$/;
@@ -125,20 +125,22 @@ export var pushQuestionSchema = z.object({
   header: z.string().min(1).max(24).optional(),
   options: z.array(z.string().min(1).max(120)).max(8).optional(),
   stage: z.string().min(1).max(32).optional(),
-  asked_by: z.string().min(1).max(64).optional()
+  asked_by: z.string().min(1).max(64).optional(),
 });
 
 export var recordAnswerSchema = z.object({
   plan_slug: z.string().min(1).max(64),
-  question_id: z.string().regex(QUESTION_ID_PATTERN, "question_id must match q_<8-hex>"),
+  question_id: z
+    .string()
+    .regex(QUESTION_ID_PATTERN, "question_id must match q_<8-hex>"),
   answer: z.string().min(1),
-  answered_by: z.string().min(1).max(64).optional()
+  answered_by: z.string().min(1).max(64).optional(),
 });
 
 export var getAnswersSchema = z.object({
   plan_slug: z.string().min(1).max(64),
   answered: z.boolean().optional(),
-  stage: z.string().min(1).max(32).optional()
+  stage: z.string().min(1).max(32).optional(),
 });
 
 export var pushLintEventSchema = z.object({
@@ -150,13 +152,13 @@ export var pushLintEventSchema = z.object({
   prompt_excerpt: z.string().max(2000).optional(),
   source: z.string().min(1).max(40).optional(),
   session_id: z.string().min(1).max(128).nullable().optional(),
-  plan_slug: z.string().min(1).max(64).optional()
+  plan_slug: z.string().min(1).max(64).optional(),
 });
 
 export var getLintEventsSchema = z.object({
   session_id: z.string().min(1).max(128).optional(),
   plan_slug: z.string().min(1).max(64).optional(),
-  limit: z.number().int().positive().max(1000).optional()
+  limit: z.number().int().positive().max(1000).optional(),
 });
 
 // ---- v2 stage state machine (Phase C) ------------------------------------
@@ -171,7 +173,7 @@ export var PIPELINE_STAGES = [
   "per-step-review",
   "architectural-review",
   "test-reality",
-  "documentation"
+  "documentation",
 ] as const;
 
 export var pipelineStageSchema = z.enum(PIPELINE_STAGES);
@@ -180,11 +182,11 @@ export var setStageSchema = z.object({
   plan_slug: z.string().min(1).max(64),
   to: pipelineStageSchema,
   by: z.string().min(1).max(64).optional(),
-  source: z.enum(["code", "dashboard"]).optional()
+  source: z.enum(["code", "dashboard"]).optional(),
 });
 
 export var pullPlanSchema = z.object({
-  plan_slug: z.string().min(1).max(64)
+  plan_slug: z.string().min(1).max(64),
 });
 
 export var DISPATCH_TOKEN_PATTERN = /^tok_[0-9a-f]{24}$/;
@@ -193,22 +195,25 @@ export var dispatchStageSchema = z.object({
   plan_slug: z.string().min(1).max(64),
   target_stage: pipelineStageSchema,
   confirm: z.boolean().optional(),
-  token: z.string().regex(DISPATCH_TOKEN_PATTERN, "token must match tok_<24-hex>").optional(),
-  by: z.string().min(1).max(64).optional()
+  token: z
+    .string()
+    .regex(DISPATCH_TOKEN_PATTERN, "token must match tok_<24-hex>")
+    .optional(),
+  by: z.string().min(1).max(64).optional(),
 });
 
 export var listPlanVersionsSchema = z.object({
-  slug: z.string().min(1).max(64)
+  slug: z.string().min(1).max(64),
 });
 
 export var getPlanVersionSchema = z.object({
   slug: z.string().min(1).max(64),
-  version: z.number().int().positive()
+  version: z.number().int().positive(),
 });
 
 export var restorePlanVersionSchema = z.object({
   slug: z.string().min(1).max(64),
-  version: z.number().int().positive()
+  version: z.number().int().positive(),
 });
 
 // ---- Prompt drafts (dashboard Prompt Editor) -------------------------------
@@ -221,11 +226,11 @@ var draftContent = z.string().max(60000);
 export var createPromptDraftSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   content: draftContent.optional(),
-  session_id: z.string().min(1).max(128).nullable().optional()
+  session_id: z.string().min(1).max(128).nullable().optional(),
 });
 
 export var getPromptDraftSchema = z.object({
-  id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>")
+  id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>"),
 });
 
 // Plain object (not .refine()-wrapped) so registry.ts can read .shape for the
@@ -234,5 +239,5 @@ export var getPromptDraftSchema = z.object({
 export var updatePromptDraftSchema = z.object({
   id: z.string().regex(DRAFT_ID_PATTERN, "id must match pd_<8-hex>"),
   title: z.string().min(1).max(200).optional(),
-  content: draftContent.optional()
+  content: draftContent.optional(),
 });

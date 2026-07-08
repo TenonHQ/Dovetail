@@ -12,7 +12,9 @@ import {
   ReconcileRecord,
 } from "./types";
 
-function indexBySysId(records: ReconcileRecord[]): Map<string, ReconcileRecord> {
+function indexBySysId(
+  records: ReconcileRecord[],
+): Map<string, ReconcileRecord> {
   const map = new Map<string, ReconcileRecord>();
   for (const record of records) {
     map.set(record.sys_id, record);

@@ -1,6 +1,7 @@
 # Manage Dovetail Table Includes, Excludes, and Options
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -57,9 +59,9 @@ module.exports = {
 
     // Exclude specific fields from a table (other fields still included)
     new_cool_table: {
-      cool_script: true
-    }
-  }
+      cool_script: true,
+    },
+  },
 };
 ```
 
@@ -80,10 +82,10 @@ module.exports = {
     // Include a specific field with a custom file type
     special_code_table: {
       neat_script_field: {
-        type: "js"
-      }
-    }
-  }
+        type: "js",
+      },
+    },
+  },
 };
 ```
 
@@ -108,9 +110,9 @@ module.exports = {
       differentiatorField: ["some_field", "sys_id"],
 
       // Filter records with an encoded query
-      query: "active=true^category=scripts"
-    }
-  }
+      query: "active=true^category=scripts",
+    },
+  },
 };
 ```
 
@@ -123,6 +125,7 @@ module.exports = {
 ### Common Recipes
 
 **Track only script-related tables:**
+
 ```javascript
 includes: {
   sys_script_include: true,
@@ -134,6 +137,7 @@ includes: {
 ```
 
 **Include a non-code field as code:**
+
 ```javascript
 includes: {
   sys_ui_page: {
@@ -145,10 +149,11 @@ includes: {
 ```
 
 **Filter records by query:**
+
 ```javascript
 tableOptions: {
   sys_script_include: {
-    query: "active=true"
+    query: "active=true";
   }
 }
 ```
@@ -159,16 +164,18 @@ When using multi-scope mode, each scope can have its own `tableOptions`:
 
 ```javascript
 module.exports = {
-  tableOptions: { /* default table options */ },
+  tableOptions: {
+    /* default table options */
+  },
   scopes: {
     x_cadso_core: {
       sourceDirectory: "src/x_cadso_core",
       tableOptions: {
         sys_script_include: {
-          query: "active=true"
-        }
-      }
-    }
-  }
+          query: "active=true",
+        },
+      },
+    },
+  },
 };
 ```

@@ -13,7 +13,7 @@ Adding choice values to a scoped ServiceNow field is a 3-part ritual:
    field (0 = none, 1 = suggestion, **3 = dropdown w/ `-- None --`**).
 2. Create one `sys_choice` row per value/label pair, with `sys_scope` matching
    the dictionary record.
-3. Make sure your user's current update set points at the *right* update set
+3. Make sure your user's current update set points at the _right_ update set
    (not Default), or the whole change set gets trapped.
 
 This package collapses it into:
@@ -25,8 +25,8 @@ await addChoicesToField(client, {
   updateSetSysId: "0083c3bb33d003507b18bc534d5c7b6d",
   choices: [
     { value: "delivered", label: "Delivered" },
-    { value: "failed",    label: "Failed" }
-  ]
+    { value: "failed", label: "Failed" },
+  ],
 });
 ```
 
@@ -49,11 +49,11 @@ Requires Node 20 LTS.
 
 Reads ServiceNow credentials from env vars in this order of precedence:
 
-| Field    | Preferred       | Dev fallback        | Prod fallback        |
-|----------|-----------------|---------------------|----------------------|
-| Host     | `SN_INSTANCE`   | `SN_DEV_INSTANCE`   | `SN_PROD_INSTANCE`   |
-| User     | `SN_USER`       | `SN_DEV_USERNAME`   | `SN_PROD_USERNAME`   |
-| Password | `SN_PASSWORD`   | `SN_DEV_PASSWORD`   | `SN_PROD_PASSWORD`   |
+| Field    | Preferred     | Dev fallback      | Prod fallback      |
+| -------- | ------------- | ----------------- | ------------------ |
+| Host     | `SN_INSTANCE` | `SN_DEV_INSTANCE` | `SN_PROD_INSTANCE` |
+| User     | `SN_USER`     | `SN_DEV_USERNAME` | `SN_PROD_USERNAME` |
+| Password | `SN_PASSWORD` | `SN_DEV_PASSWORD` | `SN_PROD_PASSWORD` |
 
 The dev/prod fallbacks match the names documented in the committed
 `Craftsman/.env.example`, so existing developer setups work out of the box.
@@ -105,7 +105,7 @@ JSON payload shape:
   "choiceType": 3,
   "choices": [
     { "value": "delivered", "label": "Delivered" },
-    { "value": "failed",    "label": "Failed" }
+    { "value": "failed", "label": "Failed" }
   ]
 }
 ```
@@ -116,7 +116,9 @@ JSON payload shape:
 import { createClient, addChoicesToField } from "@tenonhq/dovetail-servicenow";
 
 var client = createClient({});
-var result = await addChoicesToField(client, { /* ... */ });
+var result = await addChoicesToField(client, {
+  /* ... */
+});
 
 console.log(result.choices);
 // [
@@ -131,12 +133,12 @@ The same query-to-diff, update-set-captured pattern now covers ServiceNow form
 and list layouts. Four declarative, idempotent functions reconcile the `sys_ui_*`
 tables — you describe the layout you want, the function writes only the delta.
 
-| Function | What it sets | ServiceNow tables |
-|----------|--------------|-------------------|
-| `createView` | a named custom view | `sys_ui_view` |
-| `setListLayout` | the columns of a list | `sys_ui_list`, `sys_ui_list_element` |
-| `setFormLayout` | the sections + fields of a form | `sys_ui_form`, `sys_ui_form_section`, `sys_ui_section`, `sys_ui_element` |
-| `setRelatedLists` | which related lists appear on a form | `sys_ui_related_list`, `sys_ui_related_list_entry` |
+| Function          | What it sets                         | ServiceNow tables                                                        |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| `createView`      | a named custom view                  | `sys_ui_view`                                                            |
+| `setListLayout`   | the columns of a list                | `sys_ui_list`, `sys_ui_list_element`                                     |
+| `setFormLayout`   | the sections + fields of a form      | `sys_ui_form`, `sys_ui_form_section`, `sys_ui_section`, `sys_ui_element` |
+| `setRelatedLists` | which related lists appear on a form | `sys_ui_related_list`, `sys_ui_related_list_entry`                       |
 
 All four are **idempotent** (re-running reports every record `unchanged`),
 **update-set-captured** (every create / update / delete lands in the update set
@@ -221,6 +223,7 @@ live). The
 POST silently no-ops (stays draft). Sequence reverse-engineered from Workflow
 Studio HARs and validated live (2026-06-02, tenonworkstudio). Exit `0` published
 or dry-run; `2` created-but-not-published.
+
 ### Create a table (with columns)
 
 ```bash
@@ -304,7 +307,11 @@ The first section is the **primary section** — omit its `caption`.
 ### Programmatic
 
 ```ts
-import { createClient, setFormLayout, formatLayoutResult } from "@tenonhq/dovetail-servicenow";
+import {
+  createClient,
+  setFormLayout,
+  formatLayoutResult,
+} from "@tenonhq/dovetail-servicenow";
 
 var client = createClient({});
 var result = await setFormLayout(client, {
@@ -313,8 +320,8 @@ var result = await setFormLayout(client, {
   updateSetSysId: "0083c3bb33d003507b18bc534d5c7b6d",
   sections: [
     { fields: ["name", "active"] },
-    { caption: "Meta Data", fields: ["created_by"] }
-  ]
+    { caption: "Meta Data", fields: ["created_by"] },
+  ],
 });
 console.log(formatLayoutResult("form layout", result));
 ```
@@ -339,7 +346,11 @@ npx dove-sn mcp           # run the stdio server (wire into .mcp.json)
 `.mcp.json` entry:
 
 ```json
-{ "mcpServers": { "dovetail-servicenow": { "command": "npx", "args": ["dove-sn", "mcp"] } } }
+{
+  "mcpServers": {
+    "dovetail-servicenow": { "command": "npx", "args": ["dove-sn", "mcp"] }
+  }
+}
 ```
 
 This server is separate from `@tenonhq/dovetail-mcp` (the read-only cross-system
@@ -372,9 +383,9 @@ import { createClient, publishActionType } from "@tenonhq/dovetail-servicenow";
 var client = createClient({});
 var result = await publishActionType({
   client: client,
-  sysId: "60e6743e33814bd07b18bc534d5c7b9e",      // sys_hub_action_type_definition
-  scopeSysId: "cd61acbbc3c85a1085b196c4e40131bd",  // sysparm_transaction_scope
-  steps: require("./fixtures/my-action.steps.json") // see caveat below
+  sysId: "60e6743e33814bd07b18bc534d5c7b9e", // sys_hub_action_type_definition
+  scopeSysId: "cd61acbbc3c85a1085b196c4e40131bd", // sysparm_transaction_scope
+  steps: require("./fixtures/my-action.steps.json"), // see caveat below
 });
 // { status: "published", httpStatus: 201, snapshotSysId?: "..." }
 ```

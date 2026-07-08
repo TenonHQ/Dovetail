@@ -1,6 +1,7 @@
 # Troubleshoot Dovetail Sync Issues
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -41,11 +43,13 @@ Ask the user which symptom they are experiencing (if not already clear):
 ### Diagnostic B: Authentication/Connection Failure
 
 1. **Verify `.env` file exists** in the project root with correct values:
+
    ```
    SN_USER=your_username
    SN_PASSWORD=your_password
    SN_INSTANCE=your-instance.service-now.com
    ```
+
    - Instance should NOT have `https://` prefix or trailing slash
    - Credentials must have admin or developer role
 
@@ -70,11 +74,13 @@ Dovetail checks that your local manifest scope matches the active scope on the S
 
 1. **Run a local build to see errors:** `npx dove build`
 2. **Common Babel errors:**
+
    - "Cannot find module '@tenonhq/dovetail-remove-modules'" -- Need `npm i -D @tenonhq/dovetail-babel-plugin-remove-modules`
    - "Cannot find module '@tenonhq/dovetail-servicenow'" -- Need `npm i -D @tenonhq/dovetail-babel-preset-servicenow`
    - Note: Babel package names differ from dove.config.js names. In Babel config, `@tenonhq/dovetail-remove-modules` refers to npm package `@tenonhq/dovetail-babel-plugin-remove-modules`.
 
 3. **Common TypeScript errors:**
+
    - Type errors block the build. Fix the types or set `transpile: true` to skip type checking.
    - Missing `tsconfig.json` -- Plugin works without it but may produce unexpected output.
 
@@ -87,6 +93,7 @@ Dovetail checks that your local manifest scope matches the active scope on the S
 ### Diagnostic E: Missing Files
 
 1. **Files in ServiceNow but not local:**
+
    - Run `npx dove refresh` to update the manifest and download new files.
    - Check `excludes` in `dove.config.js` -- the table may be excluded.
    - Check `includes` -- some tables need explicit inclusion.

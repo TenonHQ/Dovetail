@@ -12,12 +12,12 @@ import chalk from "chalk";
  * @returns The resolved update set name.
  */
 export async function resolveClickUpForPush(
-  clickupIdentifier: string
+  clickupIdentifier: string,
 ): Promise<string> {
   var token = process.env.CLICKUP_API_TOKEN;
   if (!token || token === "") {
     throw new Error(
-      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add it to your .env file."
+      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add it to your .env file.",
     );
   }
 

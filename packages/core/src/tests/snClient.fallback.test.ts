@@ -8,7 +8,9 @@ var mockLogger = {
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
-  getLogLevel: function () { return "debug"; },
+  getLogLevel: function () {
+    return "debug";
+  },
 };
 
 jest.mock("../Logger", function () {
@@ -16,7 +18,14 @@ jest.mock("../Logger", function () {
 });
 
 jest.mock("../FileLogger", function () {
-  return { fileLogger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } };
+  return {
+    fileLogger: {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    },
+  };
 });
 
 jest.mock("../genericUtils", function () {
@@ -32,11 +41,21 @@ import {
 function makeAxiosError(status: number, data?: any): any {
   var error: any = new Error("Request failed with status " + status);
   error.isAxiosError = true;
-  error.response = { status: status, headers: {}, data: data === undefined ? {} : data };
+  error.response = {
+    status: status,
+    headers: {},
+    data: data === undefined ? {} : data,
+  };
   return error;
 }
 
-function makeAxiosResponse<T>(data: T): { status: number; data: T; headers: any; statusText: string; config: any } {
+function makeAxiosResponse<T>(data: T): {
+  status: number;
+  data: T;
+  headers: any;
+  statusText: string;
+  config: any;
+} {
   return { status: 200, data: data, headers: {}, statusText: "OK", config: {} };
 }
 
@@ -79,8 +98,12 @@ describe("_callDovetailApi 404 fallback", function () {
     expect(_isUsingLegacyPath()).toBe(true);
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn.mock.calls[0][0]).toContain("[deprecation]");
-    expect(mockLogger.warn.mock.calls[0][0]).toContain("/api/cadso/dovetail_core/changeScope");
-    expect(mockLogger.warn.mock.calls[0][0]).toContain("/api/cadso/dovetail/changeScope");
+    expect(mockLogger.warn.mock.calls[0][0]).toContain(
+      "/api/cadso/dovetail_core/changeScope",
+    );
+    expect(mockLogger.warn.mock.calls[0][0]).toContain(
+      "/api/cadso/dovetail/changeScope",
+    );
   });
 
   it("after latching, subsequent calls skip dovetail and warn no more", async function () {
@@ -140,7 +163,9 @@ describe("_callDovetailApi 404 fallback", function () {
       throw new Error("ECONNREFUSED");
     });
 
-    await expect(_callDovetailApi("changeScope", call)).rejects.toThrow("ECONNREFUSED");
+    await expect(_callDovetailApi("changeScope", call)).rejects.toThrow(
+      "ECONNREFUSED",
+    );
 
     expect(call).toHaveBeenCalledTimes(1);
     expect(_isUsingLegacyPath()).toBe(false);
@@ -150,7 +175,9 @@ describe("_callDovetailApi 404 fallback", function () {
   describe("descriptive error enrichment", function () {
     it("includes status, endpoint, and response body on a 401", async function () {
       var call = jest.fn(async function (_endpoint: string) {
-        throw makeAxiosError(401, { error: { message: "User Not Authenticated" } });
+        throw makeAxiosError(401, {
+          error: { message: "User Not Authenticated" },
+        });
       });
 
       try {
@@ -166,7 +193,10 @@ describe("_callDovetailApi 404 fallback", function () {
 
     it("adds the missing-endpoint hint when SN returns its 400 'Requested URI does not represent any resource'", async function () {
       var snBody = {
-        error: { message: "Requested URI does not represent any resource", detail: null },
+        error: {
+          message: "Requested URI does not represent any resource",
+          detail: null,
+        },
         status: "failure",
       };
       var call = jest.fn(async function (_endpoint: string) {
@@ -180,7 +210,9 @@ describe("_callDovetailApi 404 fallback", function () {
         expect(e.response.status).toBe(400);
         expect(e.message).toContain("HTTP 400");
         expect(e.message).toContain("api/cadso/dovetail_core/changeScope");
-        expect(e.message).toContain("Install the Dovetail application's Scripted REST APIs");
+        expect(e.message).toContain(
+          "Install the Dovetail application's Scripted REST APIs",
+        );
       }
     });
 
@@ -195,7 +227,9 @@ describe("_callDovetailApi 404 fallback", function () {
       } catch (e: any) {
         expect(e.message).toContain("HTTP 400");
         expect(e.message).toContain("Invalid scope name");
-        expect(e.message).not.toContain("Install the Dovetail application's Scripted REST APIs");
+        expect(e.message).not.toContain(
+          "Install the Dovetail application's Scripted REST APIs",
+        );
       }
     });
 
@@ -229,7 +263,9 @@ describe("_callDovetailApi 404 fallback", function () {
         throw new Error("ECONNREFUSED");
       });
 
-      await expect(_callDovetailApi("changeScope", call)).rejects.toThrow("ECONNREFUSED");
+      await expect(_callDovetailApi("changeScope", call)).rejects.toThrow(
+        "ECONNREFUSED",
+      );
     });
   });
 });

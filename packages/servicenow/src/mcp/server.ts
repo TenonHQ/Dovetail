@@ -24,7 +24,7 @@ export interface CreateServerOptions {
 export function createServer(options: CreateServerOptions = {}): McpServer {
   var server = new McpServer({
     name: options.serverName || "dovetail-servicenow",
-    version: options.serverVersion || "0.1.0"
+    version: options.serverVersion || "0.1.0",
   });
   registerAllTools(server, options.registryDeps || {});
   return server;

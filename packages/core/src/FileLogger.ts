@@ -25,7 +25,10 @@ class FileLogger {
   private initialize() {
     if (this.initialized) return;
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, "-")
+      .slice(0, 19);
     const logFileName = `dovetail-debug-${timestamp}.log`;
 
     // Create log file in the current working directory (ServiceNow folder)
@@ -33,13 +36,15 @@ class FileLogger {
 
     try {
       // Create or append to the log file
-      this.logStream = fs.createWriteStream(this.logFilePath, { flags: 'a' });
+      this.logStream = fs.createWriteStream(this.logFilePath, { flags: "a" });
       this.initialized = true;
       this.writeCount = 0;
 
       // Write header to log file — once, at the top of each (rotated) file
       this.writeToFile(`\n${"=".repeat(80)}`);
-      this.writeToFile(`Dovetail Debug Log - Started at ${new Date().toISOString()}`);
+      this.writeToFile(
+        `Dovetail Debug Log - Started at ${new Date().toISOString()}`,
+      );
       this.writeToFile(`Log file: ${this.logFilePath}`);
       this.writeToFile(`Working directory: ${process.cwd()}`);
       this.writeToFile(`${"=".repeat(80)}\n`);
@@ -63,7 +68,9 @@ class FileLogger {
     if (this.logStream && this.logStream.writable) {
       const timestamp = new Date().toISOString();
       this.logStream.write(`[${timestamp}] ${"=".repeat(80)}\n`);
-      this.logStream.write(`[${timestamp}] Log rotated after ${ROTATION_WRITE_LIMIT} writes — continues in a new file\n`);
+      this.logStream.write(
+        `[${timestamp}] Log rotated after ${ROTATION_WRITE_LIMIT} writes — continues in a new file\n`,
+      );
       this.logStream.write(`[${timestamp}] ${"=".repeat(80)}\n`);
     }
     if (this.logStream) {
@@ -94,25 +101,31 @@ class FileLogger {
   /**
    * Format a message for both console and file output
    */
-  private formatMessage(level: string, message: string, ...args: any[]): string {
+  private formatMessage(
+    level: string,
+    message: string,
+    ...args: any[]
+  ): string {
     let fullMessage = message;
-    
+
     // If there are additional arguments, stringify them
     if (args.length > 0) {
-      const additionalInfo = args.map(arg => {
-        if (typeof arg === 'object') {
-          try {
-            return JSON.stringify(arg, null, 2);
-          } catch {
-            return String(arg);
+      const additionalInfo = args
+        .map((arg) => {
+          if (typeof arg === "object") {
+            try {
+              return JSON.stringify(arg, null, 2);
+            } catch {
+              return String(arg);
+            }
           }
-        }
-        return String(arg);
-      }).join(' ');
-      
+          return String(arg);
+        })
+        .join(" ");
+
       fullMessage = `${message} ${additionalInfo}`;
     }
-    
+
     return fullMessage;
   }
 
@@ -120,7 +133,7 @@ class FileLogger {
    * Debug level logging - file only, no console output
    */
   debug(message: string, ...args: any[]) {
-    const formattedMessage = this.formatMessage('DEBUG', message, ...args);
+    const formattedMessage = this.formatMessage("DEBUG", message, ...args);
     this.writeToFile(`[DEBUG] ${formattedMessage}`);
   }
 
@@ -128,11 +141,11 @@ class FileLogger {
    * Info level logging
    */
   info(message: string, ...args: any[]) {
-    const formattedMessage = this.formatMessage('INFO', message, ...args);
-    
+    const formattedMessage = this.formatMessage("INFO", message, ...args);
+
     // Write to console with color
     console.log(chalk.blue(message), ...args);
-    
+
     // Write to file
     this.writeToFile(`[INFO] ${formattedMessage}`);
   }
@@ -141,11 +154,11 @@ class FileLogger {
    * Warning level logging
    */
   warn(message: string, ...args: any[]) {
-    const formattedMessage = this.formatMessage('WARN', message, ...args);
-    
+    const formattedMessage = this.formatMessage("WARN", message, ...args);
+
     // Write to console with color
     console.log(chalk.yellow(message), ...args);
-    
+
     // Write to file
     this.writeToFile(`[WARN] ${formattedMessage}`);
   }
@@ -154,11 +167,11 @@ class FileLogger {
    * Error level logging
    */
   error(message: string, ...args: any[]) {
-    const formattedMessage = this.formatMessage('ERROR', message, ...args);
-    
+    const formattedMessage = this.formatMessage("ERROR", message, ...args);
+
     // Write to console with color
     console.error(chalk.red(message), ...args);
-    
+
     // Write to file
     this.writeToFile(`[ERROR] ${formattedMessage}`);
   }
@@ -167,11 +180,11 @@ class FileLogger {
    * Success level logging
    */
   success(message: string, ...args: any[]) {
-    const formattedMessage = this.formatMessage('SUCCESS', message, ...args);
-    
+    const formattedMessage = this.formatMessage("SUCCESS", message, ...args);
+
     // Write to console with color
     console.log(chalk.green(message), ...args);
-    
+
     // Write to file
     this.writeToFile(`[SUCCESS] ${formattedMessage}`);
   }
@@ -184,7 +197,7 @@ class FileLogger {
       this.writeToFile(`\n${"=".repeat(80)}`);
       this.writeToFile(`Log session ended at ${new Date().toISOString()}`);
       this.writeToFile(`${"=".repeat(80)}\n`);
-      
+
       this.logStream.end();
       this.logStream = null;
       this.initialized = false;
@@ -209,27 +222,29 @@ export { fileLogger };
 export function enableFileLogging() {
   // Store original console.log
   const originalConsoleLog = console.log;
-  
+
   // Override console.log to also write to file
-  console.log = function(...args: any[]) {
+  console.log = function (...args: any[]) {
     // Call original console.log
     originalConsoleLog.apply(console, args);
-    
+
     // Also write to file
-    const message = args.map(arg => {
-      if (typeof arg === 'object') {
-        try {
-          return JSON.stringify(arg, null, 2);
-        } catch {
-          return String(arg);
+    const message = args
+      .map((arg) => {
+        if (typeof arg === "object") {
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch {
+            return String(arg);
+          }
         }
-      }
-      return String(arg);
-    }).join(' ');
-    
+        return String(arg);
+      })
+      .join(" ");
+
     fileLogger.debug(message);
   };
-  
+
   // Log that file logging is enabled
-  fileLogger.info('File logging has been enabled for this session');
+  fileLogger.info("File logging has been enabled for this session");
 }

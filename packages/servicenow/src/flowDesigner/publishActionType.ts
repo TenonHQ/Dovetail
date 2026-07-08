@@ -48,10 +48,18 @@ export interface PublishActionTypeResult {
   snapshotSysId?: string;
 }
 
-function actionTypePath(sysId: string, scopeSysId: string, suffix: string): string {
-  return "/api/now/processflow/action/action_types/" + encodeURIComponent(sysId)
-    + suffix
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+function actionTypePath(
+  sysId: string,
+  scopeSysId: string,
+  suffix: string,
+): string {
+  return (
+    "/api/now/processflow/action/action_types/" +
+    encodeURIComponent(sysId) +
+    suffix +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 
 /**
@@ -60,13 +68,20 @@ function actionTypePath(sysId: string, scopeSysId: string, suffix: string): stri
  * `result`; normalize to the model object.
  */
 function unwrap(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     return data.result;
   }
   return data;
 }
 
-export async function publishActionType(params: PublishActionTypeParams): Promise<PublishActionTypeResult> {
+export async function publishActionType(
+  params: PublishActionTypeParams,
+): Promise<PublishActionTypeResult> {
   var client = params.client;
   var sysId = params.sysId;
   var scopeSysId = params.scopeSysId;
@@ -75,16 +90,22 @@ export async function publishActionType(params: PublishActionTypeParams): Promis
     throw new Error("publishActionType: sysId is required.");
   }
   if (!scopeSysId) {
-    throw new Error("publishActionType: scopeSysId is required (sysparm_transaction_scope).");
+    throw new Error(
+      "publishActionType: scopeSysId is required (sysparm_transaction_scope).",
+    );
   }
 
   // 1. GET the model. Returns everything except `steps` (always null).
-  var getResp = await client.now.get<any>(actionTypePath(sysId, scopeSysId, ""));
+  var getResp = await client.now.get<any>(
+    actionTypePath(sysId, scopeSysId, ""),
+  );
   var model = unwrap(getResp);
   if (!model || typeof model !== "object") {
     throw new Error(
-      "publishActionType: unexpected GET response for action type " + sysId
-        + " — expected a model object, got: " + JSON.stringify(getResp).substring(0, 300)
+      "publishActionType: unexpected GET response for action type " +
+        sysId +
+        " — expected a model object, got: " +
+        JSON.stringify(getResp).substring(0, 300),
     );
   }
 
@@ -103,22 +124,31 @@ export async function publishActionType(params: PublishActionTypeParams): Promis
       copy.action = sysId;
       return copy;
     });
-  } else if (model.steps && Array.isArray(model.steps) && model.steps.length > 0) {
+  } else if (
+    model.steps &&
+    Array.isArray(model.steps) &&
+    model.steps.length > 0
+  ) {
     steps = model.steps;
   }
 
   if (!steps || steps.length === 0) {
     throw new Error(
-      "publishActionType: no steps to publish for action type " + sysId + ". "
-        + "The GET returns steps:null, so you must supply a steps fixture via params.steps. "
-        + "See docs/servicenow-flow-designer-headless-authoring.md."
+      "publishActionType: no steps to publish for action type " +
+        sysId +
+        ". " +
+        "The GET returns steps:null, so you must supply a steps fixture via params.steps. " +
+        "See docs/servicenow-flow-designer-headless-authoring.md.",
     );
   }
 
   model.steps = steps;
 
   // 3. POST the grafted model to /snapshot — compiles the snapshot (201).
-  var snapResp = await client.now.post<any>(actionTypePath(sysId, scopeSysId, "/snapshot"), model);
+  var snapResp = await client.now.post<any>(
+    actionTypePath(sysId, scopeSysId, "/snapshot"),
+    model,
+  );
   var snapBody = unwrap(snapResp);
 
   // request() throws on any non-2xx, so reaching here means a 2xx (201 in practice).
@@ -126,7 +156,8 @@ export async function publishActionType(params: PublishActionTypeParams): Promis
   if (snapBody && typeof snapBody === "object") {
     // The snapshot ref is surfaced under different keys and as either a bare
     // sys_id string or a record object — coerce whichever is present to a string.
-    var snap = snapBody.latest_snapshot || snapBody.master_snapshot || snapBody.snapshot;
+    var snap =
+      snapBody.latest_snapshot || snapBody.master_snapshot || snapBody.snapshot;
     if (snap && typeof snap === "object") {
       snapshotSysId = typeof snap.sys_id === "string" ? snap.sys_id : undefined;
     } else if (typeof snap === "string") {
@@ -137,6 +168,6 @@ export async function publishActionType(params: PublishActionTypeParams): Promis
   return {
     status: "published",
     httpStatus: 201,
-    snapshotSysId: snapshotSysId
+    snapshotSysId: snapshotSysId,
   };
 }

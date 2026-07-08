@@ -23,11 +23,7 @@
 import * as path from "path";
 import { spawn as realSpawn } from "child_process";
 
-import {
-  ClaudePlan,
-  DispatchEvent,
-  PipelineStage
-} from "./types";
+import { ClaudePlan, DispatchEvent, PipelineStage } from "./types";
 
 // ---- Error taxonomy --------------------------------------------------------
 
@@ -37,8 +33,11 @@ export class MissingAgentError extends Error {
   public agent: string;
   constructor(stage: PipelineStage, agent: string) {
     super(
-      "dispatch_stage cannot target " + stage + ": the '" + agent +
-      "' agent has not been authored yet (see PR #160)"
+      "dispatch_stage cannot target " +
+        stage +
+        ": the '" +
+        agent +
+        "' agent has not been authored yet (see PR #160)",
     );
     this.name = "MissingAgentError";
     this.code = "MISSING_AGENT";
@@ -86,7 +85,7 @@ export class SpawnError extends Error {
  */
 export var KNOWN_MISSING_AGENTS: Partial<Record<PipelineStage, string>> = {
   "test-first": "test-author",
-  "test-reality": "test-reality-checker"
+  "test-reality": "test-reality-checker",
 };
 
 export function assertAgentAvailable(stage: PipelineStage): void {
@@ -107,29 +106,35 @@ export interface ResolvedCommand {
  * dashboard's pre-dispatch preview tooltip and for the dry-run response.
  * Never shell-interpolated; argv is passed straight to spawn().
  */
-export function resolveDispatchCommand(plan: ClaudePlan, stage: PipelineStage): ResolvedCommand {
-  var cwd =
-    process.env.DOVE_CLAUDE_PLANS_DISPATCH_CWD ||
-    process.cwd();
+export function resolveDispatchCommand(
+  plan: ClaudePlan,
+  stage: PipelineStage,
+): ResolvedCommand {
+  var cwd = process.env.DOVE_CLAUDE_PLANS_DISPATCH_CWD || process.cwd();
   // session_id is reserved for future use (e.g. mapping back to the repo
   // the originating session was running in). Today we don't bind to it
   // beyond logging.
   var argv = [
     "claude",
-    "--resume-plan", plan.slug,
-    "--target-stage", stage,
-    "--session-source", "dispatch"
+    "--resume-plan",
+    plan.slug,
+    "--target-stage",
+    stage,
+    "--session-source",
+    "dispatch",
   ];
   return {
     argv: argv,
     command: argv.join(" "),
-    cwd: path.resolve(cwd)
+    cwd: path.resolve(cwd),
   };
 }
 
 // ---- Spawn injection -------------------------------------------------------
 
-export interface SpawnResult { pid: number; }
+export interface SpawnResult {
+  pid: number;
+}
 export type SpawnFn = (argv: string[], cwd: string) => SpawnResult;
 
 /**
@@ -137,12 +142,15 @@ export type SpawnFn = (argv: string[], cwd: string) => SpawnResult;
  * so the new session attaches to the operator's terminal. Returns the
  * pid; throws SpawnError on failure to launch.
  */
-export var productionSpawn: SpawnFn = function (argv: string[], cwd: string): SpawnResult {
+export var productionSpawn: SpawnFn = function (
+  argv: string[],
+  cwd: string,
+): SpawnResult {
   try {
     var child = realSpawn(argv[0], argv.slice(1), {
       cwd: cwd,
       stdio: "inherit",
-      detached: true
+      detached: true,
     });
     child.unref();
     if (typeof child.pid !== "number") {
@@ -158,24 +166,34 @@ export var productionSpawn: SpawnFn = function (argv: string[], cwd: string): Sp
 
 // ---- Token validation ------------------------------------------------------
 
-export interface TokenCheck { reason?: string; ok: boolean; }
+export interface TokenCheck {
+  reason?: string;
+  ok: boolean;
+}
 
 export function validateToken(
   plan: ClaudePlan,
   providedToken: string | undefined,
   targetStage: PipelineStage,
-  nowMs: number
+  nowMs: number,
 ): TokenCheck {
-  if (!providedToken) return { ok: false, reason: "token argument is required" };
+  if (!providedToken)
+    return { ok: false, reason: "token argument is required" };
   var stored = plan.dispatch_token || null;
-  if (!stored) return { ok: false, reason: "plan has no outstanding token (call set_stage first)" };
-  if (stored.token !== providedToken) return { ok: false, reason: "token mismatch" };
-  if (stored.consumed_at) return { ok: false, reason: "token already consumed" };
+  if (!stored)
+    return {
+      ok: false,
+      reason: "plan has no outstanding token (call set_stage first)",
+    };
+  if (stored.token !== providedToken)
+    return { ok: false, reason: "token mismatch" };
+  if (stored.consumed_at)
+    return { ok: false, reason: "token already consumed" };
   if (stored.issued_for_stage !== targetStage) {
     return {
       ok: false,
-      reason: "token issued for " + stored.issued_for_stage +
-        ", not " + targetStage
+      reason:
+        "token issued for " + stored.issued_for_stage + ", not " + targetStage,
     };
   }
   if (nowMs > Date.parse(stored.expires_at)) {
@@ -202,7 +220,7 @@ export function makeEvent(opts: {
     target_stage: opts.targetStage,
     mode: opts.mode,
     by: opts.by,
-    outcome: opts.outcome
+    outcome: opts.outcome,
   };
   if (opts.command !== undefined) ev.command = opts.command;
   if (opts.cwd !== undefined) ev.cwd = opts.cwd;

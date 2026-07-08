@@ -45,10 +45,7 @@ jest.mock("../Logger", function () {
   };
 });
 
-import {
-  readUpdateSetConfig,
-  writeUpdateSetRouting,
-} from "../updateSetConfig";
+import { readUpdateSetConfig, writeUpdateSetRouting } from "../updateSetConfig";
 import { logger } from "../Logger";
 
 describe("updateSetConfig", function () {
@@ -134,7 +131,11 @@ describe("updateSetConfig", function () {
 
     test("returns null when sys_id or name is blank", function () {
       expect(
-        writeUpdateSetRouting({ scope: "x_cadso_core", sysId: "  ", name: "y" }),
+        writeUpdateSetRouting({
+          scope: "x_cadso_core",
+          sysId: "  ",
+          name: "y",
+        }),
       ).toBeNull();
       expect(
         writeUpdateSetRouting({ scope: "x_cadso_core", sysId: "x", name: "" }),

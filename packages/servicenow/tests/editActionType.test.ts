@@ -9,32 +9,61 @@ interface Cap {
 
 // getResponses is consumed sequentially: index 0 = the model GET (steps:null),
 // index 1 = the /step_instances GET (carries the script).
-function mockClient(getResponses: Array<any>, postResponse?: any): { client: ServiceNowClient; cap: Cap } {
+function mockClient(
+  getResponses: Array<any>,
+  postResponse?: any,
+): { client: ServiceNowClient; cap: Cap } {
   var cap: Cap = { gets: [], posts: [], updateSets: [] };
   var idx = 0;
   var client = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function () { return []; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
+      runQuery: async function () {
+        return [];
+      },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
-      createRecord: async function () { return { sys_id: "x" }; },
-      pushWithUpdateSet: async function () { return { sys_id: "x" }; },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function (p: { sysId: string }) { cap.updateSets.push(p.sysId); return {}; },
-      deleteRecord: async function () { return {}; },
+      createRecord: async function () {
+        return { sys_id: "x" };
+      },
+      pushWithUpdateSet: async function () {
+        return { sys_id: "x" };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function (p: { sysId: string }) {
+        cap.updateSets.push(p.sysId);
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
     now: {
       get: async function <T>(path: string): Promise<T> {
         cap.gets.push(path);
-        var r = getResponses[idx] !== undefined ? getResponses[idx] : getResponses[getResponses.length - 1];
+        var r =
+          getResponses[idx] !== undefined
+            ? getResponses[idx]
+            : getResponses[getResponses.length - 1];
         idx += 1;
         return r as T;
       },
       post: async function <T>(path: string, body: any): Promise<T> {
         cap.posts.push({ path: path, body: body });
-        return (postResponse !== undefined ? postResponse : { latest_snapshot: { sys_id: "snap1" } }) as T;
+        return (
+          postResponse !== undefined
+            ? postResponse
+            : { latest_snapshot: { sys_id: "snap1" } }
+        ) as T;
       },
     },
   } as unknown as ServiceNowClient;
@@ -51,8 +80,20 @@ var SCRIPT_OLD =
 
 function fixtures(scriptValue: string): Array<any> {
   return [
-    { result: { outputs: [{ name: "to_address_list", type: "Array.String" }], steps: null, scope: SCOPE } },
-    { result: { steps: [{ action: "orig", inputs: [{ name: "script", value: scriptValue }] }] } },
+    {
+      result: {
+        outputs: [{ name: "to_address_list", type: "Array.String" }],
+        steps: null,
+        scope: SCOPE,
+      },
+    },
+    {
+      result: {
+        steps: [
+          { action: "orig", inputs: [{ name: "script", value: scriptValue }] },
+        ],
+      },
+    },
   ];
 }
 
@@ -60,7 +101,9 @@ describe("editActionType", function () {
   it("dry-run previews a script patch without writing", async function () {
     var m = mockClient(fixtures(SCRIPT_OLD));
     var res = await editActionType({
-      client: m.client, sysId: SYS, scopeSysId: SCOPE,
+      client: m.client,
+      sysId: SYS,
+      scopeSysId: SCOPE,
       ops: { patchScript: { find: "grabHashData", replace: "grabRecipients" } },
     });
     expect(res.status).toBe("preview");
@@ -76,9 +119,12 @@ describe("editActionType", function () {
   it("apply patches the script and republishes via /snapshot with action remapped + update set pinned", async function () {
     var m = mockClient(fixtures(SCRIPT_OLD));
     var res = await editActionType({
-      client: m.client, sysId: SYS, scopeSysId: SCOPE,
+      client: m.client,
+      sysId: SYS,
+      scopeSysId: SCOPE,
       ops: { patchScript: { find: "grabHashData", replace: "grabRecipients" } },
-      apply: true, updateSetSysId: "us1",
+      apply: true,
+      updateSetSysId: "us1",
     });
     expect(res.status).toBe("published");
     expect(res.snapshotSysId).toBe("snap1");
@@ -87,7 +133,9 @@ describe("editActionType", function () {
     expect(m.cap.posts[0].path).toContain("/snapshot");
     var posted = m.cap.posts[0].body;
     expect(posted.steps[0].action).toBe(SYS); // remapped from "orig"
-    expect(posted.steps[0].inputs[0].value).toContain("grabRecipients(inputs.sendId)");
+    expect(posted.steps[0].inputs[0].value).toContain(
+      "grabRecipients(inputs.sendId)",
+    );
     expect(posted.steps[0].inputs[0].value).not.toContain("grabHashData");
   });
 
@@ -99,19 +147,30 @@ describe("editActionType", function () {
       children: [{ name: "recipients.recipient.address", type: "string" }],
     };
     var res = await editActionType({
-      client: m.client, sysId: SYS, scopeSysId: SCOPE,
-      ops: { mergeOutputs: [recipients] }, apply: true,
+      client: m.client,
+      sysId: SYS,
+      scopeSysId: SCOPE,
+      ops: { mergeOutputs: [recipients] },
+      apply: true,
     });
     expect(res.outputsMerged).toEqual(["recipients"]);
-    var names = m.cap.posts[0].body.outputs.map(function (o: any) { return o.name; });
+    var names = m.cap.posts[0].body.outputs.map(function (o: any) {
+      return o.name;
+    });
     expect(names).toContain("recipients");
     expect(names).toContain("to_address_list");
   });
 
   it("warns when patchScript.find is absent and makes no change", async function () {
-    var m = mockClient(fixtures("(function execute(inputs, outputs){ outputs.x = 1; })(inputs, outputs);"));
+    var m = mockClient(
+      fixtures(
+        "(function execute(inputs, outputs){ outputs.x = 1; })(inputs, outputs);",
+      ),
+    );
     var res = await editActionType({
-      client: m.client, sysId: SYS, scopeSysId: SCOPE,
+      client: m.client,
+      sysId: SYS,
+      scopeSysId: SCOPE,
       ops: { patchScript: { find: "grabHashData", replace: "grabRecipients" } },
     });
     expect(res.warnings.join(" ")).toContain("not present");
@@ -121,7 +180,12 @@ describe("editActionType", function () {
   it("throws when no ops are supplied", async function () {
     var m = mockClient(fixtures(SCRIPT_OLD));
     await expect(
-      editActionType({ client: m.client, sysId: SYS, scopeSysId: SCOPE, ops: {} })
+      editActionType({
+        client: m.client,
+        sysId: SYS,
+        scopeSysId: SCOPE,
+        ops: {},
+      }),
     ).rejects.toThrow(/no ops/);
   });
 });

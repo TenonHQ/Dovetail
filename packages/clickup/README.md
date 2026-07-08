@@ -42,7 +42,10 @@ var created = await createTask({
 
 await updateTaskStatus({ api: api, taskId: "abc123", status: "in progress" });
 
-var digest = await formatTeamSync({ api: api, teamId: process.env.CLICKUP_TEAM_ID });
+var digest = await formatTeamSync({
+  api: api,
+  teamId: process.env.CLICKUP_TEAM_ID,
+});
 ```
 
 ## API Surface

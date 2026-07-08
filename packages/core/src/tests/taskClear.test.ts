@@ -35,11 +35,15 @@ var mockFs = fs as jest.Mocked<typeof fs>;
 // Mock other imports to prevent side effects
 jest.mock("../config", function () {
   return {
-    getConfig: jest.fn(function () { return {}; }),
+    getConfig: jest.fn(function () {
+      return {};
+    }),
     loadConfigs: jest.fn(),
   };
 });
-jest.mock("../appUtils", function () { return {}; });
+jest.mock("../appUtils", function () {
+  return {};
+});
 jest.mock("../snClient", function () {
   return {
     defaultClient: jest.fn(),
@@ -94,9 +98,11 @@ describe("taskClearCommand", function () {
     await taskClearCommand(defaultArgs as any);
 
     expect(mockFs.unlinkSync).toHaveBeenCalledWith(taskPath);
-    expect(logMessages.some(function (m) {
-      return m.level === "success" && m.msg.indexOf("My Test Task") !== -1;
-    })).toBe(true);
+    expect(
+      logMessages.some(function (m) {
+        return m.level === "success" && m.msg.indexOf("My Test Task") !== -1;
+      }),
+    ).toBe(true);
   });
 
   it("should show informational message when no active task exists", async function () {
@@ -105,9 +111,11 @@ describe("taskClearCommand", function () {
     await taskClearCommand(defaultArgs as any);
 
     expect(mockFs.unlinkSync).not.toHaveBeenCalled();
-    expect(logMessages.some(function (m) {
-      return m.level === "info" && m.msg.indexOf("No active task") !== -1;
-    })).toBe(true);
+    expect(
+      logMessages.some(function (m) {
+        return m.level === "info" && m.msg.indexOf("No active task") !== -1;
+      }),
+    ).toBe(true);
   });
 
   it("should still remove file even if JSON is invalid", async function () {
@@ -122,9 +130,11 @@ describe("taskClearCommand", function () {
     await taskClearCommand(defaultArgs as any);
 
     expect(mockFs.unlinkSync).toHaveBeenCalledWith(taskPath);
-    expect(logMessages.some(function (m) {
-      return m.level === "success" && m.msg.indexOf("removed") !== -1;
-    })).toBe(true);
+    expect(
+      logMessages.some(function (m) {
+        return m.level === "success" && m.msg.indexOf("removed") !== -1;
+      }),
+    ).toBe(true);
   });
 
   it("should use taskId as fallback when taskName is missing", async function () {
@@ -145,8 +155,10 @@ describe("taskClearCommand", function () {
     await taskClearCommand(defaultArgs as any);
 
     expect(mockFs.unlinkSync).toHaveBeenCalledWith(taskPath);
-    expect(logMessages.some(function (m) {
-      return m.level === "success" && m.msg.indexOf("def456") !== -1;
-    })).toBe(true);
+    expect(
+      logMessages.some(function (m) {
+        return m.level === "success" && m.msg.indexOf("def456") !== -1;
+      }),
+    ).toBe(true);
   });
 });

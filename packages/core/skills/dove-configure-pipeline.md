@@ -1,6 +1,7 @@
 # Configure Dovetail Build Pipeline
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -28,6 +30,7 @@ The user wants to configure or modify their `dove.config.js` plugin pipeline. He
 ### Step 1: Identify the user's file types and needs
 
 Ask what file types they have if not specified:
+
 - `.ts` files (server-side TypeScript)
 - `.js` files (server-side JavaScript)
 - `.client.js` or `.wp.js` files (client-side, need Webpack bundling)
@@ -39,6 +42,7 @@ Ask what file types they have if not specified:
 For each file type, construct a rule using these templates:
 
 **Server-side TypeScript (most common):**
+
 ```javascript
 {
   match: /\.ts$/,
@@ -67,6 +71,7 @@ For each file type, construct a rule using these templates:
 ```
 
 **Server-side JavaScript:**
+
 ```javascript
 {
   match: /\.js$/,
@@ -88,6 +93,7 @@ For each file type, construct a rule using these templates:
 ```
 
 **Client-side Webpack bundle:**
+
 ```javascript
 {
   match: /\.wp\.js$/,
@@ -106,6 +112,7 @@ For each file type, construct a rule using these templates:
 ```
 
 **SCSS:**
+
 ```javascript
 {
   match: /\.scss$/,
@@ -116,6 +123,7 @@ For each file type, construct a rule using these templates:
 ```
 
 **Skip processing:**
+
 ```javascript
 {
   match: /\.secret\.ts$/,
@@ -133,21 +141,21 @@ Provide a single `npm i -D` command with all required packages.
 
 ### Available Plugins Reference
 
-| Plugin | Purpose | npm Package |
-|--------|---------|-------------|
-| TypeScript | Type-check and/or transpile `.ts` | `@tenonhq/dovetail-typescript-plugin` |
-| Babel | Run Babel transforms | `@tenonhq/dovetail-babel-plugin` |
-| ESLint | Lint before sync (blocks on errors) | `@tenonhq/dovetail-eslint-plugin` |
-| Prettier | Format output code | `@tenonhq/dovetail-prettier-plugin` |
-| SASS | Compile SCSS to CSS | `@tenonhq/dovetail-sass-plugin` |
-| Webpack | Bundle frontend JS | `@tenonhq/dovetail-webpack-plugin` |
+| Plugin     | Purpose                             | npm Package                           |
+| ---------- | ----------------------------------- | ------------------------------------- |
+| TypeScript | Type-check and/or transpile `.ts`   | `@tenonhq/dovetail-typescript-plugin` |
+| Babel      | Run Babel transforms                | `@tenonhq/dovetail-babel-plugin`      |
+| ESLint     | Lint before sync (blocks on errors) | `@tenonhq/dovetail-eslint-plugin`     |
+| Prettier   | Format output code                  | `@tenonhq/dovetail-prettier-plugin`   |
+| SASS       | Compile SCSS to CSS                 | `@tenonhq/dovetail-sass-plugin`       |
+| Webpack    | Bundle frontend JS                  | `@tenonhq/dovetail-webpack-plugin`    |
 
 ### Babel Sub-Packages (used inside babel-plugin options)
 
-| Package | Purpose | Config Key |
-|---------|---------|------------|
+| Package                                         | Purpose                            | Config Key                                      |
+| ----------------------------------------------- | ---------------------------------- | ----------------------------------------------- |
 | `@tenonhq/dovetail-babel-plugin-remove-modules` | Strip import/export for ServiceNow | `plugins: ["@tenonhq/dovetail-remove-modules"]` |
-| `@tenonhq/dovetail-babel-preset-servicenow` | Sanitize for Rhino engine | `presets: ["@tenonhq/dovetail-servicenow"]` |
+| `@tenonhq/dovetail-babel-preset-servicenow`     | Sanitize for Rhino engine          | `presets: ["@tenonhq/dovetail-servicenow"]`     |
 
 ### Critical Warnings
 

@@ -1,6 +1,7 @@
 # Manage ServiceNow Update Sets
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -21,17 +23,17 @@ Help the user manage ServiceNow update sets through Dovetail's CLI commands and 
 
 ### Available Commands
 
-| Command | Purpose |
-|---------|---------|
-| `npx dove listUpdateSets` | List all in-progress update sets |
-| `npx dove listUpdateSets --scope x_cadso_core` | List update sets for a specific scope |
-| `npx dove createUpdateSet --name "FEAT-123 New Feature"` | Create and activate a new update set |
-| `npx dove createUpdateSet --name "FEAT-123" --scope x_cadso_core --description "Feature description"` | Create with scope and description |
-| `npx dove switchUpdateSet --name "FEAT-123"` | Switch to an existing update set (partial name match) |
-| `npx dove switchUpdateSet --scope x_cadso_core` | Browse and select from a scope's update sets |
-| `npx dove currentUpdateSet` | Show the currently active update set |
-| `npx dove currentScope` | Show the currently active scope |
-| `npx dove changeScope --scope x_cadso_work` | Switch to a different scope |
+| Command                                                                                               | Purpose                                               |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `npx dove listUpdateSets`                                                                             | List all in-progress update sets                      |
+| `npx dove listUpdateSets --scope x_cadso_core`                                                        | List update sets for a specific scope                 |
+| `npx dove createUpdateSet --name "FEAT-123 New Feature"`                                              | Create and activate a new update set                  |
+| `npx dove createUpdateSet --name "FEAT-123" --scope x_cadso_core --description "Feature description"` | Create with scope and description                     |
+| `npx dove switchUpdateSet --name "FEAT-123"`                                                          | Switch to an existing update set (partial name match) |
+| `npx dove switchUpdateSet --scope x_cadso_core`                                                       | Browse and select from a scope's update sets          |
+| `npx dove currentUpdateSet`                                                                           | Show the currently active update set                  |
+| `npx dove currentScope`                                                                               | Show the currently active scope                       |
+| `npx dove changeScope --scope x_cadso_work`                                                           | Switch to a different scope                           |
 
 ### Push with Update Set
 
@@ -54,6 +56,7 @@ npx dove dashboard
 ```
 
 Launches at `http://localhost:3456` (configurable via `DASHBOARD_PORT` in `.env`). Features:
+
 - All configured scopes with display names
 - In-progress update sets per scope
 - Create new update sets
@@ -75,6 +78,7 @@ When using `npx dove watchAllScopes`, update set status is automatically checked
 ### Recommended Workflow
 
 1. **Before starting work:** Create a named update set for your feature/ticket:
+
    ```bash
    npx dove createUpdateSet --name "FEAT-123 Add User Dashboard" --scope x_cadso_core
    ```

@@ -8,15 +8,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  pushPlan,
-  setStage,
-  loadPlanFull,
-  pushQuestion
-} from "../storage";
+import { pushPlan, setStage, loadPlanFull, pushQuestion } from "../storage";
 import {
   IllegalTransitionError,
-  ConflictRejectedError
+  ConflictRejectedError,
 } from "../state-machine";
 
 function mkTmp(): string {
@@ -36,7 +31,9 @@ describe("setStage — happy path", function () {
     expect(res.history_length).toBe(1);
     expect(res.token.token).toMatch(/^tok_[0-9a-f]{24}$/);
     expect(res.token.issued_for_stage).toBe("research");
-    expect(Date.parse(res.token.expires_at)).toBeGreaterThan(Date.parse(res.token.issued_at));
+    expect(Date.parse(res.token.expires_at)).toBeGreaterThan(
+      Date.parse(res.token.issued_at),
+    );
 
     var disk = rawPlan(root, "t");
     expect(disk.stage).toBe("research");
@@ -44,7 +41,7 @@ describe("setStage — happy path", function () {
     expect(disk.stage_history[0]).toMatchObject({
       from: null,
       to: "research",
-      source: "code"
+      source: "code",
     });
     expect(disk.dispatch_token.token).toBe(res.token.token);
     expect(disk.schema_version).toBe(2);
@@ -70,7 +67,8 @@ describe("setStage — happy path", function () {
     process.env.DOVE_CLAUDE_PLANS_TOKEN_TTL_MS = "1000"; // 1s
     try {
       var res = setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
-      var dt = Date.parse(res.token.expires_at) - Date.parse(res.token.issued_at);
+      var dt =
+        Date.parse(res.token.expires_at) - Date.parse(res.token.issued_at);
       expect(dt).toBe(1000);
     } finally {
       if (prev === undefined) delete process.env.DOVE_CLAUDE_PLANS_TOKEN_TTL_MS;
@@ -91,10 +89,16 @@ describe("setStage — illegal transitions", function () {
   it("rejects code-sourced writes within the dashboard grace window", function () {
     var root = mkTmp();
     pushPlan({ title: "T", content_md: "x" }, { rootDir: root });
-    setStage({ plan_slug: "t", to: "research", source: "dashboard" }, { rootDir: root });
+    setStage(
+      { plan_slug: "t", to: "research", source: "dashboard" },
+      { rootDir: root },
+    );
     // Try to follow up with a code-sourced move within 30s — rejected.
     expect(function () {
-      setStage({ plan_slug: "t", to: "planning", source: "code" }, { rootDir: root });
+      setStage(
+        { plan_slug: "t", to: "planning", source: "code" },
+        { rootDir: root },
+      );
     }).toThrow(ConflictRejectedError);
   });
 
@@ -116,7 +120,10 @@ describe("setStage — preservation across pushPlan", function () {
   it("pushPlan on a staged plan preserves stage / history / token", function () {
     var root = mkTmp();
     pushPlan({ title: "T", content_md: "v1" }, { rootDir: root });
-    var staged = setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
+    var staged = setStage(
+      { plan_slug: "t", to: "research" },
+      { rootDir: root },
+    );
     // Updating content via pushPlan must NOT wipe stage state.
     pushPlan({ title: "T", content_md: "v2" }, { rootDir: root });
     var disk = rawPlan(root, "t");
@@ -131,7 +138,10 @@ describe("loadPlanFull — single-read snapshot", function () {
   it("returns plan + artifacts + prompts + questions + stage state", function () {
     var root = mkTmp();
     pushPlan({ title: "T", content_md: "x" }, { rootDir: root });
-    pushQuestion({ plan_slug: "t", question: "?", stage: "research" }, { rootDir: root });
+    pushQuestion(
+      { plan_slug: "t", question: "?", stage: "research" },
+      { rootDir: root },
+    );
     setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
 
     var full = loadPlanFull("t", { rootDir: root });
@@ -154,16 +164,19 @@ describe("loadPlanFull — single-read snapshot", function () {
   it("returns sensible defaults for a v1 record (stage:null, empty history)", function () {
     var root = mkTmp();
     var slug = "legacy";
-    fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify({
-      slug: slug,
-      title: "Legacy",
-      status: "DRAFT",
-      content_md: "x",
-      content_hash: "0".repeat(64),
-      created_at: "2026-01-01T00:00:00.000Z",
-      updated_at: "2026-01-01T00:00:00.000Z",
-      session_id: null
-    }));
+    fs.writeFileSync(
+      path.join(root, slug + ".json"),
+      JSON.stringify({
+        slug: slug,
+        title: "Legacy",
+        status: "DRAFT",
+        content_md: "x",
+        content_hash: "0".repeat(64),
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        session_id: null,
+      }),
+    );
     var full = loadPlanFull(slug, { rootDir: root });
     expect(full).not.toBeNull();
     if (!full) return;

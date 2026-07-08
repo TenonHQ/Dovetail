@@ -1,7 +1,6 @@
 import { parseClickUpIdentifier } from "../parser";
 
 describe("parseClickUpIdentifier", function () {
-
   describe("raw task IDs", function () {
     it("parses a simple alphanumeric ID", function () {
       var result = parseClickUpIdentifier("abc123def");
@@ -20,7 +19,10 @@ describe("parseClickUpIdentifier", function () {
 
     it("parses an ID with underscores", function () {
       var result = parseClickUpIdentifier("task_with_underscores");
-      expect(result).toEqual({ taskId: "task_with_underscores", raw: "task_with_underscores" });
+      expect(result).toEqual({
+        taskId: "task_with_underscores",
+        raw: "task_with_underscores",
+      });
     });
 
     it("parses a purely numeric ID", function () {
@@ -43,13 +45,17 @@ describe("parseClickUpIdentifier", function () {
 
   describe("short URLs", function () {
     it("extracts task ID from short URL format", function () {
-      var result = parseClickUpIdentifier("https://app.clickup.com/t/abc123def");
+      var result = parseClickUpIdentifier(
+        "https://app.clickup.com/t/abc123def",
+      );
       expect(result.taskId).toBe("abc123def");
       expect(result.raw).toBe("https://app.clickup.com/t/abc123def");
     });
 
     it("extracts task ID from short URL with realistic ID", function () {
-      var result = parseClickUpIdentifier("https://app.clickup.com/t/86a3bx7wz");
+      var result = parseClickUpIdentifier(
+        "https://app.clickup.com/t/86a3bx7wz",
+      );
       expect(result.taskId).toBe("86a3bx7wz");
     });
 
@@ -62,14 +68,14 @@ describe("parseClickUpIdentifier", function () {
   describe("long URLs", function () {
     it("extracts task ID from long URL format", function () {
       var result = parseClickUpIdentifier(
-        "https://app.clickup.com/12345678/v/dc/abcde-12345/86a3bx7wz"
+        "https://app.clickup.com/12345678/v/dc/abcde-12345/86a3bx7wz",
       );
       expect(result.taskId).toBe("86a3bx7wz");
     });
 
     it("extracts last segment from long URL", function () {
       var result = parseClickUpIdentifier(
-        "https://app.clickup.com/9999/v/li/900100/task123"
+        "https://app.clickup.com/9999/v/li/900100/task123",
       );
       expect(result.taskId).toBe("task123");
     });
@@ -122,7 +128,7 @@ describe("parseClickUpIdentifier", function () {
   describe("edge cases", function () {
     it("handles URL with query parameters", function () {
       var result = parseClickUpIdentifier(
-        "https://app.clickup.com/t/abc123?view=board"
+        "https://app.clickup.com/t/abc123?view=board",
       );
       expect(result.taskId).toBe("abc123");
     });

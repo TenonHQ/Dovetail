@@ -7,7 +7,11 @@ import { includes, excludes, tableOptions, scopes } from "./defaultOptions";
 // Resolve an artifact path, preferring the dove.* name and falling back to the
 // legacy sinc.* name when only the legacy file exists. Returns the new path if
 // neither exists (so writes default to the new name).
-function resolveDovePath(rootDir: string, doveName: string, sincName: string): string {
+function resolveDovePath(
+  rootDir: string,
+  doveName: string,
+  sincName: string,
+): string {
   const newPath = path.join(rootDir, doveName);
   const oldPath = path.join(rootDir, sincName);
   if (fs.existsSync(newPath)) return newPath;
@@ -92,7 +96,11 @@ export function getManifest(setup = false) {
 export function getManifestPath(scope?: string) {
   if (scope) {
     const rootDir = getRootDir();
-    return resolveDovePath(rootDir, `dove.manifest.${scope}.json`, `sinc.manifest.${scope}.json`);
+    return resolveDovePath(
+      rootDir,
+      `dove.manifest.${scope}.json`,
+      `sinc.manifest.${scope}.json`,
+    );
   }
   if (manifest_path) return manifest_path;
   throw new Error("Error getting manifest path");
@@ -100,7 +108,11 @@ export function getManifestPath(scope?: string) {
 
 export function getScopeManifestPath(scope: string) {
   const rootDir = getRootDir();
-  return resolveDovePath(rootDir, `dove.manifest.${scope}.json`, `sinc.manifest.${scope}.json`);
+  return resolveDovePath(
+    rootDir,
+    `dove.manifest.${scope}.json`,
+    `sinc.manifest.${scope}.json`,
+  );
 }
 
 export function getSourcePath() {
@@ -111,7 +123,11 @@ export function getSourcePath() {
 export function getSourcePathForScope(scopeName: string): string {
   var cfg = getConfig();
   var scopeConfig = cfg.scopes && cfg.scopes[scopeName];
-  if (scopeConfig && typeof scopeConfig === "object" && (scopeConfig as any).sourceDirectory) {
+  if (
+    scopeConfig &&
+    typeof scopeConfig === "object" &&
+    (scopeConfig as any).sourceDirectory
+  ) {
     return path.resolve(getRootDir(), (scopeConfig as any).sourceDirectory);
   }
   return getSourcePath();
@@ -177,13 +193,22 @@ export function getDefaultConfigFile(): string {
 export function generateConfigFile(params: {
   scopes: Array<{ scope: string; sourceDirectory: string }>;
 }): string {
-  var scopeEntries = params.scopes.map(function(s) {
-    return "\t\t" + s.scope + ": {\n\t\t\tsourceDirectory: \"" + s.sourceDirectory + "\",\n\t\t},";
-  }).join("\n");
+  var scopeEntries = params.scopes
+    .map(function (s) {
+      return (
+        "\t\t" +
+        s.scope +
+        ': {\n\t\t\tsourceDirectory: "' +
+        s.sourceDirectory +
+        '",\n\t\t},'
+      );
+    })
+    .join("\n");
 
-  return "module.exports = {\n" +
-    "\tsourceDirectory: \"src\",\n" +
-    "\tbuildDirectory: \"build\",\n" +
+  return (
+    "module.exports = {\n" +
+    '\tsourceDirectory: "src",\n' +
+    '\tbuildDirectory: "build",\n' +
     "\n" +
     "\t// Plugin Rules Configuration\n" +
     "\trules: [\n" +
@@ -191,31 +216,31 @@ export function generateConfigFile(params: {
     "\t\t\tmatch: /sys_script_include.*\\.ts$/,\n" +
     "\t\t\tplugins: [\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/dovetail-typescript-plugin\",\n" +
+    '\t\t\t\t\tname: "@tenonhq/dovetail-typescript-plugin",\n' +
     "\t\t\t\t\toptions: {\n" +
     "\t\t\t\t\t\ttranspile: true,\n" +
     "\t\t\t\t\t\ttypeCheck: true,\n" +
-    "\t\t\t\t\t\ttsconfig: \"./tsconfig.servicenow.json\",\n" +
+    '\t\t\t\t\t\ttsconfig: "./tsconfig.servicenow.json",\n' +
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/dovetail-eslint-plugin\",\n" +
+    '\t\t\t\t\tname: "@tenonhq/dovetail-eslint-plugin",\n' +
     "\t\t\t\t\toptions: {\n" +
-    "\t\t\t\t\t\tconfigFile: \"./.eslintrc.js\",\n" +
+    '\t\t\t\t\t\tconfigFile: "./.eslintrc.js",\n' +
     "\t\t\t\t\t\tfix: false,\n" +
     "\t\t\t\t\t\tcache: true,\n" +
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/dovetail-babel-plugin\",\n" +
+    '\t\t\t\t\tname: "@tenonhq/dovetail-babel-plugin",\n' +
     "\t\t\t\t\toptions: {\n" +
-    "\t\t\t\t\t\tconfigFile: \"./.babelrc\",\n" +
+    '\t\t\t\t\t\tconfigFile: "./.babelrc",\n' +
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t\t{\n" +
-    "\t\t\t\t\tname: \"@tenonhq/dovetail-prettier-plugin\",\n" +
+    '\t\t\t\t\tname: "@tenonhq/dovetail-prettier-plugin",\n' +
     "\t\t\t\t\toptions: {\n" +
-    "\t\t\t\t\t\tconfigFile: \"./.prettierrc.js\",\n" +
+    '\t\t\t\t\t\tconfigFile: "./.prettierrc.js",\n' +
     "\t\t\t\t\t},\n" +
     "\t\t\t\t},\n" +
     "\t\t\t],\n" +
@@ -224,88 +249,88 @@ export function generateConfigFile(params: {
     "\n" +
     "\tincludes: {\n" +
     "\t\t_tables: [\n" +
-    "\t\t\t\"sys_script_include\",\n" +
-    "\t\t\t\"sys_script\",\n" +
-    "\t\t\t\"sys_ui_script\",\n" +
-    "\t\t\t\"sys_ui_page\",\n" +
-    "\t\t\t\"sys_ux_client_script\",\n" +
-    "\t\t\t\"sys_processor\",\n" +
-    "\t\t\t\"sys_ws_operation\",\n" +
-    "\t\t\t\"sys_rest_message_fn\",\n" +
-    "\t\t\t\"sys_ui_action\",\n" +
-    "\t\t\t\"sys_security_acl\",\n" +
-    "\t\t\t\"sysevent_script_action\",\n" +
-    "\t\t\t\"sys_ux_macroponent\",\n" +
-    "\t\t\t\"sys_ux_event\",\n" +
-    "\t\t\t\"sys_ux_client_script_include\",\n" +
-    "\t\t\t\"sys_ux_screen\",\n" +
-    "\t\t\t\"sys_script_fix\",\n" +
+    '\t\t\t"sys_script_include",\n' +
+    '\t\t\t"sys_script",\n' +
+    '\t\t\t"sys_ui_script",\n' +
+    '\t\t\t"sys_ui_page",\n' +
+    '\t\t\t"sys_ux_client_script",\n' +
+    '\t\t\t"sys_processor",\n' +
+    '\t\t\t"sys_ws_operation",\n' +
+    '\t\t\t"sys_rest_message_fn",\n' +
+    '\t\t\t"sys_ui_action",\n' +
+    '\t\t\t"sys_security_acl",\n' +
+    '\t\t\t"sysevent_script_action",\n' +
+    '\t\t\t"sys_ux_macroponent",\n' +
+    '\t\t\t"sys_ux_event",\n' +
+    '\t\t\t"sys_ux_client_script_include",\n' +
+    '\t\t\t"sys_ux_screen",\n' +
+    '\t\t\t"sys_script_fix",\n' +
     "\t\t],\n" +
     "\t\tsys_script_include: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_script: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_ui_script: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_ui_page: {\n" +
-    "\t\t\tprocessing_script: { type: \"js\" },\n" +
-    "\t\t\tclient_script: { type: \"js\" },\n" +
-    "\t\t\thtml: { type: \"html\" },\n" +
+    '\t\t\tprocessing_script: { type: "js" },\n' +
+    '\t\t\tclient_script: { type: "js" },\n' +
+    '\t\t\thtml: { type: "html" },\n' +
     "\t\t},\n" +
     "\t\tsys_processor: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_ws_operation: {\n" +
-    "\t\t\toperation_script: { type: \"js\" },\n" +
+    '\t\t\toperation_script: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_rest_message_fn: {\n" +
-    "\t\t\tcontent: { type: \"txt\" },\n" +
+    '\t\t\tcontent: { type: "txt" },\n' +
     "\t\t},\n" +
     "\t\tsys_ui_action: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
-    "\t\t\tclient_script_v2: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
+    '\t\t\tclient_script_v2: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_security_acl: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsysevent_script_action: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_script_fix: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
     "\t\t},\n" +
     "\t\tsys_ux_macroponent: {\n" +
-    "\t\t\tcomposition: { type: \"json\" },\n" +
-    "\t\t\tprops: { type: \"json\" },\n" +
-    "\t\t\tdata: { type: \"json\" },\n" +
-    "\t\t\trequired_translations: { type: \"json\" },\n" +
-    "\t\t\troot_component_definition: { type: \"json\" },\n" +
-    "\t\t\tstate_properties: { type: \"json\" },\n" +
-    "\t\t\troot_component_config: { type: \"json\" },\n" +
-    "\t\t\tinternal_event_mappings: { type: \"json\" },\n" +
-    "\t\t\tstate_persistence_config: { type: \"json\" },\n" +
+    '\t\t\tcomposition: { type: "json" },\n' +
+    '\t\t\tprops: { type: "json" },\n' +
+    '\t\t\tdata: { type: "json" },\n' +
+    '\t\t\trequired_translations: { type: "json" },\n' +
+    '\t\t\troot_component_definition: { type: "json" },\n' +
+    '\t\t\tstate_properties: { type: "json" },\n' +
+    '\t\t\troot_component_config: { type: "json" },\n' +
+    '\t\t\tinternal_event_mappings: { type: "json" },\n' +
+    '\t\t\tstate_persistence_config: { type: "json" },\n' +
     "\t\t},\n" +
     "\t\tsys_ux_event: {\n" +
-    "\t\t\tdescription: { type: \"txt\" },\n" +
-    "\t\t\tevent_name: { type: \"txt\" },\n" +
-    "\t\t\tlabel: { type: \"txt\" },\n" +
-    "\t\t\tprops: { type: \"json\" },\n" +
-    "\t\t\trequired_translations: { type: \"json\" },\n" +
+    '\t\t\tdescription: { type: "txt" },\n' +
+    '\t\t\tevent_name: { type: "txt" },\n' +
+    '\t\t\tlabel: { type: "txt" },\n' +
+    '\t\t\tprops: { type: "json" },\n' +
+    '\t\t\trequired_translations: { type: "json" },\n' +
     "\t\t},\n" +
     "\t\tsys_ux_client_script: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
-    "\t\t\tname: { type: \"txt\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
+    '\t\t\tname: { type: "txt" },\n' +
     "\t\t},\n" +
     "\t\tsys_ux_client_script_include: {\n" +
-    "\t\t\tscript: { type: \"js\" },\n" +
-    "\t\t\tname: { type: \"txt\" },\n" +
+    '\t\t\tscript: { type: "js" },\n' +
+    '\t\t\tname: { type: "txt" },\n' +
     "\t\t},\n" +
     "\t\tsys_ux_screen: {\n" +
-    "\t\t\tmacroponent_config: { type: \"json\" },\n" +
-    "\t\t\tevent_mappings: { type: \"json\" },\n" +
+    '\t\t\tmacroponent_config: { type: "json" },\n' +
+    '\t\t\tevent_mappings: { type: "json" },\n' +
     "\t\t},\n" +
     "\t\t_scopes: {},\n" +
     "\t},\n" +
@@ -320,13 +345,15 @@ export function generateConfigFile(params: {
     "\t},\n" +
     "\n" +
     "\tserver: {\n" +
-    "\t\twatchPath: \"./src\",\n" +
+    '\t\twatchPath: "./src",\n' +
     "\t},\n" +
     "\n" +
     "\tscopes: {\n" +
-    scopeEntries + "\n" +
+    scopeEntries +
+    "\n" +
     "\t},\n" +
-    "};\n";
+    "};\n"
+  );
 }
 
 async function loadConfig(skipConfigPath = false): Promise<Sinc.ScopedConfig> {
@@ -379,10 +406,11 @@ async function loadAllScopeManifests(): Promise<SN.AppManifest | undefined> {
   try {
     const rootDir = getRootDir();
     const files = await fsp.readdir(rootDir);
-    const manifestFiles = files.filter(f =>
-      ((f.startsWith('dove.manifest.') && f !== 'dove.manifest.json') ||
-       (f.startsWith('sinc.manifest.') && f !== 'sinc.manifest.json')) &&
-      f.endsWith('.json'),
+    const manifestFiles = files.filter(
+      (f) =>
+        ((f.startsWith("dove.manifest.") && f !== "dove.manifest.json") ||
+          (f.startsWith("sinc.manifest.") && f !== "sinc.manifest.json")) &&
+        f.endsWith(".json"),
     );
 
     if (manifestFiles.length === 0) {
@@ -393,12 +421,14 @@ async function loadAllScopeManifests(): Promise<SN.AppManifest | undefined> {
     const combinedManifest: any = {};
 
     for (const file of manifestFiles) {
-      const scope = file.replace(/^(dove|sinc)\.manifest\./, '').replace('.json', '');
+      const scope = file
+        .replace(/^(dove|sinc)\.manifest\./, "")
+        .replace(".json", "");
       const manifestPath = path.join(rootDir, file);
       try {
         const content = await fsp.readFile(manifestPath, "utf-8");
         const scopeManifest = JSON.parse(content);
-        
+
         // If the manifest already has the scope at root level, use it directly
         if (scopeManifest.scope && scopeManifest.tables) {
           combinedManifest[scope] = scopeManifest;
@@ -410,14 +440,18 @@ async function loadAllScopeManifests(): Promise<SN.AppManifest | undefined> {
         logger.warn(`Failed to load manifest for scope ${scope}: ${e}`);
       }
     }
-    
-    return Object.keys(combinedManifest).length > 0 ? combinedManifest : undefined;
+
+    return Object.keys(combinedManifest).length > 0
+      ? combinedManifest
+      : undefined;
   } catch (e) {
     return undefined;
   }
 }
 
-export async function loadScopeManifest(scope: string): Promise<SN.AppManifest | undefined> {
+export async function loadScopeManifest(
+  scope: string,
+): Promise<SN.AppManifest | undefined> {
   try {
     const manifestPath = getScopeManifestPath(scope);
     const content = await fsp.readFile(manifestPath, "utf-8");
@@ -435,7 +469,10 @@ export function isMultiScopeManifest(man: any): boolean {
   return typeof man === "object" && man !== null && !man.scope && !man.tables;
 }
 
-export function resolveManifestForScope(man: any, scope: string): SN.AppManifest | undefined {
+export function resolveManifestForScope(
+  man: any,
+  scope: string,
+): SN.AppManifest | undefined {
   if (!isMultiScopeManifest(man)) {
     if (!scope || man.scope === scope) {
       return man;
@@ -518,12 +555,20 @@ async function loadEnvPath() {
 
 async function loadManifestPath() {
   let rootDir = getRootDir();
-  manifest_path = resolveDovePath(rootDir, "dove.manifest.json", "sinc.manifest.json");
+  manifest_path = resolveDovePath(
+    rootDir,
+    "dove.manifest.json",
+    "sinc.manifest.json",
+  );
 }
 
 async function loadDiffPath() {
   let rootDir = getRootDir();
-  diff_path = resolveDovePath(rootDir, "dove.diff.manifest.json", "sinc.diff.manifest.json");
+  diff_path = resolveDovePath(
+    rootDir,
+    "dove.diff.manifest.json",
+    "sinc.diff.manifest.json",
+  );
 }
 
 async function loadDiffFile() {
@@ -587,7 +632,9 @@ export function resolveConfigForScope(
   // Backward compat: support old "table" key (no underscore)
   var globalTables: string[] = cfgIncludes._tables || [];
   if (!cfgIncludes._tables && Array.isArray(cfgIncludes.table)) {
-    logger.warn("Deprecation: 'table' key in includes is deprecated. Use '_tables' instead.");
+    logger.warn(
+      "Deprecation: 'table' key in includes is deprecated. Use '_tables' instead.",
+    );
     globalTables = cfgIncludes.table;
   }
 
@@ -637,7 +684,7 @@ export function resolveConfigForScope(
     for (i = 0; i < excludeTables.length; i++) {
       excludeSet[excludeTables[i]] = true;
     }
-    resolvedTables = resolvedTables.filter(function(t) {
+    resolvedTables = resolvedTables.filter(function (t) {
       return !excludeSet[t];
     });
   }
@@ -647,13 +694,22 @@ export function resolveConfigForScope(
   var allTableKeys: { [key: string]: boolean } = {};
   var gKeys = Object.keys(globalFieldOverrides);
   var sKeys = Object.keys(scopeFieldOverrides);
-  for (i = 0; i < gKeys.length; i++) { allTableKeys[gKeys[i]] = true; }
-  for (i = 0; i < sKeys.length; i++) { allTableKeys[sKeys[i]] = true; }
+  for (i = 0; i < gKeys.length; i++) {
+    allTableKeys[gKeys[i]] = true;
+  }
+  for (i = 0; i < sKeys.length; i++) {
+    allTableKeys[sKeys[i]] = true;
+  }
 
   for (var tblKey in allTableKeys) {
     var globalEntry = globalFieldOverrides[tblKey];
     var scopeEntry = scopeFieldOverrides[tblKey];
-    if (globalEntry && scopeEntry && typeof globalEntry === "object" && typeof scopeEntry === "object") {
+    if (
+      globalEntry &&
+      scopeEntry &&
+      typeof globalEntry === "object" &&
+      typeof scopeEntry === "object"
+    ) {
       fieldOverrides[tblKey] = Object.assign({}, globalEntry, scopeEntry);
     } else {
       fieldOverrides[tblKey] = scopeEntry || globalEntry;

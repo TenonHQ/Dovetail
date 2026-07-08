@@ -17,7 +17,9 @@ interface ScriptedRequest {
   data: any;
 }
 
-function installAxiosScript(reqs: Array<ScriptedRequest>): Array<{ url: string; method: string }> {
+function installAxiosScript(
+  reqs: Array<ScriptedRequest>,
+): Array<{ url: string; method: string }> {
   var seen: Array<{ url: string; method: string }> = [];
   var instance: any = {
     request: function (cfg: any) {
@@ -26,14 +28,22 @@ function installAxiosScript(reqs: Array<ScriptedRequest>): Array<{ url: string; 
       seen.push({ url: url, method: method });
       for (var i = 0; i < reqs.length; i++) {
         if (reqs[i].match.test(url)) {
-          return Promise.resolve({ status: reqs[i].status, data: reqs[i].data });
+          return Promise.resolve({
+            status: reqs[i].status,
+            data: reqs[i].data,
+          });
         }
       }
-      return Promise.resolve({ status: 500, data: { error: "no script matched: " + url } });
+      return Promise.resolve({
+        status: 500,
+        data: { error: "no script matched: " + url },
+      });
     },
   };
   // axios.create is what client.ts calls.
-  (mockedAxios as any).create = jest.fn(function () { return instance; });
+  (mockedAxios as any).create = jest.fn(function () {
+    return instance;
+  });
   return seen;
 }
 
@@ -47,7 +57,8 @@ describe("buildAgent.runQuery fallback", function () {
   it("uses sn_build_agent endpoint when available", async function () {
     var seen = installAxiosScript([
       {
-        match: /\/api\/sn_build_agent\/build_agent_api\/runQuery\/table\/sys_hub_flow/,
+        match:
+          /\/api\/sn_build_agent\/build_agent_api\/runQuery\/table\/sys_hub_flow/,
         status: 200,
         data: { result: [{ sys_id: "f1", name: "N" }] },
       },
@@ -55,9 +66,14 @@ describe("buildAgent.runQuery fallback", function () {
     // Lazy require so the jest.mock is in effect.
     var clientModule = require("../src/client");
     var client = clientModule.createClient();
-    var rows = await client.buildAgent.runQuery({ table: "sys_hub_flow", query: "active=true" });
+    var rows = await client.buildAgent.runQuery({
+      table: "sys_hub_flow",
+      query: "active=true",
+    });
     expect(rows).toEqual([{ sys_id: "f1", name: "N" }]);
-    expect(seen[0].url).toContain("/api/sn_build_agent/build_agent_api/runQuery/table/sys_hub_flow");
+    expect(seen[0].url).toContain(
+      "/api/sn_build_agent/build_agent_api/runQuery/table/sys_hub_flow",
+    );
   });
 
   it("falls back to plain Table API on 403", async function () {
@@ -75,7 +91,10 @@ describe("buildAgent.runQuery fallback", function () {
     ]);
     var clientModule = require("../src/client");
     var client = clientModule.createClient();
-    var rows = await client.buildAgent.runQuery({ table: "sys_hub_flow", query: "active=true" });
+    var rows = await client.buildAgent.runQuery({
+      table: "sys_hub_flow",
+      query: "active=true",
+    });
     expect(rows).toEqual([{ sys_id: "fb1", name: "fallback" }]);
     // Two requests: build_agent first, then plain Table API.
     expect(seen).toHaveLength(2);
@@ -98,7 +117,10 @@ describe("buildAgent.runQuery fallback", function () {
     ]);
     var clientModule = require("../src/client");
     var client = clientModule.createClient();
-    var rows = await client.buildAgent.runQuery({ table: "sys_hub_flow_input", query: "flow=x" });
+    var rows = await client.buildAgent.runQuery({
+      table: "sys_hub_flow_input",
+      query: "flow=x",
+    });
     expect(rows).toEqual([]);
     expect(seen[0].url).toContain("/api/sn_build_agent/");
     expect(seen[1].url).toContain("/api/now/table/sys_hub_flow_input");
@@ -114,19 +136,31 @@ describe("buildAgent.runQuery fallback", function () {
     ]);
     var clientModule = require("../src/client");
     var client = clientModule.createClient({ maxRetries5xx: 0 });
-    await expect(client.buildAgent.runQuery({ table: "sys_hub_flow", query: "" }))
-      .rejects.toThrow(/SN 500/);
+    await expect(
+      client.buildAgent.runQuery({ table: "sys_hub_flow", query: "" }),
+    ).rejects.toThrow(/SN 500/);
     // Should NOT have called the Table API fallback.
-    expect(seen.every(function (r) { return r.url.indexOf("/api/now/table/") < 0; })).toBe(true);
+    expect(
+      seen.every(function (r) {
+        return r.url.indexOf("/api/now/table/") < 0;
+      }),
+    ).toBe(true);
   });
 
   it("accepts both { result: [...] } and bare-array response shapes", async function () {
     installAxiosScript([
-      { match: /\/api\/sn_build_agent\//, status: 200, data: [{ sys_id: "bare" }] },
+      {
+        match: /\/api\/sn_build_agent\//,
+        status: 200,
+        data: [{ sys_id: "bare" }],
+      },
     ]);
     var clientModule = require("../src/client");
     var client = clientModule.createClient();
-    var rows = await client.buildAgent.runQuery({ table: "sys_hub_flow", query: "" });
+    var rows = await client.buildAgent.runQuery({
+      table: "sys_hub_flow",
+      query: "",
+    });
     expect(rows).toEqual([{ sys_id: "bare" }]);
   });
 });
@@ -141,13 +175,24 @@ describe("buildAgent.getTableSchema fallback", function () {
   it("returns the sn_build_agent schema when available", async function () {
     installAxiosScript([
       {
-        match: /\/api\/sn_build_agent\/build_agent_api\/getTableSchema\/sys_hub_flow/,
+        match:
+          /\/api\/sn_build_agent\/build_agent_api\/getTableSchema\/sys_hub_flow/,
         status: 200,
         data: {
           result: {
             fields: [
-              { name: "name", type: "string", mandatory: true, reference_table: null },
-              { name: "sys_scope", type: "reference", mandatory: true, reference_table: "sys_scope" },
+              {
+                name: "name",
+                type: "string",
+                mandatory: true,
+                reference_table: null,
+              },
+              {
+                name: "sys_scope",
+                type: "reference",
+                mandatory: true,
+                reference_table: "sys_scope",
+              },
             ],
             primary_key: "sys_id",
           },
@@ -174,9 +219,24 @@ describe("buildAgent.getTableSchema fallback", function () {
         status: 200,
         data: {
           result: [
-            { element: "name", internal_type: "string", mandatory: "true", reference_table: "" },
-            { element: "active", internal_type: "boolean", mandatory: "false", reference_table: "" },
-            { element: "sys_scope", internal_type: "reference", mandatory: "true", reference_table: "sys_scope" },
+            {
+              element: "name",
+              internal_type: "string",
+              mandatory: "true",
+              reference_table: "",
+            },
+            {
+              element: "active",
+              internal_type: "boolean",
+              mandatory: "false",
+              reference_table: "",
+            },
+            {
+              element: "sys_scope",
+              internal_type: "reference",
+              mandatory: "true",
+              reference_table: "sys_scope",
+            },
           ],
         },
       },
@@ -185,14 +245,26 @@ describe("buildAgent.getTableSchema fallback", function () {
     var client = clientModule.createClient();
     var schema = await client.buildAgent.getTableSchema("sys_hub_flow");
     expect(schema.primary_key).toBe("sys_id");
-    expect(schema.fields.find(function (f: any) { return f.name === "name"; })).toEqual({
+    expect(
+      schema.fields.find(function (f: any) {
+        return f.name === "name";
+      }),
+    ).toEqual({
       name: "name",
       type: "string",
       mandatory: true,
       reference_table: null,
     });
-    expect(schema.fields.find(function (f: any) { return f.name === "sys_scope"; }))
-      .toEqual({ name: "sys_scope", type: "reference", mandatory: true, reference_table: "sys_scope" });
+    expect(
+      schema.fields.find(function (f: any) {
+        return f.name === "sys_scope";
+      }),
+    ).toEqual({
+      name: "sys_scope",
+      type: "reference",
+      mandatory: true,
+      reference_table: "sys_scope",
+    });
     // Both endpoints were called.
     expect(seen[0].url).toContain("/api/sn_build_agent/");
     expect(seen[1].url).toContain("/api/now/table/sys_dictionary");

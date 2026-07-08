@@ -26,7 +26,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "warn"; },
+  getLogLevel: function () {
+    return "warn";
+  },
 };
 
 var mockFileLogger = {
@@ -41,12 +43,22 @@ var mockClient = {
   getMissingFiles: jest.fn(),
 };
 
-jest.mock("../Logger", function () { return { logger: mockLogger }; });
-jest.mock("../FileLogger", function () { return { fileLogger: mockFileLogger }; });
+jest.mock("../Logger", function () {
+  return { logger: mockLogger };
+});
+jest.mock("../FileLogger", function () {
+  return { fileLogger: mockFileLogger };
+});
 jest.mock("../snClient", function () {
   return {
-    defaultClient: function () { return mockClient; },
-    unwrapSNResponse: function (p: any) { return Promise.resolve(p).then(function (r: any) { return r; }); },
+    defaultClient: function () {
+      return mockClient;
+    },
+    unwrapSNResponse: function (p: any) {
+      return Promise.resolve(p).then(function (r: any) {
+        return r;
+      });
+    },
     processPushResponse: jest.fn(),
     retryOnErr: jest.fn(),
     retryOnHttpErr: jest.fn(),
@@ -77,7 +89,9 @@ var mockConfig: any = {
   updateManifest: jest.fn(),
 };
 
-jest.mock("../config", function () { return mockConfig; });
+jest.mock("../config", function () {
+  return mockConfig;
+});
 
 // Silence ProgressBar's stdout writes.
 jest.mock("progress", function () {
@@ -103,13 +117,19 @@ import * as AppUtils from "../appUtils";
 
 var tmpRoot: string;
 
-function setupScope(files: Array<{ record: string; name: string; type: string; content: string }>) {
+function setupScope(
+  files: Array<{ record: string; name: string; type: string; content: string }>,
+) {
   // Build a manifest whose single table (sys_script_include) contains the
   // supplied records/files. Content is stripped (manifests do not carry it).
   var records: Record<string, any> = {};
   files.forEach(function (f) {
     if (!records[f.record]) {
-      records[f.record] = { name: f.record, sys_id: "sysid_" + f.record, files: [] };
+      records[f.record] = {
+        name: f.record,
+        sys_id: "sysid_" + f.record,
+        files: [],
+      };
     }
     records[f.record].files.push({ name: f.name, type: f.type });
   });
@@ -121,7 +141,12 @@ function setupScope(files: Array<{ record: string; name: string; type: string; c
   };
 }
 
-function writeLocal(record: string, name: string, type: string, content: string) {
+function writeLocal(
+  record: string,
+  name: string,
+  type: string,
+  content: string,
+) {
   var recDir = path.join(tmpRoot, "sys_script_include", record);
   fs.mkdirSync(recDir, { recursive: true });
   fs.writeFileSync(path.join(recDir, name + "." + type), content);
@@ -129,7 +154,11 @@ function writeLocal(record: string, name: string, type: string, content: string)
 
 function readLocal(record: string, name: string, type: string): string | null {
   var p = path.join(tmpRoot, "sys_script_include", record, name + "." + type);
-  try { return fs.readFileSync(p, "utf8"); } catch (e) { return null; }
+  try {
+    return fs.readFileSync(p, "utf8");
+  } catch (e) {
+    return null;
+  }
 }
 
 function statMtime(record: string, name: string, type: string): number {
@@ -146,13 +175,17 @@ describe("syncManifest — refresh pulls instance edits down", function () {
   });
 
   afterEach(function () {
-    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (e) {}
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch (e) {}
   });
 
   test("overwrites existing file when instance content differs", async function () {
     writeLocal("Foo", "script", "js", "var x = 1;"); // stale local
 
-    var manifest = setupScope([{ record: "Foo", name: "script", type: "js", content: "" }]);
+    var manifest = setupScope([
+      { record: "Foo", name: "script", type: "js", content: "" },
+    ]);
     mockClient.getManifest.mockResolvedValue(manifest);
     mockClient.getMissingFiles.mockResolvedValue({
       sys_script_include: {
@@ -160,7 +193,13 @@ describe("syncManifest — refresh pulls instance edits down", function () {
           Foo: {
             name: "Foo",
             sys_id: "sysid_Foo",
-            files: [{ name: "script", type: "js", content: "var x = 2; // from instance" }],
+            files: [
+              {
+                name: "script",
+                type: "js",
+                content: "var x = 2; // from instance",
+              },
+            ],
           },
         },
       },
@@ -169,7 +208,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
     await AppUtils.syncManifest("x_cadso_core");
 
     expect(mockClient.getMissingFiles).toHaveBeenCalledTimes(1);
-    expect(readLocal("Foo", "script", "js")).toBe("var x = 2; // from instance");
+    expect(readLocal("Foo", "script", "js")).toBe(
+      "var x = 2; // from instance",
+    );
   });
 
   test("does not rewrite a file when content already matches", async function () {
@@ -177,7 +218,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
     writeLocal("Bar", "script", "js", identical);
     var beforeMtime = statMtime("Bar", "script", "js");
 
-    var manifest = setupScope([{ record: "Bar", name: "script", type: "js", content: "" }]);
+    var manifest = setupScope([
+      { record: "Bar", name: "script", type: "js", content: "" },
+    ]);
     mockClient.getManifest.mockResolvedValue(manifest);
     mockClient.getMissingFiles.mockResolvedValue({
       sys_script_include: {
@@ -192,7 +235,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
     });
 
     // Give the fs a moment so any write would register a different mtime.
-    await new Promise(function (r) { setTimeout(r, 10); });
+    await new Promise(function (r) {
+      setTimeout(r, 10);
+    });
     await AppUtils.syncManifest("x_cadso_core");
 
     expect(readLocal("Bar", "script", "js")).toBe(identical);
@@ -202,7 +247,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
   });
 
   test("creates the file when it is missing locally", async function () {
-    var manifest = setupScope([{ record: "Baz", name: "script", type: "js", content: "" }]);
+    var manifest = setupScope([
+      { record: "Baz", name: "script", type: "js", content: "" },
+    ]);
     mockClient.getManifest.mockResolvedValue(manifest);
     mockClient.getMissingFiles.mockResolvedValue({
       sys_script_include: {
@@ -226,7 +273,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
     var identical = "var same = true;";
     writeLocal("Qux", "script", "js", identical);
 
-    var manifest = setupScope([{ record: "Qux", name: "script", type: "js", content: "" }]);
+    var manifest = setupScope([
+      { record: "Qux", name: "script", type: "js", content: "" },
+    ]);
     mockClient.getManifest.mockResolvedValue(manifest);
     mockClient.getMissingFiles.mockResolvedValue({
       sys_script_include: {
@@ -241,7 +290,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
     });
 
     var beforeMtime = statMtime("Qux", "script", "js");
-    await new Promise(function (r) { setTimeout(r, 10); });
+    await new Promise(function (r) {
+      setTimeout(r, 10);
+    });
     await AppUtils.syncManifest("x_cadso_core", { force: true });
 
     // Force path rewrites regardless — mtime should advance.
@@ -262,11 +313,13 @@ describe("syncManifest — refresh pulls instance edits down", function () {
       sys_script_include: {
         records: {
           RecA: {
-            name: "RecA", sys_id: "sysid_RecA",
+            name: "RecA",
+            sys_id: "sysid_RecA",
             files: [{ name: "script", type: "js", content: "local A" }],
           },
           RecB: {
-            name: "RecB", sys_id: "sysid_RecB",
+            name: "RecB",
+            sys_id: "sysid_RecB",
             files: [{ name: "script", type: "js", content: "local B" }],
           },
         },
@@ -277,6 +330,9 @@ describe("syncManifest — refresh pulls instance edits down", function () {
 
     expect(mockClient.getMissingFiles).toHaveBeenCalledTimes(1);
     var missingArg = mockClient.getMissingFiles.mock.calls[0][0];
-    expect(Object.keys(missingArg.sys_script_include).sort()).toEqual(["sysid_RecA", "sysid_RecB"]);
+    expect(Object.keys(missingArg.sys_script_include).sort()).toEqual([
+      "sysid_RecA",
+      "sysid_RecB",
+    ]);
   });
 });

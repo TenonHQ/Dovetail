@@ -65,7 +65,9 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getScopeManifestPath: jest.fn(
+    (scope: string) => `/project/dove.manifest.${scope}.json`,
+  ),
   getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
@@ -151,20 +153,22 @@ describe("US-012: Add staleness warning for active task", () => {
     };
     mockFsStore[taskPath] = JSON.stringify(validTask);
     // 10 days ago
-    mockFsStatStore[taskPath] = { mtimeMs: Date.now() - (10 * 24 * 60 * 60 * 1000) };
+    mockFsStatStore[taskPath] = {
+      mtimeMs: Date.now() - 10 * 24 * 60 * 60 * 1000,
+    };
 
     var result = (multiScopeWatcher as any).readActiveTask();
 
     expect(result).not.toBeNull();
     expect(result.taskId).toBe("TASK-123");
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Old Feature")
+      expect.stringContaining("Old Feature"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("10 days ago")
+      expect.stringContaining("10 days ago"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("dove task clear")
+      expect.stringContaining("dove task clear"),
     );
   });
 
@@ -176,7 +180,9 @@ describe("US-012: Add staleness warning for active task", () => {
     };
     mockFsStore[taskPath] = JSON.stringify(validTask);
     // 2 days ago
-    mockFsStatStore[taskPath] = { mtimeMs: Date.now() - (2 * 24 * 60 * 60 * 1000) };
+    mockFsStatStore[taskPath] = {
+      mtimeMs: Date.now() - 2 * 24 * 60 * 60 * 1000,
+    };
 
     var result = (multiScopeWatcher as any).readActiveTask();
 
@@ -192,16 +198,18 @@ describe("US-012: Add staleness warning for active task", () => {
     };
     mockFsStore[taskPath] = JSON.stringify(taskNoName);
     // 14 days ago
-    mockFsStatStore[taskPath] = { mtimeMs: Date.now() - (14 * 24 * 60 * 60 * 1000) };
+    mockFsStatStore[taskPath] = {
+      mtimeMs: Date.now() - 14 * 24 * 60 * 60 * 1000,
+    };
 
     var result = (multiScopeWatcher as any).readActiveTask();
 
     expect(result).not.toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("TASK-789")
+      expect.stringContaining("TASK-789"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("14 days ago")
+      expect.stringContaining("14 days ago"),
     );
   });
 
@@ -213,7 +221,9 @@ describe("US-012: Add staleness warning for active task", () => {
     };
     mockFsStore[taskPath] = JSON.stringify(validTask);
     // 6 days ago
-    mockFsStatStore[taskPath] = { mtimeMs: Date.now() - (6 * 24 * 60 * 60 * 1000) };
+    mockFsStatStore[taskPath] = {
+      mtimeMs: Date.now() - 6 * 24 * 60 * 60 * 1000,
+    };
 
     var result = (multiScopeWatcher as any).readActiveTask();
 

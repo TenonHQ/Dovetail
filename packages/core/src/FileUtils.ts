@@ -17,30 +17,29 @@ export const SNFileExists =
     }
   };
 
-export const writeManifestFile = async (man: SN.AppManifest, scope?: string) => {
+export const writeManifestFile = async (
+  man: SN.AppManifest,
+  scope?: string,
+) => {
   if (scope) {
     const manifestPath = ConfigManager.getScopeManifestPath(scope);
-    fileLogger.debug("Writing manifest for scope " + scope + " to " + manifestPath);
-    return fsp.writeFile(
-      manifestPath,
-      JSON.stringify(man, null, 2),
+    fileLogger.debug(
+      "Writing manifest for scope " + scope + " to " + manifestPath,
     );
+    return fsp.writeFile(manifestPath, JSON.stringify(man, null, 2));
   }
   const manifestPath = ConfigManager.getManifestPath();
   fileLogger.debug("Writing manifest to " + manifestPath);
-  return fsp.writeFile(
-    manifestPath,
-    JSON.stringify(man, null, 2),
-  );
+  return fsp.writeFile(manifestPath, JSON.stringify(man, null, 2));
 };
 
-export const writeScopeManifest = async (scope: string, man: SN.AppManifest) => {
+export const writeScopeManifest = async (
+  scope: string,
+  man: SN.AppManifest,
+) => {
   const manifestPath = ConfigManager.getScopeManifestPath(scope);
   fileLogger.debug("Writing scope manifest: " + scope + " -> " + manifestPath);
-  return fsp.writeFile(
-    manifestPath,
-    JSON.stringify(man, null, 2),
-  );
+  return fsp.writeFile(manifestPath, JSON.stringify(man, null, 2));
 };
 
 export const writeSNFileCurry =
@@ -105,7 +104,9 @@ export const writeSNFileIfDifferent = async (
   }
 
   if (localContent !== null) {
-    fileLogger.debug("Overwriting local content (differs from instance): " + fullPath);
+    fileLogger.debug(
+      "Overwriting local content (differs from instance): " + fullPath,
+    );
   } else {
     fileLogger.debug("Writing (missing locally): " + fullPath);
   }
@@ -224,7 +225,10 @@ export const getFileContextWithSkipReason = (
     if (!detectedScope) {
       return { skipReason: "scope not found" };
     }
-    var scopeMan = ConfigManager.resolveManifestForScope(manifest, detectedScope);
+    var scopeMan = ConfigManager.resolveManifestForScope(
+      manifest,
+      detectedScope,
+    );
     if (!scopeMan) {
       return { skipReason: "scope manifest not found" };
     }
@@ -327,7 +331,10 @@ export const writeBuildFile = async (
   const buildPath = ConfigManager.getBuildPath();
   const resolvedFolder = path.resolve(folderPath);
   const resolvedFile = path.resolve(newPath);
-  if (!isUnderPath(buildPath, resolvedFolder) || !isUnderPath(buildPath, resolvedFile)) {
+  if (
+    !isUnderPath(buildPath, resolvedFolder) ||
+    !isUnderPath(buildPath, resolvedFile)
+  ) {
     throw new Error(
       `Write rejected: path "${resolvedFile}" is outside build directory "${buildPath}"`,
     );
@@ -356,7 +363,11 @@ function escapeRegex(str: string): string {
 
 function quoteEnvValue(value: string): string {
   if (/[\s#"'\\]/.test(value)) {
-    return "\"" + value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n") + "\"";
+    return (
+      '"' +
+      value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n") +
+      '"'
+    );
   }
   return value;
 }
@@ -390,9 +401,17 @@ function readEnvFile(envPath: string): string {
  * @param {string} params.value - The value to set.
  * @param {string} [params.envPath] - Path to .env file. Defaults to process.cwd()/.env.
  */
-export function writeEnvVar(params: { key: string; value: string; envPath?: string }): void {
+export function writeEnvVar(params: {
+  key: string;
+  value: string;
+  envPath?: string;
+}): void {
   const resolvedPath = params.envPath || path.resolve(process.cwd(), ".env");
-  const content = mergeEnvLine(readEnvFile(resolvedPath), params.key, params.value);
+  const content = mergeEnvLine(
+    readEnvFile(resolvedPath),
+    params.key,
+    params.value,
+  );
   fs.writeFileSync(resolvedPath, content, "utf8");
 }
 
@@ -402,7 +421,10 @@ export function writeEnvVar(params: { key: string; value: string; envPath?: stri
  * @param {Array<{key: string; value: string}>} params.vars - Array of key/value pairs to write.
  * @param {string} [params.envPath] - Path to .env file. Defaults to process.cwd()/.env.
  */
-export function writeEnvVars(params: { vars: Array<{ key: string; value: string }>; envPath?: string }): void {
+export function writeEnvVars(params: {
+  vars: Array<{ key: string; value: string }>;
+  envPath?: string;
+}): void {
   const resolvedPath = params.envPath || path.resolve(process.cwd(), ".env");
   let content = readEnvFile(resolvedPath);
 

@@ -36,7 +36,9 @@ jest.mock("../Logger", function () {
 });
 
 jest.mock("chalk", function () {
-  var identity: any = function (s: any) { return s; };
+  var identity: any = function (s: any) {
+    return s;
+  };
   identity.green = identity;
   return {
     default: identity,
@@ -47,7 +49,10 @@ jest.mock("chalk", function () {
 // --- Imports (after mocks) ---
 
 import { resolveClickUpForPush } from "../clickupPushHelper";
-import { parseClickUpIdentifier, createClickUpApi } from "@tenonhq/dovetail-clickup";
+import {
+  parseClickUpIdentifier,
+  createClickUpApi,
+} from "@tenonhq/dovetail-clickup";
 import { refineUpdateSetName } from "../clickupCommands";
 
 // --- Tests ---
@@ -72,17 +77,17 @@ describe("resolveClickUpForPush", function () {
   it("throws when CLICKUP_API_TOKEN is not set", async function () {
     delete process.env.CLICKUP_API_TOKEN;
 
-    await expect(
-      resolveClickUpForPush("abc123")
-    ).rejects.toThrow("CLICKUP_API_TOKEN not set");
+    await expect(resolveClickUpForPush("abc123")).rejects.toThrow(
+      "CLICKUP_API_TOKEN not set",
+    );
   });
 
   it("throws when CLICKUP_API_TOKEN is empty", async function () {
     process.env.CLICKUP_API_TOKEN = "";
 
-    await expect(
-      resolveClickUpForPush("abc123")
-    ).rejects.toThrow("CLICKUP_API_TOKEN not set");
+    await expect(resolveClickUpForPush("abc123")).rejects.toThrow(
+      "CLICKUP_API_TOKEN not set",
+    );
   });
 
   it("resolves task and returns refined update set name", async function () {
@@ -117,7 +122,7 @@ describe("resolveClickUpForPush", function () {
     expect(refineUpdateSetName).toHaveBeenCalledWith(
       expect.objectContaining({
         taskDescription: "",
-      })
+      }),
     );
   });
 
@@ -133,16 +138,16 @@ describe("resolveClickUpForPush", function () {
     expect(refineUpdateSetName).toHaveBeenCalledWith(
       expect.objectContaining({
         taskDescription: "",
-      })
+      }),
     );
   });
 
   it("propagates API errors", async function () {
     mockApi.getTask.mockRejectedValue(new Error("Task not found"));
 
-    await expect(
-      resolveClickUpForPush("missing123")
-    ).rejects.toThrow("Task not found");
+    await expect(resolveClickUpForPush("missing123")).rejects.toThrow(
+      "Task not found",
+    );
   });
 
   it("works with ClickUp URL input", async function () {
@@ -155,6 +160,8 @@ describe("resolveClickUpForPush", function () {
     // The mock parseClickUpIdentifier strips the URL prefix
     await resolveClickUpForPush("https://app.clickup.com/t/86a3bx7wz");
 
-    expect(parseClickUpIdentifier).toHaveBeenCalledWith("https://app.clickup.com/t/86a3bx7wz");
+    expect(parseClickUpIdentifier).toHaveBeenCalledWith(
+      "https://app.clickup.com/t/86a3bx7wz",
+    );
   });
 });

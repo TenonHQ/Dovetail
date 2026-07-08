@@ -10,7 +10,12 @@ import type { ReadActionTypeResult } from "./flowDesigner/readActionType";
 function indent(s: string, n: number): string {
   var pad = "";
   for (var i = 0; i < n; i++) pad += " ";
-  return s.split("\n").map(function (line) { return pad + line; }).join("\n");
+  return s
+    .split("\n")
+    .map(function (line) {
+      return pad + line;
+    })
+    .join("\n");
 }
 
 function pad(s: string, width: number): string {
@@ -24,10 +29,27 @@ export function formatBuildFlowResult(result: BuildFlowResult): string {
   var spec = result.spec;
   var verbStem = spec.mode === "clone" ? "Clone" : "Create";
 
-  lines.push(verbStem + " " + spec.kind + ": \"" + spec.newName + "\" (outcome: " + result.outcome + ", exit " + result.exitCode + ")");
+  lines.push(
+    verbStem +
+      " " +
+      spec.kind +
+      ': "' +
+      spec.newName +
+      '" (outcome: ' +
+      result.outcome +
+      ", exit " +
+      result.exitCode +
+      ")",
+  );
 
   if (result.artifact) {
-    lines.push("  Artifact sys_id: " + result.artifact.sysId + " (" + result.artifact.action + ")");
+    lines.push(
+      "  Artifact sys_id: " +
+        result.artifact.sysId +
+        " (" +
+        result.artifact.action +
+        ")",
+    );
     if (result.artifact.writtenCount > 0) {
       lines.push("  Records written: " + result.artifact.writtenCount);
     }
@@ -40,24 +62,52 @@ export function formatBuildFlowResult(result: BuildFlowResult): string {
       byTable[t] = (byTable[t] || 0) + 1;
     }
     lines.push("  Plan (dry-run, no writes performed):");
-    Object.keys(byTable).sort().forEach(function (t) {
-      lines.push(indent(t + " × " + byTable[t], 4));
-    });
+    Object.keys(byTable)
+      .sort()
+      .forEach(function (t) {
+        lines.push(indent(t + " × " + byTable[t], 4));
+      });
   }
 
   if (result.verify) {
     var f = result.verify.found;
-    lines.push("  Verify: parent=" + f.parent + " inputs=" + f.inputCount + " outputs=" + f.outputCount + " steps=" + f.stepCount + " snapshot=" + f.snapshotPresent);
+    lines.push(
+      "  Verify: parent=" +
+        f.parent +
+        " inputs=" +
+        f.inputCount +
+        " outputs=" +
+        f.outputCount +
+        " steps=" +
+        f.stepCount +
+        " snapshot=" +
+        f.snapshotPresent,
+    );
     if (result.verify.failures.length > 0) {
       lines.push("  Verify failures:");
       result.verify.failures.forEach(function (failure) {
-        lines.push(indent(failure.layer + " " + failure.field + ": expected=" + JSON.stringify(failure.expected) + " actual=" + JSON.stringify(failure.actual), 4));
+        lines.push(
+          indent(
+            failure.layer +
+              " " +
+              failure.field +
+              ": expected=" +
+              JSON.stringify(failure.expected) +
+              " actual=" +
+              JSON.stringify(failure.actual),
+            4,
+          ),
+        );
       });
     }
   }
 
   if (result.publish) {
-    lines.push("  Publish: " + result.publish.status + (result.publish.pushSucceeded ? " (push ok)" : " (push failed)"));
+    lines.push(
+      "  Publish: " +
+        result.publish.status +
+        (result.publish.pushSucceeded ? " (push ok)" : " (push failed)"),
+    );
     if (result.publish.uiPublishUrl && result.publish.status !== "published") {
       lines.push("    UI publish: " + result.publish.uiPublishUrl);
     }
@@ -67,12 +117,16 @@ export function formatBuildFlowResult(result: BuildFlowResult): string {
   }
 
   if (result.error) {
-    lines.push("  Error at " + result.error.stage + ": " + result.error.message);
+    lines.push(
+      "  Error at " + result.error.stage + ": " + result.error.message,
+    );
   }
 
   if (result.outcome === "needs-ui-publish") {
     lines.push("");
-    lines.push("Next: open Flow Designer in the URL above and click Publish, then commit the update set.");
+    lines.push(
+      "Next: open Flow Designer in the URL above and click Publish, then commit the update set.",
+    );
   } else if (result.outcome === "done") {
     lines.push("");
     lines.push("Next: commit the update set when you're ready to ship.");
@@ -81,7 +135,9 @@ export function formatBuildFlowResult(result: BuildFlowResult): string {
     lines.push("Spec or auth bug — fix and re-run. No SN state was changed.");
   } else if (result.outcome === "write-failed") {
     lines.push("");
-    lines.push("Partial state may be in the update set. Discard the update set in the SN UI to roll back, or re-run after fixing the error above.");
+    lines.push(
+      "Partial state may be in the update set. Discard the update set in the SN UI to roll back, or re-run after fixing the error above.",
+    );
   }
 
   return lines.join("\n");
@@ -93,10 +149,23 @@ export function formatReadFlowResult(result: ReadFlowResult): string {
   lines.push(result.name + " (" + result.type + ")");
   lines.push("  internal: " + result.internalName);
   lines.push("  sys_id:   " + result.sysId + "  scope: " + result.scopeSysId);
-  lines.push("  status:   " + result.status
-    + "  published=" + result.published + "  userCanRead=" + result.userCanRead);
-  lines.push("  instances: " + result.counts.action + " action + "
-    + result.counts.logic + " logic = " + result.counts.total + " total");
+  lines.push(
+    "  status:   " +
+      result.status +
+      "  published=" +
+      result.published +
+      "  userCanRead=" +
+      result.userCanRead,
+  );
+  lines.push(
+    "  instances: " +
+      result.counts.action +
+      " action + " +
+      result.counts.logic +
+      " logic = " +
+      result.counts.total +
+      " total",
+  );
 
   lines.push("");
   lines.push("Step graph (order  kind  label):");
@@ -105,14 +174,22 @@ export function formatReadFlowResult(result: ReadFlowResult): string {
     var depthPad = "";
     for (var d = 0; d < s.depth; d += 1) depthPad += "  ";
     var kind = s.kind === "action" ? "A" : "L";
-    lines.push("  " + depthPad + pad(String(s.order), 3) + "  " + kind + "  " + s.label);
+    lines.push(
+      "  " + depthPad + pad(String(s.order), 3) + "  " + kind + "  " + s.label,
+    );
   }
 
   if (result.variables.length > 0) {
     lines.push("");
     lines.push("Flow variables (" + result.variables.length + "):");
     for (var v = 0; v < result.variables.length; v += 1) {
-      lines.push("  " + result.variables[v].label + "  [" + result.variables[v].type + "]");
+      lines.push(
+        "  " +
+          result.variables[v].label +
+          "  [" +
+          result.variables[v].type +
+          "]",
+      );
     }
   }
 
@@ -120,7 +197,9 @@ export function formatReadFlowResult(result: ReadFlowResult): string {
 }
 
 /** Human view for `dove-sn view-action` — identity + the action's I/O contract. */
-export function formatReadActionTypeResult(result: ReadActionTypeResult): string {
+export function formatReadActionTypeResult(
+  result: ReadActionTypeResult,
+): string {
   var lines: Array<string> = [];
   lines.push(result.name + " (action type)");
   lines.push("  internal: " + result.internalName);
@@ -132,13 +211,17 @@ export function formatReadActionTypeResult(result: ReadActionTypeResult): string
   lines.push("");
   lines.push("Inputs (" + result.counts.inputs + "):");
   for (var i = 0; i < result.inputs.length; i += 1) {
-    lines.push("  " + result.inputs[i].label + "  [" + result.inputs[i].type + "]");
+    lines.push(
+      "  " + result.inputs[i].label + "  [" + result.inputs[i].type + "]",
+    );
   }
 
   lines.push("");
   lines.push("Outputs (" + result.counts.outputs + "):");
   for (var o = 0; o < result.outputs.length; o += 1) {
-    lines.push("  " + result.outputs[o].label + "  [" + result.outputs[o].type + "]");
+    lines.push(
+      "  " + result.outputs[o].label + "  [" + result.outputs[o].type + "]",
+    );
   }
 
   return lines.join("\n");

@@ -55,7 +55,12 @@ export interface CopyFlowResult {
  * nest it under a model object's `id`/`sys_id`.
  */
 function extractCopiedSysId(resp: any): string {
-  if (resp && typeof resp === "object" && resp.result && typeof resp.result === "object") {
+  if (
+    resp &&
+    typeof resp === "object" &&
+    resp.result &&
+    typeof resp.result === "object"
+  ) {
     var d = resp.result.data;
     if (typeof d === "string" && d.length >= 32) {
       return d;
@@ -77,31 +82,51 @@ function flowGetPath(sysId: string): string {
 }
 
 function copyPath(sourceSysId: string, scopeSysId: string): string {
-  return "/api/now/processflow/flow/" + encodeURIComponent(sourceSysId) + "/copy"
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/flow/" +
+    encodeURIComponent(sourceSysId) +
+    "/copy" +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 
 function unwrapModel(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     if (data.result.data && typeof data.result.data === "object") {
       return data.result.data;
     }
     return data.result;
   }
-  if (data && typeof data === "object" && data.data && typeof data.data === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.data &&
+    typeof data.data === "object"
+  ) {
     return data.data;
   }
   return data;
 }
 
-export async function copyFlow(params: CopyFlowParams): Promise<CopyFlowResult> {
+export async function copyFlow(
+  params: CopyFlowParams,
+): Promise<CopyFlowResult> {
   var client = params.client;
   var sourceSysId = params.sourceSysId;
 
   if (!sourceSysId) {
     throw new Error("copyFlow: sourceSysId is required.");
   }
-  if (typeof params.newName !== "string" || params.newName.trim().length === 0) {
+  if (
+    typeof params.newName !== "string" ||
+    params.newName.trim().length === 0
+  ) {
     throw new Error("copyFlow: newName is required.");
   }
 
@@ -115,25 +140,25 @@ export async function copyFlow(params: CopyFlowParams): Promise<CopyFlowResult> 
   }
   if (!scopeSysId) {
     throw new Error(
-      "copyFlow: scopeSysId is required and the source flow carried no `scope` to default from."
+      "copyFlow: scopeSysId is required and the source flow carried no `scope` to default from.",
     );
   }
 
-  var resp = await client.now.post<any>(
-    copyPath(sourceSysId, scopeSysId),
-    { name: params.newName, scope: scopeSysId }
-  );
+  var resp = await client.now.post<any>(copyPath(sourceSysId, scopeSysId), {
+    name: params.newName,
+    scope: scopeSysId,
+  });
   var newSysId = extractCopiedSysId(resp);
   if (!newSysId) {
     throw new Error(
-      "copyFlow: the copy succeeded but no new flow sys_id was found in the response: "
-        + JSON.stringify(resp).substring(0, 300)
+      "copyFlow: the copy succeeded but no new flow sys_id was found in the response: " +
+        JSON.stringify(resp).substring(0, 300),
     );
   }
 
   return {
     sysId: newSysId,
     name: params.newName,
-    scopeSysId: scopeSysId
+    scopeSysId: scopeSysId,
   };
 }

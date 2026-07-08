@@ -36,7 +36,9 @@ export const SYSTEM_FIELDS_TO_STRIP: ReadonlyArray<string> = [
  * Return a shallow copy of `record` with SN-managed metadata fields removed.
  * Does not mutate the input.
  */
-export function stripSystemFields<T extends Record<string, unknown>>(record: T): Partial<T> {
+export function stripSystemFields<T extends Record<string, unknown>>(
+  record: T,
+): Partial<T> {
   var out: Record<string, unknown> = {};
   var keys = Object.keys(record);
   for (var i = 0; i < keys.length; i++) {
@@ -58,9 +60,16 @@ export function generateSysId(): string {
 
 const RX_SYS_ID = /^[0-9a-f]{32}$/;
 
-export function assertSysId(value: unknown, name: string): asserts value is string {
+export function assertSysId(
+  value: unknown,
+  name: string,
+): asserts value is string {
   if (typeof value !== "string" || !RX_SYS_ID.test(value)) {
-    throw new Error(name + " must be a 32-char ServiceNow sys_id (lowercase hex), got: " + JSON.stringify(value));
+    throw new Error(
+      name +
+        " must be a 32-char ServiceNow sys_id (lowercase hex), got: " +
+        JSON.stringify(value),
+    );
   }
 }
 
@@ -72,7 +81,10 @@ export function assertSysId(value: unknown, name: string): asserts value is stri
  * sys_hub_action_type_definition) are updated. Records that don't have an
  * `application` field are unchanged.
  */
-export function applyScope<T extends Record<string, unknown>>(record: T, scopeSysId: string): T {
+export function applyScope<T extends Record<string, unknown>>(
+  record: T,
+  scopeSysId: string,
+): T {
   assertSysId(scopeSysId, "scopeSysId");
   var out = Object.assign({}, record) as Record<string, unknown>;
   if ("sys_scope" in out) out.sys_scope = scopeSysId;

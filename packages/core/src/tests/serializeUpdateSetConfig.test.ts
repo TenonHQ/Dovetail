@@ -24,7 +24,9 @@ jest.mock("fs", function () {
     writeFileSync: jest.fn(function (p: string, data: string) {
       mockFsStore[p] = data;
     }),
-    statSync: jest.fn(function () { return { mtimeMs: Date.now() }; }),
+    statSync: jest.fn(function () {
+      return { mtimeMs: Date.now() };
+    }),
     promises: {
       readFile: jest.fn(function (p: string) {
         if (p in mockFsStore) return Promise.resolve(mockFsStore[p]);
@@ -56,8 +58,12 @@ var mockSNClient = {
 
 jest.mock("../snClient", function () {
   return {
-    defaultClient: jest.fn(function () { return mockSNClient; }),
-    unwrapSNResponse: jest.fn(function (val: any) { return val; }),
+    defaultClient: jest.fn(function () {
+      return mockSNClient;
+    }),
+    unwrapSNResponse: jest.fn(function (val: any) {
+      return val;
+    }),
   };
 });
 
@@ -79,7 +85,9 @@ jest.mock("lodash", function () {
     debounce: jest.fn(function (fn: Function) {
       var wrapper = jest.fn();
       (wrapper as any).cancel = jest.fn();
-      (wrapper as any).flush = jest.fn(function () { return fn(); });
+      (wrapper as any).flush = jest.fn(function () {
+        return fn();
+      });
       return wrapper;
     }),
   };
@@ -141,7 +149,9 @@ jest.mock("../config", function () {
     updateManifest: jest.fn(),
     getManifest: jest.fn(),
     getSourcePath: jest.fn().mockReturnValue("/project/src"),
-    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/dove.manifest." + scope + ".json"; }),
+    getScopeManifestPath: jest.fn(function (scope: string) {
+      return "/project/dove.manifest." + scope + ".json";
+    }),
     getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
   };
 });
@@ -161,7 +171,10 @@ jest.mock("axios", function () {
 // --- Imports ---
 import fs from "fs";
 import { logger } from "../Logger";
-import { multiScopeWatcher, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 
 // --- Helpers ---
 
@@ -169,7 +182,10 @@ var CONFIG_PATH = "/fake/.dove-update-sets.json";
 var TASK_PATH = "/fake/.dove-active-task.json";
 
 function setActiveTask(task: any) {
-  var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+  var taskPath = require("path").resolve(
+    process.cwd(),
+    ".dove-active-task.json",
+  );
   mockFsStore[taskPath] = JSON.stringify(task);
 }
 
@@ -186,7 +202,9 @@ function readPersistedConfig(): Record<string, any> {
 }
 
 function clearFsStore() {
-  Object.keys(mockFsStore).forEach(function (k) { delete mockFsStore[k]; });
+  Object.keys(mockFsStore).forEach(function (k) {
+    delete mockFsStore[k];
+  });
 }
 
 // --- Tests ---
@@ -200,7 +218,9 @@ describe("US-005: Serialize update set config writes under scope lock", function
     // Default: scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.createCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.changeScope.mockResolvedValue(undefined);
@@ -209,7 +229,13 @@ describe("US-005: Serialize update set config writes under scope lock", function
     // Mock: existing update set found for each scope
     mockSNClient.client.get.mockResolvedValue({
       data: {
-        result: [{ sys_id: "us_found_123", name: "CU-TASK123 Update Set", state: "in progress" }],
+        result: [
+          {
+            sys_id: "us_found_123",
+            name: "CU-TASK123 Update Set",
+            state: "in progress",
+          },
+        ],
       },
     });
   });
@@ -236,16 +262,28 @@ describe("US-005: Serialize update set config writes under scope lock", function
       callCount++;
       return Promise.resolve({
         data: {
-          result: [{ sys_id: "us_" + callCount, name: "CU-TASK123 Scope " + callCount, state: "in progress" }],
+          result: [
+            {
+              sys_id: "us_" + callCount,
+              name: "CU-TASK123 Scope " + callCount,
+              state: "in progress",
+            },
+          ],
         },
       });
     });
 
     // Call all 3 concurrently — they should serialize under scopeLock
     var watcher = multiScopeWatcher as any;
-    var p1 = watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_a"); });
-    var p2 = watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_b"); });
-    var p3 = watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_c"); });
+    var p1 = watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_a");
+    });
+    var p2 = watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_b");
+    });
+    var p3 = watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_c");
+    });
 
     await Promise.all([p1, p2, p3]);
 
@@ -278,12 +316,16 @@ describe("US-005: Serialize update set config writes under scope lock", function
 
     mockSNClient.client.get.mockResolvedValue({
       data: {
-        result: [{ sys_id: "us_new_b", name: "CU-TASK456 B", state: "in progress" }],
+        result: [
+          { sys_id: "us_new_b", name: "CU-TASK456 B", state: "in progress" },
+        ],
       },
     });
 
     var watcher = multiScopeWatcher as any;
-    await watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_b"); });
+    await watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_b");
+    });
 
     // Both scope_a (pre-existing) and scope_b (new) should be present
     var config = readPersistedConfig();
@@ -306,12 +348,16 @@ describe("US-005: Serialize update set config writes under scope lock", function
 
     mockSNClient.client.get.mockResolvedValue({
       data: {
-        result: [{ sys_id: "us_verified", name: "CU-TASK789", state: "in progress" }],
+        result: [
+          { sys_id: "us_verified", name: "CU-TASK789", state: "in progress" },
+        ],
       },
     });
 
     var watcher = multiScopeWatcher as any;
-    await watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_a"); });
+    await watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_a");
+    });
 
     // Should log a debug message confirming verification
     expect(logger.debug).toHaveBeenCalledWith(
@@ -332,13 +378,18 @@ describe("US-005: Serialize update set config writes under scope lock", function
 
     mockSNClient.client.get.mockResolvedValue({
       data: {
-        result: [{ sys_id: "us_fail", name: "CU-TASKFAIL", state: "in progress" }],
+        result: [
+          { sys_id: "us_fail", name: "CU-TASKFAIL", state: "in progress" },
+        ],
       },
     });
 
     // Make writeFileSync succeed but readFileSync return empty on verification re-read
     var writeCount = 0;
-    (fs.writeFileSync as jest.Mock).mockImplementation(function (p: string, data: string) {
+    (fs.writeFileSync as jest.Mock).mockImplementation(function (
+      p: string,
+      data: string,
+    ) {
       // Write succeeds but data is "corrupted" — store empty config
       mockFsStore[p] = JSON.stringify({});
     });
@@ -346,7 +397,9 @@ describe("US-005: Serialize update set config writes under scope lock", function
     var watcher = multiScopeWatcher as any;
 
     // The error is caught by ensureUpdateSetForScope's try/catch, which logs error + warn
-    await watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_a"); });
+    await watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_a");
+    });
 
     // Should log error about verification failure
     expect(logger.error).toHaveBeenCalledWith(
@@ -362,7 +415,9 @@ describe("US-005: Serialize update set config writes under scope lock", function
     });
 
     var watcher = multiScopeWatcher as any;
-    await watcher.withScopeLock(function () { return watcher.ensureUpdateSetForScope("x_scope_a"); });
+    await watcher.withScopeLock(function () {
+      return watcher.ensureUpdateSetForScope("x_scope_a");
+    });
 
     // Should not have called any ServiceNow APIs
     expect(mockSNClient.changeScope).not.toHaveBeenCalled();

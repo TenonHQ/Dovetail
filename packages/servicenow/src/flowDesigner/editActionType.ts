@@ -69,15 +69,28 @@ export interface EditActionTypeResult {
   snapshotSysId?: string;
 }
 
-function actionTypePath(sysId: string, scopeSysId: string, suffix: string): string {
-  return "/api/now/processflow/action/action_types/" + encodeURIComponent(sysId)
-    + suffix
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+function actionTypePath(
+  sysId: string,
+  scopeSysId: string,
+  suffix: string,
+): string {
+  return (
+    "/api/now/processflow/action/action_types/" +
+    encodeURIComponent(sysId) +
+    suffix +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 
 /** Normalize the `{ result: ... }` envelope the processflow endpoints sometimes use. */
 function unwrap(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     return data.result;
   }
   return data;
@@ -86,7 +99,10 @@ function unwrap(data: any): any {
 var SCRIPT_SIGNATURE = /function execute|inputs\.|outputs\.|new\s+[A-Za-z_$]/;
 
 /** Locate the step input holding the action script (by name, else by signature). */
-function findScriptInput(steps: Array<any>, inputName?: string): { input: any } | null {
+function findScriptInput(
+  steps: Array<any>,
+  inputName?: string,
+): { input: any } | null {
   for (var s = 0; s < steps.length; s += 1) {
     var inputs = (steps[s] && steps[s].inputs) || [];
     for (var i = 0; i < inputs.length; i += 1) {
@@ -98,7 +114,11 @@ function findScriptInput(steps: Array<any>, inputName?: string): { input: any } 
         if (inp.name === inputName) {
           return { input: inp };
         }
-      } else if (typeof inp.value === "string" && inp.value.length > 30 && SCRIPT_SIGNATURE.test(inp.value)) {
+      } else if (
+        typeof inp.value === "string" &&
+        inp.value.length > 30 &&
+        SCRIPT_SIGNATURE.test(inp.value)
+      ) {
         return { input: inp };
       }
     }
@@ -106,7 +126,9 @@ function findScriptInput(steps: Array<any>, inputName?: string): { input: any } 
   return null;
 }
 
-export async function editActionType(params: EditActionTypeParams): Promise<EditActionTypeResult> {
+export async function editActionType(
+  params: EditActionTypeParams,
+): Promise<EditActionTypeResult> {
   var client = params.client;
   var sysId = params.sysId;
   var scopeSysId = params.scopeSysId;
@@ -116,10 +138,18 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
     throw new Error("editActionType: sysId is required.");
   }
   if (!scopeSysId) {
-    throw new Error("editActionType: scopeSysId is required (sysparm_transaction_scope).");
+    throw new Error(
+      "editActionType: scopeSysId is required (sysparm_transaction_scope).",
+    );
   }
-  if (!ops.patchScript && !ops.setScript && !(ops.mergeOutputs && ops.mergeOutputs.length > 0)) {
-    throw new Error("editActionType: no ops — supply patchScript, setScript, and/or mergeOutputs.");
+  if (
+    !ops.patchScript &&
+    !ops.setScript &&
+    !(ops.mergeOutputs && ops.mergeOutputs.length > 0)
+  ) {
+    throw new Error(
+      "editActionType: no ops — supply patchScript, setScript, and/or mergeOutputs.",
+    );
   }
 
   var changes: Array<string> = [];
@@ -127,16 +157,28 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   var outputsMerged: Array<string> = [];
 
   // 1. GET the model (outputs[], steps:null).
-  var model = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "")));
+  var model = unwrap(
+    await client.now.get<any>(actionTypePath(sysId, scopeSysId, "")),
+  );
   if (!model || typeof model !== "object") {
-    throw new Error("editActionType: unexpected GET model response for action type " + sysId);
+    throw new Error(
+      "editActionType: unexpected GET model response for action type " + sysId,
+    );
   }
 
   // 2. GET the steps — the model's `steps` come back null.
-  var stepsResp = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "/step_instances")));
-  var steps: Array<any> = stepsResp && Array.isArray(stepsResp.steps) ? stepsResp.steps : [];
+  var stepsResp = unwrap(
+    await client.now.get<any>(
+      actionTypePath(sysId, scopeSysId, "/step_instances"),
+    ),
+  );
+  var steps: Array<any> =
+    stepsResp && Array.isArray(stepsResp.steps) ? stepsResp.steps : [];
   if (steps.length === 0) {
-    throw new Error("editActionType: /step_instances returned no steps for action type " + sysId);
+    throw new Error(
+      "editActionType: /step_instances returned no steps for action type " +
+        sysId,
+    );
   }
 
   // 3. Patch the script step input.
@@ -145,17 +187,26 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   if (ops.patchScript || ops.setScript) {
     var hit = findScriptInput(steps, ops.scriptInputName);
     if (!hit) {
-      warnings.push("script input not found" + (ops.scriptInputName ? " (name=" + ops.scriptInputName + ")" : " (auto-detect)"));
+      warnings.push(
+        "script input not found" +
+          (ops.scriptInputName
+            ? " (name=" + ops.scriptInputName + ")"
+            : " (auto-detect)"),
+      );
     } else {
       scriptBefore = String(hit.input.value);
       if (ops.setScript) {
         scriptAfter = ops.setScript;
       } else if (ops.patchScript) {
         if (scriptBefore.indexOf(ops.patchScript.find) === -1) {
-          warnings.push("patchScript.find not present in script: " + ops.patchScript.find);
+          warnings.push(
+            "patchScript.find not present in script: " + ops.patchScript.find,
+          );
           scriptAfter = scriptBefore;
         } else {
-          scriptAfter = scriptBefore.split(ops.patchScript.find).join(ops.patchScript.replace);
+          scriptAfter = scriptBefore
+            .split(ops.patchScript.find)
+            .join(ops.patchScript.replace);
         }
       }
       if (scriptAfter !== undefined && scriptAfter !== scriptBefore) {
@@ -191,7 +242,9 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
         model.outputs.push(outDef);
       }
       outputsMerged.push(outName);
-      changes.push("output '" + outName + "' " + (replaced ? "replaced" : "added"));
+      changes.push(
+        "output '" + outName + "' " + (replaced ? "replaced" : "added"),
+      );
     }
   }
 
@@ -215,7 +268,7 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
       warnings: warnings,
       scriptBefore: scriptBefore,
       scriptAfter: scriptAfter,
-      outputsMerged: outputsMerged
+      outputsMerged: outputsMerged,
     };
   }
 
@@ -224,10 +277,16 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   if (params.updateSetSysId) {
     await client.claude.changeUpdateSet({ sysId: params.updateSetSysId });
   }
-  var snapResp = unwrap(await client.now.post<any>(actionTypePath(sysId, scopeSysId, "/snapshot"), model));
+  var snapResp = unwrap(
+    await client.now.post<any>(
+      actionTypePath(sysId, scopeSysId, "/snapshot"),
+      model,
+    ),
+  );
   var snapshotSysId: string | undefined;
   if (snapResp && typeof snapResp === "object") {
-    var snap = snapResp.latest_snapshot || snapResp.master_snapshot || snapResp.snapshot;
+    var snap =
+      snapResp.latest_snapshot || snapResp.master_snapshot || snapResp.snapshot;
     if (snap && typeof snap === "object") {
       snapshotSysId = typeof snap.sys_id === "string" ? snap.sys_id : undefined;
     } else if (typeof snap === "string") {
@@ -243,6 +302,6 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
     scriptAfter: scriptAfter,
     outputsMerged: outputsMerged,
     httpStatus: 201,
-    snapshotSysId: snapshotSysId
+    snapshotSysId: snapshotSysId,
   };
 }

@@ -65,7 +65,9 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getScopeManifestPath: jest.fn(
+    (scope: string) => `/project/dove.manifest.${scope}.json`,
+  ),
   getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
@@ -124,7 +126,10 @@ jest.mock("axios", () => ({
 
 // --- Imports ---
 import { logger } from "../Logger";
-import { multiScopeWatcher, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 
 // --- Tests ---
 
@@ -136,7 +141,9 @@ describe("US-006: Surface warning when no update set is configured", () => {
     // Default: scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.createCurrentAppUserPref.mockResolvedValue({});
   });
@@ -150,24 +157,27 @@ describe("US-006: Surface warning when no update set is configured", () => {
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_core");
 
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("No update set configured for scope x_test_core")
+      expect.stringContaining("No update set configured for scope x_test_core"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Changes will go to Default")
+      expect.stringContaining("Changes will go to Default"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("dove createUpdateSet")
+      expect.stringContaining("dove createUpdateSet"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("activate a task in the dashboard")
+      expect.stringContaining("activate a task in the dashboard"),
     );
   });
 
   it("does not warn when update set already configured for scope", async () => {
     // Pre-populate the update set config
-    var configPath = require("path").resolve(process.cwd(), ".dove-update-sets.json");
+    var configPath = require("path").resolve(
+      process.cwd(),
+      ".dove-update-sets.json",
+    );
     mockFsStore[configPath] = JSON.stringify({
-      x_test_core: { sys_id: "us_123", name: "My Update Set" }
+      x_test_core: { sys_id: "us_123", name: "My Update Set" },
     });
 
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_core");
@@ -179,7 +189,10 @@ describe("US-006: Surface warning when no update set is configured", () => {
 
   it("logs error and skips creation when scope not found on instance (scopeSysId is undefined)", async () => {
     // Active task exists so we get past the no-task check
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -196,10 +209,10 @@ describe("US-006: Surface warning when no update set is configured", () => {
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_invalid_scope");
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("x_invalid_scope")
+      expect.stringContaining("x_invalid_scope"),
     );
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("not found on the instance")
+      expect.stringContaining("not found on the instance"),
     );
 
     // Should NOT attempt to create an update set
@@ -208,7 +221,10 @@ describe("US-006: Surface warning when no update set is configured", () => {
   });
 
   it("logs error and skips creation when getScopeId returns null", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -225,16 +241,19 @@ describe("US-006: Surface warning when no update set is configured", () => {
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_bad_scope");
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("x_bad_scope")
+      expect.stringContaining("x_bad_scope"),
     );
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("not found on the instance")
+      expect.stringContaining("not found on the instance"),
     );
     expect(mockSNClient.createUpdateSet).not.toHaveBeenCalled();
   });
 
   it("proceeds to create update set when scope is valid", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -246,11 +265,21 @@ describe("US-006: Surface warning when no update set is configured", () => {
     });
 
     // Valid scope
-    mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "valid_scope_sys_id" }]);
+    mockSNClient.getScopeId.mockResolvedValue([
+      { sys_id: "valid_scope_sys_id" },
+    ]);
 
     // Search returns existing update set
     mockSNClient.client.get.mockResolvedValue({
-      data: { result: [{ sys_id: "us_existing", name: "CU-abc123 Test Task", state: "in progress" }] }
+      data: {
+        result: [
+          {
+            sys_id: "us_existing",
+            name: "CU-abc123 Test Task",
+            state: "in progress",
+          },
+        ],
+      },
     });
 
     // changeUpdateSet succeeds
@@ -262,7 +291,11 @@ describe("US-006: Surface warning when no update set is configured", () => {
     expect(mockSNClient.client.get).toHaveBeenCalled();
 
     // No "not found on the instance" error
-    var errorCalls = (logger.error as jest.Mock).mock.calls.map(function (c: any[]) { return c[0]; });
+    var errorCalls = (logger.error as jest.Mock).mock.calls.map(function (
+      c: any[],
+    ) {
+      return c[0];
+    });
     var hasInvalidScopeError = errorCalls.some(function (msg: string) {
       return msg.indexOf("not found on the instance") !== -1;
     });

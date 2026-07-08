@@ -4,39 +4,73 @@ import type { ServiceNowClient } from "../src/client";
 
 interface Captured {
   runQueryCalls: Array<{ table: string; query: string }>;
-  createRecordCalls: Array<{ table: string; fields: Record<string, any>; sys_id?: string; update_set_sys_id?: string; scope?: string }>;
+  createRecordCalls: Array<{
+    table: string;
+    fields: Record<string, any>;
+    sys_id?: string;
+    update_set_sys_id?: string;
+    scope?: string;
+  }>;
 }
 
-function makeClient(scripted: Array<{ match: (table: string, query: string) => boolean; rows: Array<any> }>): {
+function makeClient(
+  scripted: Array<{
+    match: (table: string, query: string) => boolean;
+    rows: Array<any>;
+  }>,
+): {
   client: ServiceNowClient;
   cap: Captured;
 } {
   var cap: Captured = { runQueryCalls: [], createRecordCalls: [] };
   var client: ServiceNowClient = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function <T>(p: { table: string; query: string; limit?: number }): Promise<Array<T>> {
+      runQuery: async function <T>(p: {
+        table: string;
+        query: string;
+        limit?: number;
+      }): Promise<Array<T>> {
         cap.runQueryCalls.push({ table: p.table, query: p.query });
         for (var i = 0; i < scripted.length; i++) {
-          if (scripted[i].match(p.table, p.query)) return scripted[i].rows as Array<T>;
+          if (scripted[i].match(p.table, p.query))
+            return scripted[i].rows as Array<T>;
         }
         return [] as Array<T>;
       },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
       createRecord: async function (params: any) {
         cap.createRecordCalls.push(params);
         return { sys_id: params.sys_id };
       },
-      pushWithUpdateSet: async function (p: any) { return { sys_id: p.record_sys_id }; },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function () { return {}; },
-      deleteRecord: async function () { return {}; },
+      pushWithUpdateSet: async function (p: any) {
+        return { sys_id: p.record_sys_id };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
     now: {
-      get: async function () { return {} as any; },
-      post: async function () { return {} as any; },
+      get: async function () {
+        return {} as any;
+      },
+      post: async function () {
+        return {} as any;
+      },
     },
   };
   return { client: client, cap: cap };
@@ -50,44 +84,86 @@ describe("cloneSubflow", function () {
   it("clones the parent + every child row, rewriting flow FK to the new sys_id", async function () {
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("sys_id=" + SOURCE_FLOW_ID) >= 0; },
-        rows: [{
-          sys_id: SOURCE_FLOW_ID,
-          name: "Source Subflow",
-          internal_name: "source_subflow",
-          type: "subflow",
-          sys_scope: "old_scope_xx",
-          application: "old_scope_xx",
-          description: "from",
-          master_snapshot: "stale_master",
-          latest_snapshot: "stale_latest",
-          sys_created_on: "2025-01-01",
-          sys_mod_count: "9",
-        }],
+        match: function (t, q) {
+          return (
+            t === "sys_hub_flow" && q.indexOf("sys_id=" + SOURCE_FLOW_ID) >= 0
+          );
+        },
+        rows: [
+          {
+            sys_id: SOURCE_FLOW_ID,
+            name: "Source Subflow",
+            internal_name: "source_subflow",
+            type: "subflow",
+            sys_scope: "old_scope_xx",
+            application: "old_scope_xx",
+            description: "from",
+            master_snapshot: "stale_master",
+            latest_snapshot: "stale_latest",
+            sys_created_on: "2025-01-01",
+            sys_mod_count: "9",
+          },
+        ],
       },
       // idempotency check returns empty (target name doesn't exist yet)
       {
-        match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("name=Cloned Subflow") >= 0; },
+        match: function (t, q) {
+          return t === "sys_hub_flow" && q.indexOf("name=Cloned Subflow") >= 0;
+        },
         rows: [],
       },
       {
-        match: function (t) { return t === "sys_hub_flow_input"; },
+        match: function (t) {
+          return t === "sys_hub_flow_input";
+        },
         rows: [
-          { sys_id: "i1", name: "Recipient", flow: SOURCE_FLOW_ID, sys_scope: "old_scope_xx" },
-          { sys_id: "i2", name: "Body", flow: SOURCE_FLOW_ID, sys_scope: "old_scope_xx" },
+          {
+            sys_id: "i1",
+            name: "Recipient",
+            flow: SOURCE_FLOW_ID,
+            sys_scope: "old_scope_xx",
+          },
+          {
+            sys_id: "i2",
+            name: "Body",
+            flow: SOURCE_FLOW_ID,
+            sys_scope: "old_scope_xx",
+          },
         ],
       },
       {
-        match: function (t) { return t === "sys_hub_flow_output"; },
-        rows: [{ sys_id: "o1", name: "Sent", flow: SOURCE_FLOW_ID, sys_scope: "old_scope_xx" }],
+        match: function (t) {
+          return t === "sys_hub_flow_output";
+        },
+        rows: [
+          {
+            sys_id: "o1",
+            name: "Sent",
+            flow: SOURCE_FLOW_ID,
+            sys_scope: "old_scope_xx",
+          },
+        ],
       },
       {
-        match: function (t) { return t === "sys_hub_action_instance_v2"; },
-        rows: [{ sys_id: "a1", flow: SOURCE_FLOW_ID, action_type: "at_xyz", sys_scope: "old_scope_xx" }],
+        match: function (t) {
+          return t === "sys_hub_action_instance_v2";
+        },
+        rows: [
+          {
+            sys_id: "a1",
+            flow: SOURCE_FLOW_ID,
+            action_type: "at_xyz",
+            sys_scope: "old_scope_xx",
+          },
+        ],
       },
       {
-        match: function (t) { return t === "sys_hub_flow_logic_instance_v2"; },
-        rows: [{ sys_id: "l1", flow: SOURCE_FLOW_ID, sys_scope: "old_scope_xx" }],
+        match: function (t) {
+          return t === "sys_hub_flow_logic_instance_v2";
+        },
+        rows: [
+          { sys_id: "l1", flow: SOURCE_FLOW_ID, sys_scope: "old_scope_xx" },
+        ],
       },
     ]);
 
@@ -133,7 +209,9 @@ describe("cloneSubflow", function () {
   it("short-circuits when (newName, newScope) already exists", async function () {
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("name=Already There") >= 0; },
+        match: function (t, q) {
+          return t === "sys_hub_flow" && q.indexOf("name=Already There") >= 0;
+        },
         rows: [{ sys_id: "existing_sys_id_yyyyyyyyyyyyyyyy" }],
       },
     ]);
@@ -151,39 +229,58 @@ describe("cloneSubflow", function () {
 
   it("throws when the source sys_hub_flow is not found", async function () {
     var ctx = makeClient([]);
-    await expect(cloneSubflow({
-      client: ctx.client,
-      sourceSysId: SOURCE_FLOW_ID,
-      newName: "X",
-      newScope: NEW_SCOPE_ID,
-      updateSetSysId: UPDATE_SET_ID,
-    })).rejects.toThrow(/source sys_hub_flow not found/);
+    await expect(
+      cloneSubflow({
+        client: ctx.client,
+        sourceSysId: SOURCE_FLOW_ID,
+        newName: "X",
+        newScope: NEW_SCOPE_ID,
+        updateSetSysId: UPDATE_SET_ID,
+      }),
+    ).rejects.toThrow(/source sys_hub_flow not found/);
   });
 
   it("rejects a non-subflow source (refuses to clone full flows in Phase 1)", async function () {
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("sys_id=" + SOURCE_FLOW_ID) >= 0; },
+        match: function (t, q) {
+          return (
+            t === "sys_hub_flow" && q.indexOf("sys_id=" + SOURCE_FLOW_ID) >= 0
+          );
+        },
         rows: [{ sys_id: SOURCE_FLOW_ID, name: "Real Flow", type: "flow" }],
       },
     ]);
-    await expect(cloneSubflow({
-      client: ctx.client,
-      sourceSysId: SOURCE_FLOW_ID,
-      newName: "X",
-      newScope: NEW_SCOPE_ID,
-      updateSetSysId: UPDATE_SET_ID,
-    })).rejects.toThrow(/not a subflow/);
+    await expect(
+      cloneSubflow({
+        client: ctx.client,
+        sourceSysId: SOURCE_FLOW_ID,
+        newName: "X",
+        newScope: NEW_SCOPE_ID,
+        updateSetSysId: UPDATE_SET_ID,
+      }),
+    ).rejects.toThrow(/not a subflow/);
   });
 
   it("dryRun returns the plan without writing", async function () {
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("sys_id=") >= 0; },
-        rows: [{ sys_id: SOURCE_FLOW_ID, name: "S", type: "subflow", sys_scope: "old" }],
+        match: function (t, q) {
+          return t === "sys_hub_flow" && q.indexOf("sys_id=") >= 0;
+        },
+        rows: [
+          {
+            sys_id: SOURCE_FLOW_ID,
+            name: "S",
+            type: "subflow",
+            sys_scope: "old",
+          },
+        ],
       },
       {
-        match: function (t) { return t === "sys_hub_flow_input"; },
+        match: function (t) {
+          return t === "sys_hub_flow_input";
+        },
         rows: [{ sys_id: "i1", flow: SOURCE_FLOW_ID, sys_scope: "old" }],
       },
     ]);
@@ -204,8 +301,18 @@ describe("cloneSubflow", function () {
   it("applies modifications.description and fieldPatch on top of the cloned parent", async function () {
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_flow" && q.indexOf("sys_id=") >= 0; },
-        rows: [{ sys_id: SOURCE_FLOW_ID, name: "S", type: "subflow", sys_scope: "old", description: "old desc" }],
+        match: function (t, q) {
+          return t === "sys_hub_flow" && q.indexOf("sys_id=") >= 0;
+        },
+        rows: [
+          {
+            sys_id: SOURCE_FLOW_ID,
+            name: "S",
+            type: "subflow",
+            sys_scope: "old",
+            description: "old desc",
+          },
+        ],
       },
     ]);
     await cloneSubflow({
@@ -230,27 +337,75 @@ describe("cloneActionType", function () {
     var SOURCE_AT = "44444444444444444444444444444444";
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_action_type_definition" && q.indexOf("sys_id=" + SOURCE_AT) >= 0; },
-        rows: [{ sys_id: SOURCE_AT, name: "Get Audience Members", internal_name: "get_aud", sys_scope: "old", description: "" }],
+        match: function (t, q) {
+          return (
+            t === "sys_hub_action_type_definition" &&
+            q.indexOf("sys_id=" + SOURCE_AT) >= 0
+          );
+        },
+        rows: [
+          {
+            sys_id: SOURCE_AT,
+            name: "Get Audience Members",
+            internal_name: "get_aud",
+            sys_scope: "old",
+            description: "",
+          },
+        ],
       },
       // idempotency check - empty
       {
-        match: function (t, q) { return t === "sys_hub_action_type_definition" && q.indexOf("name=Get Engaged") >= 0; },
+        match: function (t, q) {
+          return (
+            t === "sys_hub_action_type_definition" &&
+            q.indexOf("name=Get Engaged") >= 0
+          );
+        },
         rows: [],
       },
       {
-        match: function (t) { return t === "sys_hub_action_input"; },
-        rows: [{ sys_id: "ai1", name: "Audience", model_id: SOURCE_AT, sys_scope: "old" }],
-      },
-      {
-        match: function (t) { return t === "sys_hub_action_output"; },
-        rows: [{ sys_id: "ao1", name: "Members", model_id: SOURCE_AT, sys_scope: "old" }],
-      },
-      {
-        match: function (t) { return t === "sys_hub_step_instance"; },
+        match: function (t) {
+          return t === "sys_hub_action_input";
+        },
         rows: [
-          { sys_id: "s1", name: "Step1", model_id: SOURCE_AT, sys_scope: "old" },
-          { sys_id: "s2", name: "Step2", model_id: SOURCE_AT, sys_scope: "old" },
+          {
+            sys_id: "ai1",
+            name: "Audience",
+            model_id: SOURCE_AT,
+            sys_scope: "old",
+          },
+        ],
+      },
+      {
+        match: function (t) {
+          return t === "sys_hub_action_output";
+        },
+        rows: [
+          {
+            sys_id: "ao1",
+            name: "Members",
+            model_id: SOURCE_AT,
+            sys_scope: "old",
+          },
+        ],
+      },
+      {
+        match: function (t) {
+          return t === "sys_hub_step_instance";
+        },
+        rows: [
+          {
+            sys_id: "s1",
+            name: "Step1",
+            model_id: SOURCE_AT,
+            sys_scope: "old",
+          },
+          {
+            sys_id: "s2",
+            name: "Step2",
+            model_id: SOURCE_AT,
+            sys_scope: "old",
+          },
         ],
       },
     ]);
@@ -265,8 +420,12 @@ describe("cloneActionType", function () {
 
     expect(result.action).toBe("created");
     expect(ctx.cap.createRecordCalls).toHaveLength(5);
-    expect(ctx.cap.createRecordCalls[0].table).toBe("sys_hub_action_type_definition");
-    expect(ctx.cap.createRecordCalls[0].fields.name).toBe("Get Engaged Audience Members");
+    expect(ctx.cap.createRecordCalls[0].table).toBe(
+      "sys_hub_action_type_definition",
+    );
+    expect(ctx.cap.createRecordCalls[0].fields.name).toBe(
+      "Get Engaged Audience Members",
+    );
 
     // Children must FK back to the new parent via model_id (not the source sys_id).
     for (var i = 1; i < ctx.cap.createRecordCalls.length; i++) {
@@ -279,7 +438,12 @@ describe("cloneActionType", function () {
     var SOURCE_AT = "44444444444444444444444444444444";
     var ctx = makeClient([
       {
-        match: function (t, q) { return t === "sys_hub_action_type_definition" && q.indexOf("name=Existing") >= 0; },
+        match: function (t, q) {
+          return (
+            t === "sys_hub_action_type_definition" &&
+            q.indexOf("name=Existing") >= 0
+          );
+        },
         rows: [{ sys_id: "abc12345abc12345abc12345abc12345" }],
       },
     ]);

@@ -9,7 +9,9 @@ var mockLogger = {
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
-  getLogLevel: function () { return "debug"; },
+  getLogLevel: function () {
+    return "debug";
+  },
 };
 
 jest.mock("../Logger", function () {
@@ -17,7 +19,14 @@ jest.mock("../Logger", function () {
 });
 
 jest.mock("../FileLogger", function () {
-  return { fileLogger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } };
+  return {
+    fileLogger: {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    },
+  };
 });
 
 jest.mock("../genericUtils", function () {
@@ -29,7 +38,11 @@ import { snClient, _resetDovetailApiFallback } from "../snClient";
 function makeAxiosError(status: number, data?: any): any {
   var error: any = new Error("Request failed with status " + status);
   error.isAxiosError = true;
-  error.response = { status: status, headers: {}, data: data === undefined ? {} : data };
+  error.response = {
+    status: status,
+    headers: {},
+    data: data === undefined ? {} : data,
+  };
   return error;
 }
 
@@ -38,7 +51,10 @@ function makeAxiosResponse<T>(data: T): any {
 }
 
 var MISSING_ENDPOINT_BODY = {
-  error: { message: "Requested URI does not represent any resource", detail: null },
+  error: {
+    message: "Requested URI does not represent any resource",
+    detail: null,
+  },
   status: "failure",
 };
 
@@ -50,9 +66,16 @@ describe("snClient.createUpdateSet", function () {
 
   it("calls the createUpdateSet endpoint and normalizes the response to {result}", async function () {
     var c = snClient("https://x.service-now.com/", "u", "p");
-    var post = jest.spyOn(c.client, "post").mockImplementation(async function () {
-      return makeAxiosResponse({ success: true, sys_id: "abc123", name: "My Set", application: "scopeSys" });
-    });
+    var post = jest
+      .spyOn(c.client, "post")
+      .mockImplementation(async function () {
+        return makeAxiosResponse({
+          success: true,
+          sys_id: "abc123",
+          name: "My Set",
+          application: "scopeSys",
+        });
+      });
 
     var resp = await c.createUpdateSet("My Set", "scopeSys", "a description");
 
@@ -71,7 +94,9 @@ describe("snClient.createUpdateSet", function () {
   it("falls back to the Table API when the endpoint 404s", async function () {
     var c = snClient("https://x.service-now.com/", "u", "p");
     var urls: string[] = [];
-    jest.spyOn(c.client, "post").mockImplementation(async function (url: string) {
+    jest.spyOn(c.client, "post").mockImplementation(async function (
+      url: string,
+    ) {
       urls.push(url);
       if (url.indexOf("dovetail") !== -1) {
         throw makeAxiosError(404, {});
@@ -90,7 +115,9 @@ describe("snClient.createUpdateSet", function () {
   it("falls back to the Table API on the 400 missing-endpoint body", async function () {
     var c = snClient("https://x.service-now.com/", "u", "p");
     var urls: string[] = [];
-    jest.spyOn(c.client, "post").mockImplementation(async function (url: string) {
+    jest.spyOn(c.client, "post").mockImplementation(async function (
+      url: string,
+    ) {
       urls.push(url);
       if (url.indexOf("dovetail") !== -1) {
         throw makeAxiosError(400, MISSING_ENDPOINT_BODY);
@@ -107,9 +134,13 @@ describe("snClient.createUpdateSet", function () {
   it("does NOT fall back on an unrelated 400 (rethrows)", async function () {
     var c = snClient("https://x.service-now.com/", "u", "p");
     var tableHit = false;
-    jest.spyOn(c.client, "post").mockImplementation(async function (url: string) {
+    jest.spyOn(c.client, "post").mockImplementation(async function (
+      url: string,
+    ) {
       if (url.indexOf("dovetail") !== -1) {
-        throw makeAxiosError(400, { error: { message: "Invalid update set name" } });
+        throw makeAxiosError(400, {
+          error: { message: "Invalid update set name" },
+        });
       }
       tableHit = true;
       return makeAxiosResponse({ result: { sys_id: "should-not-happen" } });
@@ -122,7 +153,9 @@ describe("snClient.createUpdateSet", function () {
   it("does NOT fall back on a 500 (rethrows)", async function () {
     var c = snClient("https://x.service-now.com/", "u", "p");
     var tableHit = false;
-    jest.spyOn(c.client, "post").mockImplementation(async function (url: string) {
+    jest.spyOn(c.client, "post").mockImplementation(async function (
+      url: string,
+    ) {
       if (url.indexOf("dovetail") !== -1) {
         throw makeAxiosError(500, { error: { message: "boom" } });
       }

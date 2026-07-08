@@ -45,12 +45,21 @@ export interface ReadActionTypeResult {
 }
 
 function actionTypePath(sysId: string, scopeSysId: string): string {
-  return "/api/now/processflow/action/action_types/" + encodeURIComponent(sysId)
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/action/action_types/" +
+    encodeURIComponent(sysId) +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 
 function unwrap(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     return data.result;
   }
   return data;
@@ -61,7 +70,9 @@ function val(field: any): string {
     return "";
   }
   if (typeof field === "object") {
-    return field.value !== undefined && field.value !== null ? String(field.value) : "";
+    return field.value !== undefined && field.value !== null
+      ? String(field.value)
+      : "";
   }
   return String(field);
 }
@@ -76,13 +87,15 @@ function mapIo(arr: any): Array<ActionIo> {
     out.push({
       name: val(io.name),
       label: val(io.label) || val(io.name),
-      type: val(io.type_label) || val(io.type)
+      type: val(io.type_label) || val(io.type),
     });
   }
   return out;
 }
 
-export async function readActionType(params: ReadActionTypeParams): Promise<ReadActionTypeResult> {
+export async function readActionType(
+  params: ReadActionTypeParams,
+): Promise<ReadActionTypeResult> {
   var client = params.client;
   var sysId = params.sysId;
   var scopeSysId = params.scopeSysId;
@@ -91,15 +104,19 @@ export async function readActionType(params: ReadActionTypeParams): Promise<Read
     throw new Error("readActionType: sysId is required.");
   }
   if (!scopeSysId) {
-    throw new Error("readActionType: scopeSysId is required (sysparm_transaction_scope).");
+    throw new Error(
+      "readActionType: scopeSysId is required (sysparm_transaction_scope).",
+    );
   }
 
   var resp = await client.now.get<any>(actionTypePath(sysId, scopeSysId));
   var model = unwrap(resp);
   if (!model || typeof model !== "object") {
     throw new Error(
-      "readActionType: unexpected response for action type " + sysId
-        + " — expected a model object, got: " + JSON.stringify(resp).substring(0, 300)
+      "readActionType: unexpected response for action type " +
+        sysId +
+        " — expected a model object, got: " +
+        JSON.stringify(resp).substring(0, 300),
     );
   }
 
@@ -113,7 +130,7 @@ export async function readActionType(params: ReadActionTypeParams): Promise<Read
     description: val(model.description),
     inputs: inputs,
     outputs: outputs,
-    counts: { inputs: inputs.length, outputs: outputs.length }
+    counts: { inputs: inputs.length, outputs: outputs.length },
   };
 
   if (params.raw) {

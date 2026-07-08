@@ -26,7 +26,12 @@ import {
 } from "./snClient";
 import { BenchmarkCollector } from "./benchmark";
 import { logger } from "./Logger";
-import { aggregateErrorMessages, allSettled, processBatched, allSettledBatched } from "./genericUtils";
+import {
+  aggregateErrorMessages,
+  allSettled,
+  processBatched,
+  allSettledBatched,
+} from "./genericUtils";
 
 interface UpdateSetSelection {
   sys_id: string;
@@ -56,7 +61,10 @@ export const stampMetadataContent = (file: SN.File): SN.File => {
   if (file.name !== "metaData" || file.type !== "json") return file;
   const stamp = new Date().toISOString();
   if (!file.content) {
-    return { ...file, content: JSON.stringify({ _lastUpdatedOn: stamp }, null, 2) };
+    return {
+      ...file,
+      content: JSON.stringify({ _lastUpdatedOn: stamp }, null, 2),
+    };
   }
   try {
     const metadata = JSON.parse(file.content);
@@ -83,7 +91,9 @@ const processFilesInManRec = async (
   rec: SN.MetaRecord,
   forceWrite: boolean,
 ) => {
-  fileLogger.debug("Processing record: " + rec.name + " (" + rec.files.length + " files)");
+  fileLogger.debug(
+    "Processing record: " + rec.name + " (" + rec.files.length + " files)",
+  );
 
   const fileWrite = fUtils.writeSNFileCurry(forceWrite);
 
@@ -93,7 +103,11 @@ const processFilesInManRec = async (
     const stubMetadata: SN.File = {
       name: "metaData",
       type: "json",
-      content: JSON.stringify({ _lastUpdatedOn: new Date().toISOString() }, null, 2),
+      content: JSON.stringify(
+        { _lastUpdatedOn: new Date().toISOString() },
+        null,
+        2,
+      ),
     };
     await fileWrite(stubMetadata, recPath);
   }
@@ -101,14 +115,16 @@ const processFilesInManRec = async (
   const writeResults = await allSettledBatched(
     rec.files,
     CONCURRENCY_FILES,
-    function(file) { return fileWrite(stampMetadataContent(file), recPath); },
+    function (file) {
+      return fileWrite(stampMetadataContent(file), recPath);
+    },
   );
-  const writeFailures = writeResults.filter(
-    (r) => r.status === "rejected",
-  );
+  const writeFailures = writeResults.filter((r) => r.status === "rejected");
   if (writeFailures.length > 0) {
     writeFailures.forEach((f) => {
-      fileLogger.error("File write failed: " + (f as PromiseRejectedResult).reason);
+      fileLogger.error(
+        "File write failed: " + (f as PromiseRejectedResult).reason,
+      );
     });
   }
 
@@ -118,7 +134,6 @@ const processFilesInManRec = async (
     delete fileCopy.content;
     return fileCopy;
   });
-
 };
 
 const processRecsInManTable = async (
@@ -135,21 +150,26 @@ const processRecsInManTable = async (
   // response, whose .name is the unmodified ServiceNow display name — which can
   // be filesystem-unsafe (e.g. a `<table>.*` ACL). toSafeFolderName is
   // idempotent on already-safe names, so re-applying it here is harmless.
-  const recKeyToPath = (key: string) => path.join(tablePath, toSafeFolderName(records[key]));
+  const recKeyToPath = (key: string) =>
+    path.join(tablePath, toSafeFolderName(records[key]));
   const recPathPromises = recKeys
     .map(recKeyToPath)
     .map(fUtils.createDirRecursively);
   await Promise.all(recPathPromises);
 
-  await processBatched(recKeys, CONCURRENCY_RECORDS, function(recKey) {
-    return processFilesInManRec(recKeyToPath(recKey), records[recKey], forceWrite).then(function() {
+  await processBatched(recKeys, CONCURRENCY_RECORDS, function (recKey) {
+    return processFilesInManRec(
+      recKeyToPath(recKey),
+      records[recKey],
+      forceWrite,
+    ).then(function () {
       if (onRecordProcessed) onRecordProcessed();
     });
   });
 };
 
 const countRecordsInTables = (tables: SN.TableMap): number => {
-  return Object.keys(tables).reduce(function(sum, tableName) {
+  return Object.keys(tables).reduce(function (sum, tableName) {
     return sum + Object.keys(tables[tableName].records).length;
   }, 0);
 };
@@ -173,7 +193,7 @@ const processTablesInManifest = async (
       var allowed = resolved.tables;
       if (allowed && allowed.length > 0) {
         var skipped: string[] = [];
-        tableNames = tableNames.filter(function(t) {
+        tableNames = tableNames.filter(function (t) {
           if (allowed.indexOf(t) === -1) {
             skipped.push(t);
             return false;
@@ -182,19 +202,27 @@ const processTablesInManifest = async (
         });
         if (skipped.length > 0) {
           fileLogger.debug(
-            "processTablesInManifest: dropped " + skipped.length +
-            " non-whitelisted tables for scope '" + scope + "': " + skipped.join(", ")
+            "processTablesInManifest: dropped " +
+              skipped.length +
+              " non-whitelisted tables for scope '" +
+              scope +
+              "': " +
+              skipped.join(", "),
           );
         }
       }
     } catch (e) {
       // Config resolution can fail for legacy single-scope manifests; fall
       // through and process whatever the manifest contains.
-      fileLogger.debug("processTablesInManifest: could not resolve whitelist for scope '" + scope + "'");
+      fileLogger.debug(
+        "processTablesInManifest: could not resolve whitelist for scope '" +
+          scope +
+          "'",
+      );
     }
   }
 
-  await processBatched(tableNames, CONCURRENCY_TABLES, function(tableName) {
+  await processBatched(tableNames, CONCURRENCY_TABLES, function (tableName) {
     return processRecsInManTable(
       path.join(basePath, tableName),
       tables[tableName],
@@ -229,7 +257,9 @@ export const toSafeFolderName = (record: SN.MetaRecord): string => {
  * the manifest key that `dove push` looks records up by — so the key ≡ folder
  * invariant holds even when an unsafe display name forces a sys_id fallback.
  */
-export const normalizeManifestKeys = (manifest: SN.AppManifest): SN.AppManifest => {
+export const normalizeManifestKeys = (
+  manifest: SN.AppManifest,
+): SN.AppManifest => {
   var tables = manifest.tables || {};
   var tableNames = Object.keys(tables);
   for (var i = 0; i < tableNames.length; i++) {
@@ -265,7 +295,13 @@ export const processManifest = async (
   // every write path, including downloadCommand which does not normalize upstream.
   normalizeManifestKeys(manifest);
   const tableCount = Object.keys(manifest.tables).length;
-  fileLogger.debug("Processing manifest: " + (manifest.scope || "legacy") + " (" + tableCount + " tables)");
+  fileLogger.debug(
+    "Processing manifest: " +
+      (manifest.scope || "legacy") +
+      " (" +
+      tableCount +
+      " tables)",
+  );
 
   var recordCount = countRecordsInTables(manifest.tables);
   var progress = createScopeProgress(logger.getLogLevel(), {
@@ -273,7 +309,13 @@ export const processManifest = async (
     total: recordCount,
   });
 
-  await processTablesInManifest(manifest.tables, forceWrite, sourcePath, progress.tick, manifest.scope);
+  await processTablesInManifest(
+    manifest.tables,
+    forceWrite,
+    sourcePath,
+    progress.tick,
+    manifest.scope,
+  );
 
   if (manifest.scope) {
     await fUtils.writeScopeManifest(manifest.scope, manifest);
@@ -322,10 +364,14 @@ export const syncManifest = async (
       // the refresh loop (see RFC-0004 / sys_alias debris incident 2026-04-14).
       if (declaredScopes.length > 0 && declaredScopes.indexOf(scope) === -1) {
         logger.warn(
-          "Skipping scope '" + scope + "' — not declared in dove.config.js `scopes`. " +
-          "Add it to config.scopes to sync, or remove its manifest file."
+          "Skipping scope '" +
+            scope +
+            "' — not declared in dove.config.js `scopes`. " +
+            "Add it to config.scopes to sync, or remove its manifest file.",
         );
-        fileLogger.debug("syncManifest: skipped undeclared scope '" + scope + "'");
+        fileLogger.debug(
+          "syncManifest: skipped undeclared scope '" + scope + "'",
+        );
         return;
       }
 
@@ -358,17 +404,32 @@ export const syncManifest = async (
         }
         if (skippedCount > 0) {
           fileLogger.debug(
-            "syncManifest: filtered " + skippedCount + " tables not in _tables whitelist for " +
-            scope + " (kept " + Object.keys(filteredTables).length + " of " + manifestTableNames.length + ")"
+            "syncManifest: filtered " +
+              skippedCount +
+              " tables not in _tables whitelist for " +
+              scope +
+              " (kept " +
+              Object.keys(filteredTables).length +
+              " of " +
+              manifestTableNames.length +
+              ")",
           );
         }
         newManifest.tables = filteredTables;
       } else {
-        logger.warn("No _tables whitelist defined — writing ALL tables for " + scope);
+        logger.warn(
+          "No _tables whitelist defined — writing ALL tables for " + scope,
+        );
       }
 
       const refreshTableCount = Object.keys(newManifest.tables).length;
-      fileLogger.debug("Refreshed manifest for " + scope + ": " + refreshTableCount + " tables");
+      fileLogger.debug(
+        "Refreshed manifest for " +
+          scope +
+          ": " +
+          refreshTableCount +
+          " tables",
+      );
 
       await fUtils.writeScopeManifest(scope, newManifest);
       if (collector) collector.startScope(scope);
@@ -563,7 +624,7 @@ const buildAllFilesMap = (manifest: SN.AppManifest): SN.MissingFileTableMap => {
       if (!rec.files || rec.files.length === 0) continue;
       // Strip any content that may be lingering on manifest file entries; the
       // bulkDownload endpoint only needs name + type to resolve each field.
-      recMap[rec.sys_id] = rec.files.map(function(f) {
+      recMap[rec.sys_id] = rec.files.map(function (f) {
         return { name: f.name, type: f.type };
       });
     }
@@ -592,16 +653,29 @@ export const refreshAllFiles = async (
     if (tableNames.length === 0) return;
 
     fileLogger.debug(
-      "Refreshing file content for " + tableNames.length + " tables (force=" + !!options.force + ")",
+      "Refreshing file content for " +
+        tableNames.length +
+        " tables (force=" +
+        !!options.force +
+        ")",
     );
 
     const { tableOptions = {} } = ConfigManager.getConfig();
     const client = defaultClient();
-    const totalChunks = Math.ceil(tableNames.length / BULK_DOWNLOAD_TABLE_CHUNK_SIZE);
+    const totalChunks = Math.ceil(
+      tableNames.length / BULK_DOWNLOAD_TABLE_CHUNK_SIZE,
+    );
     const filesToProcess: SN.TableMap = {} as SN.TableMap;
 
-    for (var i = 0; i < tableNames.length; i += BULK_DOWNLOAD_TABLE_CHUNK_SIZE) {
-      const chunkTableNames = tableNames.slice(i, i + BULK_DOWNLOAD_TABLE_CHUNK_SIZE);
+    for (
+      var i = 0;
+      i < tableNames.length;
+      i += BULK_DOWNLOAD_TABLE_CHUNK_SIZE
+    ) {
+      const chunkTableNames = tableNames.slice(
+        i,
+        i + BULK_DOWNLOAD_TABLE_CHUNK_SIZE,
+      );
       const chunkMissing: SN.MissingFileTableMap = {} as SN.MissingFileTableMap;
       for (var j = 0; j < chunkTableNames.length; j++) {
         chunkMissing[chunkTableNames[j]] = allFiles[chunkTableNames[j]];
@@ -609,8 +683,14 @@ export const refreshAllFiles = async (
 
       const batchNum = Math.floor(i / BULK_DOWNLOAD_TABLE_CHUNK_SIZE) + 1;
       fileLogger.debug(
-        "Refresh download batch " + batchNum + "/" + totalChunks +
-        " (" + chunkTableNames.length + " tables): " + chunkTableNames.join(", "),
+        "Refresh download batch " +
+          batchNum +
+          "/" +
+          totalChunks +
+          " (" +
+          chunkTableNames.length +
+          " tables): " +
+          chunkTableNames.join(", "),
       );
 
       const chunkResult = await unwrapSNResponse(
@@ -635,101 +715,135 @@ export const refreshAllFiles = async (
     const forceWriter = fUtils.writeSNFileCurry(false);
 
     const processedTableNames = Object.keys(filesToProcess);
-    await processBatched(processedTableNames, CONCURRENCY_TABLES, async function(tableName) {
-      var tablePath = path.join(basePath, tableName);
-      var recs = filesToProcess[tableName].records;
-      var recKeys = Object.keys(recs);
-      await Promise.all(recKeys.map(function(k) {
-        // toSafeFolderName, not raw recs[k].name: the bulkDownload response
-        // carries the unmodified ServiceNow display name, which may be
-        // filesystem-unsafe (e.g. a `<table>.*` ACL). Without this, refresh
-        // recreates Windows-illegal folders that normalizeManifestKeys
-        // already removed from the manifest.
-        return fUtils.createDirRecursively(path.join(tablePath, toSafeFolderName(recs[k])));
-      }));
+    await processBatched(
+      processedTableNames,
+      CONCURRENCY_TABLES,
+      async function (tableName) {
+        var tablePath = path.join(basePath, tableName);
+        var recs = filesToProcess[tableName].records;
+        var recKeys = Object.keys(recs);
+        await Promise.all(
+          recKeys.map(function (k) {
+            // toSafeFolderName, not raw recs[k].name: the bulkDownload response
+            // carries the unmodified ServiceNow display name, which may be
+            // filesystem-unsafe (e.g. a `<table>.*` ACL). Without this, refresh
+            // recreates Windows-illegal folders that normalizeManifestKeys
+            // already removed from the manifest.
+            return fUtils.createDirRecursively(
+              path.join(tablePath, toSafeFolderName(recs[k])),
+            );
+          }),
+        );
 
-      await processBatched(recKeys, CONCURRENCY_RECORDS, async function(recKey) {
-        var rec = recs[recKey];
-        var recPath = path.join(tablePath, toSafeFolderName(rec));
+        await processBatched(
+          recKeys,
+          CONCURRENCY_RECORDS,
+          async function (recKey) {
+            var rec = recs[recKey];
+            var recPath = path.join(tablePath, toSafeFolderName(rec));
 
-        // Split server-provided metadata off from the regular files so we can
-        // track whether any regular file actually changed — metaData shouldn't
-        // be the trigger for "this record changed" since we stamp it on every
-        // touch.
-        var metadataFiles: SN.File[] = [];
-        var regularFiles: SN.File[] = [];
-        for (var mi = 0; mi < rec.files.length; mi++) {
-          var rf = rec.files[mi];
-          if (rf.name === "metaData" && rf.type === "json") {
-            metadataFiles.push(rf);
-          } else {
-            regularFiles.push(rf);
-          }
-        }
+            // Split server-provided metadata off from the regular files so we can
+            // track whether any regular file actually changed — metaData shouldn't
+            // be the trigger for "this record changed" since we stamp it on every
+            // touch.
+            var metadataFiles: SN.File[] = [];
+            var regularFiles: SN.File[] = [];
+            for (var mi = 0; mi < rec.files.length; mi++) {
+              var rf = rec.files[mi];
+              if (rf.name === "metaData" && rf.type === "json") {
+                metadataFiles.push(rf);
+              } else {
+                regularFiles.push(rf);
+              }
+            }
 
-        var results = await allSettledBatched(regularFiles, CONCURRENCY_FILES, async function(file) {
-          if (forceWrite) {
-            await forceWriter(file, recPath);
-            return true;
-          }
-          return fUtils.writeSNFileIfDifferent(file, recPath);
-        });
+            var results = await allSettledBatched(
+              regularFiles,
+              CONCURRENCY_FILES,
+              async function (file) {
+                if (forceWrite) {
+                  await forceWriter(file, recPath);
+                  return true;
+                }
+                return fUtils.writeSNFileIfDifferent(file, recPath);
+              },
+            );
 
-        var anyChanged = false;
-        for (var f = 0; f < results.length; f++) {
-          var res = results[f];
-          if (res.status === "rejected") {
-            fileLogger.error("File write failed: " + (res as PromiseRejectedResult).reason);
-            continue;
-          }
-          if ((res as PromiseFulfilledResult<boolean>).value) {
-            anyChanged = true;
-            writtenCount++;
-          } else {
-            unchangedCount++;
-          }
-        }
+            var anyChanged = false;
+            for (var f = 0; f < results.length; f++) {
+              var res = results[f];
+              if (res.status === "rejected") {
+                fileLogger.error(
+                  "File write failed: " + (res as PromiseRejectedResult).reason,
+                );
+                continue;
+              }
+              if ((res as PromiseFulfilledResult<boolean>).value) {
+                anyChanged = true;
+                writtenCount++;
+              } else {
+                unchangedCount++;
+              }
+            }
 
-        // Only touch metaData when at least one regular file in the record
-        // actually changed. Avoids rewriting _lastUpdatedOn for records that
-        // were already in sync with the instance. Prefer the server-provided
-        // metadata (full field snapshot) over a stub; fall back to a stub only
-        // when the server didn't send metadata at all.
-        if (anyChanged || forceWrite) {
-          let metadataFile: SN.File;
-          if (metadataFiles.length > 0 && metadataFiles[0].content) {
-            metadataFile = stampMetadataContent(metadataFiles[0]);
-          } else {
-            metadataFile = {
-              name: "metaData",
-              type: "json",
-              content: JSON.stringify({ _lastUpdatedOn: new Date().toISOString() }, null, 2),
-            };
-          }
-          await forceWriter(metadataFile, recPath);
-        }
+            // Only touch metaData when at least one regular file in the record
+            // actually changed. Avoids rewriting _lastUpdatedOn for records that
+            // were already in sync with the instance. Prefer the server-provided
+            // metadata (full field snapshot) over a stub; fall back to a stub only
+            // when the server didn't send metadata at all.
+            if (anyChanged || forceWrite) {
+              let metadataFile: SN.File;
+              if (metadataFiles.length > 0 && metadataFiles[0].content) {
+                metadataFile = stampMetadataContent(metadataFiles[0]);
+              } else {
+                metadataFile = {
+                  name: "metaData",
+                  type: "json",
+                  content: JSON.stringify(
+                    { _lastUpdatedOn: new Date().toISOString() },
+                    null,
+                    2,
+                  ),
+                };
+              }
+              await forceWriter(metadataFile, recPath);
+            }
 
-        // Strip content from manifest entries to keep memory bounded.
-        rec.files = rec.files.map(function(file) {
-          var copy = Object.assign({}, file);
-          delete copy.content;
-          return copy;
-        });
+            // Strip content from manifest entries to keep memory bounded.
+            rec.files = rec.files.map(function (file) {
+              var copy = Object.assign({}, file);
+              delete copy.content;
+              return copy;
+            });
 
-        progress.tick();
-      });
-    });
+            progress.tick();
+          },
+        );
+      },
+    );
 
     fileLogger.debug(
-      "Refresh complete: " + writtenCount + " written, " + unchangedCount + " unchanged",
+      "Refresh complete: " +
+        writtenCount +
+        " written, " +
+        unchangedCount +
+        " unchanged",
     );
     if (writtenCount > 0) {
       logger.info(
-        "Refreshed " + writtenCount + " file(s) from instance" +
-        (unchangedCount > 0 ? " (" + unchangedCount + " already in sync)" : ""),
+        "Refreshed " +
+          writtenCount +
+          " file(s) from instance" +
+          (unchangedCount > 0
+            ? " (" + unchangedCount + " already in sync)"
+            : ""),
       );
     } else {
-      logger.debug("No file changes detected from instance (" + unchangedCount + " checked)");
+      logger.debug(
+        "No file changes detected from instance (" +
+          unchangedCount +
+          " checked)",
+      );
     }
 
     if (options.benchmarkCollector) {
@@ -752,7 +866,9 @@ export const processMissingFiles = async (
     const missingTableCount = Object.keys(missing).length;
     if (missingTableCount === 0) return;
 
-    fileLogger.debug("Downloading missing files from " + missingTableCount + " tables");
+    fileLogger.debug(
+      "Downloading missing files from " + missingTableCount + " tables",
+    );
 
     const { tableOptions = {} } = ConfigManager.getConfig();
     const client = defaultClient();
@@ -760,11 +876,20 @@ export const processMissingFiles = async (
     // Chunk the bulkDownload request: ServiceNow rejects REST payloads > 10 MB,
     // so send table batches and merge the results before processing.
     const tableNames = Object.keys(missing);
-    const totalChunks = Math.ceil(tableNames.length / BULK_DOWNLOAD_TABLE_CHUNK_SIZE);
+    const totalChunks = Math.ceil(
+      tableNames.length / BULK_DOWNLOAD_TABLE_CHUNK_SIZE,
+    );
     const filesToProcess: SN.TableMap = {} as SN.TableMap;
 
-    for (var i = 0; i < tableNames.length; i += BULK_DOWNLOAD_TABLE_CHUNK_SIZE) {
-      const chunkTableNames = tableNames.slice(i, i + BULK_DOWNLOAD_TABLE_CHUNK_SIZE);
+    for (
+      var i = 0;
+      i < tableNames.length;
+      i += BULK_DOWNLOAD_TABLE_CHUNK_SIZE
+    ) {
+      const chunkTableNames = tableNames.slice(
+        i,
+        i + BULK_DOWNLOAD_TABLE_CHUNK_SIZE,
+      );
       const chunkMissing: SN.MissingFileTableMap = {} as SN.MissingFileTableMap;
       for (var j = 0; j < chunkTableNames.length; j++) {
         chunkMissing[chunkTableNames[j]] = missing[chunkTableNames[j]];
@@ -772,8 +897,14 @@ export const processMissingFiles = async (
 
       const batchNum = Math.floor(i / BULK_DOWNLOAD_TABLE_CHUNK_SIZE) + 1;
       fileLogger.debug(
-        "Bulk download batch " + batchNum + "/" + totalChunks +
-        " (" + chunkTableNames.length + " tables): " + chunkTableNames.join(", "),
+        "Bulk download batch " +
+          batchNum +
+          "/" +
+          totalChunks +
+          " (" +
+          chunkTableNames.length +
+          " tables): " +
+          chunkTableNames.join(", "),
       );
 
       const chunkResult = await unwrapSNResponse(
@@ -792,7 +923,13 @@ export const processMissingFiles = async (
       total: recordCount,
     });
 
-    await processTablesInManifest(filesToProcess, false, sourcePath, progress.tick, newManifest.scope);
+    await processTablesInManifest(
+      filesToProcess,
+      false,
+      sourcePath,
+      progress.tick,
+      newManifest.scope,
+    );
   } catch (e) {
     throw e;
   }
@@ -952,43 +1089,55 @@ export const pushFiles = async (
   const announcedSkipTables: Record<string, boolean> = {};
 
   const tick = getProgTick(logger.getLogLevel(), recs.length * 2) || (() => {});
-  const results = await allSettledBatched(recs, CONCURRENCY_PUSH, async function(rec) {
-    const fieldNames = Object.keys(rec.fields);
-    const firstField = rec.fields[fieldNames[0]];
-    const recSummary = summarizeRecord(rec.table, firstField.name);
-    const scope = firstField.scope;
+  const results = await allSettledBatched(
+    recs,
+    CONCURRENCY_PUSH,
+    async function (rec) {
+      const fieldNames = Object.keys(rec.fields);
+      const firstField = rec.fields[fieldNames[0]];
+      const recSummary = summarizeRecord(rec.table, firstField.name);
+      const scope = firstField.scope;
 
-    const readOnlySet = scope ? readOnlyByScope[scope] : undefined;
-    if (readOnlySet && readOnlySet.has(rec.table)) {
-      tick();
-      tick();
-      const skipKey = `${scope}:${rec.table}`;
-      if (!announcedSkipTables[skipKey]) {
-        announcedSkipTables[skipKey] = true;
-        logger.info(`Read-only table ${rec.table} in scope ${scope}: push skipped`);
+      const readOnlySet = scope ? readOnlyByScope[scope] : undefined;
+      if (readOnlySet && readOnlySet.has(rec.table)) {
+        tick();
+        tick();
+        const skipKey = `${scope}:${rec.table}`;
+        if (!announcedSkipTables[skipKey]) {
+          announcedSkipTables[skipKey] = true;
+          logger.info(
+            `Read-only table ${rec.table} in scope ${scope}: push skipped`,
+          );
+        }
+        return {
+          success: true,
+          message: `${recSummary} : skipped (read-only table)`,
+        };
       }
-      return { success: true, message: `${recSummary} : skipped (read-only table)` };
-    }
 
-    const buildRes = await buildRec(rec);
-    tick();
-    if (!buildRes.success) {
+      const buildRes = await buildRec(rec);
       tick();
-      return { success: false, message: `${recSummary} : ${buildRes.message}` };
-    }
-    const pushRes = await pushRec(
-      client,
-      rec.table,
-      rec.sysId,
-      buildRes.builtRec,
-      recSummary,
-      scope,
-      updateSetConfig,
-    );
-    tick();
-    return pushRes;
-  });
-  return results.map(function(result) {
+      if (!buildRes.success) {
+        tick();
+        return {
+          success: false,
+          message: `${recSummary} : ${buildRes.message}`,
+        };
+      }
+      const pushRes = await pushRec(
+        client,
+        rec.table,
+        rec.sysId,
+        buildRes.builtRec,
+        recSummary,
+        scope,
+        updateSetConfig,
+      );
+      tick();
+      return pushRes;
+    },
+  );
+  return results.map(function (result) {
     if (result.status === "fulfilled") {
       return result.value;
     }
@@ -1009,7 +1158,7 @@ const createScopeProgress = (
   options: { scope: string; total: number },
 ): ScopeProgressResult => {
   if (logLevel !== "info" || options.total === 0) {
-    return { tick: function() {}, setTotal: function() {} };
+    return { tick: function () {}, setTotal: function () {} };
   }
   var progBar = new ProgressBar(":scope :bar :current/:total (:percent)", {
     total: options.total,
@@ -1018,10 +1167,10 @@ const createScopeProgress = (
     incomplete: "-",
   });
   return {
-    tick: function() {
+    tick: function () {
       progBar.tick({ scope: options.scope });
     },
-    setTotal: function(n) {
+    setTotal: function (n) {
       progBar.total = n;
     },
   };
@@ -1074,9 +1223,9 @@ const writeBuildFile = async (
     );
     return writeResult;
   });
-  
+
   try {
-    await processBatched(fieldNames, CONCURRENCY_FILES, async function(field) {
+    await processBatched(fieldNames, CONCURRENCY_FILES, async function (field) {
       const fieldCtx = fields[field];
       const srcFilePath = fieldCtx.filePath;
       const relativePath = path.relative(sourcePath, srcFilePath);
@@ -1108,22 +1257,29 @@ export const buildFiles = async (
 ): Promise<Sinc.BuildResult[]> => {
   const tick =
     getProgTick(logger.getLogLevel(), fileList.length * 2) || (() => {});
-  const results = await allSettledBatched(fileList, CONCURRENCY_BUILD, async function(rec) {
-    const { fields, table } = rec;
-    const fieldNames = Object.keys(fields);
-    const recSummary = summarizeRecord(table, fields[fieldNames[0]].name);
-    const buildRes = await buildRec(rec);
-    tick();
-    if (!buildRes.success) {
+  const results = await allSettledBatched(
+    fileList,
+    CONCURRENCY_BUILD,
+    async function (rec) {
+      const { fields, table } = rec;
+      const fieldNames = Object.keys(fields);
+      const recSummary = summarizeRecord(table, fields[fieldNames[0]].name);
+      const buildRes = await buildRec(rec);
       tick();
-      return { success: false, message: `${recSummary} : ${buildRes.message}` };
-    }
-    // writeFile
-    const writeRes = await writeBuildFile(rec, buildRes, recSummary);
-    tick();
-    return writeRes;
-  });
-  return results.map(function(result) {
+      if (!buildRes.success) {
+        tick();
+        return {
+          success: false,
+          message: `${recSummary} : ${buildRes.message}`,
+        };
+      }
+      // writeFile
+      const writeRes = await writeBuildFile(rec, buildRes, recSummary);
+      tick();
+      return writeRes;
+    },
+  );
+  return results.map(function (result) {
     if (result.status === "fulfilled") {
       return result.value;
     }
@@ -1176,8 +1332,13 @@ const swapServerScope = async (scopeId: string): Promise<void> => {
  * @param updateSetName - does not create update set if value is blank
  * @param scope - optional scope name (e.g. x_cadso_work) to create the update set in
  */
-export const createAndAssignUpdateSet = async (updateSetName = "", scope?: string) => {
-  logger.info(`Update Set Name: ${updateSetName}` + (scope ? ` (scope: ${scope})` : ""));
+export const createAndAssignUpdateSet = async (
+  updateSetName = "",
+  scope?: string,
+) => {
+  logger.info(
+    `Update Set Name: ${updateSetName}` + (scope ? ` (scope: ${scope})` : ""),
+  );
   const client = defaultClient();
   var scopeSysId: string | undefined;
   if (scope) {
@@ -1229,4 +1390,3 @@ export const createAndAssignUpdateSet = async (updateSetName = "", scope?: strin
     id: updateSetSysId,
   };
 };
-

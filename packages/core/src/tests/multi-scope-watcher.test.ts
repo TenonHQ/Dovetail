@@ -105,7 +105,9 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getScopeManifestPath: jest.fn(
+    (scope: string) => `/project/dove.manifest.${scope}.json`,
+  ),
   getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
@@ -137,18 +139,27 @@ jest.mock("axios", () => ({
 import chokidar from "chokidar";
 import fs from "fs";
 import * as ConfigManager from "../config";
-import { getFileContextFromPath, getFileContextWithSkipReason } from "../FileUtils";
+import {
+  getFileContextFromPath,
+  getFileContextWithSkipReason,
+} from "../FileUtils";
 import { groupAppFiles, pushFiles } from "../appUtils";
 import { logFilePush } from "../logMessages";
 import { logger } from "../Logger";
-import { multiScopeWatcher, startMultiScopeWatching, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  startMultiScopeWatching,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 
 // Helper to flush microtask queue (for async code in setInterval callbacks)
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 // --- Fixtures ---
 
-const makeFileContext = (overrides: Partial<Sinc.FileContext> = {}): Sinc.FileContext => ({
+const makeFileContext = (
+  overrides: Partial<Sinc.FileContext> = {},
+): Sinc.FileContext => ({
   filePath: "/project/src/x_test_core/sys_script_include/TestScript/script.js",
   ext: ".js",
   sys_id: "abc123",
@@ -203,7 +214,9 @@ describe("MultiScopeWatcherManager", () => {
     // Default: scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.createCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.getCurrentUpdateSetUserPref.mockResolvedValue([]);
@@ -216,7 +229,9 @@ describe("MultiScopeWatcherManager", () => {
 
   describe("startWatchingAllScopes", () => {
     it("loads config and creates a watcher per scope", async () => {
-      (ConfigManager.getConfig as jest.Mock).mockReturnValue(MOCK_CONFIG_TWO_SCOPES);
+      (ConfigManager.getConfig as jest.Mock).mockReturnValue(
+        MOCK_CONFIG_TWO_SCOPES,
+      );
 
       await startMultiScopeWatching();
 
@@ -225,13 +240,19 @@ describe("MultiScopeWatcherManager", () => {
     });
 
     it("throws when config has no scopes", async () => {
-      (ConfigManager.getConfig as jest.Mock).mockReturnValue(MOCK_CONFIG_NO_SCOPES);
+      (ConfigManager.getConfig as jest.Mock).mockReturnValue(
+        MOCK_CONFIG_NO_SCOPES,
+      );
 
-      await expect(startMultiScopeWatching()).rejects.toThrow("No scopes defined in configuration");
+      await expect(startMultiScopeWatching()).rejects.toThrow(
+        "No scopes defined in configuration",
+      );
     });
 
     it("uses custom sourceDirectory from scope config", async () => {
-      (ConfigManager.getConfig as jest.Mock).mockReturnValue(MOCK_CONFIG_CUSTOM_DIR);
+      (ConfigManager.getConfig as jest.Mock).mockReturnValue(
+        MOCK_CONFIG_CUSTOM_DIR,
+      );
 
       await startMultiScopeWatching();
 
@@ -304,9 +325,15 @@ describe("MultiScopeWatcherManager", () => {
 
     it("processes file change through scope switch and push pipeline", async () => {
       const ctx = makeFileContext();
-      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ context: ctx });
-      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+        context: ctx,
+      });
+      (groupAppFiles as jest.Mock).mockReturnValue([
+        { table: "sys_script_include", sysId: "abc123", fields: {} },
+      ]);
+      (pushFiles as jest.Mock).mockResolvedValue([
+        { success: true, message: "ok" },
+      ]);
 
       // Emit change on the scope's watcher
       mockWatchers[0]._emit("change", ctx.filePath);
@@ -321,9 +348,15 @@ describe("MultiScopeWatcherManager", () => {
 
     it("processes file add through the same pipeline", async () => {
       const ctx = makeFileContext();
-      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ context: ctx });
-      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+        context: ctx,
+      });
+      (groupAppFiles as jest.Mock).mockReturnValue([
+        { table: "sys_script_include", sysId: "abc123", fields: {} },
+      ]);
+      (pushFiles as jest.Mock).mockResolvedValue([
+        { success: true, message: "ok" },
+      ]);
 
       mockWatchers[0]._emit("add", ctx.filePath);
       await capturedDebounceFns[0]();
@@ -332,9 +365,14 @@ describe("MultiScopeWatcherManager", () => {
     });
 
     it("warns when no valid file contexts found", async () => {
-      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ skipReason: "not in manifest" });
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+        skipReason: "not in manifest",
+      });
 
-      mockWatchers[0]._emit("change", "/project/src/x_test_core/unknown/file.txt");
+      mockWatchers[0]._emit(
+        "change",
+        "/project/src/x_test_core/unknown/file.txt",
+      );
       await capturedDebounceFns[0]();
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -347,26 +385,42 @@ describe("MultiScopeWatcherManager", () => {
       (getFileContextWithSkipReason as jest.Mock)
         .mockReturnValueOnce({ skipReason: "not in manifest" })
         .mockReturnValueOnce({ context: makeFileContext() });
-      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+      (groupAppFiles as jest.Mock).mockReturnValue([
+        { table: "sys_script_include", sysId: "abc123", fields: {} },
+      ]);
+      (pushFiles as jest.Mock).mockResolvedValue([
+        { success: true, message: "ok" },
+      ]);
 
-      mockWatchers[0]._emit("change", "/project/src/x_test_core/unknown/file.txt");
+      mockWatchers[0]._emit(
+        "change",
+        "/project/src/x_test_core/unknown/file.txt",
+      );
       mockWatchers[0]._emit("change", makeFileContext().filePath);
       await capturedDebounceFns[0]();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Skipped: /project/src/x_test_core/unknown/file.txt (not in manifest)"),
+        expect.stringContaining(
+          "Skipped: /project/src/x_test_core/unknown/file.txt (not in manifest)",
+        ),
       );
     });
 
     it("logs warning with scope not found reason", async () => {
-      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ skipReason: "scope not found" });
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+        skipReason: "scope not found",
+      });
 
-      mockWatchers[0]._emit("change", "/project/src/x_unknown/sys_script/file.js");
+      mockWatchers[0]._emit(
+        "change",
+        "/project/src/x_unknown/sys_script/file.js",
+      );
       await capturedDebounceFns[0]();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Skipped: /project/src/x_unknown/sys_script/file.js (scope not found)"),
+        expect.stringContaining(
+          "Skipped: /project/src/x_unknown/sys_script/file.js (scope not found)",
+        ),
       );
     });
 
@@ -375,20 +429,33 @@ describe("MultiScopeWatcherManager", () => {
       (getFileContextWithSkipReason as jest.Mock)
         .mockReturnValueOnce({ context: ctx })
         .mockReturnValueOnce({ skipReason: "not in manifest" });
-      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+      (groupAppFiles as jest.Mock).mockReturnValue([
+        { table: "sys_script_include", sysId: "abc123", fields: {} },
+      ]);
+      (pushFiles as jest.Mock).mockResolvedValue([
+        { success: true, message: "ok" },
+      ]);
 
       mockWatchers[0]._emit("change", ctx.filePath);
-      mockWatchers[0]._emit("change", "/project/src/x_test_core/unknown/other.txt");
+      mockWatchers[0]._emit(
+        "change",
+        "/project/src/x_test_core/unknown/other.txt",
+      );
       await capturedDebounceFns[0]();
 
       // Should log a summary with pushed/total counts and skipped files
       var allCalls = [
         ...(logger.info as jest.Mock).mock.calls,
         ...(logger.success as jest.Mock).mock.calls,
-      ].map(function (c: any[]) { return c[0]; });
+      ].map(function (c: any[]) {
+        return c[0];
+      });
       var summaryCall = allCalls.find(function (msg: any) {
-        return typeof msg === "string" && msg.indexOf("Pushed") !== -1 && msg.indexOf("files to") !== -1;
+        return (
+          typeof msg === "string" &&
+          msg.indexOf("Pushed") !== -1 &&
+          msg.indexOf("files to") !== -1
+        );
       });
       expect(summaryCall).toBeDefined();
       expect(summaryCall).toContain("1/2");
@@ -397,9 +464,15 @@ describe("MultiScopeWatcherManager", () => {
 
     it("allows file through when scope matches watcher scope", async () => {
       const ctx = makeFileContext({ scope: "x_test_core" });
-      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ context: ctx });
-      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+        context: ctx,
+      });
+      (groupAppFiles as jest.Mock).mockReturnValue([
+        { table: "sys_script_include", sysId: "abc123", fields: {} },
+      ]);
+      (pushFiles as jest.Mock).mockResolvedValue([
+        { success: true, message: "ok" },
+      ]);
 
       mockWatchers[0]._emit("change", ctx.filePath);
       await capturedDebounceFns[0]();
@@ -412,7 +485,9 @@ describe("MultiScopeWatcherManager", () => {
 
     it("skips file with error when scope mismatches watcher scope", async () => {
       const ctx = makeFileContext({ scope: "x_other_scope" });
-      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ context: ctx });
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+        context: ctx,
+      });
 
       mockWatchers[0]._emit("change", ctx.filePath);
       await capturedDebounceFns[0]();
@@ -438,13 +513,23 @@ describe("MultiScopeWatcherManager", () => {
     });
 
     it("includes scope-mismatched file in push summary alongside valid files", async () => {
-      const validCtx = makeFileContext({ scope: "x_test_core", filePath: "/project/src/x_test_core/sys_script_include/Valid/script.js" });
-      const mismatchCtx = makeFileContext({ scope: "x_other_scope", filePath: "/project/src/x_test_core/sys_script_include/Wrong/script.js" });
+      const validCtx = makeFileContext({
+        scope: "x_test_core",
+        filePath: "/project/src/x_test_core/sys_script_include/Valid/script.js",
+      });
+      const mismatchCtx = makeFileContext({
+        scope: "x_other_scope",
+        filePath: "/project/src/x_test_core/sys_script_include/Wrong/script.js",
+      });
       (getFileContextWithSkipReason as jest.Mock)
         .mockReturnValueOnce({ context: validCtx })
         .mockReturnValueOnce({ context: mismatchCtx });
-      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+      (groupAppFiles as jest.Mock).mockReturnValue([
+        { table: "sys_script_include", sysId: "abc123", fields: {} },
+      ]);
+      (pushFiles as jest.Mock).mockResolvedValue([
+        { success: true, message: "ok" },
+      ]);
 
       mockWatchers[0]._emit("change", validCtx.filePath);
       mockWatchers[0]._emit("change", mismatchCtx.filePath);
@@ -462,9 +547,15 @@ describe("MultiScopeWatcherManager", () => {
       var allCalls = [
         ...(logger.info as jest.Mock).mock.calls,
         ...(logger.success as jest.Mock).mock.calls,
-      ].map(function (c: any[]) { return c[0]; });
+      ].map(function (c: any[]) {
+        return c[0];
+      });
       var summaryCall = allCalls.find(function (msg: any) {
-        return typeof msg === "string" && msg.indexOf("Pushed") !== -1 && msg.indexOf("files to") !== -1;
+        return (
+          typeof msg === "string" &&
+          msg.indexOf("Pushed") !== -1 &&
+          msg.indexOf("files to") !== -1
+        );
       });
       expect(summaryCall).toBeDefined();
       expect(summaryCall).toContain("1/2");
@@ -511,7 +602,9 @@ describe("MultiScopeWatcherManager", () => {
     });
 
     it("propagates errors from changeScope and invalidates cached scope", async () => {
-      mockSNClient.changeScope.mockRejectedValueOnce(new Error("changeScope failed"));
+      mockSNClient.changeScope.mockRejectedValueOnce(
+        new Error("changeScope failed"),
+      );
 
       await expect(
         (multiScopeWatcher as any).switchToScope("x_test_core"),
@@ -525,9 +618,14 @@ describe("MultiScopeWatcherManager", () => {
       (fs.existsSync as jest.Mock).mockImplementation((p: string) =>
         p.includes("dove.manifest.x_test_core.json"),
       );
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify(manifest),
+      );
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(ConfigManager.updateManifest).toHaveBeenCalledWith(manifest);
     });
@@ -537,9 +635,14 @@ describe("MultiScopeWatcherManager", () => {
       (fs.existsSync as jest.Mock).mockImplementation((p: string) =>
         p.includes("dove.manifest.x_test_core.json"),
       );
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify(manifest),
+      );
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(ConfigManager.updateManifest).toHaveBeenCalledWith(
         expect.objectContaining({ scope: "x_test_core" }),
@@ -558,12 +661,20 @@ describe("MultiScopeWatcherManager", () => {
         if (p.includes("dove.manifest.json")) return true;
         return false;
       });
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(legacyManifest));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify(legacyManifest),
+      );
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(ConfigManager.updateManifest).toHaveBeenCalledWith(
-        expect.objectContaining({ scope: "x_test_core", tables: { sys_script_include: {} } }),
+        expect.objectContaining({
+          scope: "x_test_core",
+          tables: { sys_script_include: {} },
+        }),
       );
     });
 
@@ -575,9 +686,14 @@ describe("MultiScopeWatcherManager", () => {
         if (p.includes("dove.manifest.json")) return true;
         return false;
       });
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify(manifest),
+      );
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(ConfigManager.updateManifest).toHaveBeenCalledWith(manifest);
     });
@@ -590,12 +706,20 @@ describe("MultiScopeWatcherManager", () => {
         if (p.includes("dove.manifest.json")) return true;
         return false;
       });
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify(manifest),
+      );
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(ConfigManager.updateManifest).toHaveBeenCalledWith(
-        expect.objectContaining({ scope: "x_test_core", tables: { sys_script_include: {} } }),
+        expect.objectContaining({
+          scope: "x_test_core",
+          tables: { sys_script_include: {} },
+        }),
       );
     });
 
@@ -607,9 +731,14 @@ describe("MultiScopeWatcherManager", () => {
         if (p.includes("dove.manifest.json")) return true;
         return false;
       });
-      (fs.promises.readFile as jest.Mock).mockResolvedValue(JSON.stringify(manifest));
+      (fs.promises.readFile as jest.Mock).mockResolvedValue(
+        JSON.stringify(manifest),
+      );
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining("Scope not found in manifest"),
@@ -619,7 +748,10 @@ describe("MultiScopeWatcherManager", () => {
     it("warns when no manifest files exist", async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-      await (multiScopeWatcher as any).loadScopeManifest("x_test_core", "/project/src/x_test_core");
+      await (multiScopeWatcher as any).loadScopeManifest(
+        "x_test_core",
+        "/project/src/x_test_core",
+      );
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining("No manifest found"),
@@ -629,7 +761,9 @@ describe("MultiScopeWatcherManager", () => {
 
   describe("stopWatching", () => {
     it("closes all scope watchers", async () => {
-      (ConfigManager.getConfig as jest.Mock).mockReturnValue(MOCK_CONFIG_TWO_SCOPES);
+      (ConfigManager.getConfig as jest.Mock).mockReturnValue(
+        MOCK_CONFIG_TWO_SCOPES,
+      );
 
       await startMultiScopeWatching();
       expect(mockWatchers.length).toBe(2);
@@ -651,7 +785,9 @@ describe("MultiScopeWatcherManager", () => {
       jest.clearAllMocks();
       stopMultiScopeWatching();
 
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("Stopping watcher"));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("Stopping watcher"),
+      );
       expect(logger.info).toHaveBeenCalledWith("All watchers stopped");
     });
   });

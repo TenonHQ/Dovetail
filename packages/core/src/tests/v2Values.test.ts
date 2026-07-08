@@ -9,7 +9,12 @@ describe("decodeV2Values / encodeV2Values", () => {
   describe("round-trip", () => {
     it("decodes what encodeV2Values encoded (primitive array)", () => {
       const original = [
-        { actionInstanceSysId: "abc", id: "1", name: "to", value: "user@example.com" },
+        {
+          actionInstanceSysId: "abc",
+          id: "1",
+          name: "to",
+          value: "user@example.com",
+        },
         { actionInstanceSysId: "abc", id: "2", name: "subject", value: "hi" },
       ];
       const blob = encodeV2Values(original);
@@ -58,9 +63,15 @@ describe("decodeV2Values / encodeV2Values", () => {
     });
 
     it("throws on non-string input", () => {
-      expect(() => decodeV2Values(null as unknown as string)).toThrow(/non-empty string/);
-      expect(() => decodeV2Values(undefined as unknown as string)).toThrow(/non-empty string/);
-      expect(() => decodeV2Values(123 as unknown as string)).toThrow(/non-empty string/);
+      expect(() => decodeV2Values(null as unknown as string)).toThrow(
+        /non-empty string/,
+      );
+      expect(() => decodeV2Values(undefined as unknown as string)).toThrow(
+        /non-empty string/,
+      );
+      expect(() => decodeV2Values(123 as unknown as string)).toThrow(
+        /non-empty string/,
+      );
     });
 
     it("throws with a clear message on non-gzip base64 input", () => {
@@ -70,14 +81,18 @@ describe("decodeV2Values / encodeV2Values", () => {
     });
 
     it("throws on gzip of invalid JSON", () => {
-      const badJson = gzipSync(Buffer.from("{not valid json", "utf8")).toString("base64");
+      const badJson = gzipSync(Buffer.from("{not valid json", "utf8")).toString(
+        "base64",
+      );
       expect(() => decodeV2Values(badJson)).toThrow(/not valid JSON/);
     });
 
     it("tolerates trailing whitespace and newlines (common from file reads)", () => {
       const blob = encodeV2Values([{ id: "1", value: "a" }]);
       expect(decodeV2Values(blob + "\n")).toEqual([{ id: "1", value: "a" }]);
-      expect(decodeV2Values("  " + blob + "  ")).toEqual([{ id: "1", value: "a" }]);
+      expect(decodeV2Values("  " + blob + "  ")).toEqual([
+        { id: "1", value: "a" },
+      ]);
     });
   });
 
@@ -96,7 +111,9 @@ describe("decodeV2Values / encodeV2Values", () => {
 
   describe("encode — input validation", () => {
     it("throws on undefined", () => {
-      expect(() => encodeV2Values(undefined as unknown)).toThrow(/must not be undefined/);
+      expect(() => encodeV2Values(undefined as unknown)).toThrow(
+        /must not be undefined/,
+      );
     });
 
     it("throws on non-JSON-serializable values (function at root)", () => {
@@ -112,14 +129,20 @@ describe("decodeV2Values / encodeV2Values", () => {
     });
 
     it("accepts plain objects (logic_instance_v2 shape)", () => {
-      const original = { outputsToAssign: [], inputs: [{ name: "x", value: "" }] };
+      const original = {
+        outputsToAssign: [],
+        inputs: [{ name: "x", value: "" }],
+      };
       expect(decodeV2Values(encodeV2Values(original))).toEqual(original);
     });
   });
 
   describe("encode — options", () => {
     it("round-trips correctly at every supported compression level", () => {
-      const v = Array.from({ length: 200 }, (_, i) => ({ id: String(i), value: "x".repeat(50) }));
+      const v = Array.from({ length: 200 }, (_, i) => ({
+        id: String(i),
+        value: "x".repeat(50),
+      }));
       for (let level = 1; level <= 9; level++) {
         const blob = encodeV2Values(v, { level });
         expect(decodeV2Values(blob)).toEqual(v);
@@ -129,7 +152,10 @@ describe("decodeV2Values / encodeV2Values", () => {
     it("emits different byte streams at different levels (level is honored)", () => {
       // Highly compressible payload — level=1 vs level=9 must differ in bytes,
       // even if which is shorter is not strictly monotonic for tiny inputs.
-      const v = Array.from({ length: 500 }, (_, i) => ({ id: String(i), value: "abcde".repeat(20) }));
+      const v = Array.from({ length: 500 }, (_, i) => ({
+        id: String(i),
+        value: "abcde".repeat(20),
+      }));
       const lvl1 = encodeV2Values(v, { level: 1 });
       const lvl9 = encodeV2Values(v, { level: 9 });
       expect(lvl1).not.toEqual(lvl9);
@@ -138,7 +164,9 @@ describe("decodeV2Values / encodeV2Values", () => {
     it("treats undefined level as default (no throw, valid output)", () => {
       const v = [{ id: "1", value: "a" }];
       expect(decodeV2Values(encodeV2Values(v, {}))).toEqual(v);
-      expect(decodeV2Values(encodeV2Values(v, { level: undefined }))).toEqual(v);
+      expect(decodeV2Values(encodeV2Values(v, { level: undefined }))).toEqual(
+        v,
+      );
     });
   });
 
@@ -162,7 +190,9 @@ describe("decodeV2Values / encodeV2Values", () => {
 
     fixtures.forEach((filename) => {
       it(`round-trips: ${filename}`, () => {
-        const blob = fs.readFileSync(path.join(FIXTURES_DIR, filename), "utf8").trim();
+        const blob = fs
+          .readFileSync(path.join(FIXTURES_DIR, filename), "utf8")
+          .trim();
         const decoded = decodeV2Values(blob);
         const reencoded = encodeV2Values(decoded);
         const reDecoded = decodeV2Values(reencoded);
@@ -174,10 +204,14 @@ describe("decodeV2Values / encodeV2Values", () => {
       // Belt-and-suspenders: our own zlib can read what we just wrote.
       // (RFC 1952 conformance check; SN-side acceptance is a separate integration test.)
       if (!fixtures.length) return;
-      const blob = fs.readFileSync(path.join(FIXTURES_DIR, fixtures[0]), "utf8").trim();
+      const blob = fs
+        .readFileSync(path.join(FIXTURES_DIR, fixtures[0]), "utf8")
+        .trim();
       const decoded = decodeV2Values(blob);
       const reencoded = encodeV2Values(decoded);
-      const ourJson = gunzipSync(Buffer.from(reencoded, "base64")).toString("utf8");
+      const ourJson = gunzipSync(Buffer.from(reencoded, "base64")).toString(
+        "utf8",
+      );
       expect(JSON.parse(ourJson)).toEqual(decoded);
     });
   });

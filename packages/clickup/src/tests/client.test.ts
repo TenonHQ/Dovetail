@@ -68,7 +68,7 @@ describe("createClient", function () {
     expect(axios.create).toHaveBeenCalledWith({
       baseURL: "https://api.clickup.com",
       headers: {
-        "Authorization": "pk_test_token_123",
+        Authorization: "pk_test_token_123",
         "Content-Type": "application/json",
       },
     });
@@ -79,7 +79,7 @@ describe("createClient", function () {
     expect(axios.create).toHaveBeenCalledWith(
       expect.objectContaining({
         baseURL: "https://custom.api.com",
-      })
+      }),
     );
   });
 
@@ -88,7 +88,7 @@ describe("createClient", function () {
     expect(axios.create).toHaveBeenCalledWith(
       expect.objectContaining({
         baseURL: "https://api.clickup.com",
-      })
+      }),
     );
   });
 });
@@ -111,7 +111,7 @@ describe("getAuthorizedUser", function () {
     mockAxiosInstance.get.mockRejectedValue(makeAxiosError(401));
 
     await expect(
-      getAuthorizedUser({ client: mockAxiosInstance as any })
+      getAuthorizedUser({ client: mockAxiosInstance as any }),
     ).rejects.toThrow("authentication failed");
   });
 });
@@ -125,16 +125,22 @@ describe("getTask", function () {
     var mockTask = makeClickUpTask({ id: "abc123" });
     mockAxiosInstance.get.mockResolvedValue({ data: mockTask });
 
-    var result = await getTask({ client: mockAxiosInstance as any, taskId: "abc123" });
+    var result = await getTask({
+      client: mockAxiosInstance as any,
+      taskId: "abc123",
+    });
     expect(result).toEqual(mockTask);
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/abc123", {});
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+      "/api/v2/task/abc123",
+      {},
+    );
   });
 
   it("throws on 404 with task context", async function () {
     mockAxiosInstance.get.mockRejectedValue(makeAxiosError(404));
 
     await expect(
-      getTask({ client: mockAxiosInstance as any, taskId: "missing123" })
+      getTask({ client: mockAxiosInstance as any, taskId: "missing123" }),
     ).rejects.toThrow("not found");
   });
 
@@ -142,15 +148,17 @@ describe("getTask", function () {
     mockAxiosInstance.get.mockRejectedValue(makeAxiosError(429));
 
     await expect(
-      getTask({ client: mockAxiosInstance as any, taskId: "abc" })
+      getTask({ client: mockAxiosInstance as any, taskId: "abc" }),
     ).rejects.toThrow("rate limit exceeded");
   });
 
   it("includes error message from response data", async function () {
-    mockAxiosInstance.get.mockRejectedValue(makeAxiosError(500, { err: "Internal server error" }));
+    mockAxiosInstance.get.mockRejectedValue(
+      makeAxiosError(500, { err: "Internal server error" }),
+    );
 
     await expect(
-      getTask({ client: mockAxiosInstance as any, taskId: "abc" })
+      getTask({ client: mockAxiosInstance as any, taskId: "abc" }),
     ).rejects.toThrow("Internal server error");
   });
 
@@ -159,7 +167,7 @@ describe("getTask", function () {
     mockAxiosInstance.get.mockRejectedValue(error);
 
     await expect(
-      getTask({ client: mockAxiosInstance as any, taskId: "abc" })
+      getTask({ client: mockAxiosInstance as any, taskId: "abc" }),
     ).rejects.toThrow("Network failure");
   });
 });
@@ -172,8 +180,24 @@ describe("listMyTasks", function () {
   it("fetches user first, then queries team tasks", async function () {
     var mockUser = makeUser({ id: 42 });
     var tasks = [
-      makeClickUpTask({ id: "t1", status: { status: "in progress", color: "#000", type: "open", orderindex: 1 } }),
-      makeClickUpTask({ id: "t2", status: { status: "done", color: "#000", type: "closed", orderindex: 2 } }),
+      makeClickUpTask({
+        id: "t1",
+        status: {
+          status: "in progress",
+          color: "#000",
+          type: "open",
+          orderindex: 1,
+        },
+      }),
+      makeClickUpTask({
+        id: "t2",
+        status: {
+          status: "done",
+          color: "#000",
+          type: "closed",
+          orderindex: 2,
+        },
+      }),
     ];
 
     // First call: getAuthorizedUser, Second call: team tasks
@@ -203,7 +227,10 @@ describe("listMyTasks", function () {
     });
 
     var callArgs = mockAxiosInstance.get.mock.calls[1];
-    expect(callArgs[1].params["statuses[]"]).toEqual(["in progress", "blocked"]);
+    expect(callArgs[1].params["statuses[]"]).toEqual([
+      "in progress",
+      "blocked",
+    ]);
   });
 
   it("handles empty tasks array", async function () {
@@ -221,7 +248,9 @@ describe("listMyTasks", function () {
   });
 
   it("groups tasks with unknown status under 'unknown'", async function () {
-    var task = makeClickUpTask({ status: { status: "", color: "", type: "", orderindex: 0 } });
+    var task = makeClickUpTask({
+      status: { status: "", color: "", type: "", orderindex: 0 },
+    });
     // Simulate missing status.status
     (task as any).status = null;
 
@@ -256,7 +285,7 @@ describe("createTask", function () {
     expect(result.name).toBe("New Task");
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/list/list1/task",
-      { name: "New Task" }
+      { name: "New Task" },
     );
   });
 
@@ -281,7 +310,7 @@ describe("createTask", function () {
         assignees: [1, 2],
         status: "in progress",
         priority: 2,
-      }
+      },
     );
   });
 
@@ -319,7 +348,7 @@ describe("updateTask", function () {
     expect(mockAxiosInstance.put).toHaveBeenCalledWith(
       "/api/v2/task/t1",
       { name: "Updated Name" },
-      {}
+      {},
     );
     var sentBody = mockAxiosInstance.put.mock.calls[0][1];
     expect(sentBody).not.toHaveProperty("description");
@@ -344,7 +373,7 @@ describe("updateTaskStatus", function () {
     expect(mockAxiosInstance.put).toHaveBeenCalledWith(
       "/api/v2/task/t1",
       { status: "done" },
-      {}
+      {},
     );
   });
 });
@@ -365,7 +394,7 @@ describe("deleteTask", function () {
     mockAxiosInstance.delete.mockRejectedValue(makeAxiosError(404));
 
     await expect(
-      deleteTask({ client: mockAxiosInstance as any, taskId: "t1" })
+      deleteTask({ client: mockAxiosInstance as any, taskId: "t1" }),
     ).rejects.toThrow("not found");
   });
 });
@@ -376,7 +405,9 @@ describe("addComment", function () {
   });
 
   it("posts comment with correct body", async function () {
-    mockAxiosInstance.post.mockResolvedValue({ data: { id: "c1", comment_text: "Hello" } });
+    mockAxiosInstance.post.mockResolvedValue({
+      data: { id: "c1", comment_text: "Hello" },
+    });
 
     var result = await addComment({
       client: mockAxiosInstance as any,
@@ -386,7 +417,7 @@ describe("addComment", function () {
 
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/t1/comment",
-      { comment_text: "Hello from Dovetail" }
+      { comment_text: "Hello from Dovetail" },
     );
   });
 });
@@ -421,9 +452,14 @@ describe("getSpaces", function () {
     var spaces = [{ id: "s1", name: "Engineering" }];
     mockAxiosInstance.get.mockResolvedValue({ data: { spaces: spaces } });
 
-    var result = await getSpaces({ client: mockAxiosInstance as any, teamId: "team1" });
+    var result = await getSpaces({
+      client: mockAxiosInstance as any,
+      teamId: "team1",
+    });
     expect(result).toEqual(spaces);
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/team/team1/space");
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+      "/api/v2/team/team1/space",
+    );
   });
 });
 
@@ -436,9 +472,14 @@ describe("getFolders", function () {
     var folders = [{ id: "f1", name: "Sprint" }];
     mockAxiosInstance.get.mockResolvedValue({ data: { folders: folders } });
 
-    var result = await getFolders({ client: mockAxiosInstance as any, spaceId: "s1" });
+    var result = await getFolders({
+      client: mockAxiosInstance as any,
+      spaceId: "s1",
+    });
     expect(result).toEqual(folders);
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/space/s1/folder");
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+      "/api/v2/space/s1/folder",
+    );
   });
 });
 
@@ -451,9 +492,14 @@ describe("getLists", function () {
     var lists = [{ id: "l1", name: "Backlog" }];
     mockAxiosInstance.get.mockResolvedValue({ data: { lists: lists } });
 
-    var result = await getLists({ client: mockAxiosInstance as any, folderId: "f1" });
+    var result = await getLists({
+      client: mockAxiosInstance as any,
+      folderId: "f1",
+    });
     expect(result).toEqual(lists);
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/folder/f1/list");
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+      "/api/v2/folder/f1/list",
+    );
   });
 });
 
@@ -466,7 +512,10 @@ describe("getSpaceLists", function () {
     var lists = [{ id: "l1", name: "Quick Tasks" }];
     mockAxiosInstance.get.mockResolvedValue({ data: { lists: lists } });
 
-    var result = await getSpaceLists({ client: mockAxiosInstance as any, spaceId: "s1" });
+    var result = await getSpaceLists({
+      client: mockAxiosInstance as any,
+      spaceId: "s1",
+    });
     expect(result).toEqual(lists);
     expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/space/s1/list");
   });
@@ -478,9 +527,14 @@ describe("getListTasks", function () {
   });
 
   it("fetches tasks with default pagination", async function () {
-    mockAxiosInstance.get.mockResolvedValue({ data: { tasks: [makeClickUpTask()] } });
+    mockAxiosInstance.get.mockResolvedValue({
+      data: { tasks: [makeClickUpTask()] },
+    });
 
-    var result = await getListTasks({ client: mockAxiosInstance as any, listId: "l1" });
+    var result = await getListTasks({
+      client: mockAxiosInstance as any,
+      listId: "l1",
+    });
     expect(result).toHaveLength(1);
     expect(mockAxiosInstance.get).toHaveBeenCalledWith(
       "/api/v2/list/l1/task",
@@ -490,14 +544,18 @@ describe("getListTasks", function () {
           subtasks: true,
           include_closed: false,
         }),
-      })
+      }),
     );
   });
 
   it("passes page number when provided", async function () {
     mockAxiosInstance.get.mockResolvedValue({ data: { tasks: [] } });
 
-    await getListTasks({ client: mockAxiosInstance as any, listId: "l1", page: 3 });
+    await getListTasks({
+      client: mockAxiosInstance as any,
+      listId: "l1",
+      page: 3,
+    });
     var callParams = mockAxiosInstance.get.mock.calls[0][1].params;
     expect(callParams.page).toBe(3);
   });
@@ -505,7 +563,11 @@ describe("getListTasks", function () {
   it("passes includeClosed flag", async function () {
     mockAxiosInstance.get.mockResolvedValue({ data: { tasks: [] } });
 
-    await getListTasks({ client: mockAxiosInstance as any, listId: "l1", includeClosed: true });
+    await getListTasks({
+      client: mockAxiosInstance as any,
+      listId: "l1",
+      includeClosed: true,
+    });
     var callParams = mockAxiosInstance.get.mock.calls[0][1].params;
     expect(callParams.include_closed).toBe(true);
   });
@@ -517,7 +579,9 @@ describe("getTask (custom IDs)", function () {
   });
 
   it("passes custom_task_ids and team_id when customTaskIds is set", async function () {
-    mockAxiosInstance.get.mockResolvedValue({ data: makeClickUpTask({ id: "x" }) });
+    mockAxiosInstance.get.mockResolvedValue({
+      data: makeClickUpTask({ id: "x" }),
+    });
 
     await getTask({
       client: mockAxiosInstance as any,
@@ -586,7 +650,7 @@ describe("updateTask (markdown + custom IDs)", function () {
     expect(mockAxiosInstance.put).toHaveBeenCalledWith(
       "/api/v2/task/DEV-224",
       { markdown_content: "intro\n- [ ] A\n- [x] B" },
-      { params: { custom_task_ids: true, team_id: "team9" } }
+      { params: { custom_task_ids: true, team_id: "team9" } },
     );
   });
 });
@@ -609,7 +673,7 @@ describe("setCustomField", function () {
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/t1/field/f1",
       { value: "hello" },
-      {}
+      {},
     );
   });
 
@@ -628,7 +692,7 @@ describe("setCustomField", function () {
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/DEV-225/field/f1",
       { value: { add: [1], rem: [] } },
-      { params: { custom_task_ids: true, team_id: "team9" } }
+      { params: { custom_task_ids: true, team_id: "team9" } },
     );
   });
 
@@ -641,7 +705,7 @@ describe("setCustomField", function () {
         taskId: "t1",
         fieldId: "f1",
         value: "x",
-      })
+      }),
     ).rejects.toThrow("not found");
   });
 });
@@ -663,7 +727,7 @@ describe("linkTask", function () {
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/t1/link/t2",
       {},
-      {}
+      {},
     );
   });
 
@@ -681,7 +745,7 @@ describe("linkTask", function () {
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/DEV-226/link/DEV-365",
       {},
-      { params: { custom_task_ids: true, team_id: "team9" } }
+      { params: { custom_task_ids: true, team_id: "team9" } },
     );
   });
 });
@@ -689,7 +753,7 @@ describe("linkTask", function () {
 describe("normalizeChecklistMarkdown", function () {
   it("splits an inline checkbox run onto separate lines", function () {
     expect(normalizeChecklistMarkdown("- [ ] A   - [ ] B   - [x] C")).toBe(
-      "- [ ] A\n- [ ] B\n- [x] C"
+      "- [ ] A\n- [ ] B\n- [x] C",
     );
   });
 
@@ -711,13 +775,13 @@ describe("normalizeChecklistMarkdown", function () {
     // Two-space indent (nested checklist). Old behavior stripped the indent and
     // injected a leading "\n" — fix preserves the indent on every line.
     expect(normalizeChecklistMarkdown("  - [ ] A   - [ ] B")).toBe(
-      "  - [ ] A\n  - [ ] B"
+      "  - [ ] A\n  - [ ] B",
     );
   });
 
   it("preserves tab indentation", function () {
     expect(normalizeChecklistMarkdown("\t- [ ] A   - [x] B")).toBe(
-      "\t- [ ] A\n\t- [x] B"
+      "\t- [ ] A\n\t- [x] B",
     );
   });
 });
@@ -750,12 +814,17 @@ describe("createClickUpApi", function () {
   });
 
   it("delegates getTask to the correct endpoint", async function () {
-    mockAxiosInstance.get.mockResolvedValue({ data: makeClickUpTask({ id: "delegated" }) });
+    mockAxiosInstance.get.mockResolvedValue({
+      data: makeClickUpTask({ id: "delegated" }),
+    });
 
     var api = createClickUpApi({ token: "test" });
     var result = await api.getTask({ taskId: "delegated" });
 
-    expect(mockAxiosInstance.get).toHaveBeenCalledWith("/api/v2/task/delegated", {});
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+      "/api/v2/task/delegated",
+      {},
+    );
     expect(result.id).toBe("delegated");
   });
 
@@ -767,7 +836,7 @@ describe("createClickUpApi", function () {
 
     expect(mockAxiosInstance.post).toHaveBeenCalledWith(
       "/api/v2/task/t1/comment",
-      { comment_text: "Test comment" }
+      { comment_text: "Test comment" },
     );
   });
 });

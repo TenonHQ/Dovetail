@@ -3,7 +3,9 @@ var mockLogger = {
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
-  getLogLevel: function () { return "debug"; },
+  getLogLevel: function () {
+    return "debug";
+  },
 };
 
 jest.mock("../Logger", function () {
@@ -11,7 +13,14 @@ jest.mock("../Logger", function () {
 });
 
 jest.mock("../FileLogger", function () {
-  return { fileLogger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } };
+  return {
+    fileLogger: {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    },
+  };
 });
 
 // Minimal mock for genericUtils — just need wait()
@@ -53,10 +62,10 @@ describe("retryOnHttpErr", function () {
     await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow();
     expect(fn).toHaveBeenCalledTimes(1);
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Unauthorized (401)")
+      expect.stringContaining("Unauthorized (401)"),
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("credentials")
+      expect.stringContaining("credentials"),
     );
   });
 
@@ -65,10 +74,10 @@ describe("retryOnHttpErr", function () {
     await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow();
     expect(fn).toHaveBeenCalledTimes(1);
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Forbidden (403)")
+      expect.stringContaining("Forbidden (403)"),
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("credentials")
+      expect.stringContaining("credentials"),
     );
   });
 
@@ -78,13 +87,14 @@ describe("retryOnHttpErr", function () {
     await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow();
     expect(fn).toHaveBeenCalledTimes(1);
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Record not found (404)")
+      expect.stringContaining("Record not found (404)"),
     );
   });
 
   // 429: Rate limited — honor Retry-After
   it("retries on 429 and honors Retry-After header", async function () {
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(429, { "retry-after": "5" }))
       .mockResolvedValue({ status: 200, data: {} });
 
@@ -93,12 +103,13 @@ describe("retryOnHttpErr", function () {
     expect(fn).toHaveBeenCalledTimes(2);
     expect(wait).toHaveBeenCalledWith(5000); // 5 seconds from Retry-After
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Rate limited (429)")
+      expect.stringContaining("Rate limited (429)"),
     );
   });
 
   it("uses default 10s wait on 429 without Retry-After header", async function () {
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(429))
       .mockResolvedValue({ status: 200, data: {} });
 
@@ -108,7 +119,8 @@ describe("retryOnHttpErr", function () {
 
   // 500/502/503: Exponential backoff
   it("retries 500 with exponential backoff (1s, 2s, 4s)", async function () {
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(500))
       .mockRejectedValueOnce(makeAxiosError(500))
       .mockRejectedValueOnce(makeAxiosError(500))
@@ -127,12 +139,13 @@ describe("retryOnHttpErr", function () {
     await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow();
     expect(fn).toHaveBeenCalledTimes(4); // 1 initial + 3 retries
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("after 3 retries")
+      expect.stringContaining("after 3 retries"),
     );
   });
 
   it("retries 502 with exponential backoff", async function () {
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(502))
       .mockResolvedValue({ status: 200, data: {} });
 
@@ -142,7 +155,8 @@ describe("retryOnHttpErr", function () {
   });
 
   it("retries 503 with exponential backoff", async function () {
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(503))
       .mockResolvedValue({ status: 200, data: {} });
 
@@ -154,7 +168,8 @@ describe("retryOnHttpErr", function () {
   it("caps backoff at 8s for server errors", async function () {
     // After 3 retries with backoff doubling: 1s, 2s, 4s
     // If we could do a 4th it would be 8s (capped), but we stop at 3
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(500))
       .mockRejectedValueOnce(makeAxiosError(500))
       .mockRejectedValueOnce(makeAxiosError(500))
@@ -171,24 +186,27 @@ describe("retryOnHttpErr", function () {
     await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow();
     expect(fn).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("HTTP 418")
+      expect.stringContaining("HTTP 418"),
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining("after 1 retry")
+      expect.stringContaining("after 1 retry"),
     );
   });
 
   it("retries non-HTTP error once then fails", async function () {
     var fn = jest.fn().mockRejectedValue(new Error("ECONNRESET"));
-    await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow("ECONNRESET");
+    await expect(retryOnHttpErr(fn, "test > rec1")).rejects.toThrow(
+      "ECONNRESET",
+    );
     expect(fn).toHaveBeenCalledTimes(2); // 1 initial + 1 retry
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("unknown error")
+      expect.stringContaining("unknown error"),
     );
   });
 
   it("succeeds on retry for unknown error", async function () {
-    var fn = jest.fn()
+    var fn = jest
+      .fn()
       .mockRejectedValueOnce(makeAxiosError(418))
       .mockResolvedValue({ status: 200, data: {} });
 

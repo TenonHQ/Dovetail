@@ -31,7 +31,7 @@ export const writeDiff = async (files: string) => {
   logger.silly(JSON.stringify(paths, null, 2));
   fs.promises.writeFile(
     ConfigManager.getDiffPath(),
-    JSON.stringify({ changed: paths })
+    JSON.stringify({ changed: paths }),
   );
 };
 
@@ -66,7 +66,7 @@ const getRepoRootDir = async (): Promise<string> => {
 const isValidScope = (
   file: string,
   scope: string,
-  baseRepoPath: string
+  baseRepoPath: string,
 ): boolean => {
   const relativePath = path.relative(baseRepoPath, scope);
   return file.startsWith(relativePath) ? true : false;

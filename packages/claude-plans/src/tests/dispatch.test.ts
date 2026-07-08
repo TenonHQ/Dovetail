@@ -17,7 +17,7 @@ import {
   SpawnError,
   KNOWN_MISSING_AGENTS,
   resolveDispatchCommand,
-  validateToken
+  validateToken,
 } from "../dispatch";
 
 function mkTmp(): string {
@@ -48,11 +48,13 @@ describe("dispatch_stage — dry-run (default)", function () {
     var spawn = fakeSpawn();
     var res = dispatchStage(
       { plan_slug: "t", target_stage: "research" },
-      { rootDir: root, spawn: spawn.fn }
+      { rootDir: root, spawn: spawn.fn },
     );
 
     expect(res.mode).toBe("dry-run");
-    expect(res.command).toMatch(/^claude --resume-plan t --target-stage research /);
+    expect(res.command).toMatch(
+      /^claude --resume-plan t --target-stage research /,
+    );
     expect(typeof res.cwd).toBe("string");
     expect(res.pid).toBeUndefined();
     expect(spawn.calls).toHaveLength(0);
@@ -64,14 +66,14 @@ describe("dispatch_stage — dry-run (default)", function () {
     setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
     dispatchStage(
       { plan_slug: "t", target_stage: "research" },
-      { rootDir: root, spawn: fakeSpawn().fn }
+      { rootDir: root, spawn: fakeSpawn().fn },
     );
     var disk = rawPlan(root, "t");
     expect(disk.dispatch_log).toHaveLength(1);
     expect(disk.dispatch_log[0]).toMatchObject({
       mode: "dry-run",
       target_stage: "research",
-      outcome: "ok"
+      outcome: "ok",
     });
   });
 
@@ -81,7 +83,7 @@ describe("dispatch_stage — dry-run (default)", function () {
     setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
     dispatchStage(
       { plan_slug: "t", target_stage: "research" },
-      { rootDir: root, spawn: fakeSpawn().fn }
+      { rootDir: root, spawn: fakeSpawn().fn },
     );
     var disk = rawPlan(root, "t");
     expect(disk.dispatch_token.consumed_at).toBeUndefined();
@@ -103,7 +105,7 @@ describe("dispatch_stage — MissingAgentError (stages 5 & 9)", function () {
     try {
       dispatchStage(
         { plan_slug: "t", target_stage: "test-first" },
-        { rootDir: root, spawn: fakeSpawn().fn }
+        { rootDir: root, spawn: fakeSpawn().fn },
       );
     } catch (e) {
       threw = e as any;
@@ -125,9 +127,11 @@ describe("dispatch_stage — MissingAgentError (stages 5 & 9)", function () {
     try {
       dispatchStage(
         { plan_slug: "t", target_stage: "test-first" },
-        { rootDir: root, spawn: fakeSpawn().fn }
+        { rootDir: root, spawn: fakeSpawn().fn },
       );
-    } catch (e) { /* expected */ }
+    } catch (e) {
+      /* expected */
+    }
     var after = fs.readFileSync(path.join(root, "t.json"), "utf8");
     expect(after).toBe(before);
   });
@@ -137,7 +141,10 @@ describe("dispatch_stage — live mode preconditions", function () {
   function setupStaged(): { root: string; token: string } {
     var root = mkTmp();
     pushPlan({ title: "T", content_md: "x" }, { rootDir: root });
-    var staged = setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
+    var staged = setStage(
+      { plan_slug: "t", to: "research" },
+      { rootDir: root },
+    );
     return { root: root, token: staged.token.token };
   }
 
@@ -146,7 +153,7 @@ describe("dispatch_stage — live mode preconditions", function () {
     expect(function () {
       dispatchStage(
         { plan_slug: "t", target_stage: "research", confirm: true },
-        { rootDir: s.root, spawn: fakeSpawn().fn }
+        { rootDir: s.root, spawn: fakeSpawn().fn },
       );
     }).toThrow(NoTokenError);
   });
@@ -155,8 +162,13 @@ describe("dispatch_stage — live mode preconditions", function () {
     var s = setupStaged();
     expect(function () {
       dispatchStage(
-        { plan_slug: "t", target_stage: "research", confirm: true, token: "tok_" + "0".repeat(24) },
-        { rootDir: s.root, spawn: fakeSpawn().fn }
+        {
+          plan_slug: "t",
+          target_stage: "research",
+          confirm: true,
+          token: "tok_" + "0".repeat(24),
+        },
+        { rootDir: s.root, spawn: fakeSpawn().fn },
       );
     }).toThrow(StaleTokenError);
   });
@@ -166,8 +178,13 @@ describe("dispatch_stage — live mode preconditions", function () {
     // Token was issued for 'research'; try to use it for 'planning'.
     expect(function () {
       dispatchStage(
-        { plan_slug: "t", target_stage: "planning", confirm: true, token: s.token },
-        { rootDir: s.root, spawn: fakeSpawn().fn }
+        {
+          plan_slug: "t",
+          target_stage: "planning",
+          confirm: true,
+          token: s.token,
+        },
+        { rootDir: s.root, spawn: fakeSpawn().fn },
       );
     }).toThrow(StaleTokenError);
   });
@@ -188,15 +205,22 @@ describe("dispatch_stage — live mode preconditions", function () {
     var sleep = function (ms: number) {
       var until = Date.now() + ms;
       // Busy-wait — deterministic across runners.
-      while (Date.now() < until) { /* spin */ }
+      while (Date.now() < until) {
+        /* spin */
+      }
     };
     sleep(5);
     if (!staged) throw new Error("staged not set");
     var stagedToken = staged.token.token;
     expect(function () {
       dispatchStage(
-        { plan_slug: "t", target_stage: "research", confirm: true, token: stagedToken },
-        { rootDir: root, spawn: fakeSpawn().fn }
+        {
+          plan_slug: "t",
+          target_stage: "research",
+          confirm: true,
+          token: stagedToken,
+        },
+        { rootDir: root, spawn: fakeSpawn().fn },
       );
     }).toThrow(StaleTokenError);
   });
@@ -205,14 +229,24 @@ describe("dispatch_stage — live mode preconditions", function () {
     var s = setupStaged();
     var spawn = fakeSpawn();
     dispatchStage(
-      { plan_slug: "t", target_stage: "research", confirm: true, token: s.token },
-      { rootDir: s.root, spawn: spawn.fn }
+      {
+        plan_slug: "t",
+        target_stage: "research",
+        confirm: true,
+        token: s.token,
+      },
+      { rootDir: s.root, spawn: spawn.fn },
     );
     // Same token, second time.
     expect(function () {
       dispatchStage(
-        { plan_slug: "t", target_stage: "research", confirm: true, token: s.token },
-        { rootDir: s.root, spawn: spawn.fn }
+        {
+          plan_slug: "t",
+          target_stage: "research",
+          confirm: true,
+          token: s.token,
+        },
+        { rootDir: s.root, spawn: spawn.fn },
       );
     }).toThrow(StaleTokenError);
   });
@@ -221,10 +255,17 @@ describe("dispatch_stage — live mode preconditions", function () {
     var s = setupStaged();
     try {
       dispatchStage(
-        { plan_slug: "t", target_stage: "research", confirm: true, token: "tok_" + "0".repeat(24) },
-        { rootDir: s.root, spawn: fakeSpawn().fn }
+        {
+          plan_slug: "t",
+          target_stage: "research",
+          confirm: true,
+          token: "tok_" + "0".repeat(24),
+        },
+        { rootDir: s.root, spawn: fakeSpawn().fn },
       );
-    } catch (e) { /* expected */ }
+    } catch (e) {
+      /* expected */
+    }
     var disk = rawPlan(s.root, "t");
     expect(disk.dispatch_log.length).toBeGreaterThan(0);
     var last = disk.dispatch_log[disk.dispatch_log.length - 1];
@@ -237,19 +278,34 @@ describe("dispatch_stage — live spawn success", function () {
   it("consumes the token, spawns, and records pid in dispatch_log", function () {
     var root = mkTmp();
     pushPlan({ title: "T", content_md: "x" }, { rootDir: root });
-    var staged = setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
+    var staged = setStage(
+      { plan_slug: "t", to: "research" },
+      { rootDir: root },
+    );
     var spawn = fakeSpawn({ pid: 99999 });
 
     var res = dispatchStage(
-      { plan_slug: "t", target_stage: "research", confirm: true, token: staged.token.token },
-      { rootDir: root, spawn: spawn.fn }
+      {
+        plan_slug: "t",
+        target_stage: "research",
+        confirm: true,
+        token: staged.token.token,
+      },
+      { rootDir: root, spawn: spawn.fn },
     );
 
     expect(res.mode).toBe("live");
     expect(res.pid).toBe(99999);
     expect(spawn.calls).toHaveLength(1);
     expect(spawn.calls[0].argv[0]).toBe("claude");
-    expect(spawn.calls[0].argv).toEqual(expect.arrayContaining(["--resume-plan", "t", "--target-stage", "research"]));
+    expect(spawn.calls[0].argv).toEqual(
+      expect.arrayContaining([
+        "--resume-plan",
+        "t",
+        "--target-stage",
+        "research",
+      ]),
+    );
 
     var disk = rawPlan(root, "t");
     expect(disk.dispatch_token.consumed_at).toBeDefined();
@@ -263,12 +319,22 @@ describe("dispatch_stage — live spawn success", function () {
   it("consumes the token BEFORE spawn so a spawn crash still invalidates it", function () {
     var root = mkTmp();
     pushPlan({ title: "T", content_md: "x" }, { rootDir: root });
-    var staged = setStage({ plan_slug: "t", to: "research" }, { rootDir: root });
-    var explodingSpawn = function () { throw new SpawnError("boom"); };
+    var staged = setStage(
+      { plan_slug: "t", to: "research" },
+      { rootDir: root },
+    );
+    var explodingSpawn = function () {
+      throw new SpawnError("boom");
+    };
     expect(function () {
       dispatchStage(
-        { plan_slug: "t", target_stage: "research", confirm: true, token: staged.token.token },
-        { rootDir: root, spawn: explodingSpawn }
+        {
+          plan_slug: "t",
+          target_stage: "research",
+          confirm: true,
+          token: staged.token.token,
+        },
+        { rootDir: root, spawn: explodingSpawn },
       );
     }).toThrow(SpawnError);
     var disk = rawPlan(root, "t");
@@ -288,32 +354,40 @@ describe("validateToken — pure unit", function () {
     created_at: "2026-05-26T12:00:00.000Z",
     updated_at: "2026-05-26T12:00:00.000Z",
     session_id: null,
-    schema_version: 2
+    schema_version: 2,
   };
   var goodToken = {
     token: "tok_" + "a".repeat(24),
     issued_for_stage: "research",
     issued_at: "2026-05-26T12:00:00.000Z",
-    expires_at: "2026-05-26T12:05:00.000Z"
+    expires_at: "2026-05-26T12:05:00.000Z",
   };
   var now = Date.parse("2026-05-26T12:01:00.000Z"); // 1 minute in
 
   it("ok when everything aligns", function () {
     var plan = Object.assign({}, basePlan, { dispatch_token: goodToken });
-    expect(validateToken(plan, goodToken.token, "research", now)).toEqual({ ok: true });
+    expect(validateToken(plan, goodToken.token, "research", now)).toEqual({
+      ok: true,
+    });
   });
   it("missing token argument", function () {
     var plan = Object.assign({}, basePlan, { dispatch_token: goodToken });
     expect(validateToken(plan, undefined, "research", now).ok).toBe(false);
   });
   it("no stored token", function () {
-    expect(validateToken(basePlan, goodToken.token, "research", now).ok).toBe(false);
+    expect(validateToken(basePlan, goodToken.token, "research", now).ok).toBe(
+      false,
+    );
   });
   it("consumed", function () {
     var plan = Object.assign({}, basePlan, {
-      dispatch_token: Object.assign({}, goodToken, { consumed_at: "2026-05-26T12:00:30.000Z" })
+      dispatch_token: Object.assign({}, goodToken, {
+        consumed_at: "2026-05-26T12:00:30.000Z",
+      }),
     });
-    expect(validateToken(plan, goodToken.token, "research", now).ok).toBe(false);
+    expect(validateToken(plan, goodToken.token, "research", now).ok).toBe(
+      false,
+    );
   });
 });
 
@@ -323,9 +397,12 @@ describe("resolveDispatchCommand — pure unit", function () {
     var resolved = resolveDispatchCommand(plan, "research");
     expect(resolved.argv).toEqual([
       "claude",
-      "--resume-plan", "plan-with-dashes",
-      "--target-stage", "research",
-      "--session-source", "dispatch"
+      "--resume-plan",
+      "plan-with-dashes",
+      "--target-stage",
+      "research",
+      "--session-source",
+      "dispatch",
     ]);
     expect(resolved.command).toBe(resolved.argv.join(" "));
   });

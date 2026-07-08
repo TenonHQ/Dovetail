@@ -6,24 +6,24 @@ var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
   it("registers exactly the 13 expected tools", function () {
-    var names = buildDescriptors().map(function (d) { return d.name; });
-    expect(names.slice().sort()).toEqual(
-      [
-        "action_view",
-        "add_choices_to_field",
-        "create_table",
-        "create_view",
-        "flow_copy",
-        "flow_create",
-        "flow_edit",
-        "flow_publish",
-        "flow_test",
-        "flow_view",
-        "set_form_layout",
-        "set_list_layout",
-        "set_related_lists"
-      ]
-    );
+    var names = buildDescriptors().map(function (d) {
+      return d.name;
+    });
+    expect(names.slice().sort()).toEqual([
+      "action_view",
+      "add_choices_to_field",
+      "create_table",
+      "create_view",
+      "flow_copy",
+      "flow_create",
+      "flow_edit",
+      "flow_publish",
+      "flow_test",
+      "flow_view",
+      "set_form_layout",
+      "set_list_layout",
+      "set_related_lists",
+    ]);
     expect(TOOL_NAMES).toHaveLength(13);
   });
 
@@ -40,14 +40,16 @@ describe("MCP registry", function () {
       query: async function (table) {
         if (table === "sys_update_set") return [US];
         return [];
-      }
+      },
     });
     var descriptors = buildDescriptors({ client: ctx.client });
-    var createView = descriptors.filter(function (d) { return d.name === "create_view"; })[0];
+    var createView = descriptors.filter(function (d) {
+      return d.name === "create_view";
+    })[0];
     var result = await createView.handler({
       name: "sales_support",
       updateSetSysId: "us1",
-      scope: "global"
+      scope: "global",
     });
     expect(result.view.action).toBe("created");
     expect(ctx.calls.createRecord).toHaveLength(1);
@@ -59,34 +61,44 @@ describe("MCP registry", function () {
       query: async function (table) {
         if (table === "sys_update_set") return [US];
         return [];
-      }
+      },
     });
     var descriptors = buildDescriptors({ client: ctx.client });
-    var setList = descriptors.filter(function (d) { return d.name === "set_list_layout"; })[0];
+    var setList = descriptors.filter(function (d) {
+      return d.name === "set_list_layout";
+    })[0];
     var result = await setList.handler({
       table: "x_cadso_automate_audience",
       columns: ["number", "name"],
       updateSetSysId: "us1",
-      scope: "x_cadso_automate"
+      scope: "x_cadso_automate",
     });
     expect(result.dryRun).toBe(false);
-    expect(ctx.calls.createRecord.filter(function (c) { return c.table === "sys_ui_list_element"; }))
-      .toHaveLength(2);
+    expect(
+      ctx.calls.createRecord.filter(function (c) {
+        return c.table === "sys_ui_list_element";
+      }),
+    ).toHaveLength(2);
   });
 
   it("rejects invalid args via the zod schema", async function () {
     var descriptors = buildDescriptors();
-    var setList = descriptors.filter(function (d) { return d.name === "set_list_layout"; })[0];
-    await expect(setList.handler({ table: "x", columns: [], updateSetSysId: "u" }))
-      .rejects.toThrow();
+    var setList = descriptors.filter(function (d) {
+      return d.name === "set_list_layout";
+    })[0];
+    await expect(
+      setList.handler({ table: "x", columns: [], updateSetSysId: "u" }),
+    ).rejects.toThrow();
   });
 
   it("runSmoke lists every registered tool", async function () {
     var out = "";
-    var spy = jest.spyOn(process.stdout, "write").mockImplementation((function (s: any) {
+    var spy = jest.spyOn(process.stdout, "write").mockImplementation(function (
+      s: any,
+    ) {
       out += String(s);
       return true;
-    }) as any);
+    } as any);
     await runSmoke();
     spy.mockRestore();
     expect(out).toContain("Registered tools (13)");
@@ -135,7 +147,13 @@ describe("MCP registry — annotations", function () {
     });
 
     // destructive-but-idempotent overwrites (prune/recompile/in-place edit)
-    ["set_list_layout", "set_form_layout", "set_related_lists", "flow_publish", "flow_edit"].forEach(function (name) {
+    [
+      "set_list_layout",
+      "set_form_layout",
+      "set_related_lists",
+      "flow_publish",
+      "flow_edit",
+    ].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);
       expect(map[name].annotations.idempotentHint).toBe(true);

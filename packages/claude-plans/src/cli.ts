@@ -39,8 +39,8 @@ function printUsage(): void {
       "  exit-stale [--quiet]  Flip every DRAFT plan to EXITED",
       "  recategorize [--dry]  Re-extract topic categories on every plan",
       "  where                 Print the storage root path",
-      ""
-    ].join("\n")
+      "",
+    ].join("\n"),
   );
 }
 
@@ -61,7 +61,9 @@ async function cmdList(): Promise<void> {
   }
   for (var i = 0; i < plans.length; i++) {
     var p = plans[i];
-    process.stdout.write(p.status.padEnd(9) + " " + p.slug + "  " + p.title + "\n");
+    process.stdout.write(
+      p.status.padEnd(9) + " " + p.slug + "  " + p.title + "\n",
+    );
   }
 }
 
@@ -132,7 +134,7 @@ async function cmdRecategorize(): Promise<void> {
     var next = extractCategories({
       title: plan.title,
       content_md: plan.content_md,
-      content_html: plan.content_html
+      content_html: plan.content_html,
     });
     var prior = plan.categories || [];
     if (sameArray(prior, next)) {
@@ -141,11 +143,21 @@ async function cmdRecategorize(): Promise<void> {
     }
     if (dry) {
       process.stdout.write(
-        plan.slug + ": [" + prior.join(", ") + "] -> [" + next.join(", ") + "]\n"
+        plan.slug +
+          ": [" +
+          prior.join(", ") +
+          "] -> [" +
+          next.join(", ") +
+          "]\n",
       );
     } else {
       plan.categories = next;
-      var tmp = filePath + ".tmp." + process.pid + "." + crypto.randomBytes(4).toString("hex");
+      var tmp =
+        filePath +
+        ".tmp." +
+        process.pid +
+        "." +
+        crypto.randomBytes(4).toString("hex");
       fs.writeFileSync(tmp, JSON.stringify(plan, null, 2));
       fs.renameSync(tmp, filePath);
     }
@@ -157,7 +169,7 @@ async function cmdRecategorize(): Promise<void> {
       updated +
       " plan(s); " +
       skipped +
-      " already current\n"
+      " already current\n",
   );
 }
 
@@ -188,7 +200,9 @@ async function main(): Promise<void> {
 if (require.main === module) {
   main().catch(function (err) {
     process.stderr.write(
-      "dove-claude-plans fatal: " + (err && err.message ? err.message : String(err)) + "\n"
+      "dove-claude-plans fatal: " +
+        (err && err.message ? err.message : String(err)) +
+        "\n",
     );
     process.exit(1);
   });

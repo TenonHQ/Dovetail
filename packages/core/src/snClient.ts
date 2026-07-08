@@ -108,7 +108,8 @@ function _enrichDovetailApiError(
   e.message =
     "Dovetail REST call failed: " +
     (status ? "HTTP " + status : "no response") +
-    " " + attemptedEndpoint +
+    " " +
+    attemptedEndpoint +
     (body ? " — " + body : "") +
     hint;
   return e;
@@ -139,8 +140,10 @@ export async function _callDovetailApi<T>(
   } catch (e) {
     if (!_dovetailApiUseLegacyPath && _getHttpStatus(e) === 404) {
       logger.warn(
-        "[deprecation] /api/cadso/dovetail_core/" + op +
-          " returned 404. Falling back to legacy /api/cadso/dovetail/" + op +
+        "[deprecation] /api/cadso/dovetail_core/" +
+          op +
+          " returned 404. Falling back to legacy /api/cadso/dovetail/" +
+          op +
           ". Install the Dovetail application's Scripted REST APIs to silence this warning.",
       );
       _dovetailApiUseLegacyPath = true;
@@ -187,8 +190,12 @@ export const retryOnHttpErr = async <T>(
       if (status === 401 || status === 403) {
         var authMsg = status === 401 ? "Unauthorized" : "Forbidden";
         logger.error(
-          authMsg + " (" + status + ") pushing " + recSummary +
-          ". Verify your ServiceNow credentials and permissions."
+          authMsg +
+            " (" +
+            status +
+            ") pushing " +
+            recSummary +
+            ". Verify your ServiceNow credentials and permissions.",
         );
         throw e;
       }
@@ -196,8 +203,9 @@ export const retryOnHttpErr = async <T>(
       // 404: Record not found — fail immediately
       if (status === 404) {
         logger.error(
-          "Record not found (404) pushing " + recSummary +
-          ". The record may have been deleted from the instance."
+          "Record not found (404) pushing " +
+            recSummary +
+            ". The record may have been deleted from the instance.",
         );
         throw e;
       }
@@ -206,8 +214,11 @@ export const retryOnHttpErr = async <T>(
       if (status === 429) {
         var retryWait = _getRetryAfterMs(e);
         logger.warn(
-          "Rate limited (429) pushing " + recSummary +
-          ". Waiting " + Math.round(retryWait / 1000) + "s before retry."
+          "Rate limited (429) pushing " +
+            recSummary +
+            ". Waiting " +
+            Math.round(retryWait / 1000) +
+            "s before retry.",
         );
         await wait(retryWait);
         continue;
@@ -217,16 +228,27 @@ export const retryOnHttpErr = async <T>(
       if (status === 500 || status === 502 || status === 503) {
         if (attempt > maxServerRetries) {
           logger.error(
-            "Server error (" + status + ") pushing " + recSummary +
-            " after " + maxServerRetries + " retries. Giving up."
+            "Server error (" +
+              status +
+              ") pushing " +
+              recSummary +
+              " after " +
+              maxServerRetries +
+              " retries. Giving up.",
           );
           throw e;
         }
         var cappedBackoff = Math.min(backoffMs, 8000);
         logger.warn(
-          "Server error (" + status + ") pushing " + recSummary +
-          ". Retrying in " + (cappedBackoff / 1000) + "s (" +
-          (maxServerRetries - attempt) + " retries left)."
+          "Server error (" +
+            status +
+            ") pushing " +
+            recSummary +
+            ". Retrying in " +
+            cappedBackoff / 1000 +
+            "s (" +
+            (maxServerRetries - attempt) +
+            " retries left).",
         );
         await wait(cappedBackoff);
         backoffMs = backoffMs * 2;
@@ -237,15 +259,21 @@ export const retryOnHttpErr = async <T>(
       if (attempt > 1) {
         var errDetail = status ? "HTTP " + status : "unknown error";
         logger.error(
-          "Push failed for " + recSummary + " (" + errDetail +
-          ") after 1 retry. Giving up."
+          "Push failed for " +
+            recSummary +
+            " (" +
+            errDetail +
+            ") after 1 retry. Giving up.",
         );
         throw e;
       }
       var retryDetail = status ? "HTTP " + status : "unknown error";
       logger.warn(
-        "Unexpected error (" + retryDetail + ") pushing " + recSummary +
-        ". Retrying once."
+        "Unexpected error (" +
+          retryDetail +
+          ") pushing " +
+          recSummary +
+          ". Retrying once.",
       );
       await wait(1000);
     }
@@ -561,7 +589,11 @@ export const snClient = (
     var cleanIncludes = _stripUnderscoreKeys(includes);
     var cleanExcludes = _stripUnderscoreKeys(excludes);
 
-    fileLogger.debug("Fetching manifest for scope " + scope + (withFiles ? " (with file contents)" : " (structure only)"));
+    fileLogger.debug(
+      "Fetching manifest for scope " +
+        scope +
+        (withFiles ? " (with file contents)" : " (structure only)"),
+    );
 
     type AppResponse = Sinc.SNAPIResponse<SN.AppManifest>;
     return client.post<AppResponse>(endpoint, {
@@ -579,8 +611,9 @@ export const snClient = (
     scope?: string;
   }) => {
     type ChangeUpdateSetResponse = { message?: string; error?: string };
-    return _callDovetailApi<ChangeUpdateSetResponse>("changeUpdateSet", (endpoint) =>
-      client.get<ChangeUpdateSetResponse>(endpoint, { params }),
+    return _callDovetailApi<ChangeUpdateSetResponse>(
+      "changeUpdateSet",
+      (endpoint) => client.get<ChangeUpdateSetResponse>(endpoint, { params }),
     );
   };
 
@@ -595,8 +628,9 @@ export const snClient = (
     if (scope) {
       params.scope = scope;
     }
-    return _callDovetailApi<CurrentUpdateSetResponse>("currentUpdateSet", (endpoint) =>
-      client.get<CurrentUpdateSetResponse>(endpoint, { params }),
+    return _callDovetailApi<CurrentUpdateSetResponse>(
+      "currentUpdateSet",
+      (endpoint) => client.get<CurrentUpdateSetResponse>(endpoint, { params }),
     );
   };
 
@@ -733,10 +767,22 @@ export const unwrapSNResponse = async <T>(
 
       if (url.includes("getManifest") && result && result.tables) {
         const tableCount = Object.keys(result.tables).length;
-        fileLogger.debug("Manifest received: " + tableCount + " tables (status " + resp.status + ")");
+        fileLogger.debug(
+          "Manifest received: " +
+            tableCount +
+            " tables (status " +
+            resp.status +
+            ")",
+        );
       } else if (url.includes("bulkDownload") && result) {
         const tableCount = Object.keys(result).length;
-        fileLogger.debug("Bulk download received: " + tableCount + " tables (status " + resp.status + ")");
+        fileLogger.debug(
+          "Bulk download received: " +
+            tableCount +
+            " tables (status " +
+            resp.status +
+            ")",
+        );
       }
     }
 
@@ -754,7 +800,11 @@ export const unwrapSNResponse = async <T>(
       // Extract ServiceNow-shaped error message if present (`{error: {message, detail}, status}`)
       let snMessage = "";
       if (data && typeof data === "object") {
-        if (data.error && typeof data.error === "object" && data.error.message) {
+        if (
+          data.error &&
+          typeof data.error === "object" &&
+          data.error.message
+        ) {
           snMessage = " — " + String(data.error.message);
         } else if (typeof data.message === "string") {
           snMessage = " — " + data.message;
@@ -767,8 +817,15 @@ export const unwrapSNResponse = async <T>(
       if (manifestMatch) scope = manifestMatch[1];
 
       logger.error(
-        "Error from " + instance + ": HTTP " + status + " " +
-        method + " " + url + snMessage
+        "Error from " +
+          instance +
+          ": HTTP " +
+          status +
+          " " +
+          method +
+          " " +
+          url +
+          snMessage,
       );
 
       fileLogger.debug("REST error detail", {

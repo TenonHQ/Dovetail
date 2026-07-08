@@ -54,7 +54,12 @@ export interface TestFlowResult {
 }
 
 function unwrap(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     return data.result;
   }
   return data;
@@ -86,10 +91,19 @@ async function validate(params: TestFlowParams): Promise<TestFlowResult> {
   var keys = Object.keys(inputs);
   for (var i = 0; i < keys.length; i += 1) {
     if (!declared[keys[i]]) {
-      notes.push("warning: input '" + keys[i] + "' does not match any declared flow variable.");
+      notes.push(
+        "warning: input '" +
+          keys[i] +
+          "' does not match any declared flow variable.",
+      );
     }
   }
-  notes.push(keys.length + " input(s) supplied; " + read.variables.length + " variable(s) declared.");
+  notes.push(
+    keys.length +
+      " input(s) supplied; " +
+      read.variables.length +
+      " variable(s) declared.",
+  );
 
   return { mode: "validate", ok: ok, notes: notes };
 }
@@ -98,15 +112,15 @@ async function validate(params: TestFlowParams): Promise<TestFlowResult> {
 async function execute(params: TestFlowParams): Promise<TestFlowResult> {
   if (params.confirm !== true) {
     throw new Error(
-      "testFlow: mode='execute' requires confirm=true — running a flow can cause real "
-        + "side effects (e.g. sending an SMS). Pass confirm:true to proceed."
+      "testFlow: mode='execute' requires confirm=true — running a flow can cause real " +
+        "side effects (e.g. sending an SMS). Pass confirm:true to proceed.",
     );
   }
 
   var path = params.runnerPath || DEFAULT_RUN_FLOW_PATH;
   var body = {
     flowSysId: params.sysId,
-    inputs: params.inputs || {}
+    inputs: params.inputs || {},
   };
 
   var resp: any;
@@ -116,9 +130,11 @@ async function execute(params: TestFlowParams): Promise<TestFlowResult> {
     var msg = err && err.message ? String(err.message) : String(err);
     if (msg.indexOf("404") >= 0) {
       throw new Error(
-        "testFlow: the runner endpoint " + path + " is not deployed. Deploy the FlowAPI "
-          + "Scripted REST resource (see resources/runFlow.md) or pass runnerPath to an "
-          + "existing one."
+        "testFlow: the runner endpoint " +
+          path +
+          " is not deployed. Deploy the FlowAPI " +
+          "Scripted REST resource (see resources/runFlow.md) or pass runnerPath to an " +
+          "existing one.",
       );
     }
     throw err;
@@ -127,8 +143,12 @@ async function execute(params: TestFlowParams): Promise<TestFlowResult> {
   var data = unwrap(resp);
   var contextSysId: string | undefined;
   if (data && typeof data === "object") {
-    contextSysId = typeof data.contextId === "string" ? data.contextId
-      : (typeof data.context_sys_id === "string" ? data.context_sys_id : undefined);
+    contextSysId =
+      typeof data.contextId === "string"
+        ? data.contextId
+        : typeof data.context_sys_id === "string"
+        ? data.context_sys_id
+        : undefined;
   }
 
   return {
@@ -136,11 +156,13 @@ async function execute(params: TestFlowParams): Promise<TestFlowResult> {
     ok: true,
     notes: ["run accepted via " + path],
     contextSysId: contextSysId,
-    run: data
+    run: data,
   };
 }
 
-export async function testFlow(params: TestFlowParams): Promise<TestFlowResult> {
+export async function testFlow(
+  params: TestFlowParams,
+): Promise<TestFlowResult> {
   if (!params.sysId) {
     throw new Error("testFlow: sysId is required.");
   }

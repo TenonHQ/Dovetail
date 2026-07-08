@@ -3,7 +3,10 @@
 // section.
 
 import { SchemaDiff } from "@tenonhq/dovetail-schema";
-import { formatReconcileReport, ReconcileScopeResult } from "../reconcile/report";
+import {
+  formatReconcileReport,
+  ReconcileScopeResult,
+} from "../reconcile/report";
 import { RecordChange, RecordDiff } from "../reconcile/types";
 
 const emptyDiff = (): RecordDiff => ({
@@ -13,7 +16,9 @@ const emptyDiff = (): RecordDiff => ({
   unchangedCount: 0,
 });
 
-const change = (over: Partial<RecordChange> & Pick<RecordChange, "sys_id" | "kind">): RecordChange => ({
+const change = (
+  over: Partial<RecordChange> & Pick<RecordChange, "sys_id" | "kind">,
+): RecordChange => ({
   table: "sys_script_include",
   scope: "x_cadso_core",
   name: over.sys_id,
@@ -50,10 +55,19 @@ describe("formatReconcileReport", () => {
           sys_id: "u1",
           kind: "update",
           name: "Edited",
-          fieldDeltas: [{ field: "script.js", onBranch: true, onLive: true, changed: true }],
+          fieldDeltas: [
+            { field: "script.js", onBranch: true, onLive: true, changed: true },
+          ],
         }),
       ],
-      deletes: [change({ sys_id: "d1", kind: "delete", name: "Gone", deleteDisposition: "tracked" })],
+      deletes: [
+        change({
+          sys_id: "d1",
+          kind: "delete",
+          name: "Gone",
+          deleteDisposition: "tracked",
+        }),
+      ],
       unchangedCount: 0,
     };
     const out = formatReconcileReport({
@@ -75,7 +89,14 @@ describe("formatReconcileReport", () => {
   it("keeps local-new instance-only records out of DELETE and never proposes deleting them", () => {
     const diff: RecordDiff = {
       ...emptyDiff(),
-      deletes: [change({ sys_id: "mine", kind: "delete", name: "DevMade", deleteDisposition: "local-new" })],
+      deletes: [
+        change({
+          sys_id: "mine",
+          kind: "delete",
+          name: "DevMade",
+          deleteDisposition: "local-new",
+        }),
+      ],
     };
     const out = formatReconcileReport({
       instanceHost: "tenonworkstudio",
@@ -85,7 +106,9 @@ describe("formatReconcileReport", () => {
     });
     expect(out).toContain("INSTANCE-ONLY");
     expect(out).not.toContain("DELETE (");
-    expect(out).toContain("Summary: 0 create, 0 update, 0 delete, 1 instance-only kept");
+    expect(out).toContain(
+      "Summary: 0 create, 0 update, 0 delete, 1 instance-only kept",
+    );
   });
 
   it("surfaces drift and warns that apply would refuse", () => {
@@ -95,14 +118,21 @@ describe("formatReconcileReport", () => {
       scopes: [
         scope({
           dirty: [
-            { sys_id: "x", table: "sys_script", name: "Touched", reason: "changed-since-baseline" },
+            {
+              sys_id: "x",
+              table: "sys_script",
+              name: "Touched",
+              reason: "changed-since-baseline",
+            },
           ],
         }),
       ],
       schemaSkippedReason: null,
     });
     expect(out).toContain("DRIFT — instance changed since baseline");
-    expect(out).toContain("Apply would REFUSE: 1 record(s) changed on the instance since baseline");
+    expect(out).toContain(
+      "Apply would REFUSE: 1 record(s) changed on the instance since baseline",
+    );
   });
 
   it("warns when no baseline exists for the scope", () => {
@@ -123,7 +153,14 @@ describe("formatReconcileReport", () => {
       scope: "x_cadso_core",
       summary: { breaking: 1, warn: 0, info: 0 },
       tables: [],
-      fields: [{ table: "x_cadso_thing", field: "old_col", change: "removed", severity: "BREAKING" }],
+      fields: [
+        {
+          table: "x_cadso_thing",
+          field: "old_col",
+          change: "removed",
+          severity: "BREAKING",
+        },
+      ],
       exit_code: 1,
     };
     const out = formatReconcileReport({
@@ -134,7 +171,9 @@ describe("formatReconcileReport", () => {
     });
     expect(out).toContain("SCHEMA — report-only");
     expect(out).toContain("removed x_cadso_thing.old_col");
-    expect(out).toContain("sys_dictionary_list.do?sysparm_query=name=x_cadso_thing^element=old_col");
+    expect(out).toContain(
+      "sys_dictionary_list.do?sysparm_query=name=x_cadso_thing^element=old_col",
+    );
   });
 
   it("notes when the schema arm was skipped", () => {

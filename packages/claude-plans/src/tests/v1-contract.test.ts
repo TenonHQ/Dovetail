@@ -37,14 +37,20 @@ function mkTmp(): string {
 }
 
 function loadFixture(tool: string): Fixture {
-  return JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, tool + ".json"), "utf8"));
+  return JSON.parse(
+    fs.readFileSync(path.join(FIXTURES_DIR, tool + ".json"), "utf8"),
+  );
 }
 
 function listFixtures(): string[] {
   return fs
     .readdirSync(FIXTURES_DIR)
-    .filter(function (f) { return f.endsWith(".json"); })
-    .map(function (f) { return f.replace(/\.json$/, ""); });
+    .filter(function (f) {
+      return f.endsWith(".json");
+    })
+    .map(function (f) {
+      return f.replace(/\.json$/, "");
+    });
 }
 
 // Replace placeholder strings in `expected` with their corresponding
@@ -70,7 +76,10 @@ function substitutePlaceholders(expected: any, actual: any): any {
     var out: Record<string, any> = {};
     for (var k in expected) {
       if (Object.prototype.hasOwnProperty.call(expected, k)) {
-        out[k] = substitutePlaceholders(expected[k], actual ? actual[k] : undefined);
+        out[k] = substitutePlaceholders(
+          expected[k],
+          actual ? actual[k] : undefined,
+        );
       }
     }
     return out;
@@ -88,7 +97,9 @@ describe("v1 contract — preserved tools return byte-identical shapes", functio
     // Freeze nowIso() output. storage.ts builds timestamps via
     // `new Date().toISOString()`; pinning Date.prototype.toISOString
     // covers every callsite without monkey-patching individual helpers.
-    Date.prototype.toISOString = function () { return FROZEN_NOW; };
+    Date.prototype.toISOString = function () {
+      return FROZEN_NOW;
+    };
 
     // The registry derives session_id from CLAUDE_CODE_SESSION_ID when the
     // caller doesn't pass one. Unset for the test so the contract anchors
@@ -103,13 +114,16 @@ describe("v1 contract — preserved tools return byte-identical shapes", functio
       counter += 1;
       return "q_" + counter.toString(16).padStart(8, "0");
     });
-    restoreIdGen = function () { __setIdGenerator(prev); };
+    restoreIdGen = function () {
+      __setIdGenerator(prev);
+    };
   });
 
   afterEach(function () {
     Date.prototype.toISOString = realToISOString;
     Date.now = realDateNow;
-    if (realSessionId !== undefined) process.env.CLAUDE_CODE_SESSION_ID = realSessionId;
+    if (realSessionId !== undefined)
+      process.env.CLAUDE_CODE_SESSION_ID = realSessionId;
     if (restoreIdGen) restoreIdGen();
   });
 
@@ -122,7 +136,9 @@ describe("v1 contract — preserved tools return byte-identical shapes", functio
       var descriptors = buildDescriptors({ storage: { rootDir: root } });
 
       function descriptor(name: string) {
-        var d = descriptors.find(function (x) { return x.name === name; });
+        var d = descriptors.find(function (x) {
+          return x.name === name;
+        });
         if (!d) throw new Error("unknown tool in fixture: " + name);
         return d;
       }
@@ -134,7 +150,9 @@ describe("v1 contract — preserved tools return byte-identical shapes", functio
       if (fixture.seed) {
         var seeds = Array.isArray(fixture.seed) ? fixture.seed : [fixture.seed];
         for (var i = 0; i < seeds.length; i++) {
-          var seedResult = await descriptor(seeds[i].tool).handler(seeds[i].request);
+          var seedResult = await descriptor(seeds[i].tool).handler(
+            seeds[i].request,
+          );
           if (seeds[i].tool === "push_question" && seededQuestionId === null) {
             seededQuestionId = seedResult.id;
           }
@@ -146,8 +164,8 @@ describe("v1 contract — preserved tools return byte-identical shapes", functio
       var request = JSON.parse(
         JSON.stringify(fixture.request).replace(
           /"q_<seeded id from push_question>"/g,
-          JSON.stringify(seededQuestionId || "")
-        )
+          JSON.stringify(seededQuestionId || ""),
+        ),
       );
 
       var actual = await descriptor(fixture.tool).handler(request);

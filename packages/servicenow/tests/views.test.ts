@@ -4,9 +4,13 @@ import { makeMockClient } from "./mockClient";
 describe("createView", function () {
   it("rejects an empty name", async function () {
     var ctx = makeMockClient();
-    await expect(createView(ctx.client, {
-      name: "", updateSetSysId: "us1", scope: "x_cadso_automate"
-    })).rejects.toThrow(/name is required/);
+    await expect(
+      createView(ctx.client, {
+        name: "",
+        updateSetSysId: "us1",
+        scope: "x_cadso_automate",
+      }),
+    ).rejects.toThrow(/name is required/);
   });
 
   it("rejects an update set that is not in progress", async function () {
@@ -16,11 +20,15 @@ describe("createView", function () {
           return [{ sys_id: "us1", name: "X", state: "complete" }];
         }
         return [];
-      }
+      },
     });
-    await expect(createView(ctx.client, {
-      name: "sales_support", updateSetSysId: "us1", scope: "x_cadso_automate"
-    })).rejects.toThrow(/in progress/);
+    await expect(
+      createView(ctx.client, {
+        name: "sales_support",
+        updateSetSysId: "us1",
+        scope: "x_cadso_automate",
+      }),
+    ).rejects.toThrow(/in progress/);
   });
 
   it("creates a new view", async function () {
@@ -31,10 +39,12 @@ describe("createView", function () {
           return [{ sys_id: "us1", name: "Work", state: "in progress" }];
         }
         return [];
-      }
+      },
     });
     var result = await createView(ctx.client, {
-      name: "sales_support", updateSetSysId: "us1", scope: "x_cadso_automate"
+      name: "sales_support",
+      updateSetSysId: "us1",
+      scope: "x_cadso_automate",
     });
     expect(ctx.calls.createRecord).toHaveLength(1);
     expect(ctx.calls.createRecord[0].table).toBe("sys_ui_view");
@@ -53,10 +63,12 @@ describe("createView", function () {
           return [{ sys_id: "us1", name: "Work", state: "in progress" }];
         }
         return [];
-      }
+      },
     });
     var result = await createView(ctx.client, {
-      name: "sales_support", updateSetSysId: "us1", scope: "x_cadso_automate"
+      name: "sales_support",
+      updateSetSysId: "us1",
+      scope: "x_cadso_automate",
     });
     expect(ctx.calls.createRecord).toHaveLength(0);
     expect(result.view.action).toBe("unchanged");
@@ -71,10 +83,13 @@ describe("createView", function () {
           return [{ sys_id: "us1", name: "Work", state: "in progress" }];
         }
         return [];
-      }
+      },
     });
     var result = await createView(ctx.client, {
-      name: "sales_support", updateSetSysId: "us1", scope: "x_cadso_automate", dryRun: true
+      name: "sales_support",
+      updateSetSysId: "us1",
+      scope: "x_cadso_automate",
+      dryRun: true,
     });
     expect(ctx.calls.createRecord).toHaveLength(0);
     expect(result.dryRun).toBe(true);

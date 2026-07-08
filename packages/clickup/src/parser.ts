@@ -15,7 +15,7 @@ import { ParsedIdentifier } from "./types";
 export function parseClickUpIdentifier(input: string): ParsedIdentifier {
   if (!input || input.trim() === "") {
     throw new Error(
-      "ClickUp identifier is empty. Provide a task ID or ClickUp URL."
+      "ClickUp identifier is empty. Provide a task ID or ClickUp URL.",
     );
   }
 
@@ -39,7 +39,7 @@ export function parseClickUpIdentifier(input: string): ParsedIdentifier {
   throw new Error(
     "Could not parse ClickUp identifier: '" +
       input +
-      "'. Expected a task ID (alphanumeric) or ClickUp URL."
+      "'. Expected a task ID (alphanumeric) or ClickUp URL.",
   );
 }
 
@@ -51,15 +51,13 @@ function parseUrl(url: string, raw: string): ParsedIdentifier {
     throw new Error(
       "Invalid ClickUp URL: '" +
         url +
-        "'. Expected a URL like https://app.clickup.com/t/<task-id>"
+        "'. Expected a URL like https://app.clickup.com/t/<task-id>",
     );
   }
 
-  var segments = parsed.pathname
-    .split("/")
-    .filter(function (s) {
-      return s !== "";
-    });
+  var segments = parsed.pathname.split("/").filter(function (s) {
+    return s !== "";
+  });
 
   // Short URL format: https://app.clickup.com/t/<task-id>
   var tIndex = segments.indexOf("t");
@@ -80,6 +78,6 @@ function parseUrl(url: string, raw: string): ParsedIdentifier {
   throw new Error(
     "Could not extract task ID from ClickUp URL: '" +
       url +
-      "'. Expected a URL containing /t/<task-id> or ending with a task ID."
+      "'. Expected a URL containing /t/<task-id> or ending with a task ID.",
   );
 }

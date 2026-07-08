@@ -1,4 +1,9 @@
-import { ClickUpTask, ClickUpUser, PipelineGroup, PipelineStage } from "../types";
+import {
+  ClickUpTask,
+  ClickUpUser,
+  PipelineGroup,
+  PipelineStage,
+} from "../types";
 
 var defaultCreator: ClickUpUser = {
   id: 1,
@@ -15,7 +20,12 @@ export function makeClickUpTask(overrides?: Partial<ClickUpTask>): ClickUpTask {
     custom_id: null,
     name: "Test Task",
     description: "",
-    status: { status: "in progress", color: "#4194f6", type: "open", orderindex: 1 },
+    status: {
+      status: "in progress",
+      color: "#4194f6",
+      type: "open",
+      orderindex: 1,
+    },
     assignees: [],
     priority: null,
     url: "https://app.clickup.com/t/task1",
@@ -59,7 +69,7 @@ export function makeUser(overrides?: Partial<ClickUpUser>): ClickUpUser {
 
 export function makePipelineGroup(
   stage: PipelineStage,
-  tasks: ClickUpTask[]
+  tasks: ClickUpTask[],
 ): PipelineGroup {
   return { stage: stage, tasks: tasks };
 }

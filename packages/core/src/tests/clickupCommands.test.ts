@@ -66,7 +66,9 @@ jest.mock("../commands", function () {
 });
 
 jest.mock("chalk", function () {
-  var identity: any = function (s: any) { return s; };
+  var identity: any = function (s: any) {
+    return s;
+  };
   identity.green = identity;
   identity.bold = identity;
   return {
@@ -262,7 +264,7 @@ describe("clickupTaskCommand", function () {
     delete process.env.CLICKUP_API_TOKEN;
 
     await expect(
-      clickupTaskCommand({ id: "t1", logLevel: "info" })
+      clickupTaskCommand({ id: "t1", logLevel: "info" }),
     ).rejects.toThrow("CLICKUP_API_TOKEN not set");
   });
 
@@ -270,7 +272,7 @@ describe("clickupTaskCommand", function () {
     mockApi.getTask.mockRejectedValue(new Error("API down"));
 
     await expect(
-      clickupTaskCommand({ id: "t1", logLevel: "info" })
+      clickupTaskCommand({ id: "t1", logLevel: "info" }),
     ).rejects.toThrow("API down");
     expect(logger.error).toHaveBeenCalledWith("Failed to get task");
   });
@@ -326,19 +328,27 @@ describe("clickupTasksCommand", function () {
   });
 
   it("uses explicit --team flag when provided", async function () {
-    mockApi.listMyTasks.mockResolvedValue({ tasks: [], byStatus: {}, total: 0 });
+    mockApi.listMyTasks.mockResolvedValue({
+      tasks: [],
+      byStatus: {},
+      total: 0,
+    });
 
     await clickupTasksCommand({ team: "explicit-team", logLevel: "info" });
 
     expect(mockApi.listMyTasks).toHaveBeenCalledWith(
-      expect.objectContaining({ teamId: "explicit-team" })
+      expect.objectContaining({ teamId: "explicit-team" }),
     );
     // Should NOT call getTeams when --team is provided
     expect(mockApi.getTeams).not.toHaveBeenCalled();
   });
 
   it("passes status filter from args", async function () {
-    mockApi.listMyTasks.mockResolvedValue({ tasks: [], byStatus: {}, total: 0 });
+    mockApi.listMyTasks.mockResolvedValue({
+      tasks: [],
+      byStatus: {},
+      total: 0,
+    });
 
     await clickupTasksCommand({
       logLevel: "info",
@@ -348,7 +358,7 @@ describe("clickupTasksCommand", function () {
     expect(mockApi.listMyTasks).toHaveBeenCalledWith(
       expect.objectContaining({
         statuses: ["in progress", "blocked"],
-      })
+      }),
     );
   });
 });
@@ -373,7 +383,11 @@ describe("clickupCommentCommand", function () {
   it("adds comment to task", async function () {
     mockApi.addComment.mockResolvedValue({});
 
-    await clickupCommentCommand({ taskId: "t1", msg: "Hello!", logLevel: "info" });
+    await clickupCommentCommand({
+      taskId: "t1",
+      msg: "Hello!",
+      logLevel: "info",
+    });
 
     expect(mockApi.addComment).toHaveBeenCalledWith({
       taskId: "t1",
@@ -383,13 +397,13 @@ describe("clickupCommentCommand", function () {
 
   it("throws when message is empty", async function () {
     await expect(
-      clickupCommentCommand({ taskId: "t1", msg: "", logLevel: "info" })
+      clickupCommentCommand({ taskId: "t1", msg: "", logLevel: "info" }),
     ).rejects.toThrow("Comment message is required");
   });
 
   it("throws when message is whitespace-only", async function () {
     await expect(
-      clickupCommentCommand({ taskId: "t1", msg: "   ", logLevel: "info" })
+      clickupCommentCommand({ taskId: "t1", msg: "   ", logLevel: "info" }),
     ).rejects.toThrow("Comment message is required");
   });
 });
@@ -421,7 +435,11 @@ describe("clickupTeamsCommand", function () {
     await clickupTeamsCommand({ logLevel: "info" });
 
     expect(mockApi.getTeams).toHaveBeenCalled();
-    var output = consoleSpy.mock.calls.map(function (c) { return c[0]; }).join("\n");
+    var output = consoleSpy.mock.calls
+      .map(function (c) {
+        return c[0];
+      })
+      .join("\n");
     expect(output).toContain("Tenon");
     expect(output).toContain("2 members");
 
@@ -433,7 +451,9 @@ describe("clickupTeamsCommand", function () {
 
     await clickupTeamsCommand({ logLevel: "info" });
 
-    expect(logger.info).toHaveBeenCalledWith("No workspaces found for this token.");
+    expect(logger.info).toHaveBeenCalledWith(
+      "No workspaces found for this token.",
+    );
   });
 });
 
@@ -456,7 +476,7 @@ describe("getClickUpToken (via commands)", function () {
     process.env.CLICKUP_API_TOKEN = "";
 
     await expect(
-      clickupTaskCommand({ id: "t1", logLevel: "info" })
+      clickupTaskCommand({ id: "t1", logLevel: "info" }),
     ).rejects.toThrow("CLICKUP_API_TOKEN not set");
   });
 
@@ -464,7 +484,7 @@ describe("getClickUpToken (via commands)", function () {
     delete process.env.CLICKUP_API_TOKEN;
 
     await expect(
-      clickupTaskCommand({ id: "t1", logLevel: "info" })
+      clickupTaskCommand({ id: "t1", logLevel: "info" }),
     ).rejects.toThrow("CLICKUP_API_TOKEN not set");
   });
 });
@@ -488,20 +508,24 @@ describe("resolveTeamId (tested via clickupTasksCommand)", function () {
 
   it("auto-selects when only one team exists", async function () {
     mockApi.getTeams.mockResolvedValue([{ id: "solo-team", name: "Solo" }]);
-    mockApi.listMyTasks.mockResolvedValue({ tasks: [], byStatus: {}, total: 0 });
+    mockApi.listMyTasks.mockResolvedValue({
+      tasks: [],
+      byStatus: {},
+      total: 0,
+    });
 
     await clickupTasksCommand({ logLevel: "info" });
 
     expect(mockApi.listMyTasks).toHaveBeenCalledWith(
-      expect.objectContaining({ teamId: "solo-team" })
+      expect.objectContaining({ teamId: "solo-team" }),
     );
   });
 
   it("throws when no teams found", async function () {
     mockApi.getTeams.mockResolvedValue([]);
 
-    await expect(
-      clickupTasksCommand({ logLevel: "info" })
-    ).rejects.toThrow("No ClickUp workspaces found");
+    await expect(clickupTasksCommand({ logLevel: "info" })).rejects.toThrow(
+      "No ClickUp workspaces found",
+    );
   });
 });

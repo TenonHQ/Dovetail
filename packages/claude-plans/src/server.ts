@@ -12,7 +12,8 @@ export async function runSmoke(): Promise<void> {
   var lines: string[] = [];
   lines.push("dovetail-claude-plans smoke test");
   lines.push("Registered tools (" + TOOL_NAMES.length + "):");
-  for (var i = 0; i < TOOL_NAMES.length; i++) lines.push("  - " + TOOL_NAMES[i]);
+  for (var i = 0; i < TOOL_NAMES.length; i++)
+    lines.push("  - " + TOOL_NAMES[i]);
   process.stdout.write(lines.join("\n") + "\n");
 }
 

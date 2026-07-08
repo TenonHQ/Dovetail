@@ -33,6 +33,7 @@ npx dove createUpdateSet
 ```
 
 #### Options:
+
 - `-n, --name <name>` - Name of the update set to create
 - `-d, --description <description>` - Description of the update set
 - `-s, --scope <scope>` - Scope for the update set (e.g., x_company_app)
@@ -43,16 +44,19 @@ npx dove createUpdateSet
 #### Examples:
 
 Interactive mode (prompts for details):
+
 ```bash
 npx dove createUpdateSet
 ```
 
 Create with all parameters:
+
 ```bash
 npx dove createUpdateSet -n "Feature XYZ Updates" -d "Adding new functionality for XYZ" -s x_company_app
 ```
 
 Create with just a name:
+
 ```bash
 npx dove createUpdateSet -n "Quick Fix" --skipDescription --skipScope
 ```
@@ -66,6 +70,7 @@ npx dove switchUpdateSet
 ```
 
 #### Options:
+
 - `-n, --name <name>` - Name or partial name of the update set to switch to
 - `-s, --scope <scope>` - Filter update sets by scope
 - `--logLevel <level>` - Set log level (default: info)
@@ -73,16 +78,19 @@ npx dove switchUpdateSet
 #### Examples:
 
 Interactive mode (shows list to select from):
+
 ```bash
 npx dove switchUpdateSet
 ```
 
 Switch by partial name match:
+
 ```bash
 npx dove switchUpdateSet -n "Feature XYZ"
 ```
 
 Switch to update set in specific scope:
+
 ```bash
 npx dove switchUpdateSet -s x_company_app
 ```
@@ -96,17 +104,20 @@ npx dove listUpdateSets
 ```
 
 #### Options:
+
 - `-s, --scope <scope>` - Filter update sets by scope
 - `--logLevel <level>` - Set log level (default: info)
 
 #### Examples:
 
 List all in-progress update sets:
+
 ```bash
 npx dove listUpdateSets
 ```
 
 List update sets for a specific scope:
+
 ```bash
 npx dove listUpdateSets -s x_company_app
 ```
@@ -114,18 +125,23 @@ npx dove listUpdateSets -s x_company_app
 ## Features
 
 ### Smart Name Matching
+
 The `switchUpdateSet` command supports partial name matching:
+
 - If an exact match is found, it's selected automatically
 - If only one partial match exists, it's selected automatically
 - If multiple matches exist, you'll be prompted to select from a list
 
 ### Current Update Set Indicator
+
 When listing update sets, the currently active update set is highlighted with a green arrow (►) indicator.
 
 ### Multi-Scope Support
+
 All commands support filtering by scope, making it easy to manage update sets across different applications.
 
 ### Error Handling
+
 - Clear error messages when scopes or update sets are not found
 - Graceful handling of authentication issues
 - Validation of required parameters
@@ -135,7 +151,9 @@ All commands support filtering by scope, making it easy to manage update sets ac
 The update set commands integrate seamlessly with existing Dovetail commands:
 
 ### Push Command with Update Set
+
 The existing `push` command already supports creating an update set:
+
 ```bash
 npx dove push --updateSet "My Changes"
 ```
@@ -143,6 +161,7 @@ npx dove push --updateSet "My Changes"
 ### Workflow Example
 
 1. Create a new update set for your feature:
+
 ```bash
 npx dove createUpdateSet -n "Feature ABC Implementation"
 ```
@@ -150,16 +169,19 @@ npx dove createUpdateSet -n "Feature ABC Implementation"
 2. Make your code changes locally
 
 3. Push changes to ServiceNow (they'll be captured in the active update set):
+
 ```bash
 npx dove push
 ```
 
 4. Switch to a different update set for a quick fix:
+
 ```bash
 npx dove switchUpdateSet -n "Emergency Fix"
 ```
 
 5. List all your in-progress work:
+
 ```bash
 npx dove listUpdateSets
 ```
@@ -167,17 +189,20 @@ npx dove listUpdateSets
 ## Technical Implementation
 
 ### Files Modified/Created:
+
 - `src/updateSetCommands.ts` - New file containing all update set command implementations
 - `src/commander.ts` - Updated to register the new commands
 - `src/snClient.ts` - Updated to expose the axios client for custom API calls
 
 ### API Endpoints Used:
+
 - `api/now/table/sys_update_set` - Update set CRUD operations
 - `api/now/table/sys_user_preference` - User preference management for current update set
 - `api/now/table/sys_scope` - Scope lookups
 - `api/now/table/sys_user` - User lookups
 
 ### Key Functions:
+
 - `createUpdateSetCommand()` - Main command handler for creating update sets
 - `switchUpdateSetCommand()` - Main command handler for switching update sets
 - `listUpdateSetsCommand()` - Main command handler for listing update sets
@@ -188,7 +213,9 @@ npx dove listUpdateSets
 ## Troubleshooting
 
 ### "No server configured" Error
+
 Ensure your environment variables are set:
+
 ```bash
 export SN_INSTANCE=your-instance.service-now.com
 export SN_USER=your.username
@@ -196,9 +223,11 @@ export SN_PASSWORD=your-password
 ```
 
 ### "Scope not found" Error
+
 Verify the scope name is correct. Use the full scope name (e.g., `x_company_app`), not the display name.
 
 ### Authentication Issues
+
 - Verify your credentials are correct
 - Check if your account has the necessary permissions to manage update sets
 - Ensure your ServiceNow instance is accessible
@@ -206,6 +235,7 @@ Verify the scope name is correct. Use the full scope name (e.g., `x_company_app`
 ## Future Enhancements
 
 Potential future improvements could include:
+
 - Support for completing/closing update sets
 - Batch operations on multiple update sets
 - Update set conflict detection

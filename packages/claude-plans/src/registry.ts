@@ -13,7 +13,7 @@ import {
   WRITE_CREATE,
   WRITE_OVERWRITE,
   WRITE_EXECUTE,
-  registerKitTools
+  registerKitTools,
 } from "@tenonhq/dovetail-mcp-kit";
 import type { ToolAnnotations } from "@tenonhq/dovetail-mcp-kit";
 
@@ -40,7 +40,7 @@ import {
   restorePlanVersionSchema,
   createPromptDraftSchema,
   getPromptDraftSchema,
-  updatePromptDraftSchema
+  updatePromptDraftSchema,
 } from "./schemas";
 import {
   pushPlan,
@@ -68,7 +68,7 @@ import {
   listPromptDraftsWithActive,
   updatePromptDraft,
   getActivePromptDraft,
-  StorageOptions
+  StorageOptions,
 } from "./storage";
 import { scorePlanFeatures } from "./score";
 
@@ -97,10 +97,10 @@ export var TOOL_NAMES = [
   "get_active_prompt_draft",
   "get_prompt_draft",
   "create_prompt_draft",
-  "update_prompt_draft"
+  "update_prompt_draft",
 ] as const;
 
-export type ToolName = typeof TOOL_NAMES[number];
+export type ToolName = (typeof TOOL_NAMES)[number];
 
 export interface RegistryDeps {
   storage?: StorageOptions;
@@ -119,7 +119,8 @@ interface ToolDescriptor {
 // openWorldHint is left at its spec default — these tools operate on local plan storage;
 // dispatch_stage is the lone tool that can reach outside it (spawns a subprocess in live mode).
 
-var MERMAID_HEADERS = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|c4Context)\b/;
+var MERMAID_HEADERS =
+  /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|c4Context)\b/;
 
 // Sequence-diagram arrow tokens: -> --> ->> -->> -x --x -) --)
 var SEQ_ARROW = /(--?>>?|--?[)x])/;
@@ -152,9 +153,12 @@ function lintSequenceSemicolons(source: string): void {
     var isNote = /^\s*[Nn]ote\b/.test(head);
     if (isMessage || isNote) {
       throw new Error(
-        "mermaid sequenceDiagram line " + (i + 1) + " contains ';' in its text (\"" +
-        text.trim() + "\"). Mermaid treats ';' as a statement separator, which breaks " +
-        "the diagram — replace ';' with ',' or rephrase."
+        "mermaid sequenceDiagram line " +
+          (i + 1) +
+          " contains ';' in its text (\"" +
+          text.trim() +
+          "\"). Mermaid treats ';' as a statement separator, which breaks " +
+          "the diagram — replace ';' with ',' or rephrase.",
       );
     }
   }
@@ -166,7 +170,7 @@ function validateMermaid(source: string): string {
   var normalized = normalizeMermaid(source);
   if (!MERMAID_HEADERS.test(normalized)) {
     throw new Error(
-      "mermaid_source does not start with a recognized diagram header (graph, flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, journey, gitGraph, mindmap, timeline, quadrantChart, requirementDiagram, c4Context)"
+      "mermaid_source does not start with a recognized diagram header (graph, flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, journey, gitGraph, mindmap, timeline, quadrantChart, requirementDiagram, c4Context)",
     );
   }
   lintSequenceSemicolons(normalized);
@@ -208,23 +212,23 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         "    { sections: [ ...section objects ] }\n\n" +
         "content_structured section types:\n" +
         '  { type:"header", title, subtitle? }\n' +
-        '    Large title block, optional subtitle.\n' +
+        "    Large title block, optional subtitle.\n" +
         '  { type:"meta", title?, rows:[{label,value,badge?}] }\n' +
-        '    Key-value table. badge values: default|success|warning|danger|info\n' +
+        "    Key-value table. badge values: default|success|warning|danger|info\n" +
         '  { type:"callout", variant?, title?, message }\n' +
-        '    Alert box. variant: info|warning|danger|success (default: info)\n' +
+        "    Alert box. variant: info|warning|danger|success (default: info)\n" +
         '  { type:"checklist", title?, items:[{label,done,note?}] }\n' +
-        '    Task list with checked/unchecked items.\n' +
+        "    Task list with checked/unchecked items.\n" +
         '  { type:"steps", title?, steps:[{label,status,note?}] }\n' +
-        '    Pipeline stages. status: done|active|pending|error\n' +
+        "    Pipeline stages. status: done|active|pending|error\n" +
         '  { type:"metrics", items:[{label,value,sub?,variant?}] }\n' +
-        '    Stat cards. variant: default|success|warning|danger|info\n' +
+        "    Stat cards. variant: default|success|warning|danger|info\n" +
         '  { type:"section", title }\n' +
-        '    Labeled section divider.\n' +
+        "    Labeled section divider.\n" +
         '  { type:"table", title?, headers:string[], rows:string[][] }\n' +
-        '    Data table.\n' +
+        "    Data table.\n" +
         '  { type:"text", content }\n' +
-        '    Plain paragraph. Newlines become <br>.\n' +
+        "    Plain paragraph. Newlines become <br>.\n" +
         '  { type:"code", title?, lang?, content }\n' +
         "    Preformatted code block.\n\n" +
         "Example content_structured:\n" +
@@ -237,9 +241,13 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: pushPlanSchema.shape,
       handler: async function (args: any) {
         var parsed = pushPlanSchema.parse(args);
-        if (!parsed.content_md && !parsed.content_html && !parsed.content_structured) {
+        if (
+          !parsed.content_md &&
+          !parsed.content_html &&
+          !parsed.content_structured
+        ) {
           throw new Error(
-            "at least one of content_md, content_html, or content_structured must be provided"
+            "at least one of content_md, content_html, or content_structured must be provided",
           );
         }
         var plan = pushPlan(
@@ -250,27 +258,30 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             content_html: parsed.content_html,
             content_structured: parsed.content_structured,
             status: parsed.status,
-            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id,
+            session_id:
+              parsed.session_id === undefined
+                ? sessionIdFromEnv()
+                : parsed.session_id,
             pr_number: parsed.pr_number,
             pr_url: parsed.pr_url,
             pr_title: parsed.pr_title,
             linked_artifacts: parsed.linked_artifacts,
-            categories: parsed.categories
+            categories: parsed.categories,
           },
-          storageOpts
+          storageOpts,
         );
         // Feature-usage score (0..1) returned to the caller as a nudge to use
         // the full surface — diagrams, structured content, linked PR, etc.
         // Advisory only; reflects what's attached at push time.
         var feature_score = scorePlanFeatures({
           plan: plan,
-          artifacts: listArtifacts(plan.slug, storageOpts)
+          artifacts: listArtifacts(plan.slug, storageOpts),
         });
         return Object.assign({}, plan, {
           url: planDashboardUrl(plan.slug),
-          feature_score: feature_score
+          feature_score: feature_score,
         });
-      }
+      },
     },
     {
       name: "update_plan_status",
@@ -281,7 +292,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       handler: async function (args: any) {
         var parsed = updatePlanStatusSchema.parse(args);
         return updatePlanStatus(parsed.slug, parsed.to, storageOpts);
-      }
+      },
     },
     {
       name: "get_plan",
@@ -293,18 +304,25 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var result = getPlan(parsed.slug, storageOpts);
         if (!result) throw new Error("plan not found: " + parsed.slug);
         return result;
-      }
+      },
     },
     {
       name: "list_recent_plans",
       annotations: READ_ONLY,
-      description: "List plans newest-first. Optional filters: status, limit (default 20).",
+      description:
+        "List plans newest-first. Optional filters: status, limit (default 20).",
       shape: listRecentPlansSchema.shape,
       handler: async function (args: any) {
         var parsed = listRecentPlansSchema.parse(args || {});
         var limit = parsed.limit || 20;
-        return { plans: listPlans({ limit: limit, status: parsed.status, rootDir: storageOpts.rootDir }) };
-      }
+        return {
+          plans: listPlans({
+            limit: limit,
+            status: parsed.status,
+            rootDir: storageOpts.rootDir,
+          }),
+        };
+      },
     },
     {
       name: "push_artifact",
@@ -321,9 +339,10 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: pushArtifactSchema.shape,
       handler: async function (args: any) {
         var parsed = pushArtifactSchema.parse(args);
-        if (parsed.kind === "mermaid") parsed.content = validateMermaid(parsed.content);
+        if (parsed.kind === "mermaid")
+          parsed.content = validateMermaid(parsed.content);
         return pushArtifact(parsed, storageOpts);
-      }
+      },
     },
     {
       name: "push_diagram",
@@ -340,11 +359,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             slug: parsed.slug,
             kind: "mermaid",
             title: parsed.title,
-            content: source
+            content: source,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "push_prompt",
@@ -367,18 +386,19 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       handler: async function (args: any) {
         var parsed = pushPromptSchema.parse(args);
         return pushPrompt(parsed, storageOpts);
-      }
+      },
     },
     {
       name: "delete_plan",
       annotations: WRITE_OVERWRITE,
-      description: "Permanently delete a plan and all its artifacts from local storage.",
+      description:
+        "Permanently delete a plan and all its artifacts from local storage.",
       shape: deletePlanSchema.shape,
       handler: async function (args: any) {
         var parsed = deletePlanSchema.parse(args);
         var deleted = deletePlan(parsed.slug, storageOpts);
         return { deleted: deleted, slug: parsed.slug };
-      }
+      },
     },
     {
       name: "get_handoff_bundle",
@@ -401,9 +421,9 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         return buildHandoffBundle(parsed.slug, {
           rootDir: storageOpts.rootDir,
           follow_links: parsed.follow_links,
-          include_artifact_kinds: parsed.include_artifact_kinds
+          include_artifact_kinds: parsed.include_artifact_kinds,
         });
-      }
+      },
     },
     {
       name: "push_question",
@@ -425,9 +445,10 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: pushQuestionSchema.shape,
       handler: async function (args: any) {
         var parsed = pushQuestionSchema.parse(args);
-        var resolvedAskedBy = parsed.asked_by !== undefined
-          ? parsed.asked_by
-          : (process.env.CLAUDE_CODE_SESSION_ID || undefined);
+        var resolvedAskedBy =
+          parsed.asked_by !== undefined
+            ? parsed.asked_by
+            : process.env.CLAUDE_CODE_SESSION_ID || undefined;
         return pushQuestion(
           {
             plan_slug: parsed.plan_slug,
@@ -435,11 +456,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             header: parsed.header,
             options: parsed.options,
             stage: parsed.stage,
-            asked_by: resolvedAskedBy
+            asked_by: resolvedAskedBy,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "record_answer",
@@ -462,11 +483,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             plan_slug: parsed.plan_slug,
             question_id: parsed.question_id,
             answer: parsed.answer,
-            answered_by: parsed.answered_by
+            answered_by: parsed.answered_by,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "get_answers",
@@ -488,11 +509,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           {
             plan_slug: parsed.plan_slug,
             answered: parsed.answered,
-            stage: parsed.stage
+            stage: parsed.stage,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "push_lint_event",
@@ -505,11 +526,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         "optional associations.\n\n" +
         "Inputs:\n" +
         "  score (required, 0-100) — Turn-0 checklist score.\n" +
-        "  missing (optional) — missing checklist tags, e.g. [\"<done>\",\"<target>\"].\n" +
+        '  missing (optional) — missing checklist tags, e.g. ["<done>","<target>"].\n' +
         "  antipatterns / ceremony (optional) — detected anti-patterns / ceremony words.\n" +
         "  threshold (optional) — the cutoff that triggered recording.\n" +
         "  prompt_excerpt (optional, <=2000 chars) — truncated prompt text for context.\n" +
-        "  source (optional) — emitter label, e.g. \"hook\".\n" +
+        '  source (optional) — emitter label, e.g. "hook".\n' +
         "  session_id (optional) — Claude Code session id.\n" +
         "  plan_slug (optional) — associate with a plan if one applies.\n\n" +
         "Stored at <root>/_lint-events/<event-id>.json. Dashboard updates live via SSE.",
@@ -525,12 +546,15 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             threshold: parsed.threshold,
             prompt_excerpt: parsed.prompt_excerpt,
             source: parsed.source,
-            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id,
-            plan_slug: parsed.plan_slug
+            session_id:
+              parsed.session_id === undefined
+                ? sessionIdFromEnv()
+                : parsed.session_id,
+            plan_slug: parsed.plan_slug,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "get_lint_events",
@@ -545,11 +569,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           {
             session_id: parsed.session_id,
             plan_slug: parsed.plan_slug,
-            limit: parsed.limit
+            limit: parsed.limit,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "set_stage",
@@ -583,11 +607,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             plan_slug: parsed.plan_slug,
             to: parsed.to,
             by: parsed.by,
-            source: parsed.source
+            source: parsed.source,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "pull_plan",
@@ -606,7 +630,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var result = loadPlanFull(parsed.plan_slug, storageOpts);
         if (!result) throw new Error("plan not found: " + parsed.plan_slug);
         return result;
-      }
+      },
     },
     {
       name: "dispatch_stage",
@@ -640,11 +664,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
             target_stage: parsed.target_stage,
             confirm: parsed.confirm,
             token: parsed.token,
-            by: parsed.by
+            by: parsed.by,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "list_plan_versions",
@@ -656,8 +680,11 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: listPlanVersionsSchema.shape,
       handler: async function (args: any) {
         var parsed = listPlanVersionsSchema.parse(args);
-        return { slug: parsed.slug, versions: listVersions(parsed.slug, storageOpts) };
-      }
+        return {
+          slug: parsed.slug,
+          versions: listVersions(parsed.slug, storageOpts),
+        };
+      },
     },
     {
       name: "get_plan_version",
@@ -669,9 +696,12 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       handler: async function (args: any) {
         var parsed = getPlanVersionSchema.parse(args);
         var v = getVersion(parsed.slug, parsed.version, storageOpts);
-        if (!v) throw new Error("version not found: " + parsed.slug + " v" + parsed.version);
+        if (!v)
+          throw new Error(
+            "version not found: " + parsed.slug + " v" + parsed.version,
+          );
         return v;
-      }
+      },
     },
     {
       name: "restore_plan_version",
@@ -686,7 +716,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var parsed = restorePlanVersionSchema.parse(args);
         var plan = restoreVersion(parsed.slug, parsed.version, storageOpts);
         return Object.assign({}, plan, { url: planDashboardUrl(plan.slug) });
-      }
+      },
     },
     {
       name: "list_prompt_drafts",
@@ -699,7 +729,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       shape: {},
       handler: async function () {
         return listPromptDraftsWithActive(storageOpts);
-      }
+      },
     },
     {
       name: "get_active_prompt_draft",
@@ -714,7 +744,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       handler: async function () {
         var draft = getActivePromptDraft(storageOpts);
         return draft ? draft : { draft: null };
-      }
+      },
     },
     {
       name: "get_prompt_draft",
@@ -727,7 +757,7 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
         var parsed = getPromptDraftSchema.parse(args);
         var draft = getPromptDraft(parsed.id, storageOpts);
         return draft ? draft : { draft: null };
-      }
+      },
     },
     {
       name: "create_prompt_draft",
@@ -744,11 +774,14 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
           {
             title: parsed.title,
             content: parsed.content,
-            session_id: parsed.session_id === undefined ? sessionIdFromEnv() : parsed.session_id
+            session_id:
+              parsed.session_id === undefined
+                ? sessionIdFromEnv()
+                : parsed.session_id,
           },
-          storageOpts
+          storageOpts,
         );
-      }
+      },
     },
     {
       name: "update_prompt_draft",
@@ -763,18 +796,23 @@ export function buildDescriptors(deps: RegistryDeps = {}): ToolDescriptor[] {
       handler: async function (args: any) {
         var parsed = updatePromptDraftSchema.parse(args);
         if (parsed.title === undefined && parsed.content === undefined) {
-          throw new Error("update_prompt_draft requires at least one of title or content");
+          throw new Error(
+            "update_prompt_draft requires at least one of title or content",
+          );
         }
         return updatePromptDraft(
           { id: parsed.id, title: parsed.title, content: parsed.content },
-          storageOpts
+          storageOpts,
         );
-      }
-    }
+      },
+    },
   ];
 }
 
-export function registerAllTools(server: McpServer, deps: RegistryDeps = {}): void {
+export function registerAllTools(
+  server: McpServer,
+  deps: RegistryDeps = {},
+): void {
   // registerKitTools owns serialization + the { error, retryable, tool } contract.
   // No telemetry recorder is injected here (telemetry parity is a P2 follow-on).
   registerKitTools(server, buildDescriptors(deps));

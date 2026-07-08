@@ -1,8 +1,18 @@
 {
   "tool": "record_answer",
   "seed": [
-    { "tool": "push_plan", "request": { "title": "Plan for answer", "content_md": "seed" } },
-    { "tool": "push_question", "request": { "plan_slug": "plan-for-answer", "question": "Q?", "asked_by": "claude" } }
+    {
+      "tool": "push_plan",
+      "request": { "title": "Plan for answer", "content_md": "seed" }
+    },
+    {
+      "tool": "push_question",
+      "request": {
+        "plan_slug": "plan-for-answer",
+        "question": "Q?",
+        "asked_by": "claude"
+      }
+    }
   ],
   "request": {
     "plan_slug": "plan-for-answer",

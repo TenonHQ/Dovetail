@@ -1,14 +1,14 @@
-import {Sinc} from "@tenonhq/dovetail-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import * as babel from "@babel/core";
 export async function run(
   context: Sinc.FileContext,
   content: string,
-  options: any
+  options: any,
 ): Promise<Sinc.PluginResults> {
   try {
     let output = "";
     options = Object.assign(options, {
-      filename: `${context.targetField}${context.ext}`
+      filename: `${context.targetField}${context.ext}`,
     });
     let res = await babel.transformAsync(content, options || {});
     if (res && res.code) {
@@ -16,12 +16,12 @@ export async function run(
     } else {
       return {
         output: "",
-        success: false
+        success: false,
       };
     }
     return {
       output,
-      success: true
+      success: true,
     };
   } catch (e) {
     throw e;

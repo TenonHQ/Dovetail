@@ -69,7 +69,9 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getScopeManifestPath: jest.fn(
+    (scope: string) => `/project/dove.manifest.${scope}.json`,
+  ),
   getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
@@ -149,27 +151,32 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
     // Default: scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue(undefined);
   });
 
   test("JSON parse error in getUpdateSetConfig logs at warn level with file path", () => {
     // Put invalid JSON in the update set config
-    var configPath = require("path").resolve(process.cwd(), ".dove-update-sets.json");
+    var configPath = require("path").resolve(
+      process.cwd(),
+      ".dove-update-sets.json",
+    );
     mockFsStore[configPath] = "{invalid json!!!";
 
     var result = (multiScopeWatcher as any).getUpdateSetConfig();
 
     expect(result).toEqual({});
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to parse update set config")
+      expect.stringContaining("Failed to parse update set config"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining(configPath)
+      expect.stringContaining(configPath),
     );
     // Should NOT be at debug level
     expect(logger.debug).not.toHaveBeenCalledWith(
-      expect.stringContaining("parse")
+      expect.stringContaining("parse"),
     );
   });
 
@@ -188,7 +195,7 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
     await (multiScopeWatcher as any).processScopeQueue(scopeWatcher);
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Error processing queue")
+      expect.stringContaining("Error processing queue"),
     );
   });
 
@@ -222,16 +229,19 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
 
     // Manifest load should succeed
     var manifestPath = "/project/dove.manifest.x_cadso_core.json";
-    mockFsStore[manifestPath] = JSON.stringify({ tables: {}, scope: "x_cadso_core" });
+    mockFsStore[manifestPath] = JSON.stringify({
+      tables: {},
+      scope: "x_cadso_core",
+    });
 
     await (multiScopeWatcher as any).processScopeQueue(scopeWatcher);
 
     // In MultiScopeWatcher, skipped files log at warn level (appropriate for push context)
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Skipped")
+      expect.stringContaining("Skipped"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("not in manifest")
+      expect.stringContaining("not in manifest"),
     );
   });
 
@@ -245,7 +255,10 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
     });
 
     // Set up update set config
-    var updateSetConfigPath = require("path").resolve(process.cwd(), ".dove-update-sets.json");
+    var updateSetConfigPath = require("path").resolve(
+      process.cwd(),
+      ".dove-update-sets.json",
+    );
     mockFsStore[updateSetConfigPath] = JSON.stringify({
       x_cadso_core: { sys_id: "us1", name: "CU-1234 Feature Work" },
     });
@@ -259,11 +272,11 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
 
     // Should show update set name for configured scope
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("CU-1234 Feature Work")
+      expect.stringContaining("CU-1234 Feature Work"),
     );
     // Should show "no update set configured" for scope without one
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("no update set configured")
+      expect.stringContaining("no update set configured"),
     );
   });
 
@@ -276,28 +289,33 @@ describe("US-015: Escalate error logging from debug to appropriate levels", () =
       get: jest.fn().mockRejectedValue(new Error("Connection refused")),
     });
 
-    var result = await (multiScopeWatcher as any).getUpdateSetDetails("fake_sys_id");
+    var result = await (multiScopeWatcher as any).getUpdateSetDetails(
+      "fake_sys_id",
+    );
 
     expect(result).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Could not get update set details")
+      expect.stringContaining("Could not get update set details"),
     );
     // Should NOT be at debug level
     expect(logger.debug).not.toHaveBeenCalledWith(
-      expect.stringContaining("Could not get update set details")
+      expect.stringContaining("Could not get update set details"),
     );
   });
 
   test("readActiveTask parse error logs at warn level", () => {
     // Put invalid JSON in active task file
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = "not valid json{{{";
 
     var result = (multiScopeWatcher as any).readActiveTask();
 
     expect(result).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to parse active task file")
+      expect.stringContaining("Failed to parse active task file"),
     );
   });
 });

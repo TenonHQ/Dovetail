@@ -22,7 +22,9 @@ function createMockWatcher(): MockWatcher {
     close: jest.fn(),
     _emit: function (event: string) {
       var args = Array.prototype.slice.call(arguments, 1);
-      (handlers[event] || []).forEach(function (h) { h.apply(null, args); });
+      (handlers[event] || []).forEach(function (h) {
+        h.apply(null, args);
+      });
     },
   };
   return mock;
@@ -51,7 +53,9 @@ jest.mock("lodash", function () {
       capturedDebounceFns.push(fn);
       var wrapper = jest.fn();
       (wrapper as any).cancel = jest.fn();
-      (wrapper as any).flush = jest.fn(function () { return fn(); });
+      (wrapper as any).flush = jest.fn(function () {
+        return fn();
+      });
       return wrapper;
     }),
   };
@@ -69,8 +73,12 @@ var mockSNClient = {
 
 jest.mock("../snClient", function () {
   return {
-    defaultClient: jest.fn(function () { return mockSNClient; }),
-    unwrapSNResponse: jest.fn(function (val: any) { return val; }),
+    defaultClient: jest.fn(function () {
+      return mockSNClient;
+    }),
+    unwrapSNResponse: jest.fn(function (val: any) {
+      return val;
+    }),
   };
 });
 
@@ -117,7 +125,9 @@ jest.mock("../config", function () {
     updateManifest: jest.fn(),
     getManifest: jest.fn(),
     getSourcePath: jest.fn().mockReturnValue("/project/src"),
-    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/dove.manifest." + scope + ".json"; }),
+    getScopeManifestPath: jest.fn(function (scope: string) {
+      return "/project/dove.manifest." + scope + ".json";
+    }),
     getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
   };
 });
@@ -155,20 +165,30 @@ import * as ConfigManager from "../config";
 import { getFileContextWithSkipReason } from "../FileUtils";
 import { groupAppFiles, pushFiles } from "../appUtils";
 import { logger } from "../Logger";
-import { multiScopeWatcher, startMultiScopeWatching, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  startMultiScopeWatching,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 
 // --- Fixtures ---
 
-var makeFileContext = function (overrides?: Partial<Sinc.FileContext>): Sinc.FileContext {
-  return Object.assign({
-    filePath: "/project/src/x_test_core/sys_script_include/TestScript/script.js",
-    ext: ".js",
-    sys_id: "abc123",
-    name: "TestScript",
-    scope: "x_test_core",
-    tableName: "sys_script_include",
-    targetField: "script",
-  }, overrides || {});
+var makeFileContext = function (
+  overrides?: Partial<Sinc.FileContext>,
+): Sinc.FileContext {
+  return Object.assign(
+    {
+      filePath:
+        "/project/src/x_test_core/sys_script_include/TestScript/script.js",
+      ext: ".js",
+      sys_id: "abc123",
+      name: "TestScript",
+      scope: "x_test_core",
+      tableName: "sys_script_include",
+      targetField: "script",
+    },
+    overrides || {},
+  );
 };
 
 var TWO_SCOPES_CONFIG = {
@@ -201,7 +221,9 @@ describe("US-014: Global debounce for serialized scope processing", function () 
     // Default scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.createCurrentAppUserPref.mockResolvedValue({});
 
@@ -225,15 +247,27 @@ describe("US-014: Global debounce for serialized scope processing", function () 
   it("processes multiple scopes triggered within debounce window in a single batch", async function () {
     (ConfigManager.getConfig as jest.Mock).mockReturnValue(TWO_SCOPES_CONFIG);
 
-    var ctxA = makeFileContext({ scope: "x_scope_a", filePath: "/project/src/x_scope_a/sys_script_include/A/script.js" });
-    var ctxB = makeFileContext({ scope: "x_scope_b", filePath: "/project/src/x_scope_b/sys_script_include/B/script.js" });
-    (getFileContextWithSkipReason as jest.Mock).mockImplementation(function (fp: string) {
+    var ctxA = makeFileContext({
+      scope: "x_scope_a",
+      filePath: "/project/src/x_scope_a/sys_script_include/A/script.js",
+    });
+    var ctxB = makeFileContext({
+      scope: "x_scope_b",
+      filePath: "/project/src/x_scope_b/sys_script_include/B/script.js",
+    });
+    (getFileContextWithSkipReason as jest.Mock).mockImplementation(function (
+      fp: string,
+    ) {
       if (fp.indexOf("x_scope_a") !== -1) return { context: ctxA };
       if (fp.indexOf("x_scope_b") !== -1) return { context: ctxB };
       return { skipReason: "unknown" };
     });
-    (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-    (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+    (groupAppFiles as jest.Mock).mockReturnValue([
+      { table: "sys_script_include", sysId: "abc123", fields: {} },
+    ]);
+    (pushFiles as jest.Mock).mockResolvedValue([
+      { success: true, message: "ok" },
+    ]);
 
     await startMultiScopeWatching({ monitorIntervalMs: 0 });
 
@@ -251,15 +285,27 @@ describe("US-014: Global debounce for serialized scope processing", function () 
   it("processes scopes in FIFO order by first file change timestamp", async function () {
     (ConfigManager.getConfig as jest.Mock).mockReturnValue(TWO_SCOPES_CONFIG);
 
-    var ctxA = makeFileContext({ scope: "x_scope_a", filePath: "/project/src/x_scope_a/sys_script_include/A/script.js" });
-    var ctxB = makeFileContext({ scope: "x_scope_b", filePath: "/project/src/x_scope_b/sys_script_include/B/script.js" });
-    (getFileContextWithSkipReason as jest.Mock).mockImplementation(function (fp: string) {
+    var ctxA = makeFileContext({
+      scope: "x_scope_a",
+      filePath: "/project/src/x_scope_a/sys_script_include/A/script.js",
+    });
+    var ctxB = makeFileContext({
+      scope: "x_scope_b",
+      filePath: "/project/src/x_scope_b/sys_script_include/B/script.js",
+    });
+    (getFileContextWithSkipReason as jest.Mock).mockImplementation(function (
+      fp: string,
+    ) {
       if (fp.indexOf("x_scope_a") !== -1) return { context: ctxA };
       if (fp.indexOf("x_scope_b") !== -1) return { context: ctxB };
       return { skipReason: "unknown" };
     });
-    (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-    (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+    (groupAppFiles as jest.Mock).mockReturnValue([
+      { table: "sys_script_include", sysId: "abc123", fields: {} },
+    ]);
+    (pushFiles as jest.Mock).mockResolvedValue([
+      { success: true, message: "ok" },
+    ]);
 
     await startMultiScopeWatching({ monitorIntervalMs: 0 });
 
@@ -292,10 +338,19 @@ describe("US-014: Global debounce for serialized scope processing", function () 
   it("clears pendingScopes after processing", async function () {
     (ConfigManager.getConfig as jest.Mock).mockReturnValue(TWO_SCOPES_CONFIG);
 
-    var ctx = makeFileContext({ scope: "x_scope_a", filePath: "/project/src/x_scope_a/sys_script_include/A/script.js" });
-    (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ context: ctx });
-    (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
-    (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+    var ctx = makeFileContext({
+      scope: "x_scope_a",
+      filePath: "/project/src/x_scope_a/sys_script_include/A/script.js",
+    });
+    (getFileContextWithSkipReason as jest.Mock).mockReturnValue({
+      context: ctx,
+    });
+    (groupAppFiles as jest.Mock).mockReturnValue([
+      { table: "sys_script_include", sysId: "abc123", fields: {} },
+    ]);
+    (pushFiles as jest.Mock).mockResolvedValue([
+      { success: true, message: "ok" },
+    ]);
 
     await startMultiScopeWatching({ monitorIntervalMs: 0 });
 
@@ -314,13 +369,25 @@ describe("US-014: Global debounce for serialized scope processing", function () 
     await startMultiScopeWatching({ monitorIntervalMs: 0 });
 
     // Record the timestamp after first emit
-    mockWatchers[0]._emit("change", "/project/src/x_scope_a/sys_script_include/A/script.js");
-    var firstTimestamp = (multiScopeWatcher as any).pendingScopes.get("x_scope_a");
+    mockWatchers[0]._emit(
+      "change",
+      "/project/src/x_scope_a/sys_script_include/A/script.js",
+    );
+    var firstTimestamp = (multiScopeWatcher as any).pendingScopes.get(
+      "x_scope_a",
+    );
 
     // Wait a bit and emit again
-    await new Promise(function (r) { setTimeout(r, 5); });
-    mockWatchers[0]._emit("change", "/project/src/x_scope_a/sys_script_include/B/script.js");
-    var secondTimestamp = (multiScopeWatcher as any).pendingScopes.get("x_scope_a");
+    await new Promise(function (r) {
+      setTimeout(r, 5);
+    });
+    mockWatchers[0]._emit(
+      "change",
+      "/project/src/x_scope_a/sys_script_include/B/script.js",
+    );
+    var secondTimestamp = (multiScopeWatcher as any).pendingScopes.get(
+      "x_scope_a",
+    );
 
     // Timestamp should not have changed
     expect(secondTimestamp).toBe(firstTimestamp);

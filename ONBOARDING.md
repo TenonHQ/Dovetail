@@ -1,6 +1,6 @@
 # Dovetail — Developer Onboarding
 
-> From zero to a merged change. If you're a **Claude Code session**, read [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md) instead — this doc is for a human contributing *to* Dovetail.
+> From zero to a merged change. If you're a **Claude Code session**, read [`docs/claude-operating-guide.md`](docs/claude-operating-guide.md) instead — this doc is for a human contributing _to_ Dovetail.
 
 Dovetail is an npm-workspaces monorepo of **20 published `@tenonhq/dovetail-*` packages**: a bidirectional ServiceNow sync engine (`dove` CLI), a build toolchain (Babel/TypeScript/Webpack/SASS plugins), an action layer (SN authoring helpers, three MCP servers, ClickUp/Google clients), and the Update-Set Dashboard. Full map: [`docs/INDEX.md`](docs/INDEX.md) and the repo [`CLAUDE.md`](CLAUDE.md) → Package Inventory.
 
@@ -59,14 +59,14 @@ Per-package tests run on **Jest**. A jest `test` script with no test files gets 
 gh pr create --draft --base main --title "feat: …" --body "…"
 ```
 
-**Every Dovetail PR opens as DRAFT — no exceptions, even docs-only.** Merge-to-`main` touching `packages/**` auto-publishes the changed packages to npm immediately, and a bad version cannot be cleanly unpublished. Convert to *Ready for review* only after sign-off, then merge from there. (The only override is an explicit instruction like "open it as ready".)
+**Every Dovetail PR opens as DRAFT — no exceptions, even docs-only.** Merge-to-`main` touching `packages/**` auto-publishes the changed packages to npm immediately, and a bad version cannot be cleanly unpublished. Convert to _Ready for review_ only after sign-off, then merge from there. (The only override is an explicit instruction like "open it as ready".)
 
 ## 7. What happens on merge (auto-publish)
 
 `.github/workflows/publish.yml` fires on merge to `main` touching `packages/**`:
 
 1. **Scope** — only packages with changed files are built + published, in dependency order.
-2. **Gate** — the *entire* monorepo must `tsc`-build and pass tests; any failure publishes **nothing**.
+2. **Gate** — the _entire_ monorepo must `tsc`-build and pass tests; any failure publishes **nothing**.
 3. **Version** — auto patch-bump: `max(package.json version, npm-latest + 1 patch)`. For a minor/major, edit the package `version` in your PR and CI honors it.
 4. **After publish** — CI commits `postpublish` version bumps back to `main` as `chore(release): … [skip ci]` and cuts git tags + GitHub Releases per package.
 
@@ -83,10 +83,11 @@ Merge auto-publishes to npm and npm versions can't be cleanly unpublished. Draft
 The `postpublish` hook bumps `package.json` after a publish and commits it back as `chore(release): … [skip ci]`. So source is always ~1 patch ahead of the published version — that's expected, not drift.
 
 **Which package do I edit for X?**
+
 - ServiceNow sync / the `dove` CLI / V2 Flow codec → `core`
 - SN dictionary, choices, views, layouts, flow authoring → `servicenow` (`dove-sn`)
 - Plans/Q&A/handoff dashboard → `claude-plans`
-- ClickUp/Gmail/Calendar/SN *read* tools for Claude → `mcp`
+- ClickUp/Gmail/Calendar/SN _read_ tools for Claude → `mcp`
 - Build transforms → the matching `*-plugin` / `babel-*` package
 - Cross-instance update-set promotion → `sawmill`
 
@@ -110,4 +111,4 @@ Confirm `nvm use 22` (not a leftover Node 12/20 shell), then re-run `npm install
 
 ---
 
-*Last updated: 2026-05-29. See [`docs/INDEX.md`](docs/INDEX.md) for the full doc set.*
+_Last updated: 2026-05-29. See [`docs/INDEX.md`](docs/INDEX.md) for the full doc set._

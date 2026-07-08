@@ -90,7 +90,11 @@ async function resolveScope(args: CreateRecordArgs): Promise<string> {
   // Try to get scope from current manifest
   try {
     var manifest = ConfigManager.getManifest();
-    if (manifest && !ConfigManager.isMultiScopeManifest(manifest) && manifest.scope) {
+    if (
+      manifest &&
+      !ConfigManager.isMultiScopeManifest(manifest) &&
+      manifest.scope
+    ) {
       return manifest.scope;
     }
   } catch (e) {
@@ -316,7 +320,6 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
         fileLogger.error("Sync error:", syncErr.message);
       }
     }
-
   } catch (e) {
     logger.error("Failed to create record");
     if (e instanceof Error) {
@@ -325,7 +328,12 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
         var respStatus = (e as TSFIXME).response.status;
         var respData = (e as TSFIXME).response.data;
         logger.error("Server responded with status " + respStatus);
-        fileLogger.error("Create failed — status: " + respStatus + ", response: " + JSON.stringify(respData));
+        fileLogger.error(
+          "Create failed — status: " +
+            respStatus +
+            ", response: " +
+            JSON.stringify(respData),
+        );
       }
     }
     process.exit(1);

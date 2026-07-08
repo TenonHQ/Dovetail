@@ -31,7 +31,12 @@ const dirty = (sys_id: string): DirtyRecord => ({
 
 describe("buildApplyPlan — refusal gating", () => {
   it("refuses with no baseline", () => {
-    const plan = buildApplyPlan({ diff: diff({}), dirty: [], hasBaseline: false, force: false });
+    const plan = buildApplyPlan({
+      diff: diff({}),
+      dirty: [],
+      hasBaseline: false,
+      force: false,
+    });
     expect(plan.refuse).toBe(true);
     expect(plan.refuseReason).toContain("--write-baseline");
   });
@@ -44,7 +49,9 @@ describe("buildApplyPlan — refusal gating", () => {
       force: false,
     });
     expect(plan.refuse).toBe(true);
-    expect(plan.refuseReason).toContain("changed on the instance since baseline");
+    expect(plan.refuseReason).toContain(
+      "changed on the instance since baseline",
+    );
   });
 
   it("does not refuse on drift with --force", () => {
@@ -58,7 +65,12 @@ describe("buildApplyPlan — refusal gating", () => {
   });
 
   it("does not refuse when clean", () => {
-    const plan = buildApplyPlan({ diff: diff({}), dirty: [], hasBaseline: true, force: false });
+    const plan = buildApplyPlan({
+      diff: diff({}),
+      dirty: [],
+      hasBaseline: true,
+      force: false,
+    });
     expect(plan.refuse).toBe(false);
   });
 });
@@ -83,8 +95,16 @@ describe("buildApplyPlan — what applies", () => {
       diff: diff({
         deletes: [
           change({ sys_id: "t", kind: "delete", deleteDisposition: "tracked" }),
-          change({ sys_id: "l", kind: "delete", deleteDisposition: "local-new" }),
-          change({ sys_id: "n", kind: "delete", deleteDisposition: "no-baseline" }),
+          change({
+            sys_id: "l",
+            kind: "delete",
+            deleteDisposition: "local-new",
+          }),
+          change({
+            sys_id: "n",
+            kind: "delete",
+            deleteDisposition: "no-baseline",
+          }),
         ],
       }),
       dirty: [],
@@ -98,7 +118,13 @@ describe("buildApplyPlan — what applies", () => {
   it("--force still never deletes local-new records", () => {
     const plan = buildApplyPlan({
       diff: diff({
-        deletes: [change({ sys_id: "mine", kind: "delete", deleteDisposition: "local-new" })],
+        deletes: [
+          change({
+            sys_id: "mine",
+            kind: "delete",
+            deleteDisposition: "local-new",
+          }),
+        ],
       }),
       dirty: [dirty("other")],
       hasBaseline: true,

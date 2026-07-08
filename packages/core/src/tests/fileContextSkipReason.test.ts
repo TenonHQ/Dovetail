@@ -6,10 +6,18 @@ var mockScopeManifest: any = null;
 
 jest.mock("../config", function () {
   return {
-    getManifest: function () { return mockManifest; },
-    isMultiScopeManifest: function () { return mockIsMultiScope; },
-    resolveScopeFromPath: function () { return mockDetectedScope; },
-    resolveManifestForScope: function () { return mockScopeManifest; },
+    getManifest: function () {
+      return mockManifest;
+    },
+    isMultiScopeManifest: function () {
+      return mockIsMultiScope;
+    },
+    resolveScopeFromPath: function () {
+      return mockDetectedScope;
+    },
+    resolveManifestForScope: function () {
+      return mockScopeManifest;
+    },
   };
 });
 
@@ -32,7 +40,9 @@ describe("getFileContextWithSkipReason", function () {
     mockIsMultiScope = true;
     mockDetectedScope = undefined;
 
-    var result = getFileContextWithSkipReason("/project/src/x_unknown/sys_script_include/Test/script.js");
+    var result = getFileContextWithSkipReason(
+      "/project/src/x_unknown/sys_script_include/Test/script.js",
+    );
     expect(result.context).toBeUndefined();
     expect(result.skipReason).toBe("scope not found");
   });
@@ -43,7 +53,9 @@ describe("getFileContextWithSkipReason", function () {
     mockDetectedScope = "x_missing";
     mockScopeManifest = undefined;
 
-    var result = getFileContextWithSkipReason("/project/src/x_missing/sys_script_include/Test/script.js");
+    var result = getFileContextWithSkipReason(
+      "/project/src/x_missing/sys_script_include/Test/script.js",
+    );
     expect(result.context).toBeUndefined();
     expect(result.skipReason).toBe("scope manifest not found");
   });
@@ -55,7 +67,9 @@ describe("getFileContextWithSkipReason", function () {
     };
     mockIsMultiScope = false;
 
-    var result = getFileContextWithSkipReason("/project/src/sys_script_include/TestRecord/script.js");
+    var result = getFileContextWithSkipReason(
+      "/project/src/sys_script_include/TestRecord/script.js",
+    );
     expect(result.context).toBeUndefined();
     expect(result.skipReason).toBe("not in manifest");
   });
@@ -71,7 +85,9 @@ describe("getFileContextWithSkipReason", function () {
     };
     mockIsMultiScope = false;
 
-    var result = getFileContextWithSkipReason("/project/src/sys_script_include/MissingRecord/script.js");
+    var result = getFileContextWithSkipReason(
+      "/project/src/sys_script_include/MissingRecord/script.js",
+    );
     expect(result.context).toBeUndefined();
     expect(result.skipReason).toBe("not in manifest");
   });
@@ -92,7 +108,9 @@ describe("getFileContextWithSkipReason", function () {
     };
     mockIsMultiScope = false;
 
-    var result = getFileContextWithSkipReason("/project/src/sys_script_include/TestRecord/script.js");
+    var result = getFileContextWithSkipReason(
+      "/project/src/sys_script_include/TestRecord/script.js",
+    );
     expect(result.context).toBeUndefined();
     expect(result.skipReason).toBe("not in manifest");
   });
@@ -113,7 +131,9 @@ describe("getFileContextWithSkipReason", function () {
     };
     mockIsMultiScope = false;
 
-    var result = getFileContextWithSkipReason("/project/src/sys_script_include/TestRecord/script.js");
+    var result = getFileContextWithSkipReason(
+      "/project/src/sys_script_include/TestRecord/script.js",
+    );
     expect(result.skipReason).toBeUndefined();
     expect(result.context).toBeDefined();
     expect(result.context!.sys_id).toBe("abc123");
@@ -126,7 +146,9 @@ describe("getFileContextWithSkipReason", function () {
     mockManifest = null;
 
     expect(function () {
-      getFileContextWithSkipReason("/project/src/sys_script_include/Test/script.js");
+      getFileContextWithSkipReason(
+        "/project/src/sys_script_include/Test/script.js",
+      );
     }).toThrow("No manifest has been loaded!");
   });
 });

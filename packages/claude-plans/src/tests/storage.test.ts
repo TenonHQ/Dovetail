@@ -17,7 +17,7 @@ import {
   pushQuestion,
   recordAnswer,
   slugify,
-  updatePlanStatus
+  updatePlanStatus,
 } from "../storage";
 
 function validCycle(overrides: any = {}): string {
@@ -25,12 +25,17 @@ function validCycle(overrides: any = {}): string {
     {
       schema_version: 1,
       original_draft: "draft text",
-      lint_before: { score: 50, missing: ["done"], antipatterns: [], ceremony: [] },
+      lint_before: {
+        score: 50,
+        missing: ["done"],
+        antipatterns: [],
+        ceremony: [],
+      },
       open_questions: [{ question: "Q1", options: ["a", "b"], answer: "a" }],
       rewritten_prompt: "<prompt><done>Done = it works</done></prompt>",
-      lint_after: { score: 100, missing: [], ceremony: ["ultrathink"] }
+      lint_after: { score: 100, missing: [], ceremony: ["ultrathink"] },
     },
-    overrides
+    overrides,
   );
   return JSON.stringify(payload);
 }
@@ -53,12 +58,14 @@ describe("categories on push", function () {
     var p = pushPlan(
       {
         title: "Mortise Journey refactor",
-        content_md: "Hooks into the ServiceNow update set."
+        content_md: "Hooks into the ServiceNow update set.",
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(p.categories).toBeDefined();
-    expect(p.categories).toEqual(expect.arrayContaining(["Mortise", "Journey", "ServiceNow"]));
+    expect(p.categories).toEqual(
+      expect.arrayContaining(["Mortise", "Journey", "ServiceNow"]),
+    );
   });
 
   it("honors caller-provided categories override and skips auto-extraction", function () {
@@ -67,9 +74,9 @@ describe("categories on push", function () {
       {
         title: "Mortise Journey refactor",
         content_md: "ServiceNow update set",
-        categories: ["custom-tag-one", "custom-tag-two"]
+        categories: ["custom-tag-one", "custom-tag-two"],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(p.categories).toEqual(["custom-tag-one", "custom-tag-two"]);
   });
@@ -80,9 +87,9 @@ describe("categories on push", function () {
       {
         title: "ServiceNow work",
         content_md: "ServiceNow ServiceNow",
-        categories: []
+        categories: [],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(p.categories).toEqual([]);
   });
@@ -91,7 +98,10 @@ describe("categories on push", function () {
 describe("plan CRUD", function () {
   it("round-trips a plan with auto-slug, content_hash, and timestamps", function () {
     var root = mkTmp();
-    var p = pushPlan({ title: "My First Plan", content_md: "# hi" }, { rootDir: root });
+    var p = pushPlan(
+      { title: "My First Plan", content_md: "# hi" },
+      { rootDir: root },
+    );
     expect(p.slug).toBe("my-first-plan");
     expect(p.status).toBe("DRAFT");
     expect(p.content_hash).toHaveLength(64);
@@ -106,7 +116,9 @@ describe("plan CRUD", function () {
   it("preserves created_at and bumps updated_at on update", async function () {
     var root = mkTmp();
     var p1 = pushPlan({ title: "X", content_md: "v1" }, { rootDir: root });
-    await new Promise(function (r) { setTimeout(r, 10); });
+    await new Promise(function (r) {
+      setTimeout(r, 10);
+    });
     var p2 = pushPlan({ title: "X", content_md: "v2" }, { rootDir: root });
     expect(p2.created_at).toBe(p1.created_at);
     expect(p2.updated_at > p1.updated_at).toBe(true);
@@ -136,8 +148,12 @@ describe("status transitions", function () {
   it("allows DRAFT->APPROVED->EXITED", function () {
     var root = mkTmp();
     pushPlan({ title: "t", content_md: "x" }, { rootDir: root });
-    expect(updatePlanStatus("t", "APPROVED", { rootDir: root }).status).toBe("APPROVED");
-    expect(updatePlanStatus("t", "EXITED", { rootDir: root }).status).toBe("EXITED");
+    expect(updatePlanStatus("t", "APPROVED", { rootDir: root }).status).toBe(
+      "APPROVED",
+    );
+    expect(updatePlanStatus("t", "EXITED", { rootDir: root }).status).toBe(
+      "EXITED",
+    );
   });
 
   it("rejects reverses and skips", function () {
@@ -163,7 +179,7 @@ describe("artifacts", function () {
     expect(function () {
       pushArtifact(
         { plan_slug: "ghost", kind: "markdown", title: "x", content: "y" },
-        { rootDir: root }
+        { rootDir: root },
       );
     }).toThrow(/plan not found/);
   });
@@ -173,14 +189,23 @@ describe("artifacts", function () {
     pushPlan({ title: "p", content_md: "x" }, { rootDir: root });
     pushArtifact(
       { plan_slug: "p", kind: "markdown", title: "first", content: "1" },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushArtifact(
-      { plan_slug: "p", kind: "mermaid", title: "second", content: "graph TD; A-->B" },
-      { rootDir: root }
+      {
+        plan_slug: "p",
+        kind: "mermaid",
+        title: "second",
+        content: "graph TD; A-->B",
+      },
+      { rootDir: root },
     );
     var arts = listArtifacts("p", { rootDir: root });
-    expect(arts.map(function (a) { return a.slug; })).toEqual(["first", "second"]);
+    expect(
+      arts.map(function (a) {
+        return a.slug;
+      }),
+    ).toEqual(["first", "second"]);
     expect(arts[1].kind).toBe("mermaid");
   });
 
@@ -189,7 +214,7 @@ describe("artifacts", function () {
     pushPlan({ title: "z", content_md: "x" }, { rootDir: root });
     pushArtifact(
       { plan_slug: "z", kind: "markdown", title: "a", content: "a" },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(deletePlan("z", { rootDir: root })).toBe(true);
     expect(getPlan("z", { rootDir: root })).toBeNull();
@@ -205,16 +230,18 @@ describe("linked_artifacts on plans", function () {
         title: "child",
         content_md: "x",
         linked_artifacts: [
-          { plan_slug: "parent", relation: "improves", note: "n" }
-        ]
+          { plan_slug: "parent", relation: "improves", note: "n" },
+        ],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(p.linked_artifacts).toEqual([
-      { plan_slug: "parent", relation: "improves", note: "n" }
+      { plan_slug: "parent", relation: "improves", note: "n" },
     ]);
     var got = getPlan("child", { rootDir: root });
-    expect(got && got.plan.linked_artifacts && got.plan.linked_artifacts[0].relation).toBe("improves");
+    expect(
+      got && got.plan.linked_artifacts && got.plan.linked_artifacts[0].relation,
+    ).toBe("improves");
   });
 
   it("preserves prior links on subsequent push without the field", function () {
@@ -223,12 +250,17 @@ describe("linked_artifacts on plans", function () {
       {
         title: "child",
         content_md: "v1",
-        linked_artifacts: [{ plan_slug: "parent", relation: "built-from" }]
+        linked_artifacts: [{ plan_slug: "parent", relation: "built-from" }],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
-    var updated = pushPlan({ title: "child", content_md: "v2" }, { rootDir: root });
-    expect(updated.linked_artifacts && updated.linked_artifacts[0].plan_slug).toBe("parent");
+    var updated = pushPlan(
+      { title: "child", content_md: "v2" },
+      { rootDir: root },
+    );
+    expect(
+      updated.linked_artifacts && updated.linked_artifacts[0].plan_slug,
+    ).toBe("parent");
   });
 
   it("clears prior links when caller passes an empty array explicitly", function () {
@@ -237,13 +269,13 @@ describe("linked_artifacts on plans", function () {
       {
         title: "child",
         content_md: "v1",
-        linked_artifacts: [{ plan_slug: "parent", relation: "built-from" }]
+        linked_artifacts: [{ plan_slug: "parent", relation: "built-from" }],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     var cleared = pushPlan(
       { title: "child", content_md: "v2", linked_artifacts: [] },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(cleared.linked_artifacts).toEqual([]);
   });
@@ -259,9 +291,9 @@ describe("prompt-cycle artifact kind", function () {
         slug: "cycle",
         kind: "prompt-cycle",
         title: "improve cycle",
-        content: validCycle()
+        content: validCycle(),
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(a.kind).toBe("prompt-cycle");
     var got = getPlan("host", { rootDir: root });
@@ -276,8 +308,13 @@ describe("prompt-cycle artifact kind", function () {
     pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
     expect(function () {
       pushArtifact(
-        { plan_slug: "host", kind: "prompt-cycle", title: "bad", content: "{not json" },
-        { rootDir: root }
+        {
+          plan_slug: "host",
+          kind: "prompt-cycle",
+          title: "bad",
+          content: "{not json",
+        },
+        { rootDir: root },
       );
     }).toThrow(/not valid JSON/);
   });
@@ -291,9 +328,9 @@ describe("prompt-cycle artifact kind", function () {
           plan_slug: "host",
           kind: "prompt-cycle",
           title: "bad",
-          content: JSON.stringify({ schema_version: 1, original_draft: "x" })
+          content: JSON.stringify({ schema_version: 1, original_draft: "x" }),
         },
-        { rootDir: root }
+        { rootDir: root },
       );
     }).toThrow(/failed validation/);
   });
@@ -304,8 +341,12 @@ describe("prompts", function () {
     var root = mkTmp();
     expect(function () {
       pushPrompt(
-        { plan_slug: "ghost", title: "x", content: "<prompt><done>Done</done></prompt>" },
-        { rootDir: root }
+        {
+          plan_slug: "ghost",
+          title: "x",
+          content: "<prompt><done>Done</done></prompt>",
+        },
+        { rootDir: root },
       );
     }).toThrow(/plan not found/);
   });
@@ -320,9 +361,9 @@ describe("prompts", function () {
         content: "<prompt><done>Done = green</done></prompt>",
         source_draft: "make it better",
         score_before: 17,
-        score_after: 92
+        score_after: 92,
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(p.slug).toBe("rewrite-v1");
     expect(p.score_before).toBe(17);
@@ -341,13 +382,20 @@ describe("prompts", function () {
     pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
     var p1 = pushPrompt(
       { plan_slug: "host", title: "My Rewrite!", content: "v1" },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(p1.slug).toBe("my-rewrite");
-    await new Promise(function (r) { setTimeout(r, 10); });
+    await new Promise(function (r) {
+      setTimeout(r, 10);
+    });
     var p2 = pushPrompt(
-      { plan_slug: "host", slug: "my-rewrite", title: "My Rewrite!", content: "v2" },
-      { rootDir: root }
+      {
+        plan_slug: "host",
+        slug: "my-rewrite",
+        title: "My Rewrite!",
+        content: "v2",
+      },
+      { rootDir: root },
     );
     expect(p2.created_at).toBe(p1.created_at);
     expect(p2.updated_at > p1.updated_at).toBe(true);
@@ -363,11 +411,23 @@ describe("prompts", function () {
   it("listPrompts sorts by created_at ascending", async function () {
     var root = mkTmp();
     pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
-    pushPrompt({ plan_slug: "host", title: "first", content: "1" }, { rootDir: root });
-    await new Promise(function (r) { setTimeout(r, 10); });
-    pushPrompt({ plan_slug: "host", title: "second", content: "2" }, { rootDir: root });
+    pushPrompt(
+      { plan_slug: "host", title: "first", content: "1" },
+      { rootDir: root },
+    );
+    await new Promise(function (r) {
+      setTimeout(r, 10);
+    });
+    pushPrompt(
+      { plan_slug: "host", title: "second", content: "2" },
+      { rootDir: root },
+    );
     var list = listPrompts("host", { rootDir: root });
-    expect(list.map(function (p) { return p.slug; })).toEqual(["first", "second"]);
+    expect(
+      list.map(function (p) {
+        return p.slug;
+      }),
+    ).toEqual(["first", "second"]);
   });
 
   it("getPlan returns prompts alongside artifacts", function () {
@@ -375,9 +435,12 @@ describe("prompts", function () {
     pushPlan({ title: "host", content_md: "x" }, { rootDir: root });
     pushArtifact(
       { plan_slug: "host", kind: "markdown", title: "doc", content: "hi" },
-      { rootDir: root }
+      { rootDir: root },
     );
-    pushPrompt({ plan_slug: "host", title: "p1", content: "<prompt/>" }, { rootDir: root });
+    pushPrompt(
+      { plan_slug: "host", title: "p1", content: "<prompt/>" },
+      { rootDir: root },
+    );
     var got = getPlan("host", { rootDir: root });
     expect(got && got.artifacts.length).toBe(1);
     expect(got && got.prompts.length).toBe(1);
@@ -387,7 +450,10 @@ describe("prompts", function () {
   it("deletePlan also removes the prompts/ subdir", function () {
     var root = mkTmp();
     pushPlan({ title: "z", content_md: "x" }, { rootDir: root });
-    pushPrompt({ plan_slug: "z", title: "p", content: "<prompt/>" }, { rootDir: root });
+    pushPrompt(
+      { plan_slug: "z", title: "p", content: "<prompt/>" },
+      { rootDir: root },
+    );
     expect(fs.existsSync(path.join(root, "z", "prompts"))).toBe(true);
     expect(deletePlan("z", { rootDir: root })).toBe(true);
     expect(fs.existsSync(path.join(root, "z"))).toBe(false);
@@ -399,17 +465,21 @@ describe("buildHandoffBundle", function () {
     var root = mkTmp();
     pushPlan(
       { title: "parent plan", content_md: "# parent body" },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushPlan(
       {
         title: "child plan",
         content_md: "# child body",
         linked_artifacts: [
-          { plan_slug: "parent-plan", relation: "improves", note: "drives this" }
-        ]
+          {
+            plan_slug: "parent-plan",
+            relation: "improves",
+            note: "drives this",
+          },
+        ],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushArtifact(
       {
@@ -419,13 +489,16 @@ describe("buildHandoffBundle", function () {
         title: "the cycle",
         content: validCycle({
           rewritten_prompt: "<prompt><done>Done = ship it</done></prompt>",
-          source_plan_slug: "parent-plan"
-        })
+          source_plan_slug: "parent-plan",
+        }),
       },
-      { rootDir: root }
+      { rootDir: root },
     );
 
-    var bundle = buildHandoffBundle("child-plan", { rootDir: root, follow_links: true });
+    var bundle = buildHandoffBundle("child-plan", {
+      rootDir: root,
+      follow_links: true,
+    });
     expect(bundle.slug).toBe("child-plan");
     expect(bundle.markdown).toMatch(/# Handoff: child plan/);
     expect(bundle.markdown).toMatch(/# child body/);
@@ -445,9 +518,9 @@ describe("buildHandoffBundle", function () {
       {
         title: "child plan",
         content_md: "C",
-        linked_artifacts: [{ plan_slug: "parent-plan", relation: "improves" }]
+        linked_artifacts: [{ plan_slug: "parent-plan", relation: "improves" }],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     var bundle = buildHandoffBundle("child-plan", { rootDir: root });
     expect(bundle.markdown).toMatch(/## Linked plans/);
@@ -458,8 +531,13 @@ describe("buildHandoffBundle", function () {
     var root = mkTmp();
     pushPlan({ title: "no cycle here", content_md: "X" }, { rootDir: root });
     pushArtifact(
-      { plan_slug: "no-cycle-here", kind: "markdown", title: "doc", content: "hello" },
-      { rootDir: root }
+      {
+        plan_slug: "no-cycle-here",
+        kind: "markdown",
+        title: "doc",
+        content: "hello",
+      },
+      { rootDir: root },
     );
     var bundle = buildHandoffBundle("no-cycle-here", { rootDir: root });
     expect(bundle.ready_to_paste_prompt).toBeNull();
@@ -475,20 +553,22 @@ describe("buildHandoffBundle", function () {
         title: "early",
         content: "<prompt><done>Done = old</done></prompt>",
         score_before: 30,
-        score_after: 70
+        score_after: 70,
       },
-      { rootDir: root }
+      { rootDir: root },
     );
-    await new Promise(function (r) { setTimeout(r, 10); });
+    await new Promise(function (r) {
+      setTimeout(r, 10);
+    });
     pushPrompt(
       {
         plan_slug: "host",
         title: "latest",
         content: "<prompt><done>Done = ship the rewrite</done></prompt>",
         score_before: 30,
-        score_after: 95
+        score_after: 95,
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     var bundle = buildHandoffBundle("host", { rootDir: root });
     expect(bundle.markdown).toMatch(/## Prompts/);
@@ -504,13 +584,19 @@ describe("buildHandoffBundle", function () {
         plan_slug: "host",
         kind: "prompt-cycle",
         title: "cycle",
-        content: validCycle({ rewritten_prompt: "<prompt><done>Done = from cycle</done></prompt>" })
+        content: validCycle({
+          rewritten_prompt: "<prompt><done>Done = from cycle</done></prompt>",
+        }),
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushPrompt(
-      { plan_slug: "host", title: "p", content: "<prompt><done>Done = from prompt</done></prompt>" },
-      { rootDir: root }
+      {
+        plan_slug: "host",
+        title: "p",
+        content: "<prompt><done>Done = from prompt</done></prompt>",
+      },
+      { rootDir: root },
     );
     var bundle = buildHandoffBundle("host", { rootDir: root });
     expect(bundle.ready_to_paste_prompt).toMatch(/Done = from cycle/);
@@ -537,7 +623,7 @@ describe("atomic writes", function () {
             pushPlan({ title: "race", content_md: body }, { rootDir: root });
             resolve();
           });
-        })
+        }),
       );
     }
     await Promise.all(jobs);
@@ -561,9 +647,12 @@ function writeV1PlanFixture(root: string, slug: string): any {
     content_hash: "deadbeef",
     created_at: "2026-05-01T00:00:00.000Z",
     updated_at: "2026-05-01T00:00:00.000Z",
-    session_id: null
+    session_id: null,
   };
-  fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify(v1, null, 2));
+  fs.writeFileSync(
+    path.join(root, slug + ".json"),
+    JSON.stringify(v1, null, 2),
+  );
   return v1;
 }
 
@@ -595,7 +684,7 @@ describe("plan questions (v2)", function () {
 
     var q = pushQuestion(
       { plan_slug: slug, question: "Add field?" },
-      { rootDir: root }
+      { rootDir: root },
     );
 
     var afterRaw = fs.readFileSync(path.join(root, slug + ".json"), "utf8");
@@ -618,17 +707,22 @@ describe("plan questions (v2)", function () {
     pushPlan({ title: "answers", content_md: "x" }, { rootDir: root });
     var q = pushQuestion(
       { plan_slug: "answers", question: "Final answer?" },
-      { rootDir: root }
+      { rootDir: root },
     );
     var first = recordAnswer(
       { plan_slug: "answers", question_id: q.id, answer: "first" },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(first.answer).toBe("first");
 
     var second = recordAnswer(
-      { plan_slug: "answers", question_id: q.id, answer: "second", answered_by: "daniel" },
-      { rootDir: root }
+      {
+        plan_slug: "answers",
+        question_id: q.id,
+        answer: "second",
+        answered_by: "daniel",
+      },
+      { rootDir: root },
     );
     expect(second.answer).toBe("second");
     expect(second.answered_by).toBe("daniel");
@@ -641,20 +735,43 @@ describe("plan questions (v2)", function () {
   it("getAnswers filters: stage-only, answered-only, unanswered-only, combined", function () {
     var root = mkTmp();
     pushPlan({ title: "filters", content_md: "x" }, { rootDir: root });
-    var q1 = pushQuestion({ plan_slug: "filters", question: "r1?", stage: "research" }, { rootDir: root });
-    var q2 = pushQuestion({ plan_slug: "filters", question: "r2?", stage: "research" }, { rootDir: root });
-    pushQuestion({ plan_slug: "filters", question: "p1?", stage: "plan" }, { rootDir: root });
-    recordAnswer({ plan_slug: "filters", question_id: q1.id, answer: "yes" }, { rootDir: root });
+    var q1 = pushQuestion(
+      { plan_slug: "filters", question: "r1?", stage: "research" },
+      { rootDir: root },
+    );
+    var q2 = pushQuestion(
+      { plan_slug: "filters", question: "r2?", stage: "research" },
+      { rootDir: root },
+    );
+    pushQuestion(
+      { plan_slug: "filters", question: "p1?", stage: "plan" },
+      { rootDir: root },
+    );
+    recordAnswer(
+      { plan_slug: "filters", question_id: q1.id, answer: "yes" },
+      { rootDir: root },
+    );
 
-    expect(getAnswers({ plan_slug: "filters" }, { rootDir: root }).questions.length).toBe(3);
-    expect(getAnswers({ plan_slug: "filters", stage: "research" }, { rootDir: root }).questions.length).toBe(2);
-    expect(getAnswers({ plan_slug: "filters", answered: true }, { rootDir: root }).questions.length).toBe(1);
-    expect(getAnswers({ plan_slug: "filters", answered: false }, { rootDir: root }).questions.length).toBe(2);
+    expect(
+      getAnswers({ plan_slug: "filters" }, { rootDir: root }).questions.length,
+    ).toBe(3);
+    expect(
+      getAnswers({ plan_slug: "filters", stage: "research" }, { rootDir: root })
+        .questions.length,
+    ).toBe(2);
+    expect(
+      getAnswers({ plan_slug: "filters", answered: true }, { rootDir: root })
+        .questions.length,
+    ).toBe(1);
+    expect(
+      getAnswers({ plan_slug: "filters", answered: false }, { rootDir: root })
+        .questions.length,
+    ).toBe(2);
 
     // Combined: research + unanswered = q2.
     var combined = getAnswers(
       { plan_slug: "filters", stage: "research", answered: false },
-      { rootDir: root }
+      { rootDir: root },
     );
     expect(combined.questions.length).toBe(1);
     expect(combined.questions[0].id).toBe(q2.id);
@@ -664,14 +781,22 @@ describe("plan questions (v2)", function () {
     var root = mkTmp();
     pushPlan({ title: "collide", content_md: "x" }, { rootDir: root });
     // First push uses the default generator to seat one known id.
-    var seated = pushQuestion({ plan_slug: "collide", question: "Q1?" }, { rootDir: root });
+    var seated = pushQuestion(
+      { plan_slug: "collide", question: "Q1?" },
+      { rootDir: root },
+    );
 
     // Force the generator to always return the seated id — every retry collides.
-    var restore = __setIdGenerator(function () { return seated.id; });
+    var restore = __setIdGenerator(function () {
+      return seated.id;
+    });
     try {
       var threw: Error | null = null;
       try {
-        pushQuestion({ plan_slug: "collide", question: "Q2?" }, { rootDir: root });
+        pushQuestion(
+          { plan_slug: "collide", question: "Q2?" },
+          { rootDir: root },
+        );
       } catch (e) {
         threw = e as Error;
       }
@@ -685,17 +810,30 @@ describe("plan questions (v2)", function () {
   it("two sequential pushQuestion calls both persist", function () {
     var root = mkTmp();
     pushPlan({ title: "seq", content_md: "x" }, { rootDir: root });
-    var a = pushQuestion({ plan_slug: "seq", question: "a?" }, { rootDir: root });
-    var b = pushQuestion({ plan_slug: "seq", question: "b?" }, { rootDir: root });
+    var a = pushQuestion(
+      { plan_slug: "seq", question: "a?" },
+      { rootDir: root },
+    );
+    var b = pushQuestion(
+      { plan_slug: "seq", question: "b?" },
+      { rootDir: root },
+    );
     var listed = getAnswers({ plan_slug: "seq" }, { rootDir: root });
-    expect(listed.questions.map(function (q) { return q.id; })).toEqual([a.id, b.id]);
+    expect(
+      listed.questions.map(function (q) {
+        return q.id;
+      }),
+    ).toEqual([a.id, b.id]);
   });
 
   it("pushQuestion errors when the plan does not exist", function () {
     var root = mkTmp();
     var threw: Error | null = null;
     try {
-      pushQuestion({ plan_slug: "no-such-plan", question: "?" }, { rootDir: root });
+      pushQuestion(
+        { plan_slug: "no-such-plan", question: "?" },
+        { rootDir: root },
+      );
     } catch (e) {
       threw = e as Error;
     }
@@ -709,9 +847,14 @@ describe("plan questions (v2)", function () {
 describe("schema_version + migrateV1OnLoad", function () {
   it("stamps schema_version=2 on every pushPlan write", function () {
     var root = mkTmp();
-    var p = pushPlan({ title: "Versioned", content_md: "x" }, { rootDir: root });
+    var p = pushPlan(
+      { title: "Versioned", content_md: "x" },
+      { rootDir: root },
+    );
     expect(p.schema_version).toBe(2);
-    var raw = JSON.parse(fs.readFileSync(path.join(root, "versioned.json"), "utf8"));
+    var raw = JSON.parse(
+      fs.readFileSync(path.join(root, "versioned.json"), "utf8"),
+    );
     expect(raw.schema_version).toBe(2);
   });
 
@@ -727,20 +870,27 @@ describe("schema_version + migrateV1OnLoad", function () {
       content_hash: "0".repeat(64),
       created_at: "2026-01-01T00:00:00.000Z",
       updated_at: "2026-01-01T00:00:00.000Z",
-      session_id: null
+      session_id: null,
     };
-    fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify(v1, null, 2));
+    fs.writeFileSync(
+      path.join(root, slug + ".json"),
+      JSON.stringify(v1, null, 2),
+    );
 
     // Read-only access via getPlan returns the normalized record without
     // touching disk.
     var got = getPlan(slug, { rootDir: root });
     expect(got && got.plan.schema_version).toBe(2);
-    var rawBefore = JSON.parse(fs.readFileSync(path.join(root, slug + ".json"), "utf8"));
+    var rawBefore = JSON.parse(
+      fs.readFileSync(path.join(root, slug + ".json"), "utf8"),
+    );
     expect(rawBefore.schema_version).toBeUndefined();
 
     // A status transition triggers a write — the on-disk record is now v2.
     updatePlanStatus(slug, "APPROVED", { rootDir: root });
-    var rawAfter = JSON.parse(fs.readFileSync(path.join(root, slug + ".json"), "utf8"));
+    var rawAfter = JSON.parse(
+      fs.readFileSync(path.join(root, slug + ".json"), "utf8"),
+    );
     expect(rawAfter.schema_version).toBe(2);
     expect(rawAfter.status).toBe("APPROVED");
   });
@@ -761,18 +911,23 @@ describe("schema_version + migrateV1OnLoad", function () {
         {
           id: "q_aabbccdd",
           question: "Pre-existing?",
-          asked_at: "2026-01-01T00:00:00.000Z"
-        }
-      ]
+          asked_at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
     };
-    fs.writeFileSync(path.join(root, slug + ".json"), JSON.stringify(v1, null, 2));
+    fs.writeFileSync(
+      path.join(root, slug + ".json"),
+      JSON.stringify(v1, null, 2),
+    );
 
     recordAnswer(
       { plan_slug: slug, question_id: "q_aabbccdd", answer: "yes" },
-      { rootDir: root }
+      { rootDir: root },
     );
 
-    var raw = JSON.parse(fs.readFileSync(path.join(root, slug + ".json"), "utf8"));
+    var raw = JSON.parse(
+      fs.readFileSync(path.join(root, slug + ".json"), "utf8"),
+    );
     expect(raw.schema_version).toBe(2);
     expect(raw.questions[0].answer).toBe("yes");
   });
@@ -780,7 +935,9 @@ describe("schema_version + migrateV1OnLoad", function () {
   it("migrateV1OnLoad is idempotent on a v2 record", function () {
     var root = mkTmp();
     pushPlan({ title: "Already v2", content_md: "x" }, { rootDir: root });
-    var raw = JSON.parse(fs.readFileSync(path.join(root, "already-v2.json"), "utf8"));
+    var raw = JSON.parse(
+      fs.readFileSync(path.join(root, "already-v2.json"), "utf8"),
+    );
     expect(raw.schema_version).toBe(2);
     // Read twice; both reads should produce the same shape.
     var first = getPlan("already-v2", { rootDir: root });
@@ -794,12 +951,19 @@ describe("schema_version + migrateV1OnLoad", function () {
 describe("Q&A audit (Phase B)", function () {
   it("rejects an answer for a question id that doesn't exist on the plan", function () {
     var root = mkTmp();
-    pushPlan({ title: "Plan w/o question", content_md: "x" }, { rootDir: root });
+    pushPlan(
+      { title: "Plan w/o question", content_md: "x" },
+      { rootDir: root },
+    );
     var threw: Error | null = null;
     try {
       recordAnswer(
-        { plan_slug: "plan-w-o-question", question_id: "q_deadbeef", answer: "nope" },
-        { rootDir: root }
+        {
+          plan_slug: "plan-w-o-question",
+          question_id: "q_deadbeef",
+          answer: "nope",
+        },
+        { rootDir: root },
       );
     } catch (e) {
       threw = e as Error;
@@ -813,21 +977,25 @@ describe("Q&A audit (Phase B)", function () {
     pushPlan({ title: "Multi-stage", content_md: "x" }, { rootDir: root });
     pushQuestion(
       { plan_slug: "multi-stage", question: "Q1", stage: "research" },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushQuestion(
       { plan_slug: "multi-stage", question: "Q2", stage: "planning" },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushQuestion(
       { plan_slug: "multi-stage", question: "Q3", stage: "research" },
-      { rootDir: root }
+      { rootDir: root },
     );
     var res = getAnswers(
       { plan_slug: "multi-stage", stage: "research" },
-      { rootDir: root }
+      { rootDir: root },
     );
-    expect(res.questions.map(function (q) { return q.question; })).toEqual(["Q1", "Q3"]);
+    expect(
+      res.questions.map(function (q) {
+        return q.question;
+      }),
+    ).toEqual(["Q1", "Q3"]);
   });
 
   it("locks documented last-write-wins behavior on simulated concurrent pushQuestion", function () {

@@ -1,6 +1,7 @@
 # Create a Custom Dovetail Plugin
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -28,23 +30,23 @@ interface Plugin {
   run: (
     context: FileContext,
     content: string,
-    options: any
+    options: any,
   ) => Promise<PluginResults>;
 }
 
 interface FileContext {
-  filePath: string;     // Absolute path to the source file
-  name: string;         // Record display name
-  tableName: string;    // ServiceNow table name
-  targetField: string;  // Field name in ServiceNow
-  ext: string;          // File extension
-  sys_id: string;       // ServiceNow record sys_id
-  scope: string;        // Application scope
+  filePath: string; // Absolute path to the source file
+  name: string; // Record display name
+  tableName: string; // ServiceNow table name
+  targetField: string; // Field name in ServiceNow
+  ext: string; // File extension
+  sys_id: string; // ServiceNow record sys_id
+  scope: string; // Application scope
 }
 
 interface PluginResults {
-  success: boolean;     // If false, build is halted
-  output: string;       // Transformed content (passed to next plugin)
+  success: boolean; // If false, build is halted
+  output: string; // Transformed content (passed to next plugin)
 }
 ```
 
@@ -53,7 +55,7 @@ interface PluginResults {
 ```javascript
 // my-dovetail-plugin/index.js
 module.exports = {
-  run: async function(context, content, options) {
+  run: async function (context, content, options) {
     try {
       let output = content;
 
@@ -67,7 +69,7 @@ module.exports = {
       console.error("Plugin error: " + e.message);
       return { success: false, output: "" };
     }
-  }
+  },
 };
 ```
 
@@ -80,11 +82,11 @@ rules: [
     plugins: [
       {
         name: "my-dovetail-plugin",
-        options: { addHeader: true }
-      }
-    ]
-  }
-]
+        options: { addHeader: true },
+      },
+    ],
+  },
+];
 ```
 
 **Important:** Dovetail resolves plugins from `node_modules/` using the plugin name as a path segment. For local plugins, you have three options:
@@ -146,7 +148,7 @@ Final content pushed to ServiceNow
 var terser = require("terser");
 
 module.exports = {
-  run: async function(context, content, options) {
+  run: async function (context, content, options) {
     try {
       if (context.ext === ".css" || context.ext === ".scss") {
         return { success: true, output: content };
@@ -154,15 +156,17 @@ module.exports = {
 
       var result = await terser.minify(content, {
         compress: options.compress !== false,
-        mangle: options.mangle !== false
+        mangle: options.mangle !== false,
       });
 
       return { success: true, output: result.code };
     } catch (e) {
-      console.error("Minification failed for " + context.name + ": " + e.message);
+      console.error(
+        "Minification failed for " + context.name + ": " + e.message,
+      );
       return { success: false, output: "" };
     }
-  }
+  },
 };
 ```
 

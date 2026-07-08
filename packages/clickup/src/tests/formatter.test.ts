@@ -13,15 +13,34 @@ describe("formatForClaude", function () {
   });
 
   it("includes total count in header", function () {
-    var tasks = [makeClickUpTask(), makeClickUpTask({ id: "task2", name: "Second Task" })];
+    var tasks = [
+      makeClickUpTask(),
+      makeClickUpTask({ id: "task2", name: "Second Task" }),
+    ];
     var result = formatForClaude({ tasks: tasks });
     expect(result).toContain("## ClickUp Tasks (2 total)");
   });
 
   it("groups tasks by status with section headers", function () {
     var tasks = [
-      makeClickUpTask({ status: { status: "in progress", color: "#000", type: "open", orderindex: 1 } }),
-      makeClickUpTask({ id: "task2", name: "Done Task", status: { status: "done", color: "#000", type: "closed", orderindex: 2 } }),
+      makeClickUpTask({
+        status: {
+          status: "in progress",
+          color: "#000",
+          type: "open",
+          orderindex: 1,
+        },
+      }),
+      makeClickUpTask({
+        id: "task2",
+        name: "Done Task",
+        status: {
+          status: "done",
+          color: "#000",
+          type: "closed",
+          orderindex: 2,
+        },
+      }),
     ];
     var result = formatForClaude({ tasks: tasks });
     expect(result).toContain("### In progress (1)");
@@ -41,7 +60,9 @@ describe("formatForClaude", function () {
   });
 
   it("shows priority when present", function () {
-    var task = makeClickUpTask({ priority: { id: "2", priority: "high", color: "#f00", orderindex: "2" } });
+    var task = makeClickUpTask({
+      priority: { id: "2", priority: "high", color: "#f00", orderindex: "2" },
+    });
     var result = formatForClaude({ tasks: [task] });
     expect(result).toContain("(Priority: High)");
   });
@@ -99,7 +120,14 @@ describe("formatTaskDetail", function () {
   });
 
   it("includes status", function () {
-    var task = makeClickUpTask({ status: { status: "in review", color: "#000", type: "open", orderindex: 1 } });
+    var task = makeClickUpTask({
+      status: {
+        status: "in review",
+        color: "#000",
+        type: "open",
+        orderindex: 1,
+      },
+    });
     var result = formatTaskDetail({ task: task });
     expect(result).toContain("**Status:** In review");
   });
@@ -117,7 +145,9 @@ describe("formatTaskDetail", function () {
   });
 
   it("includes priority when present", function () {
-    var task = makeClickUpTask({ priority: { id: "1", priority: "urgent", color: "#f00", orderindex: "1" } });
+    var task = makeClickUpTask({
+      priority: { id: "1", priority: "urgent", color: "#f00", orderindex: "1" },
+    });
     var result = formatTaskDetail({ task: task });
     expect(result).toContain("**Priority:** Urgent");
   });
@@ -189,7 +219,9 @@ describe("formatTaskDetail", function () {
   });
 
   it("includes description section when present", function () {
-    var task = makeClickUpTask({ description: "Fix the login page redirect issue" });
+    var task = makeClickUpTask({
+      description: "Fix the login page redirect issue",
+    });
     var result = formatTaskDetail({ task: task });
     expect(result).toContain("### Description");
     expect(result).toContain("Fix the login page redirect issue");
@@ -237,7 +269,8 @@ describe("formatTaskSummary", function () {
   it("appends first sentence when description has early period", function () {
     var task = makeClickUpTask({
       name: "Fix Bug",
-      description: "The login page redirects incorrectly. This affects all users.",
+      description:
+        "The login page redirects incorrectly. This affects all users.",
     });
     var result = formatTaskSummary({ task: task });
     expect(result).toBe("Fix Bug — The login page redirects incorrectly.");
@@ -319,7 +352,9 @@ describe("formatTeamSync", function () {
       listCount: 2,
     });
     expect(result).toContain("## Blocked");
-    expect(result).toContain("| Task | Assignee | List | Days Stalled | Link |");
+    expect(result).toContain(
+      "| Task | Assignee | List | Days Stalled | Link |",
+    );
     expect(result).toContain("3d");
   });
 
@@ -432,8 +467,8 @@ describe("formatTeamSync", function () {
       listCount: 1,
     });
     expect(result).toContain("## Unmapped Statuses");
-    expect(result).toContain("\"custom status\" (3 tasks)");
-    expect(result).toContain("\"weird state\" (1 tasks)");
+    expect(result).toContain('"custom status" (3 tasks)');
+    expect(result).toContain('"weird state" (1 tasks)');
   });
 
   it("counts total tasks including unassigned", function () {

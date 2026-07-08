@@ -9,8 +9,14 @@ var mockHttp = {
 
 jest.mock("axios", function () {
   return {
-    default: { create: jest.fn(function () { return mockHttp; }) },
-    create: jest.fn(function () { return mockHttp; }),
+    default: {
+      create: jest.fn(function () {
+        return mockHttp;
+      }),
+    },
+    create: jest.fn(function () {
+      return mockHttp;
+    }),
   };
 });
 

@@ -66,51 +66,51 @@ Dovetail's 19 packages fall into four categories:
 
 #### Core Layer
 
-| Package | Purpose |
-|---|---|
-| `dovetail-core` | CLI engine, command routing, file watching, sync orchestration, plugin discovery. Ships the `dove` binary. |
-| `dovetail-types` | TypeScript type definitions (`Sinc.*` and `SN.*` namespaces). No runtime code. |
-| `dovetail-schema` | Fetches ServiceNow table schemas via REST API, organizes by application/scope, outputs JSON. |
+| Package           | Purpose                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `dovetail-core`   | CLI engine, command routing, file watching, sync orchestration, plugin discovery. Ships the `dove` binary. |
+| `dovetail-types`  | TypeScript type definitions (`Sinc.*` and `SN.*` namespaces). No runtime code.                             |
+| `dovetail-schema` | Fetches ServiceNow table schemas via REST API, organizes by application/scope, outputs JSON.               |
 
 #### Build Pipeline Plugins
 
 Each plugin transforms source code before it's pushed to ServiceNow. All follow the same interface: `run(context, content, options) => Promise<PluginResults>`.
 
-| Package | What It Does |
-|---|---|
-| `dovetail-typescript-plugin` | TypeScript type-checking and transpilation. Reads `tsconfig.json`. |
-| `dovetail-babel-plugin` | Babel transformation wrapper. Applies user-configured Babel transforms. |
+| Package                                | What It Does                                                                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dovetail-typescript-plugin`           | TypeScript type-checking and transpilation. Reads `tsconfig.json`.                                                                                        |
+| `dovetail-babel-plugin`                | Babel transformation wrapper. Applies user-configured Babel transforms.                                                                                   |
 | `dovetail-babel-plugin-remove-modules` | Strips `import`/`export` statements for ServiceNow's Rhino engine. Preserves `@keepModule` tagged imports. Converts `export default` to raw declarations. |
-| `dovetail-babel-preset-servicenow` | Babel preset that wraps `babel-plugin-remove-modules`. Single entry point for ServiceNow code sanitization. |
-| `dovetail-webpack-plugin` | Webpack module bundling. Uses in-memory filesystem. Outputs single `bundle.js`. |
-| `dovetail-sass-plugin` | SASS/SCSS compilation to CSS. |
-| `dovetail-eslint-plugin` | ESLint linting. Fails build if errors found. Does not transform code. |
-| `dovetail-prettier-plugin` | Prettier formatting. Resolves `.prettierrc` from file location. |
+| `dovetail-babel-preset-servicenow`     | Babel preset that wraps `babel-plugin-remove-modules`. Single entry point for ServiceNow code sanitization.                                               |
+| `dovetail-webpack-plugin`              | Webpack module bundling. Uses in-memory filesystem. Outputs single `bundle.js`.                                                                           |
+| `dovetail-sass-plugin`                 | SASS/SCSS compilation to CSS.                                                                                                                             |
+| `dovetail-eslint-plugin`               | ESLint linting. Fails build if errors found. Does not transform code.                                                                                     |
+| `dovetail-prettier-plugin`             | Prettier formatting. Resolves `.prettierrc` from file location.                                                                                           |
 
 #### Integration Packages
 
 Each wraps one external service with typed clients, API methods, and formatters.
 
-| Package | Service | Auth |
-|---|---|---|
-| `dovetail-clickup` | ClickUp API v2 (tasks, comments, workspaces) | `CLICKUP_API_TOKEN` |
-| `dovetail-google-auth` | Shared Google OAuth2 layer | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
-| `dovetail-gmail` | Gmail API (read, search, triage, archive) | Peer dep on `google-auth` |
-| `dovetail-google-calendar` | Google Calendar API (events, agenda) | Peer dep on `google-auth` |
+| Package                    | Service                                      | Auth                                                               |
+| -------------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| `dovetail-clickup`         | ClickUp API v2 (tasks, comments, workspaces) | `CLICKUP_API_TOKEN`                                                |
+| `dovetail-google-auth`     | Shared Google OAuth2 layer                   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
+| `dovetail-gmail`           | Gmail API (read, search, triage, archive)    | Peer dep on `google-auth`                                          |
+| `dovetail-google-calendar` | Google Calendar API (events, agenda)         | Peer dep on `google-auth`                                          |
 
 #### UI
 
-| Package | Purpose |
-|---|---|
+| Package              | Purpose                                                                                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dovetail-dashboard` | Express.js web UI for update set management with ClickUp task integration. Port 3456 by default. Launched by `dove dashboard` or embedded in `dove watch`. |
 
 #### Platform Helpers & Action Layer
 
-| Package | Purpose |
-|---|---|
-| `dovetail-servicenow` | ServiceNow platform helpers using the Dovetail Scripted REST API. Includes `addChoicesToField` (sys_choice + sys_dictionary upsert, update-set-aware) and the `buildFlow` CLI Phase 1 (`dove-sn` binary) for Custom Action Type + Subflow authoring. |
-| `dovetail-sawmill` | Sawmill REST client — retrieve, preview, and commit update sets across instances. Powers cross-environment code movement. |
-| `dovetail-mcp` | MCP stdio server (read-mostly) exposing 16 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads, plus 4 ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`. Telemetry written to `~/.dovetail-mcp/telemetry.jsonl` (redacted). Full catalog: [`claude-operating-guide.md`](claude-operating-guide.md). |
+| Package               | Purpose                                                                                                                                                                                                                                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dovetail-servicenow` | ServiceNow platform helpers using the Dovetail Scripted REST API. Includes `addChoicesToField` (sys_choice + sys_dictionary upsert, update-set-aware) and the `buildFlow` CLI Phase 1 (`dove-sn` binary) for Custom Action Type + Subflow authoring.                                                            |
+| `dovetail-sawmill`    | Sawmill REST client — retrieve, preview, and commit update sets across instances. Powers cross-environment code movement.                                                                                                                                                                                       |
+| `dovetail-mcp`        | MCP stdio server (read-mostly) exposing 16 tools wrapping ClickUp, Gmail, Calendar, and ServiceNow reads, plus 4 ClickUp writes gated by `SINC_MCP_WRITES_ENABLE=1`. Telemetry written to `~/.dovetail-mcp/telemetry.jsonl` (redacted). Full catalog: [`claude-operating-guide.md`](claude-operating-guide.md). |
 
 ### 2.2 Dependency Graph
 
@@ -177,14 +177,14 @@ index.ts (shebang: #!/usr/bin/env node)
 
 ### 2.5 Monorepo Tooling
 
-| Aspect | Value |
-|---|---|
-| Package manager | Lerna 0.4.2-alpha.6 + npm workspaces |
-| Build target | TypeScript ES2022, strict mode |
-| Node requirement | 20 LTS (engines field) |
-| Publishing | Public npm under `@tenonhq` scope |
-| Versioning | Independent per-package |
-| CI | Azure Pipelines (build/test) + GitHub Actions (CodeQL, PR-ClickUp sync) |
+| Aspect           | Value                                                                   |
+| ---------------- | ----------------------------------------------------------------------- |
+| Package manager  | Lerna 0.4.2-alpha.6 + npm workspaces                                    |
+| Build target     | TypeScript ES2022, strict mode                                          |
+| Node requirement | 20 LTS (engines field)                                                  |
+| Publishing       | Public npm under `@tenonhq` scope                                       |
+| Versioning       | Independent per-package                                                 |
+| CI               | Azure Pipelines (build/test) + GitHub Actions (CodeQL, PR-ClickUp sync) |
 
 ---
 
@@ -196,7 +196,6 @@ The `@tenonhq/dovetail-types` package (`packages/types/index.d.ts`) defines all 
 
 ```typescript
 export namespace Sinc {
-
   // === Command Arguments ===
 
   interface SharedCmdArgs {
@@ -283,7 +282,11 @@ export namespace Sinc {
   }
 
   interface PluginFunc {
-    (context: FileContext, content: string, options: any): Promise<PluginResults>;
+    (
+      context: FileContext,
+      content: string,
+      options: any,
+    ): Promise<PluginResults>;
   }
 
   interface PluginResults {
@@ -423,7 +426,6 @@ export namespace Sinc {
 
 ```typescript
 export namespace SN {
-
   // === Manifest Structure ===
 
   interface AppManifest {
@@ -497,10 +499,18 @@ export namespace SN {
     sys_id: string;
   }
 
-  interface UserRecord { sys_id: string; }
-  interface UserPrefRecord { sys_id: string; }
-  interface ScopeRecord { sys_id: string; }
-  interface UpdateSetRecord { sys_id: string; }
+  interface UserRecord {
+    sys_id: string;
+  }
+  interface UserPrefRecord {
+    sys_id: string;
+  }
+  interface ScopeRecord {
+    sys_id: string;
+  }
+  interface UpdateSetRecord {
+    sys_id: string;
+  }
 }
 
 export type TSFIXME = any;
@@ -514,9 +524,9 @@ The init system bootstraps a new Dovetail project through an 8-phase interactive
 
 ### 4.1 Two Entry Points
 
-| Command | Purpose |
-|---|---|
-| `dove init` | Full 8-phase setup wizard (plugin discovery, login, config, download) |
+| Command               | Purpose                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `dove init`           | Full 8-phase setup wizard (plugin discovery, login, config, download)                         |
 | `dove login [plugin]` | Credential-only flow. Supports `--instance`, `--user`, `--password` for non-interactive mode. |
 
 Both share the same plugin infrastructure defined in `packages/core/src/initSystem/`.
@@ -526,11 +536,13 @@ Both share the same plugin infrastructure defined in `packages/core/src/initSyst
 The `discoverPlugins()` function scans the filesystem for init-capable packages:
 
 **Search locations (in order):**
+
 1. `./node_modules/@tenonhq/` (current project)
 2. `../../node_modules/@tenonhq/` (monorepo hoisted)
 3. Parent directories up to 3 levels (capped traversal)
 
 **Discovery criteria:**
+
 - Directory name starts with `dovetail-`
 - Skips: `dovetail-core`, `dovetail-types`, `dovetail-dashboard`, `dovetail-schema`
 - Package must `require()` successfully
@@ -581,6 +593,7 @@ function buildInitContext(plugins: Sinc.InitPlugin[]): Sinc.InitContext {
 For each selected plugin, calls `runLoginPhase(plugin, context)`.
 
 **Core plugin (retry loop):**
+
 ```
 1. collectLoginHooks() — prompts for SN_INSTANCE, SN_USER, SN_PASSWORD
    - Shows instructions if hook provides them
@@ -604,6 +617,7 @@ For each selected plugin, calls `runLoginPhase(plugin, context)`.
 ```
 
 **Non-core plugins (no retry):**
+
 ```
 1. collectLoginHooks() — prompts for plugin-specific env keys
 2. Run per-hook validation
@@ -637,6 +651,7 @@ For each selected plugin, calls `runLoginPhase(plugin, context)`.
 For each selected plugin, runs its `configure` hooks.
 
 **Core plugin configure hook:**
+
 ```
 1. Create snClient with credentials from context.env
 2. Call client.getAppList() — returns SN.App[]
@@ -652,6 +667,7 @@ For each selected plugin, runs its `configure` hooks.
 For each selected plugin, calls `plugin.initialize(context)` if defined.
 
 **Core plugin initialize:**
+
 ```
 1. Write dove.config.js (if doesn't exist):
    - Uses ConfigManager.getDefaultConfigFile() template
@@ -710,7 +726,10 @@ const corePlugin: Sinc.InitPlugin = {
   login: [
     {
       envKey: "SN_INSTANCE",
-      prompt: { type: "input", message: "ServiceNow instance (e.g., mycompany.service-now.com):" },
+      prompt: {
+        type: "input",
+        message: "ServiceNow instance (e.g., mycompany.service-now.com):",
+      },
       required: true,
     },
     {
@@ -765,24 +784,26 @@ The file `defaultOptions.ts` exports empty objects — this is intentional. It w
 ```typescript
 // Sinc.ScopedConfig (extends Sinc.Config)
 module.exports = {
-  sourceDirectory: "src",           // Where local source files live
-  buildDirectory: "build",          // Where built files go (for dove build)
-  refreshInterval: 30,              // Seconds between manifest refresh cycles
+  sourceDirectory: "src", // Where local source files live
+  buildDirectory: "build", // Where built files go (for dove build)
+  refreshInterval: 30, // Seconds between manifest refresh cycles
 
-  rules: [                          // Build pipeline rules (first match wins)
+  rules: [
+    // Build pipeline rules (first match wins)
     {
-      match: /\.ts$/,               // Regex matched against file path
+      match: /\.ts$/, // Regex matched against file path
       plugins: [
-        { name: "@tenonhq/dovetail-typescript-plugin", options: { transpile: true } },
+        {
+          name: "@tenonhq/dovetail-typescript-plugin",
+          options: { transpile: true },
+        },
         { name: "@tenonhq/dovetail-babel-plugin", options: {} },
-      ]
+      ],
     },
     {
       match: /\.scss$/,
-      plugins: [
-        { name: "@tenonhq/dovetail-sass-plugin", options: {} },
-      ]
-    }
+      plugins: [{ name: "@tenonhq/dovetail-sass-plugin", options: {} }],
+    },
   ],
 
   includes: {
@@ -808,30 +829,32 @@ module.exports = {
 
     // Non-prefixed keys: table names with field type overrides
     sys_ux_macroponent: {
-      composition: { type: "json" },   // Override field type (default would be "js")
+      composition: { type: "json" }, // Override field type (default would be "js")
     },
 
     // _scopes directive: per-scope table overrides
     _scopes: {
       x_cadso_automate: {
-        _tables: ["x_cadso_core_setting"],  // Additional tables for this scope only
-      }
-    }
+        _tables: ["x_cadso_core_setting"], // Additional tables for this scope only
+      },
+    },
   },
 
   excludes: {
-    _tables: [],                    // Explicit exclusion list
+    _tables: [], // Explicit exclusion list
   },
 
-  tableOptions: {                   // Per-table query/display settings
+  tableOptions: {
+    // Per-table query/display settings
     sys_script_include: {
       displayField: "name",
       differentiatorField: "sys_id",
       query: "active=true",
-    }
+    },
   },
 
-  scopes: {                         // Multi-scope support
+  scopes: {
+    // Multi-scope support
     x_cadso_core: { sourceDirectory: "src/x_cadso_core" },
     x_cadso_work: { sourceDirectory: "src/x_cadso_work" },
     x_cadso_automate: { sourceDirectory: "src/x_cadso_automate" },
@@ -843,11 +866,11 @@ module.exports = {
 
 Keys starting with `_` are **config directives**, not table names:
 
-| Directive | Location | Purpose |
-|---|---|---|
+| Directive          | Location           | Purpose                                                                                                                                                       |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `includes._tables` | Top-level includes | Whitelist of tables to sync. Only these tables get written to disk. ServiceNow returns all tables in a scope — client-side filtering enforces this whitelist. |
-| `includes._scopes` | Top-level includes | Per-scope overrides. Each scope key can have its own `_tables` (additional tables) and field type overrides. |
-| `excludes._tables` | Top-level excludes | Explicit exclusion list. Tables here are never synced even if in `_tables`. |
+| `includes._scopes` | Top-level includes | Per-scope overrides. Each scope key can have its own `_tables` (additional tables) and field type overrides.                                                  |
+| `excludes._tables` | Top-level excludes | Explicit exclusion list. Tables here are never synced even if in `_tables`.                                                                                   |
 
 Non-`_` keys in `includes` are table names with field type overrides. Tables with field overrides are implicitly added to the whitelist.
 
@@ -907,28 +930,29 @@ Dovetail communicates with ServiceNow through two REST APIs: a custom Dovetail-s
 
 Custom endpoints installed on the ServiceNow instance, scoped to the Dovetail application.
 
-| Method | Endpoint | Request | Response | Purpose |
-|---|---|---|---|---|
-| GET | `/getAppList` | — | `{ result: SN.App[] }` | List available scoped applications |
-| POST | `/getManifest/{scope}` | `{ includes, excludes, tableOptions, withFiles }` | `{ result: SN.AppManifest }` | Download file tree for a scope. `withFiles=true` includes file content. |
-| POST | `/bulkDownload` | `{ missingFiles: SN.MissingFileTableMap, tableOptions }` | `{ result: SN.TableMap }` | Download specific missing files (used by refresh) |
-| GET | `/getCurrentScope` | — | `{ result: SN.ScopeObj }` | Get current application scope |
-| POST | `/pushATFfile` | `{ sys_id, content }` | `{ result: ... }` | Push ATF test file content |
+| Method | Endpoint               | Request                                                  | Response                     | Purpose                                                                 |
+| ------ | ---------------------- | -------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------- |
+| GET    | `/getAppList`          | —                                                        | `{ result: SN.App[] }`       | List available scoped applications                                      |
+| POST   | `/getManifest/{scope}` | `{ includes, excludes, tableOptions, withFiles }`        | `{ result: SN.AppManifest }` | Download file tree for a scope. `withFiles=true` includes file content. |
+| POST   | `/bulkDownload`        | `{ missingFiles: SN.MissingFileTableMap, tableOptions }` | `{ result: SN.TableMap }`    | Download specific missing files (used by refresh)                       |
+| GET    | `/getCurrentScope`     | —                                                        | `{ result: SN.ScopeObj }`    | Get current application scope                                           |
+| POST   | `/pushATFfile`         | `{ sys_id, content }`                                    | `{ result: ... }`            | Push ATF test file content                                              |
 
 ### 6.2 Claude Scripted REST API (`/api/cadso/claude/`)
 
 Global-scoped endpoints for update set and record management.
 
-| Method | Endpoint | Params/Body | Purpose |
-|---|---|---|---|
-| GET | `/changeScope` | Query: `scope` (scope name, e.g., `x_cadso_core`) | Switch application scope on instance |
-| GET | `/currentUpdateSet` | Query: `scope` (optional — temporarily switches scope before reading) | Get active update set |
-| GET | `/changeUpdateSet` | Query: `sysId` (direct) OR `name` + `scope` (lookup by name, most recent in-progress) | Switch active update set |
-| POST | `/pushWithUpdateSet` | Body: `{ update_set_sys_id, table, record_sys_id, fields }` | Update a record within a specified update set. Saves/restores previous update set. |
-| POST | `/createRecord` | Body: `{ table, fields }` (required), `{ sys_id, scope, update_set_sys_id }` (optional) | Create new record. Supports explicit `sys_id` for cross-instance moves. |
-| POST | `/deleteRecord` | Body: `{ table, sys_id }` | Delete record. Returns display name on success. |
+| Method | Endpoint             | Params/Body                                                                             | Purpose                                                                            |
+| ------ | -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/changeScope`       | Query: `scope` (scope name, e.g., `x_cadso_core`)                                       | Switch application scope on instance                                               |
+| GET    | `/currentUpdateSet`  | Query: `scope` (optional — temporarily switches scope before reading)                   | Get active update set                                                              |
+| GET    | `/changeUpdateSet`   | Query: `sysId` (direct) OR `name` + `scope` (lookup by name, most recent in-progress)   | Switch active update set                                                           |
+| POST   | `/pushWithUpdateSet` | Body: `{ update_set_sys_id, table, record_sys_id, fields }`                             | Update a record within a specified update set. Saves/restores previous update set. |
+| POST   | `/createRecord`      | Body: `{ table, fields }` (required), `{ sys_id, scope, update_set_sys_id }` (optional) | Create new record. Supports explicit `sys_id` for cross-instance moves.            |
+| POST   | `/deleteRecord`      | Body: `{ table, sys_id }`                                                               | Delete record. Returns display name on success.                                    |
 
 **Notes:**
+
 - All POST endpoints accept and return `application/json`
 - Update set operations save and restore the previous update set to avoid side effects
 - Web service definition sys_id: `b8a9db8d33d7a6107b18bc534d5c7b7b`
@@ -938,26 +962,26 @@ Global-scoped endpoints for update set and record management.
 
 Dovetail also uses ServiceNow's built-in Table API for supporting operations:
 
-| Purpose | Method | Endpoint |
-|---|---|---|
-| Update record field | PATCH | `/api/now/table/{table}/{sys_id}` |
-| List update sets | GET | `/api/now/table/sys_update_set?sysparm_query=state=in progress` |
-| Create update set | POST | `/api/now/table/sys_update_set` |
-| Lookup scope sys_id | GET | `/api/now/table/sys_scope?sysparm_query=scope={name}` |
-| Lookup user sys_id | GET | `/api/now/table/sys_user?sysparm_query=user_name={name}` |
+| Purpose             | Method | Endpoint                                                        |
+| ------------------- | ------ | --------------------------------------------------------------- |
+| Update record field | PATCH  | `/api/now/table/{table}/{sys_id}`                               |
+| List update sets    | GET    | `/api/now/table/sys_update_set?sysparm_query=state=in progress` |
+| Create update set   | POST   | `/api/now/table/sys_update_set`                                 |
+| Lookup scope sys_id | GET    | `/api/now/table/sys_scope?sysparm_query=scope={name}`           |
+| Lookup user sys_id  | GET    | `/api/now/table/sys_user?sysparm_query=user_name={name}`        |
 
 ### 6.4 HTTP Client (`snClient.ts`)
 
 The ServiceNow REST client is built on Axios with these features:
 
-| Feature | Detail |
-|---|---|
-| Authentication | Basic auth (username/password) |
+| Feature            | Detail                                                  |
+| ------------------ | ------------------------------------------------------- |
+| Authentication     | Basic auth (username/password)                          |
 | Session management | Cookie jar support (persistent session across requests) |
-| Rate limiting | 20 requests per second maximum |
-| Retry logic | 3 retries, 3 seconds between attempts |
-| Base URL | `https://{instance}.service-now.com/` |
-| Response format | All responses wrapped in `{ result: T }` |
+| Rate limiting      | 20 requests per second maximum                          |
+| Retry logic        | 3 retries, 3 seconds between attempts                   |
+| Base URL           | `https://{instance}.service-now.com/`                   |
+| Response format    | All responses wrapped in `{ result: T }`                |
 
 **Instance normalization:** Strips `https://`, `http://`, trailing slashes, and `.service-now.com` suffix. Only the instance name is stored (e.g., `mycompany`). The full URL is reconstructed at request time.
 
@@ -989,13 +1013,13 @@ Every build plugin exports:
 
 ```typescript
 export async function run(
-  context: Sinc.FileContext,  // File metadata: path, table, field, sys_id, scope
-  content: string,            // File content (or output of previous plugin)
-  options: any                // Plugin-specific options from dove.config.js
+  context: Sinc.FileContext, // File metadata: path, table, field, sys_id, scope
+  content: string, // File content (or output of previous plugin)
+  options: any, // Plugin-specific options from dove.config.js
 ): Promise<Sinc.PluginResults> {
   return {
-    success: boolean,  // false = build failure, file not pushed
-    output: string,    // Transformed content (input for next plugin or final push)
+    success: boolean, // false = build failure, file not pushed
+    output: string, // Transformed content (input for next plugin or final push)
   };
 }
 ```
@@ -1010,16 +1034,16 @@ Source (.js)  ->  (no rules match)  ->  Push as-is  ->  ServiceNow
 
 ### 7.5 What Each Plugin Does
 
-| Plugin | Input | Output | Failure Condition |
-|---|---|---|---|
-| **typescript-plugin** | `.ts` file | Transpiled `.js` (if `transpile: true`) or type-checked `.ts` | Type errors |
-| **babel-plugin** | `.js`/`.jsx` file | Babel-transformed `.js` | Babel transform error |
-| **babel-plugin-remove-modules** | `.js` with imports/exports | `.js` with imports/exports stripped. `export default` becomes raw declaration. `@keepModule` comment preserves specific imports. | Parse error |
-| **babel-preset-servicenow** | `.js` file | ServiceNow-compatible `.js` (wraps remove-modules as preset) | Parse error |
-| **webpack-plugin** | `.js` with module imports | Single bundled `.js` via in-memory webpack. Accepts `webpackConfig`, `configGenerator`, or auto-loads `webpack.config.js`. | Webpack build error |
-| **sass-plugin** | `.scss`/`.sass` file | Compiled `.css` | SASS compilation error |
-| **eslint-plugin** | Any `.js`/`.ts` file | Unchanged source (lint is validation-only) | Any ESLint errors |
-| **prettier-plugin** | Any file | Formatted source. Resolves `.prettierrc` from file location. | Prettier error |
+| Plugin                          | Input                      | Output                                                                                                                           | Failure Condition      |
+| ------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| **typescript-plugin**           | `.ts` file                 | Transpiled `.js` (if `transpile: true`) or type-checked `.ts`                                                                    | Type errors            |
+| **babel-plugin**                | `.js`/`.jsx` file          | Babel-transformed `.js`                                                                                                          | Babel transform error  |
+| **babel-plugin-remove-modules** | `.js` with imports/exports | `.js` with imports/exports stripped. `export default` becomes raw declaration. `@keepModule` comment preserves specific imports. | Parse error            |
+| **babel-preset-servicenow**     | `.js` file                 | ServiceNow-compatible `.js` (wraps remove-modules as preset)                                                                     | Parse error            |
+| **webpack-plugin**              | `.js` with module imports  | Single bundled `.js` via in-memory webpack. Accepts `webpackConfig`, `configGenerator`, or auto-loads `webpack.config.js`.       | Webpack build error    |
+| **sass-plugin**                 | `.scss`/`.sass` file       | Compiled `.css`                                                                                                                  | SASS compilation error |
+| **eslint-plugin**               | Any `.js`/`.ts` file       | Unchanged source (lint is validation-only)                                                                                       | Any ESLint errors      |
+| **prettier-plugin**             | Any file                   | Formatted source. Resolves `.prettierrc` from file location.                                                                     | Prettier error         |
 
 ---
 
@@ -1041,9 +1065,7 @@ The manifest is the bridge between local file paths and ServiceNow records. It m
         "MyScriptInclude": {
           "sys_id": "abc123def456...",
           "name": "MyScriptInclude",
-          "files": [
-            { "name": "script", "type": "js" }
-          ]
+          "files": [{ "name": "script", "type": "js" }]
         }
       }
     }
@@ -1174,14 +1196,14 @@ Refresh is an incremental download — only fetches files that are missing local
 
 ### 8.7 Concurrency Constants
 
-| Operation | Concurrency Limit |
-|---|---|
-| Table processing (download) | 2 parallel |
-| Record processing (download) | 5 parallel |
-| File writing (download) | 10 parallel |
-| Push operations | 3 parallel |
-| Build operations | 5 parallel |
-| Push retries | 3 attempts, 3 second wait |
+| Operation                    | Concurrency Limit         |
+| ---------------------------- | ------------------------- |
+| Table processing (download)  | 2 parallel                |
+| Record processing (download) | 5 parallel                |
+| File writing (download)      | 10 parallel               |
+| Push operations              | 3 parallel                |
+| Build operations             | 5 parallel                |
+| Push retries                 | 3 attempts, 3 second wait |
 
 ### 8.8 Synced Table Types
 
@@ -1197,67 +1219,67 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 ### Core Sync Commands
 
-| Command | Aliases | Description | Key Flags |
-|---|---|---|---|
-| `watch` | `w`, `watchAllScopes` | Watch all scopes for changes and sync | `--noDashboard`, `--port <n>` |
-| `refresh` | `r` | Download new files since last refresh | `--logLevel` |
-| `push [target]` | — | Push local files to ServiceNow | `--diff <branch>`, `--updateSet <name>`, `--clickup <id>`, `--ci` |
-| `download <scope>` | — | Download entire scope from ServiceNow | `--logLevel` |
-| `build` | — | Build locally without pushing | `--diff <branch>` |
-| `deploy` | — | Deploy build directory to instance | `--logLevel` |
+| Command            | Aliases               | Description                           | Key Flags                                                         |
+| ------------------ | --------------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| `watch`            | `w`, `watchAllScopes` | Watch all scopes for changes and sync | `--noDashboard`, `--port <n>`                                     |
+| `refresh`          | `r`                   | Download new files since last refresh | `--logLevel`                                                      |
+| `push [target]`    | —                     | Push local files to ServiceNow        | `--diff <branch>`, `--updateSet <name>`, `--clickup <id>`, `--ci` |
+| `download <scope>` | —                     | Download entire scope from ServiceNow | `--logLevel`                                                      |
+| `build`            | —                     | Build locally without pushing         | `--diff <branch>`                                                 |
+| `deploy`           | —                     | Deploy build directory to instance    | `--logLevel`                                                      |
 
 ### Init & Auth
 
-| Command | Description | Key Flags |
-|---|---|---|
-| `init` | Full setup wizard (discover, login, config, download) | `--logLevel` |
-| `login [plugin]` | Authenticate with ServiceNow and/or integrations | `--all`, `--instance`, `--user`, `--password` |
+| Command          | Description                                           | Key Flags                                     |
+| ---------------- | ----------------------------------------------------- | --------------------------------------------- |
+| `init`           | Full setup wizard (discover, login, config, download) | `--logLevel`                                  |
+| `login [plugin]` | Authenticate with ServiceNow and/or integrations      | `--all`, `--instance`, `--user`, `--password` |
 
 ### Record Management
 
-| Command | Description | Key Flags |
-|---|---|---|
-| `create <table>` | Create a new record | `--name`, `--scope`, `--from <json>`, `--field key=value`, `--ci` |
-| `delete <table> [name]` | Delete a record | `--scope`, `--sysid`, `--ci`, `--keepLocal` |
+| Command                 | Description         | Key Flags                                                         |
+| ----------------------- | ------------------- | ----------------------------------------------------------------- |
+| `create <table>`        | Create a new record | `--name`, `--scope`, `--from <json>`, `--field key=value`, `--ci` |
+| `delete <table> [name]` | Delete a record     | `--scope`, `--sysid`, `--ci`, `--keepLocal`                       |
 
 ### Update Set Management
 
-| Command | Description | Key Flags |
-|---|---|---|
-| `createUpdateSet` | Create new update set and switch to it | `--name`, `--description`, `--scope`, `--clickup <id>`, `--skipDescription`, `--skipScope` |
-| `switchUpdateSet` | Switch to existing update set | `--name`, `--scope` |
-| `listUpdateSets` | List in-progress update sets | `--scope` |
-| `currentUpdateSet` | Show current active update set | `--scope` |
+| Command            | Description                            | Key Flags                                                                                  |
+| ------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `createUpdateSet`  | Create new update set and switch to it | `--name`, `--description`, `--scope`, `--clickup <id>`, `--skipDescription`, `--skipScope` |
+| `switchUpdateSet`  | Switch to existing update set          | `--name`, `--scope`                                                                        |
+| `listUpdateSets`   | List in-progress update sets           | `--scope`                                                                                  |
+| `currentUpdateSet` | Show current active update set         | `--scope`                                                                                  |
 
 ### Scope Management
 
-| Command | Description | Key Flags |
-|---|---|---|
-| `changeScope` | Change to a different scope | `--scope` |
-| `currentScope` | Show current active scope | — |
-| `initScopes` | Initialize all scopes from config | `--delay <ms>` |
+| Command        | Description                       | Key Flags      |
+| -------------- | --------------------------------- | -------------- |
+| `changeScope`  | Change to a different scope       | `--scope`      |
+| `currentScope` | Show current active scope         | —              |
+| `initScopes`   | Initialize all scopes from config | `--delay <ms>` |
 
 ### Tools
 
-| Command | Description | Key Flags |
-|---|---|---|
-| `dashboard` | Launch Update Set Dashboard web UI | `--port <n>` |
-| `schema pull` | Fetch ServiceNow table schemas | `--output <dir>`, `--scope` |
-| `init-claude` | Install Claude Code skills to `.claude/commands/` | `--force` |
+| Command       | Description                                       | Key Flags                   |
+| ------------- | ------------------------------------------------- | --------------------------- |
+| `dashboard`   | Launch Update Set Dashboard web UI                | `--port <n>`                |
+| `schema pull` | Fetch ServiceNow table schemas                    | `--output <dir>`, `--scope` |
+| `init-claude` | Install Claude Code skills to `.claude/commands/` | `--force`                   |
 
 ### ClickUp Subcommands (`dove clickup ...`)
 
-| Subcommand | Description | Key Flags |
-|---|---|---|
-| `tasks` | List my tasks grouped by status | `--team`, `--status` |
-| `task <id>` | Get task details | — |
-| `create <list-id>` | Create task (interactive) | — |
-| `update <task-id>` | Update task (interactive) | — |
-| `comment <task-id> <msg>` | Add comment to task | — |
-| `teams` | List workspaces/teams | — |
-| `setup` | Configure ClickUp API token | — |
-| `spaces` | List spaces in workspace | `--team` |
-| `lists <space-or-folder>` | List lists in folder/space | — |
+| Subcommand                | Description                     | Key Flags            |
+| ------------------------- | ------------------------------- | -------------------- |
+| `tasks`                   | List my tasks grouped by status | `--team`, `--status` |
+| `task <id>`               | Get task details                | —                    |
+| `create <list-id>`        | Create task (interactive)       | —                    |
+| `update <task-id>`        | Update task (interactive)       | —                    |
+| `comment <task-id> <msg>` | Add comment to task             | —                    |
+| `teams`                   | List workspaces/teams           | —                    |
+| `setup`                   | Configure ClickUp API token     | —                    |
+| `spaces`                  | List spaces in workspace        | `--team`             |
+| `lists <space-or-folder>` | List lists in folder/space      | —                    |
 
 ---
 
@@ -1270,6 +1292,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 **Auth:** `CLICKUP_API_TOKEN` env var.
 
 **Exports:**
+
 - **Client:** `createClient(config): AxiosInstance`
 - **Read:** `getTask`, `listMyTasks`, `listTeamTasks`, `getTeams`, `getSpaces`, `getFolders`, `getLists`, `getSpaceLists`, `getListTasks`, `findListByName`
 - **Write:** `createTask`, `updateTask`, `updateTaskStatus`, `deleteTask`, `addComment`
@@ -1286,6 +1309,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 **Auth:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
 
 **Exports:**
+
 - `createGoogleAuth(config)` — Returns authenticated auth object
 - `configFromEnv()` — Load credentials from environment
 - `handleAuthError(error, context)` — Standardized error handling
@@ -1299,6 +1323,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 **Peer dependency:** Requires `@tenonhq/dovetail-google-auth`.
 
 **Exports:**
+
 - **Client:** `createGmailClient(auth)`
 - **Read:** `getUnread`, `getStarred`, `searchEmails`, `getThread`, `getVipEmails`, `getActionRequired`
 - **Write:** `archiveEmail`, `labelEmail`, `markAsRead`, `markAsUnread`, `moveToTrash`, `starEmail`, `unstarEmail`
@@ -1314,6 +1339,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 **Peer dependency:** Requires `@tenonhq/dovetail-google-auth`.
 
 **Exports:**
+
 - **Client:** `createCalendarClient(auth)`
 - **Read:** `getTodayEvents`, `getUpcomingEvents`, `getEvent`, `searchEvents`
 - **Write:** `createEvent`, `updateEvent`, `deleteEvent`
@@ -1328,6 +1354,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 **Not a library** — standalone server, no exports. Spawned by `dove dashboard` or embedded in `dove watch`.
 
 **API endpoints:**
+
 - `GET /api/scopes` — List configured scopes with selected update sets
 - `GET /api/update-sets/:scope` — List in-progress update sets for scope
 - `POST /api/update-set` — Create new update set
@@ -1351,6 +1378,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 **Purpose:** Fetch and organize ServiceNow table schemas.
 
 **Exports:**
+
 - `pullSchema(options): Promise<SchemaIndex>` — Main orchestrator
 - `fetchSchema()` — Query ServiceNow for table definitions
 - `organizeSchema()` — Structure by application/scope
@@ -1394,50 +1422,50 @@ These principles govern all Dovetail development. They are non-negotiable.
 
 ### 12.1 Package Inventory
 
-| Package | Version | Status |
-|---|---|---|
-| `dovetail-core` | 0.0.75 | Stable |
-| `dovetail-types` | 0.0.13 | Stable |
-| `dovetail-dashboard` | 0.0.9 | Stable |
-| `dovetail-schema` | 0.0.5 | Stable |
-| `dovetail-clickup` | 0.0.5 | Stable |
-| `dovetail-google-auth` | 0.0.6 | Stable |
-| `dovetail-gmail` | 0.0.5 | Stable |
-| `dovetail-google-calendar` | 0.0.5 | Stable |
-| `dovetail-typescript-plugin` | 0.0.7 | Stable |
-| `dovetail-babel-plugin` | 0.0.6 | Stable |
-| `dovetail-babel-plugin-remove-modules` | 0.0.6 | Stable |
-| `dovetail-babel-preset-servicenow` | 0.0.6 | Stable |
-| `dovetail-webpack-plugin` | 0.0.6 | Stable |
-| `dovetail-sass-plugin` | 0.0.7 | Stable |
-| `dovetail-eslint-plugin` | 0.0.6 | Stable |
-| `dovetail-prettier-plugin` | 0.0.7 | Stable |
+| Package                                | Version | Status |
+| -------------------------------------- | ------- | ------ |
+| `dovetail-core`                        | 0.0.75  | Stable |
+| `dovetail-types`                       | 0.0.13  | Stable |
+| `dovetail-dashboard`                   | 0.0.9   | Stable |
+| `dovetail-schema`                      | 0.0.5   | Stable |
+| `dovetail-clickup`                     | 0.0.5   | Stable |
+| `dovetail-google-auth`                 | 0.0.6   | Stable |
+| `dovetail-gmail`                       | 0.0.5   | Stable |
+| `dovetail-google-calendar`             | 0.0.5   | Stable |
+| `dovetail-typescript-plugin`           | 0.0.7   | Stable |
+| `dovetail-babel-plugin`                | 0.0.6   | Stable |
+| `dovetail-babel-plugin-remove-modules` | 0.0.6   | Stable |
+| `dovetail-babel-preset-servicenow`     | 0.0.6   | Stable |
+| `dovetail-webpack-plugin`              | 0.0.6   | Stable |
+| `dovetail-sass-plugin`                 | 0.0.7   | Stable |
+| `dovetail-eslint-plugin`               | 0.0.6   | Stable |
+| `dovetail-prettier-plugin`             | 0.0.7   | Stable |
 
 **Note:** Monorepo source is always 1 patch version ahead of npm due to postpublish auto-bump.
 
 ### 12.2 Planned Packages
 
-| Package | Purpose | Priority |
-|---|---|---|
-| `dovetail-deploy` | Environment management, update set promotion (DEV -> TEST -> UAT -> STAGING -> PROD), conflict detection, rollback | High |
-| `dovetail-atf` | ServiceNow Automated Test Framework execution and result reporting | High |
-| `dovetail-certification` | App Store certification readiness checks (ACL gaps, naming conventions, prohibited APIs) | Medium |
-| `dovetail-slack` | Team notifications, customer channel monitoring | Medium |
-| `dovetail-servicenow-health` | Instance performance metrics, node health | Medium |
-| `dovetail-hubspot` | Sales pipeline data | Low |
+| Package                      | Purpose                                                                                                            | Priority |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------- |
+| `dovetail-deploy`            | Environment management, update set promotion (DEV -> TEST -> UAT -> STAGING -> PROD), conflict detection, rollback | High     |
+| `dovetail-atf`               | ServiceNow Automated Test Framework execution and result reporting                                                 | High     |
+| `dovetail-certification`     | App Store certification readiness checks (ACL gaps, naming conventions, prohibited APIs)                           | Medium   |
+| `dovetail-slack`             | Team notifications, customer channel monitoring                                                                    | Medium   |
+| `dovetail-servicenow-health` | Instance performance metrics, node health                                                                          | Medium   |
+| `dovetail-hubspot`           | Sales pipeline data                                                                                                | Low      |
 
 ### 12.3 Known Technical Debt
 
-| Item | Impact | Effort |
-|---|---|---|
-| Lerna 0.4.2-alpha.6 (ancient alpha) | Blocks Node 22 upgrade, modern workspace features | 2-3 days |
-| Node 20 -> 22 migration | Node 20 EOL Oct 2026. Blocked by Lerna upgrade. | 4-5 days |
-| Test coverage gaps | Core has minimal tests. Plugin packages have zero tests. | Ongoing |
-| `TSFIXME` / `any` types | Loose typing in command handlers | 2-3 days |
-| `var` usage in init/login code | Should be `const`/`let` | 1 day |
-| Dashboard has no auth | Works for local dev, won't scale to team/remote use | Scope TBD |
-| Azure Pipelines still configured | Should consolidate to GitHub Actions only | 1 day |
-| 9 optional chaining (`?.`) violations | ES6-only rule | 1 day |
+| Item                                  | Impact                                                   | Effort    |
+| ------------------------------------- | -------------------------------------------------------- | --------- |
+| Lerna 0.4.2-alpha.6 (ancient alpha)   | Blocks Node 22 upgrade, modern workspace features        | 2-3 days  |
+| Node 20 -> 22 migration               | Node 20 EOL Oct 2026. Blocked by Lerna upgrade.          | 4-5 days  |
+| Test coverage gaps                    | Core has minimal tests. Plugin packages have zero tests. | Ongoing   |
+| `TSFIXME` / `any` types               | Loose typing in command handlers                         | 2-3 days  |
+| `var` usage in init/login code        | Should be `const`/`let`                                  | 1 day     |
+| Dashboard has no auth                 | Works for local dev, won't scale to team/remote use      | Scope TBD |
+| Azure Pipelines still configured      | Should consolidate to GitHub Actions only                | 1 day     |
+| 9 optional chaining (`?.`) violations | ES6-only rule                                            | 1 day     |
 
 ---
 
@@ -1539,12 +1567,14 @@ module.exports = {
 Step-by-step guide for adding a new `@tenonhq/dovetail-*` package:
 
 1. **Create package directory:**
+
    ```
    mkdir packages/{name}
    mkdir packages/{name}/src
    ```
 
 2. **Create `package.json`:**
+
    ```json
    {
      "name": "@tenonhq/dovetail-{name}",
@@ -1561,6 +1591,7 @@ Step-by-step guide for adding a new `@tenonhq/dovetail-*` package:
    ```
 
 3. **Create `tsconfig.json`:**
+
    ```json
    {
      "extends": "../../tsconfig.json",
@@ -1573,12 +1604,14 @@ Step-by-step guide for adding a new `@tenonhq/dovetail-*` package:
    ```
 
 4. **Implement the package pattern:**
+
    - `src/types.ts` — TypeScript interfaces for the external service
    - `src/client.ts` — Client factory + API methods
    - `src/formatter.ts` — Output formatters (markdown for humans, LLM-friendly for Claude Code)
    - `src/index.ts` — Re-export everything
 
 5. **Optional: Add init plugin support:**
+
    ```typescript
    // src/plugin.ts
    import { Sinc } from "@tenonhq/dovetail-types";
@@ -1603,20 +1636,20 @@ Step-by-step guide for adding a new `@tenonhq/dovetail-*` package:
 
 ### Appendix C: Environment Variables Reference
 
-| Variable | Package | Purpose |
-|---|---|---|
-| `SN_INSTANCE` | core | ServiceNow instance name (e.g., `mycompany`) |
-| `SN_USER` | core | ServiceNow username |
-| `SN_PASSWORD` | core | ServiceNow password |
-| `CLICKUP_API_TOKEN` | clickup | ClickUp API v2 personal token |
-| `CLICKUP_TEAM_ID` | clickup | Default ClickUp workspace/team ID |
-| `GOOGLE_CLIENT_ID` | google-auth | Google OAuth2 client ID |
-| `GOOGLE_CLIENT_SECRET` | google-auth | Google OAuth2 client secret |
-| `GOOGLE_REFRESH_TOKEN` | google-auth | Google OAuth2 refresh token |
-| `DASHBOARD_PORT` | dashboard | Express server port (default: 3456) |
+| Variable               | Package     | Purpose                                      |
+| ---------------------- | ----------- | -------------------------------------------- |
+| `SN_INSTANCE`          | core        | ServiceNow instance name (e.g., `mycompany`) |
+| `SN_USER`              | core        | ServiceNow username                          |
+| `SN_PASSWORD`          | core        | ServiceNow password                          |
+| `CLICKUP_API_TOKEN`    | clickup     | ClickUp API v2 personal token                |
+| `CLICKUP_TEAM_ID`      | clickup     | Default ClickUp workspace/team ID            |
+| `GOOGLE_CLIENT_ID`     | google-auth | Google OAuth2 client ID                      |
+| `GOOGLE_CLIENT_SECRET` | google-auth | Google OAuth2 client secret                  |
+| `GOOGLE_REFRESH_TOKEN` | google-auth | Google OAuth2 refresh token                  |
+| `DASHBOARD_PORT`       | dashboard   | Express server port (default: 3456)          |
 
 All credentials are stored in `.env` at the project root. This file must be git-ignored.
 
 ---
 
-*This document describes Dovetail as of v0.0.75 (core). Update it as packages ship or architecture changes.*
+_This document describes Dovetail as of v0.0.75 (core). Update it as packages ship or architecture changes._

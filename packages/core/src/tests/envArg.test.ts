@@ -31,9 +31,9 @@ describe("parseEnvArg", function () {
   });
 
   it("takes the last occurrence when the flag is repeated", function () {
-    expect(parseEnvArg(["push", "--env", "first.env", "--env", "second.env"])).toBe(
-      "second.env",
-    );
+    expect(
+      parseEnvArg(["push", "--env", "first.env", "--env", "second.env"]),
+    ).toBe("second.env");
   });
 
   it("ignores a bare --env with no following value", function () {

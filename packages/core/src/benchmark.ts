@@ -91,19 +91,26 @@ export class BenchmarkCollector {
     }
 
     var latencies = this.httpSamples
-      .map(function (s) { return s.durationMs; })
-      .sort(function (a, b) { return a - b; });
+      .map(function (s) {
+        return s.durationMs;
+      })
+      .sort(function (a, b) {
+        return a - b;
+      });
     var p50 = percentile(latencies, 0.5);
     var p95 = percentile(latencies, 0.95);
     var max = latencies[latencies.length - 1];
     var totalBytes = this.totalBytes();
 
     lines.push(
-      "Overall: " + this.httpSamples.length + " HTTP requests, " +
-      formatBytes(totalBytes) + " received"
+      "Overall: " +
+        this.httpSamples.length +
+        " HTTP requests, " +
+        formatBytes(totalBytes) +
+        " received",
     );
     lines.push(
-      "Latency: p50 " + p50 + "ms | p95 " + p95 + "ms | max " + max + "ms"
+      "Latency: p50 " + p50 + "ms | p95 " + p95 + "ms | max " + max + "ms",
     );
 
     if (this.scopeSamples.length > 0) {
@@ -112,11 +119,19 @@ export class BenchmarkCollector {
       for (var i = 0; i < this.scopeSamples.length; i++) {
         var s = this.scopeSamples[i];
         lines.push(
-          "  " + s.scopeName + ": " +
-          s.wallTimeMs + "ms wall, " +
-          s.httpRequests + " req, " +
-          formatBytes(s.totalResponseBytes) + ", " +
-          s.filesWritten + " written / " + s.filesUnchanged + " unchanged"
+          "  " +
+            s.scopeName +
+            ": " +
+            s.wallTimeMs +
+            "ms wall, " +
+            s.httpRequests +
+            " req, " +
+            formatBytes(s.totalResponseBytes) +
+            ", " +
+            s.filesWritten +
+            " written / " +
+            s.filesUnchanged +
+            " unchanged",
         );
       }
     }
@@ -128,10 +143,7 @@ export class BenchmarkCollector {
 
 function percentile(sortedAsc: number[], p: number): number {
   if (sortedAsc.length === 0) return 0;
-  var idx = Math.min(
-    sortedAsc.length - 1,
-    Math.floor(sortedAsc.length * p)
-  );
+  var idx = Math.min(sortedAsc.length - 1, Math.floor(sortedAsc.length * p));
   return sortedAsc[idx];
 }
 

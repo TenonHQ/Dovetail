@@ -18,7 +18,9 @@ import path from "path";
 export function loadEnvFile(explicitPath?: string): void {
   var raw = explicitPath || process.env.DOVETAIL_ENV_FILE;
   if (raw) {
-    var resolved = path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw);
+    var resolved = path.isAbsolute(raw)
+      ? raw
+      : path.resolve(process.cwd(), raw);
     dotenv.config({ path: resolved });
     return;
   }

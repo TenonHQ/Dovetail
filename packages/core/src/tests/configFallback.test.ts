@@ -9,7 +9,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "debug"; },
+  getLogLevel: function () {
+    return "debug";
+  },
   setLogLevel: jest.fn(),
 };
 
@@ -47,8 +49,14 @@ describe("loadConfigPath fallback", function () {
   });
 
   it("prefers dove.config.js when both files exist (no warning)", async function () {
-    fs.writeFileSync(path.join(tmp, "dove.config.js"), "module.exports = {};\n");
-    fs.writeFileSync(path.join(tmp, "sinc.config.js"), "module.exports = {};\n");
+    fs.writeFileSync(
+      path.join(tmp, "dove.config.js"),
+      "module.exports = {};\n",
+    );
+    fs.writeFileSync(
+      path.join(tmp, "sinc.config.js"),
+      "module.exports = {};\n",
+    );
 
     var result = await loadConfigPath(tmp);
 
@@ -57,13 +65,18 @@ describe("loadConfigPath fallback", function () {
   });
 
   it("falls back to sinc.config.js with a deprecation warning when only legacy exists", async function () {
-    fs.writeFileSync(path.join(tmp, "sinc.config.js"), "module.exports = {};\n");
+    fs.writeFileSync(
+      path.join(tmp, "sinc.config.js"),
+      "module.exports = {};\n",
+    );
 
     var result = await loadConfigPath(tmp);
 
     expect(result).toBe(path.join(tmp, "sinc.config.js"));
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
-    expect(mockLogger.warn.mock.calls[0][0]).toContain("legacy 'sinc.config.js'");
+    expect(mockLogger.warn.mock.calls[0][0]).toContain(
+      "legacy 'sinc.config.js'",
+    );
     expect(mockLogger.warn.mock.calls[0][0]).toContain("dove migrate");
   });
 

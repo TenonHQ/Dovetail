@@ -14,11 +14,13 @@ describe("scorePlanFeatures", function () {
     var root = mkTmp();
     var plan = pushPlan(
       { slug: "thin", title: "Thin", content_md: "short", categories: [] },
-      { rootDir: root }
+      { rootDir: root },
     );
     var s = scorePlanFeatures({ plan: plan, artifacts: [] });
     expect(s.score).toBeLessThan(1);
-    expect(s.missing).toEqual(expect.arrayContaining([expect.stringContaining("diagram")]));
+    expect(s.missing).toEqual(
+      expect.arrayContaining([expect.stringContaining("diagram")]),
+    );
     expect(s.hint).toContain("add");
   });
 
@@ -32,23 +34,28 @@ describe("scorePlanFeatures", function () {
         content_md: "x".repeat(500),
         pr_url: "https://example.com/pr/1",
         linked_artifacts: [{ plan_slug: "other", relation: "see-also" }],
-        categories: ["servicenow"]
+        categories: ["servicenow"],
       },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushArtifact(
       { plan_slug: "rich", kind: "markdown", title: "Doc", content: "notes" },
-      { rootDir: root }
+      { rootDir: root },
     );
     pushArtifact(
-      { plan_slug: "rich", kind: "mermaid", title: "Flow", content: "graph TD; a-->b" },
-      { rootDir: root }
+      {
+        plan_slug: "rich",
+        kind: "mermaid",
+        title: "Flow",
+        content: "graph TD; a-->b",
+      },
+      { rootDir: root },
     );
 
     var full = getPlan("rich", { rootDir: root });
     var s = scorePlanFeatures({
       plan: full!.plan,
-      artifacts: listArtifacts("rich", { rootDir: root })
+      artifacts: listArtifacts("rich", { rootDir: root }),
     });
     expect(s.score).toBe(1);
     expect(s.missing).toEqual([]);

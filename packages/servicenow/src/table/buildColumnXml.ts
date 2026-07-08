@@ -33,12 +33,32 @@ function renderRecord(col: NormalizedColumn, sysId: string): string {
   var parts: Array<string> = [];
   parts.push('<record sys_id="' + sysId + '" operation="add">');
   // column_label — the only field the user really types; element is derived from it.
-  parts.push(field("column_label", { modified: true, dsp_set: true, value: "", display: col.label }));
+  parts.push(
+    field("column_label", {
+      modified: true,
+      dsp_set: true,
+      value: "",
+      display: col.label,
+    }),
+  );
   parts.push(field("element", { value: "" }));
-  parts.push(field("internal_type", { modified: true, value_set: true, value: col.type }));
+  parts.push(
+    field("internal_type", {
+      modified: true,
+      value_set: true,
+      value: col.type,
+    }),
+  );
   parts.push(field("reference", { value: ref }));
   if (hasMax) {
-    parts.push(field("max_length", { modified: true, dsp_set: true, value: "", display: col.maxLength }));
+    parts.push(
+      field("max_length", {
+        modified: true,
+        dsp_set: true,
+        value: "",
+        display: col.maxLength,
+      }),
+    );
   } else {
     parts.push(field("max_length", { value: "" }));
   }
@@ -69,10 +89,24 @@ function field(name: string, opts: FieldOpts): string {
   var dspSet = opts.dsp_set === true ? "true" : "false";
   var inner = "<value>" + xmlEscape(opts.value) + "</value>";
   if (opts.dsp_set === true) {
-    inner += "<display_value>" + xmlEscape(opts.display === undefined ? "" : opts.display) + "</display_value>";
+    inner +=
+      "<display_value>" +
+      xmlEscape(opts.display === undefined ? "" : opts.display) +
+      "</display_value>";
   }
-  return '<field name="' + name + '" modified="' + modified
-    + '" value_set="' + valueSet + '" dsp_set="' + dspSet + '">' + inner + "</field>";
+  return (
+    '<field name="' +
+    name +
+    '" modified="' +
+    modified +
+    '" value_set="' +
+    valueSet +
+    '" dsp_set="' +
+    dspSet +
+    '">' +
+    inner +
+    "</field>"
+  );
 }
 
 /** Minimal XML-attr/text escaping — the values cross an XML boundary. */
@@ -88,15 +122,24 @@ export function xmlEscape(s: string): string {
  * Build the full `<record_update>` column blob. `sysIds[i]` is the fresh
  * client-generated sys_id for column i (length must match `columns`).
  */
-export function buildColumnXml(columns: Array<NormalizedColumn>, sysIds: Array<string>): string {
+export function buildColumnXml(
+  columns: Array<NormalizedColumn>,
+  sysIds: Array<string>,
+): string {
   if (!Array.isArray(columns)) {
     throw new Error("buildColumnXml: columns must be an array.");
   }
   if (!Array.isArray(sysIds) || sysIds.length !== columns.length) {
-    throw new Error("buildColumnXml: need exactly one sys_id per column (got "
-      + (Array.isArray(sysIds) ? sysIds.length : "none") + " for " + columns.length + " columns).");
+    throw new Error(
+      "buildColumnXml: need exactly one sys_id per column (got " +
+        (Array.isArray(sysIds) ? sysIds.length : "none") +
+        " for " +
+        columns.length +
+        " columns).",
+    );
   }
-  var open = '<record_update table="sys_dictionary" field="null" query="nameONE IN^element!=NULL^ORDERBYelement">';
+  var open =
+    '<record_update table="sys_dictionary" field="null" query="nameONE IN^element!=NULL^ORDERBYelement">';
   var body = "";
   for (var i = 0; i < columns.length; i += 1) {
     body += renderRecord(columns[i], sysIds[i]);

@@ -45,12 +45,14 @@ export function ensureEntryContent(
   }
   const base = content === null ? "" : content;
   const needsNewline = base.length > 0 && !base.endsWith("\n");
-  const next =
-    base + (needsNewline ? "\n" : "") + entry + "\n";
+  const next = base + (needsNewline ? "\n" : "") + entry + "\n";
   return { changed: true, content: next };
 }
 
-export function ensureGitignored(rootDir: string, entry: string): GitignoreUpdate {
+export function ensureGitignored(
+  rootDir: string,
+  entry: string,
+): GitignoreUpdate {
   const filePath = path.join(rootDir, ".gitignore");
   let existing: string | null = null;
   try {

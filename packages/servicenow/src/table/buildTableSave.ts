@@ -39,22 +39,44 @@ export var TYPE_MAP: Record<string, string> = {
   url: "url",
   email: "email",
   html: "html",
-  journal: "journal"
+  journal: "journal",
 };
 
 /** Internal types that are valid as-is (a caller may pass the SN type directly). */
 var KNOWN_INTERNAL: Record<string, boolean> = {
-  string_full_utf8: true, string: true, integer: true, decimal: true, boolean: true,
-  glide_date_time: true, glide_date: true, due_date: true, glide_duration: true,
-  reference: true, choice: true, translated_text: true, html: true, url: true,
-  email: true, journal: true, journal_input: true, currency: true, price: true,
-  percent_complete: true, sys_class_name: true, document_id: true, field_name: true,
-  table_name: true, json: true, script: true
+  string_full_utf8: true,
+  string: true,
+  integer: true,
+  decimal: true,
+  boolean: true,
+  glide_date_time: true,
+  glide_date: true,
+  due_date: true,
+  glide_duration: true,
+  reference: true,
+  choice: true,
+  translated_text: true,
+  html: true,
+  url: true,
+  email: true,
+  journal: true,
+  journal_input: true,
+  currency: true,
+  price: true,
+  percent_complete: true,
+  sys_class_name: true,
+  document_id: true,
+  field_name: true,
+  table_name: true,
+  json: true,
+  script: true,
 };
 
 /** Resolve a friendly-or-internal type string to the internal_type to write. */
 export function resolveType(type: string): string {
-  var t = String(type || "").trim().toLowerCase();
+  var t = String(type || "")
+    .trim()
+    .toLowerCase();
   if (!t) throw new Error("column type is required");
   if (Object.prototype.hasOwnProperty.call(TYPE_MAP, t)) return TYPE_MAP[t];
   if (KNOWN_INTERNAL[t] === true) return t;
@@ -62,7 +84,9 @@ export function resolveType(type: string): string {
 }
 
 /** Validate + normalize the friendly column list. Throws on the broken cases. */
-export function normalizeColumns(cols: Array<ColumnSpec>): Array<NormalizedColumn> {
+export function normalizeColumns(
+  cols: Array<ColumnSpec>,
+): Array<NormalizedColumn> {
   if (!Array.isArray(cols) || cols.length === 0) {
     throw new Error("createTable: at least one column is required.");
   }
@@ -71,19 +95,36 @@ export function normalizeColumns(cols: Array<ColumnSpec>): Array<NormalizedColum
   for (var i = 0; i < cols.length; i += 1) {
     var c = cols[i] || ({} as ColumnSpec);
     var label = typeof c.label === "string" ? c.label.trim() : "";
-    if (!label) throw new Error("createTable: column #" + (i + 1) + " is missing a label.");
+    if (!label)
+      throw new Error(
+        "createTable: column #" + (i + 1) + " is missing a label.",
+      );
     var key = label.toLowerCase();
-    if (seen[key]) throw new Error("createTable: duplicate column label '" + label + "'.");
+    if (seen[key])
+      throw new Error("createTable: duplicate column label '" + label + "'.");
     seen[key] = true;
     var internal = resolveType(c.type);
     var reference = typeof c.reference === "string" ? c.reference.trim() : "";
     if (internal === "reference" && !reference) {
-      throw new Error("createTable: reference column '" + label + "' needs a reference target table.");
+      throw new Error(
+        "createTable: reference column '" +
+          label +
+          "' needs a reference target table.",
+      );
     }
-    var maxLength = c.max_length === undefined || c.max_length === null ? "" : String(c.max_length).trim();
+    var maxLength =
+      c.max_length === undefined || c.max_length === null
+        ? ""
+        : String(c.max_length).trim();
     // date/time types carry no max_length in Studio's payload.
-    if (internal === "glide_date_time" || internal === "glide_date") maxLength = "";
-    out.push({ label: label, type: internal, maxLength: maxLength, reference: reference });
+    if (internal === "glide_date_time" || internal === "glide_date")
+      maxLength = "";
+    out.push({
+      label: label,
+      type: internal,
+      maxLength: maxLength,
+      reference: reference,
+    });
   }
   return out;
 }
@@ -103,8 +144,15 @@ export interface AccessFlags {
 
 export function defaultAccessFlags(): AccessFlags {
   return {
-    read: true, create: true, update: true, delete: true, ws: true,
-    configuration: true, alter: true, actions: true, client_scripts: true
+    read: true,
+    create: true,
+    update: true,
+    delete: true,
+    ws: true,
+    configuration: true,
+    alter: true,
+    actions: true,
+    client_scripts: true,
   };
 }
 
@@ -148,10 +196,16 @@ export function showInMenuKey(part: string): string {
 
 /** Build the `...ListEditFormatterAction[sys_db_object.REL:<relId>]` form key. */
 export function listEditKey(relId: string): string {
-  return "ni.java.com.glide.ui_list_edit.ListEditFormatterAction[sys_db_object.REL:" + relId + "]";
+  return (
+    "ni.java.com.glide.ui_list_edit.ListEditFormatterAction[sys_db_object.REL:" +
+    relId +
+    "]"
+  );
 }
 
-function flag(b: boolean): string { return b === true ? "true" : "false"; }
+function flag(b: boolean): string {
+  return b === true ? "true" : "false";
+}
 
 /**
  * Overlay the capability's values onto the base field map harvested from the live
@@ -162,7 +216,7 @@ function flag(b: boolean): string { return b === true ? "true" : "false"; }
  */
 export function applyTableSaveOverlay(
   base: Record<string, string>,
-  o: OverlaySpec
+  o: OverlaySpec,
 ): Record<string, string> {
   var f: Record<string, string> = Object.assign({}, base);
 

@@ -25,7 +25,9 @@ describe("toSafeFolderName", () => {
   });
 
   it("falls back to sys_id for a trailing space", () => {
-    expect(toSafeFolderName(rec("Email Status Change ", "fefb8758"))).toBe("fefb8758");
+    expect(toSafeFolderName(rec("Email Status Change ", "fefb8758"))).toBe(
+      "fefb8758",
+    );
   });
 
   it("falls back to sys_id for a trailing dot", () => {
@@ -40,7 +42,9 @@ describe("toSafeFolderName", () => {
   });
 
   it("treats the wildcard ACL name as unsafe", () => {
-    expect(toSafeFolderName(rec("x_cadso_work_task.*", "aclsid"))).toBe("aclsid");
+    expect(toSafeFolderName(rec("x_cadso_work_task.*", "aclsid"))).toBe(
+      "aclsid",
+    );
   });
 
   it("falls back to sys_id for an empty name", () => {
@@ -54,7 +58,10 @@ describe("normalizeManifestKeys", () => {
     records.forEach((r) => {
       byKey[r.sys_id] = r; // simulate a server manifest keyed by sys_id
     });
-    return { scope: "x_cadso_test", tables: { sys_script: { records: byKey } } };
+    return {
+      scope: "x_cadso_test",
+      tables: { sys_script: { records: byKey } },
+    };
   };
 
   it("keys unsafe records by sys_id and safe records by name", () => {
@@ -108,8 +115,8 @@ describe("normalizeManifestKeys", () => {
     expect(keys).toContain("Duplicate");
     expect(keys).toContain("Duplicate (22222222)");
     // invariant still holds for the suffixed record
-    expect(manifest.tables.sys_script.records["Duplicate (22222222)"].name).toBe(
-      "Duplicate (22222222)",
-    );
+    expect(
+      manifest.tables.sys_script.records["Duplicate (22222222)"].name,
+    ).toBe("Duplicate (22222222)");
   });
 });

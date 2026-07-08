@@ -31,7 +31,11 @@ async function resolveScope(args: DeleteRecordArgs): Promise<string> {
   // Try to get scope from current manifest
   try {
     var manifest = ConfigManager.getManifest();
-    if (manifest && !ConfigManager.isMultiScopeManifest(manifest) && manifest.scope) {
+    if (
+      manifest &&
+      !ConfigManager.isMultiScopeManifest(manifest) &&
+      manifest.scope
+    ) {
       return manifest.scope;
     }
   } catch (e) {
@@ -125,7 +129,14 @@ export async function deleteRecordCommand(args: TSFIXME): Promise<void> {
       name = nameAnswer.name;
     }
 
-    fileLogger.debug("Delete record: table=" + table + " name=" + (name || "n/a") + " sysId=" + (sysId || "from manifest"));
+    fileLogger.debug(
+      "Delete record: table=" +
+        table +
+        " name=" +
+        (name || "n/a") +
+        " sysId=" +
+        (sysId || "from manifest"),
+    );
 
     // 1. Resolve scope
     var scope = await resolveScope(typedArgs);
@@ -168,7 +179,10 @@ export async function deleteRecordCommand(args: TSFIXME): Promise<void> {
       logger.info("  Scope: " + chalk.cyan(scope));
       logger.info("  Sys ID: " + chalk.cyan(sysId));
       if (typedArgs.keepLocal) {
-        logger.info("  Keep Local: " + chalk.yellow("yes (local files will be preserved)"));
+        logger.info(
+          "  Keep Local: " +
+            chalk.yellow("yes (local files will be preserved)"),
+        );
       }
       logger.info("");
 
@@ -191,7 +205,15 @@ export async function deleteRecordCommand(args: TSFIXME): Promise<void> {
     }
 
     // 4. Call the delete endpoint
-    logger.info("Deleting " + table + "/" + (name || sysId) + " from " + (process.env.SN_INSTANCE || "instance") + "...");
+    logger.info(
+      "Deleting " +
+        table +
+        "/" +
+        (name || sysId) +
+        " from " +
+        (process.env.SN_INSTANCE || "instance") +
+        "...",
+    );
 
     var client = defaultClient();
     var deleteResponse = await client.deleteRecord({
@@ -269,7 +291,6 @@ export async function deleteRecordCommand(args: TSFIXME): Promise<void> {
     } else {
       logger.info(chalk.yellow("Local files preserved (--keep-local)"));
     }
-
   } catch (e) {
     logger.error("Failed to delete record");
     if (e instanceof Error) {
@@ -278,7 +299,12 @@ export async function deleteRecordCommand(args: TSFIXME): Promise<void> {
         var respStatus = (e as TSFIXME).response.status;
         var respData = (e as TSFIXME).response.data;
         logger.error("Server responded with status " + respStatus);
-        fileLogger.error("Delete failed — status: " + respStatus + ", response: " + JSON.stringify(respData));
+        fileLogger.error(
+          "Delete failed — status: " +
+            respStatus +
+            ", response: " +
+            JSON.stringify(respData),
+        );
       }
     }
     process.exit(1);

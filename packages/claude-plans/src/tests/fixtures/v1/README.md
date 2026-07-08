@@ -2,7 +2,7 @@
 
 > Frozen request/response snapshots for the 12 v1 MCP tools. Phases B–D add a `v1-contract.test.ts` suite that loads each fixture, calls the tool through `buildDescriptors()` against a clock-frozen + slug-deterministic test harness, and asserts the response is byte-identical to `response`.
 
-A byte drift means a v1 consumer (dashboard, /resume skill, /improve-prompt, downstream CTO scripts) would see a different shape. The CI gate blocks the PR until either the consumer is updated *and* the fixture is intentionally amended, or the regression is reverted.
+A byte drift means a v1 consumer (dashboard, /resume skill, /improve-prompt, downstream CTO scripts) would see a different shape. The CI gate blocks the PR until either the consumer is updated _and_ the fixture is intentionally amended, or the regression is reverted.
 
 ## Conventions
 
@@ -19,4 +19,4 @@ A byte drift means a v1 consumer (dashboard, /resume skill, /improve-prompt, dow
 
 ## Intentional amendments
 
-If a v1 tool's response shape *must* change (e.g. fixing a long-standing bug), update the fixture in the same PR, document the consumer migration in the PR body, and ship a CHANGELOG entry. The v1 contract is a guardrail, not a wall.
+If a v1 tool's response shape _must_ change (e.g. fixing a long-standing bug), update the fixture in the same PR, document the consumer migration in the PR body, and ship a CHANGELOG entry. The v1 contract is a guardrail, not a wall.

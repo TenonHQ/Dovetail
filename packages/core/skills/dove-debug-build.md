@@ -1,6 +1,7 @@
 # Debug Dovetail Build Transformations
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -47,6 +49,7 @@ build/sys_script_include/MyScript/script.ts      <-- Output (transpiled JS)
 For a typical TypeScript server-side pipeline (`typescript-plugin` + `babel-plugin`):
 
 **Stage 1: TypeScript Plugin** (`transpile: false`)
+
 - Runs the TypeScript compiler for type checking only
 - Does NOT modify the code
 - Errors here = TypeScript type errors
@@ -54,11 +57,13 @@ For a typical TypeScript server-side pipeline (`typescript-plugin` + `babel-plug
 **Stage 2: Babel Plugin** (with presets and plugins)
 
 Babel plugins run first (in order):
+
 1. `@tenonhq/dovetail-remove-modules` -- Strips `import`/`export` statements
 2. `@babel/proposal-class-properties` -- Transforms class property syntax
 3. `@babel/proposal-object-rest-spread` -- Transforms `...spread` syntax
 
 Babel presets run in reverse order:
+
 1. `@babel/typescript` (listed last, runs first) -- Strips type annotations
 2. `@babel/env` -- Transpiles ES6+ to ES5
 3. `@tenonhq/dovetail-servicenow` (listed first, runs last) -- Sanitizes for Rhino: replaces `__proto__` with `__proto_sn__`, converts `obj.default` to `obj["default"]`
@@ -66,21 +71,26 @@ Babel presets run in reverse order:
 ### Step 4: Diagnose Common Issues
 
 **"Cannot read property 'X' of undefined" in ServiceNow**
+
 - Likely: `import` statements were not removed. Check that `@tenonhq/dovetail-remove-modules` is in Babel plugins.
 - The import variable becomes `undefined` because ServiceNow has no module system.
 
 **"Illegal access to reserved word" in ServiceNow**
+
 - Likely: Missing `@tenonhq/dovetail-servicenow` preset. Code like `obj.default` or `obj.class` crashes Rhino.
 - Fix: Ensure `@tenonhq/dovetail-servicenow` is the FIRST preset listed (= runs LAST).
 
-**"__proto__" security error in ServiceNow**
+**"**proto**" security error in ServiceNow**
+
 - Likely: Missing `@tenonhq/dovetail-servicenow` preset. Babel's class transpilation generates `__proto__` references.
 
 **"TypeError: Cannot extend a non-class" or prototype errors**
+
 - Likely: Using `useBuiltIns` with `@babel/env`. Rhino locks base class prototypes.
 - Fix: Remove `useBuiltIns` from `@babel/env` config.
 
 **Build succeeds but code does nothing in ServiceNow**
+
 - Check if `export default` was on the main class/function. The `remove-modules` plugin strips exports. In ServiceNow script includes, the class/function name must match the script include name.
 
 ### Special Comment Tags
@@ -88,12 +98,14 @@ Babel presets run in reverse order:
 The `@tenonhq/dovetail-remove-modules` Babel plugin supports these comment tags:
 
 **`@keepModule`** -- Preserve an import (for actual ServiceNow modules):
+
 ```javascript
 //@keepModule
 import moduleDos from "myModuleDos";
 ```
 
 **`@expandModule`** -- Expand imports to dot notation:
+
 ```javascript
 //@expandModule
 import { helper } from "x_cadso_core";
@@ -101,6 +113,7 @@ import { helper } from "x_cadso_core";
 ```
 
 **`@moduleAlias=newName`** -- Rename the module reference with `@expandModule`:
+
 ```javascript
 //@expandModule
 //@moduleAlias=MyApp

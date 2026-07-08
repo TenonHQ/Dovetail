@@ -10,7 +10,11 @@
  */
 
 import type { ServiceNowClient } from "../client";
-import type { SetRelatedListsParams, LayoutResult, LayoutRecordResult } from "../types";
+import type {
+  SetRelatedListsParams,
+  LayoutResult,
+  LayoutRecordResult,
+} from "../types";
 import {
   assertUpdateSet,
   resolveScope,
@@ -18,7 +22,7 @@ import {
   viewFields,
   normalizeViewValue,
   encodeQueryValue,
-  diffChildren
+  diffChildren,
 } from "./layoutCommon";
 import type { ExistingChild } from "./layoutCommon";
 
@@ -45,7 +49,7 @@ function dedupe(values: Array<string>): Array<string> {
 
 export async function setRelatedLists(
   client: ServiceNowClient,
-  params: SetRelatedListsParams
+  params: SetRelatedListsParams,
 ): Promise<LayoutResult> {
   if (!params.table) {
     throw new Error("table is required.");
@@ -63,7 +67,7 @@ export async function setRelatedLists(
     viewName: params.view || "",
     updateSetSysId: params.updateSetSysId,
     scope: scope,
-    dryRun: dryRun
+    dryRun: dryRun,
   });
 
   var records: Array<LayoutRecordResult> = [];
@@ -77,12 +81,14 @@ export async function setRelatedLists(
     var listRows = await client.table.query<any>(
       "sys_ui_related_list",
       "name=" + encodeQueryValue(params.table),
-      200
+      200,
     );
     for (var i = 0; i < listRows.length; i += 1) {
       var r = listRows[i];
-      if (normalizeViewValue(r.view) === view.sysId
-        && plain(r.sys_user) === "") {
+      if (
+        normalizeViewValue(r.view) === view.sysId &&
+        plain(r.sys_user) === ""
+      ) {
         list = r;
         break;
       }
@@ -91,9 +97,19 @@ export async function setRelatedLists(
   var listSysId = list ? plain(list.sys_id) : "";
 
   if (list) {
-    records.push({ table: "sys_ui_related_list", sysId: listSysId, action: "unchanged", label: params.table });
+    records.push({
+      table: "sys_ui_related_list",
+      sysId: listSysId,
+      action: "unchanged",
+      label: params.table,
+    });
   } else if (dryRun) {
-    records.push({ table: "sys_ui_related_list", sysId: "", action: "created", label: params.table });
+    records.push({
+      table: "sys_ui_related_list",
+      sysId: "",
+      action: "created",
+      label: params.table,
+    });
   } else {
     var vf = viewFields(view);
     var createdList = await client.claude.createRecord({
@@ -101,13 +117,18 @@ export async function setRelatedLists(
       fields: {
         name: params.table,
         view: vf.view,
-        view_name: vf.view_name
+        view_name: vf.view_name,
       },
       scope: scope,
-      update_set_sys_id: params.updateSetSysId
+      update_set_sys_id: params.updateSetSysId,
     });
     listSysId = createdList.sys_id;
-    records.push({ table: "sys_ui_related_list", sysId: listSysId, action: "created", label: params.table });
+    records.push({
+      table: "sys_ui_related_list",
+      sysId: listSysId,
+      action: "created",
+      label: params.table,
+    });
   }
 
   // 2. Existing related-list entry rows.
@@ -116,13 +137,13 @@ export async function setRelatedLists(
     var elRows = await client.table.query<any>(
       "sys_ui_related_list_entry",
       "list_id=" + encodeQueryValue(listSysId),
-      500
+      500,
     );
     existing = elRows.map(function (e: any): ExistingChild {
       return {
         sysId: plain(e.sys_id),
         key: plain(e.related_list),
-        position: Number(plain(e.position)) || 0
+        position: Number(plain(e.position)) || 0,
       };
     });
   }
@@ -134,21 +155,47 @@ export async function setRelatedLists(
   for (var p = 0; p < plan.length; p += 1) {
     var step = plan[p];
     if (step.action === "unchanged") {
-      records.push({ table: "sys_ui_related_list_entry", sysId: step.sysId, action: "unchanged", label: step.key });
+      records.push({
+        table: "sys_ui_related_list_entry",
+        sysId: step.sysId,
+        action: "unchanged",
+        label: step.key,
+      });
     }
   }
   if (dryRun) {
     for (var d = 0; d < plan.length; d += 1) {
       var ds = plan[d];
       if (ds.action === "create") {
-        records.push({ table: "sys_ui_related_list_entry", sysId: "", action: "created", label: ds.key });
+        records.push({
+          table: "sys_ui_related_list_entry",
+          sysId: "",
+          action: "created",
+          label: ds.key,
+        });
       } else if (ds.action === "update") {
-        records.push({ table: "sys_ui_related_list_entry", sysId: ds.sysId, action: "updated", label: ds.key });
+        records.push({
+          table: "sys_ui_related_list_entry",
+          sysId: ds.sysId,
+          action: "updated",
+          label: ds.key,
+        });
       } else if (ds.action === "delete") {
-        records.push({ table: "sys_ui_related_list_entry", sysId: ds.sysId, action: "deleted", label: ds.key });
+        records.push({
+          table: "sys_ui_related_list_entry",
+          sysId: ds.sysId,
+          action: "deleted",
+          label: ds.key,
+        });
       }
     }
-    return { table: params.table, view: view.name, updateSet: updateSet, dryRun: true, records: records };
+    return {
+      table: params.table,
+      view: view.name,
+      updateSet: updateSet,
+      dryRun: true,
+      records: records,
+    };
   }
 
   // Creates and updates first; deletes last so a failure cannot strand a
@@ -159,11 +206,20 @@ export async function setRelatedLists(
     }
     var created = await client.claude.createRecord({
       table: "sys_ui_related_list_entry",
-      fields: { list_id: listSysId, related_list: plan[c].key, position: String(plan[c].position) },
+      fields: {
+        list_id: listSysId,
+        related_list: plan[c].key,
+        position: String(plan[c].position),
+      },
       scope: scope,
-      update_set_sys_id: params.updateSetSysId
+      update_set_sys_id: params.updateSetSysId,
     });
-    records.push({ table: "sys_ui_related_list_entry", sysId: created.sys_id, action: "created", label: plan[c].key });
+    records.push({
+      table: "sys_ui_related_list_entry",
+      sysId: created.sys_id,
+      action: "created",
+      label: plan[c].key,
+    });
   }
   for (var u = 0; u < plan.length; u += 1) {
     if (plan[u].action !== "update") {
@@ -173,19 +229,40 @@ export async function setRelatedLists(
       update_set_sys_id: params.updateSetSysId,
       table: "sys_ui_related_list_entry",
       record_sys_id: plan[u].sysId,
-      fields: { position: String(plan[u].position) }
+      fields: { position: String(plan[u].position) },
     });
-    records.push({ table: "sys_ui_related_list_entry", sysId: plan[u].sysId, action: "updated", label: plan[u].key });
+    records.push({
+      table: "sys_ui_related_list_entry",
+      sysId: plan[u].sysId,
+      action: "updated",
+      label: plan[u].key,
+    });
   }
-  var deletes = plan.filter(function (s) { return s.action === "delete"; });
+  var deletes = plan.filter(function (s) {
+    return s.action === "delete";
+  });
   if (deletes.length > 0) {
     // deleteRecord has no update-set parameter — pin the REST session's active
     // update set so the deletions are captured for promotion.
     await client.claude.changeUpdateSet({ sysId: params.updateSetSysId });
     for (var x = 0; x < deletes.length; x += 1) {
-      await client.claude.deleteRecord({ table: "sys_ui_related_list_entry", sys_id: deletes[x].sysId });
-      records.push({ table: "sys_ui_related_list_entry", sysId: deletes[x].sysId, action: "deleted", label: deletes[x].key });
+      await client.claude.deleteRecord({
+        table: "sys_ui_related_list_entry",
+        sys_id: deletes[x].sysId,
+      });
+      records.push({
+        table: "sys_ui_related_list_entry",
+        sysId: deletes[x].sysId,
+        action: "deleted",
+        label: deletes[x].key,
+      });
     }
   }
-  return { table: params.table, view: view.name, updateSet: updateSet, dryRun: false, records: records };
+  return {
+    table: params.table,
+    view: view.name,
+    updateSet: updateSet,
+    dryRun: false,
+    records: records,
+  };
 }

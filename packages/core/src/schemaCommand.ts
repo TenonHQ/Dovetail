@@ -35,7 +35,7 @@ function requireCreds(): Creds {
   const { SN_USER = "", SN_PASSWORD = "", SN_INSTANCE = "" } = process.env;
   if (!SN_USER || !SN_PASSWORD || !SN_INSTANCE) {
     throw new Error(
-      "Missing ServiceNow credentials. Ensure SN_INSTANCE, SN_USER, and SN_PASSWORD are set in your .env file or environment."
+      "Missing ServiceNow credentials. Ensure SN_INSTANCE, SN_USER, and SN_PASSWORD are set in your .env file or environment.",
     );
   }
   return { SN_USER, SN_PASSWORD, SN_INSTANCE };
@@ -50,13 +50,17 @@ function resolveScopes(args: SchemaCommandArgs): string[] {
   const configScopes = config.scopes ? Object.keys(config.scopes) : [];
   if (configScopes.length === 0) {
     throw new Error(
-      "No scopes configured in dove.config.js. Add scopes to the 'scopes' object in your configuration."
+      "No scopes configured in dove.config.js. Add scopes to the 'scopes' object in your configuration.",
     );
   }
   if (args.scope) {
     if (!configScopes.includes(args.scope)) {
       throw new Error(
-        `Scope "${args.scope}" is not configured in dove.config.js. Available scopes: ${configScopes.join(", ")}`
+        `Scope "${
+          args.scope
+        }" is not configured in dove.config.js. Available scopes: ${configScopes.join(
+          ", ",
+        )}`,
       );
     }
     return [args.scope];
@@ -84,7 +88,7 @@ export async function schemaPullCommand(args: SchemaCommandArgs) {
     });
 
     logger.success(
-      `Schema pull complete! ${index.total_tables} tables across ${index.applications.length} applications written to ${outputDir}`
+      `Schema pull complete! ${index.total_tables} tables across ${index.applications.length} applications written to ${outputDir}`,
     );
 
     if (args.snapshot !== undefined && args.snapshot !== false) {
@@ -99,7 +103,7 @@ export async function schemaPullCommand(args: SchemaCommandArgs) {
         now: new Date().toISOString(),
       });
       logger.success(
-        "Snapshot saved" + (label ? ` (${label})` : "") + ": " + info.dir
+        "Snapshot saved" + (label ? ` (${label})` : "") + ": " + info.dir,
       );
     }
   } catch (e) {
@@ -122,7 +126,9 @@ async function resolveRefDir(options: {
 }): Promise<string> {
   const { ref, outputDir, instance, scopes, creds } = options;
   if (ref === "live") {
-    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "dove-schema-live-"));
+    const tmpDir = await fsp.mkdtemp(
+      path.join(os.tmpdir(), "dove-schema-live-"),
+    );
     await pullSchema({
       instance: creds.SN_INSTANCE,
       username: creds.SN_USER,
@@ -151,15 +157,27 @@ export async function schemaDiffCommand(args: SchemaCommandArgs) {
       throw new Error(
         "No --from given and no snapshots found for " +
           instance +
-          ". Create one with `dove schema pull --snapshot <label>`, or pass --from <path>."
+          ". Create one with `dove schema pull --snapshot <label>`, or pass --from <path>.",
       );
     }
     fromRef = path.basename(snapshots[0].dir);
   }
   const toRef = args.to || "live";
 
-  const fromDir = await resolveRefDir({ ref: fromRef, outputDir, instance, scopes, creds });
-  const toDir = await resolveRefDir({ ref: toRef, outputDir, instance, scopes, creds });
+  const fromDir = await resolveRefDir({
+    ref: fromRef,
+    outputDir,
+    instance,
+    scopes,
+    creds,
+  });
+  const toDir = await resolveRefDir({
+    ref: toRef,
+    outputDir,
+    instance,
+    scopes,
+    creds,
+  });
 
   const from = await readSchemaTree({ dir: fromDir, scope });
   const to = await readSchemaTree({ dir: toDir, scope });
@@ -183,7 +201,7 @@ export async function schemaSnapshotsCommand(args: SchemaCommandArgs) {
     logger.info(
       "No snapshots for " +
         instance +
-        ". Create one with `dove schema pull --snapshot <label>`."
+        ". Create one with `dove schema pull --snapshot <label>`.",
     );
     return;
   }
@@ -196,7 +214,7 @@ export async function schemaSnapshotsCommand(args: SchemaCommandArgs) {
         "  " +
         snap.total_tables +
         " tables" +
-        (snap.label ? "  [" + snap.label + "]" : "")
+        (snap.label ? "  [" + snap.label + "]" : ""),
     );
   }
 }

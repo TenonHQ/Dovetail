@@ -49,13 +49,16 @@ function dictionaryLink(host: string, table: string, element: string): string {
   return base + "sys_dictionary_list.do?sysparm_query=" + query;
 }
 
-function recordRow(
-  host: string,
-  glyph: string,
-  change: RecordChange,
-): string {
+function recordRow(host: string, glyph: string, change: RecordChange): string {
   const label = change.table + " > " + change.name;
-  return "  " + glyph + " " + label + "  " + recordLink(host, change.table, change.sys_id);
+  return (
+    "  " +
+    glyph +
+    " " +
+    label +
+    "  " +
+    recordLink(host, change.table, change.sys_id)
+  );
 }
 
 function fieldSubRows(change: RecordChange): string[] {
@@ -110,7 +113,9 @@ function renderScope(
 
   // 1. Drift first — it is what blocks an apply.
   if (dirty.length > 0) {
-    lines.push("  DRIFT — instance changed since baseline (apply would refuse):");
+    lines.push(
+      "  DRIFT — instance changed since baseline (apply would refuse):",
+    );
     for (const record of dirty) {
       lines.push(
         "      ! " +
@@ -250,7 +255,9 @@ export function formatReconcileReport(input: ReconcileReportInput): string {
       " update, " +
       totalDeletes +
       " delete" +
-      (totalInstanceOnly > 0 ? ", " + totalInstanceOnly + " instance-only kept" : "") +
+      (totalInstanceOnly > 0
+        ? ", " + totalInstanceOnly + " instance-only kept"
+        : "") +
       (totalDrift > 0 ? ", " + totalDrift + " drift" : ""),
   );
 

@@ -53,7 +53,10 @@ function extractUpdatedOn(metaContent: string | undefined): string {
   return "";
 }
 
-function applyWhitelist(manifest: SN.AppManifest, scope: string): SN.AppManifest {
+function applyWhitelist(
+  manifest: SN.AppManifest,
+  scope: string,
+): SN.AppManifest {
   let allowed: string[] = [];
   try {
     allowed = ConfigManager.resolveConfigForScope(scope).tables || [];
@@ -76,7 +79,9 @@ function applyWhitelist(manifest: SN.AppManifest, scope: string): SN.AppManifest
 // Branch side (on-disk)
 // ---------------------------------------------------------------------------
 
-export async function loadBranchRecords(scope: string): Promise<ReconcileRecord[]> {
+export async function loadBranchRecords(
+  scope: string,
+): Promise<ReconcileRecord[]> {
   const manifest = await ConfigManager.loadScopeManifest(scope);
   if (!manifest || !manifest.tables) {
     return [];
@@ -142,7 +147,10 @@ function buildAllFilesMap(manifest: SN.AppManifest): SN.MissingFileTableMap {
       if (!rec.files || rec.files.length === 0) {
         continue;
       }
-      recMap[rec.sys_id] = rec.files.map((f) => ({ name: f.name, type: f.type }));
+      recMap[rec.sys_id] = rec.files.map((f) => ({
+        name: f.name,
+        type: f.type,
+      }));
     }
     if (Object.keys(recMap).length > 0) {
       result[table] = recMap;
@@ -151,12 +159,16 @@ function buildAllFilesMap(manifest: SN.AppManifest): SN.MissingFileTableMap {
   return result;
 }
 
-export async function loadLiveRecords(scope: string): Promise<ReconcileRecord[]> {
+export async function loadLiveRecords(
+  scope: string,
+): Promise<ReconcileRecord[]> {
   const client = defaultClient();
   const config = ConfigManager.getConfig();
 
   const liveManifest = applyWhitelist(
-    normalizeManifestKeys(await unwrapSNResponse(client.getManifest(scope, config))),
+    normalizeManifestKeys(
+      await unwrapSNResponse(client.getManifest(scope, config)),
+    ),
     scope,
   );
 

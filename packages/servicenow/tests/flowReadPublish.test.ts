@@ -8,20 +8,41 @@ interface Cap {
   posts: Array<{ path: string; body: any }>;
 }
 
-function mockClient(opts: { getResponse?: any; postResponse?: any }): { client: ServiceNowClient; cap: Cap } {
+function mockClient(opts: { getResponse?: any; postResponse?: any }): {
+  client: ServiceNowClient;
+  cap: Cap;
+} {
   var cap: Cap = { gets: [], posts: [] };
   var client = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function () { return []; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
+      runQuery: async function () {
+        return [];
+      },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
-      createRecord: async function () { return { sys_id: "x" }; },
-      pushWithUpdateSet: async function () { return { sys_id: "x" }; },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function () { return {}; },
-      deleteRecord: async function () { return {}; },
+      createRecord: async function () {
+        return { sys_id: "x" };
+      },
+      pushWithUpdateSet: async function () {
+        return { sys_id: "x" };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
     now: {
       get: async function <T>(path: string): Promise<T> {
@@ -56,18 +77,64 @@ function flowModel() {
         userCanRead: true,
         status: "published",
         actionInstances: [
-          { order: "1", name: "Process Inputs / Outputs", uiUniqueIdentifier: "a1", parent: "try", deleted: false },
-          { order: "2", name: "Update Record", uiUniqueIdentifier: "a2", parent: "try", deleted: false },
-          { order: "8", name: "Update Record", uiUniqueIdentifier: "a8", parent: "if1", deleted: false },
-          { order: "99", name: "Removed Step", uiUniqueIdentifier: "z", parent: "try", deleted: true },
+          {
+            order: "1",
+            name: "Process Inputs / Outputs",
+            uiUniqueIdentifier: "a1",
+            parent: "try",
+            deleted: false,
+          },
+          {
+            order: "2",
+            name: "Update Record",
+            uiUniqueIdentifier: "a2",
+            parent: "try",
+            deleted: false,
+          },
+          {
+            order: "8",
+            name: "Update Record",
+            uiUniqueIdentifier: "a8",
+            parent: "if1",
+            deleted: false,
+          },
+          {
+            order: "99",
+            name: "Removed Step",
+            uiUniqueIdentifier: "z",
+            parent: "try",
+            deleted: true,
+          },
         ],
         flowLogicInstances: [
-          { order: "0", name: "Top Level Try:", uiUniqueIdentifier: "try", parent: "", deleted: false },
-          { order: "7", name: "If: No Phone Home", uiUniqueIdentifier: "if1", parent: "try", deleted: false },
+          {
+            order: "0",
+            name: "Top Level Try:",
+            uiUniqueIdentifier: "try",
+            parent: "",
+            deleted: false,
+          },
+          {
+            order: "7",
+            name: "If: No Phone Home",
+            uiUniqueIdentifier: "if1",
+            parent: "try",
+            deleted: false,
+          },
         ],
         flowVariables: [
-          { name: "phone", label: "Phone", type: "string", type_label: "String" },
-          { name: "send_at", label: "Send At", type: "glide_date_time", type_label: "Date/Time" },
+          {
+            name: "phone",
+            label: "Phone",
+            type: "string",
+            type_label: "String",
+          },
+          {
+            name: "send_at",
+            label: "Send At",
+            type: "glide_date_time",
+            type_label: "Date/Time",
+          },
         ],
       },
     },
@@ -88,12 +155,22 @@ describe("readFlow", function () {
 
     // 6 instances total in the model, 1 deleted -> 5 live steps, ordered.
     expect(r.steps.length).toBe(5);
-    expect(r.steps.map(function (s) { return s.order; })).toEqual([0, 1, 2, 7, 8]);
-    expect(r.steps.map(function (s) { return s.kind; })).toEqual(["logic", "action", "action", "logic", "action"]);
+    expect(
+      r.steps.map(function (s) {
+        return s.order;
+      }),
+    ).toEqual([0, 1, 2, 7, 8]);
+    expect(
+      r.steps.map(function (s) {
+        return s.kind;
+      }),
+    ).toEqual(["logic", "action", "action", "logic", "action"]);
 
     // Depth: Try=0; its children (a1,a2,if1)=1; the If's child a8=2.
     var byLabel: Record<string, number> = {};
-    r.steps.forEach(function (s) { byLabel[s.label] = s.depth; });
+    r.steps.forEach(function (s) {
+      byLabel[s.label] = s.depth;
+    });
     expect(byLabel["Top Level Try:"]).toBe(0);
     expect(byLabel["Process Inputs / Outputs"]).toBe(1);
     expect(byLabel["If: No Phone Home"]).toBe(1);
@@ -121,12 +198,16 @@ describe("readFlow", function () {
 
   it("requires sysId", async function () {
     var ctx = mockClient({ getResponse: flowModel() });
-    await expect(readFlow({ client: ctx.client, sysId: "" })).rejects.toThrow(/sysId is required/);
+    await expect(readFlow({ client: ctx.client, sysId: "" })).rejects.toThrow(
+      /sysId is required/,
+    );
   });
 
   it("throws on an unexpected (non-object) response", async function () {
     var ctx = mockClient({ getResponse: "not json" });
-    await expect(readFlow({ client: ctx.client, sysId: FLOW })).rejects.toThrow(/unexpected response/);
+    await expect(readFlow({ client: ctx.client, sysId: FLOW })).rejects.toThrow(
+      /unexpected response/,
+    );
   });
 });
 
@@ -139,32 +220,52 @@ describe("readActionType", function () {
           displayName: "Send SMS / MMS",
           internal_name: "send_sms_mms",
           description: "Send a text",
-          inputs: [{ name: "to", label: "To", type: "string", type_label: "String" }],
+          inputs: [
+            { name: "to", label: "To", type: "string", type_label: "String" },
+          ],
           outputs: [
             { name: "message_id", label: "Message ID", type: "string" },
-            { name: "ok", label: "Success", type: "boolean", type_label: "True/False" },
+            {
+              name: "ok",
+              label: "Success",
+              type: "boolean",
+              type_label: "True/False",
+            },
           ],
         },
       },
     });
-    var r = await readActionType({ client: ctx.client, sysId: ACTION, scopeSysId: SCOPE });
+    var r = await readActionType({
+      client: ctx.client,
+      sysId: ACTION,
+      scopeSysId: SCOPE,
+    });
 
     expect(ctx.cap.gets[0]).toBe(
-      "/api/now/processflow/action/action_types/" + ACTION + "?sysparm_transaction_scope=" + SCOPE
+      "/api/now/processflow/action/action_types/" +
+        ACTION +
+        "?sysparm_transaction_scope=" +
+        SCOPE,
     );
     expect(r.name).toBe("Send SMS / MMS");
     expect(r.internalName).toBe("send_sms_mms");
     expect(r.counts).toEqual({ inputs: 1, outputs: 2 });
     expect(r.inputs[0]).toEqual({ name: "to", label: "To", type: "String" });
-    expect(r.outputs[1]).toEqual({ name: "ok", label: "Success", type: "True/False" });
+    expect(r.outputs[1]).toEqual({
+      name: "ok",
+      label: "Success",
+      type: "True/False",
+    });
   });
 
   it("requires sysId and scopeSysId", async function () {
     var ctx = mockClient({ getResponse: { result: {} } });
-    await expect(readActionType({ client: ctx.client, sysId: "", scopeSysId: SCOPE }))
-      .rejects.toThrow(/sysId is required/);
-    await expect(readActionType({ client: ctx.client, sysId: ACTION, scopeSysId: "" }))
-      .rejects.toThrow(/scopeSysId is required/);
+    await expect(
+      readActionType({ client: ctx.client, sysId: "", scopeSysId: SCOPE }),
+    ).rejects.toThrow(/sysId is required/);
+    await expect(
+      readActionType({ client: ctx.client, sysId: ACTION, scopeSysId: "" }),
+    ).rejects.toThrow(/scopeSysId is required/);
   });
 });
 
@@ -179,7 +280,10 @@ describe("publishFlow", function () {
     expect(ctx.cap.gets[0]).toBe("/api/now/processflow/flow/" + FLOW);
     expect(ctx.cap.posts.length).toBe(1);
     expect(ctx.cap.posts[0].path).toBe(
-      "/api/now/processflow/flow/" + FLOW + "/snapshot?sysparm_transaction_scope=" + SCOPE
+      "/api/now/processflow/flow/" +
+        FLOW +
+        "/snapshot?sysparm_transaction_scope=" +
+        SCOPE,
     );
     // The posted body is the fetched model (carries the instance graph).
     expect(ctx.cap.posts[0].body.actionInstances.length).toBe(4);
@@ -189,8 +293,17 @@ describe("publishFlow", function () {
 
   it("publishes a caller-supplied edited model without re-fetching", async function () {
     var ctx = mockClient({ postResponse: {} });
-    var edited = { scope: SCOPE, actionInstances: [], flowLogicInstances: [], name: "edited" };
-    var r = await publishFlow({ client: ctx.client, sysId: FLOW, model: edited });
+    var edited = {
+      scope: SCOPE,
+      actionInstances: [],
+      flowLogicInstances: [],
+      name: "edited",
+    };
+    var r = await publishFlow({
+      client: ctx.client,
+      sysId: FLOW,
+      model: edited,
+    });
 
     expect(ctx.cap.gets.length).toBe(0); // no GET — used the supplied model
     expect(ctx.cap.posts[0].body.name).toBe("edited");
@@ -199,19 +312,31 @@ describe("publishFlow", function () {
 
   it("uses an explicit scopeSysId over the model's scope", async function () {
     var ctx = mockClient({ getResponse: flowModel() });
-    await publishFlow({ client: ctx.client, sysId: FLOW, scopeSysId: "OTHER_SCOPE" });
-    expect(ctx.cap.posts[0].path).toContain("sysparm_transaction_scope=OTHER_SCOPE");
+    await publishFlow({
+      client: ctx.client,
+      sysId: FLOW,
+      scopeSysId: "OTHER_SCOPE",
+    });
+    expect(ctx.cap.posts[0].path).toContain(
+      "sysparm_transaction_scope=OTHER_SCOPE",
+    );
   });
 
   it("throws when no scope can be resolved", async function () {
     var ctx = mockClient({ postResponse: {} });
     await expect(
-      publishFlow({ client: ctx.client, sysId: FLOW, model: { actionInstances: [] } })
+      publishFlow({
+        client: ctx.client,
+        sysId: FLOW,
+        model: { actionInstances: [] },
+      }),
     ).rejects.toThrow(/scopeSysId is required/);
   });
 
   it("requires sysId", async function () {
     var ctx = mockClient({ getResponse: flowModel() });
-    await expect(publishFlow({ client: ctx.client, sysId: "" })).rejects.toThrow(/sysId is required/);
+    await expect(
+      publishFlow({ client: ctx.client, sysId: "" }),
+    ).rejects.toThrow(/sysId is required/);
   });
 });

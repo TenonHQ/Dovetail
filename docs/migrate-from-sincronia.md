@@ -22,19 +22,19 @@ After step 2, your project's `sinc.*` files are renamed, your `package.json` scr
 
 ## What changes
 
-| Before | After |
-|---|---|
-| `npm i -D @tenonhq/sincronia-core` | `npm i -D @tenonhq/dovetail-core` |
-| `npx sinc <command>` | `npx dove <command>` |
-| `sinc.config.js` | `dove.config.js` |
-| `sinc.manifest.json` | `dove.manifest.json` |
-| `sinc.manifest.<scope>.json` | `dove.manifest.<scope>.json` |
-| `sinc.diff.manifest.json` | `dove.diff.manifest.json` |
-| `.sinc-active-task.json` | `.dove-active-task.json` |
-| `.sinc-update-sets.json` | `.dove-update-sets.json` |
-| `.sinc-recent-edits.json` | `.dove-recent-edits.json` |
-| `sincronia-debug-*.log` | `dovetail-debug-*.log` |
-| `/api/cadso/claude/<op>` (ServiceNow API) | `/api/cadso/dovetail/<op>` |
+| Before                                    | After                             |
+| ----------------------------------------- | --------------------------------- |
+| `npm i -D @tenonhq/sincronia-core`        | `npm i -D @tenonhq/dovetail-core` |
+| `npx sinc <command>`                      | `npx dove <command>`              |
+| `sinc.config.js`                          | `dove.config.js`                  |
+| `sinc.manifest.json`                      | `dove.manifest.json`              |
+| `sinc.manifest.<scope>.json`              | `dove.manifest.<scope>.json`      |
+| `sinc.diff.manifest.json`                 | `dove.diff.manifest.json`         |
+| `.sinc-active-task.json`                  | `.dove-active-task.json`          |
+| `.sinc-update-sets.json`                  | `.dove-update-sets.json`          |
+| `.sinc-recent-edits.json`                 | `.dove-recent-edits.json`         |
+| `sincronia-debug-*.log`                   | `dovetail-debug-*.log`            |
+| `/api/cadso/claude/<op>` (ServiceNow API) | `/api/cadso/dovetail/<op>`        |
 
 Schemas are unchanged — only the filenames change.
 

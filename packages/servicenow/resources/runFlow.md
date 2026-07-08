@@ -44,7 +44,9 @@ elsewhere.
     response.setStatus(404);
     return { ok: false, error: "flow not found: " + flowSysId };
   }
-  var scopeName = flowGr.sys_scope.scope ? flowGr.sys_scope.scope.toString() : "global";
+  var scopeName = flowGr.sys_scope.scope
+    ? flowGr.sys_scope.scope.toString()
+    : "global";
   var qualifiedName = scopeName + "." + flowGr.internal_name.toString();
   var isSubflow = flowGr.type.toString() === "subflow";
 
@@ -52,8 +54,16 @@ elsewhere.
     // Foreground run so we can return outputs synchronously. Use inBackground()
     // / startAsync() for long-running flows and poll sys_flow_context instead.
     var runner = isSubflow
-      ? sn_fd.FlowAPI.getRunner().inForeground().fromSubflow(qualifiedName).withInputs(inputs).run()
-      : sn_fd.FlowAPI.getRunner().inForeground().fromFlow(qualifiedName).withInputs(inputs).run();
+      ? sn_fd.FlowAPI.getRunner()
+          .inForeground()
+          .fromSubflow(qualifiedName)
+          .withInputs(inputs)
+          .run()
+      : sn_fd.FlowAPI.getRunner()
+          .inForeground()
+          .fromFlow(qualifiedName)
+          .withInputs(inputs)
+          .run();
 
     var contextId = runner.getContextId ? runner.getContextId() : "";
     var outputs = runner.getOutputs ? runner.getOutputs() : {};

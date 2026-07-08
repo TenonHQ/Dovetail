@@ -66,7 +66,9 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getScopeManifestPath: jest.fn(
+    (scope: string) => `/project/dove.manifest.${scope}.json`,
+  ),
   getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
@@ -125,7 +127,10 @@ jest.mock("axios", () => ({
 
 // --- Imports ---
 import { logger } from "../Logger";
-import { multiScopeWatcher, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 import * as path from "path";
 
 // --- Tests ---
@@ -138,7 +143,9 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
     // Default: scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.createCurrentAppUserPref.mockResolvedValue({});
   });
@@ -163,7 +170,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("missing a valid taskId")
+        expect.stringContaining("missing a valid taskId"),
       );
     });
 
@@ -181,7 +188,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("missing a valid taskId")
+        expect.stringContaining("missing a valid taskId"),
       );
     });
 
@@ -200,7 +207,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("missing a valid updateSetName")
+        expect.stringContaining("missing a valid updateSetName"),
       );
     });
 
@@ -218,7 +225,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
       expect(result).toBeNull();
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("missing a valid updateSetName")
+        expect.stringContaining("missing a valid updateSetName"),
       );
     });
 
@@ -259,7 +266,7 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
       // readActiveTask should have returned null due to whitespace-only taskId
       // which triggers the no-active-task warning instead
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("No update set configured for scope")
+        expect.stringContaining("No update set configured for scope"),
       );
 
       // Should NOT have made any ServiceNow API calls
@@ -279,10 +286,10 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
 
       // readActiveTask returns null → falls through to no-active-task warning
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("missing a valid taskId")
+        expect.stringContaining("missing a valid taskId"),
       );
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("No update set configured for scope")
+        expect.stringContaining("No update set configured for scope"),
       );
 
       // No ServiceNow API calls
@@ -303,7 +310,15 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
       // Mock: scope found, existing update set found
       mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
       mockSNClient.client.get.mockResolvedValue({
-        data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task", state: "in progress" }] },
+        data: {
+          result: [
+            {
+              sys_id: "us_123",
+              name: "CU-abc123 Test Task",
+              state: "in progress",
+            },
+          ],
+        },
       });
       mockSNClient.changeUpdateSet.mockResolvedValue(undefined);
       mockSNClient.getCurrentUpdateSet.mockResolvedValue({
@@ -320,7 +335,11 @@ describe("US-010: Validate task ID before ServiceNow queries", () => {
       expect(getCall[1].params.sysparm_query).toContain("CU-abc123");
 
       // No "empty taskId" error
-      var errorCalls = (logger.error as jest.Mock).mock.calls.map(function (c: any[]) { return c[0]; });
+      var errorCalls = (logger.error as jest.Mock).mock.calls.map(function (
+        c: any[],
+      ) {
+        return c[0];
+      });
       var hasEmptyTaskIdError = errorCalls.some(function (msg: string) {
         return msg.indexOf("empty taskId") !== -1;
       });

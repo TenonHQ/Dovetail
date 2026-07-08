@@ -29,7 +29,7 @@ export var LEGAL_TRANSITIONS: Record<string, PipelineStage[]> = {
   "per-step-review": ["code", "architectural-review"],
   "architectural-review": ["per-step-review", "test-reality", "documentation"],
   "test-reality": ["documentation", "code"],
-  documentation: ["documentation"]
+  documentation: ["documentation"],
 };
 
 export class IllegalTransitionError extends Error {
@@ -37,10 +37,18 @@ export class IllegalTransitionError extends Error {
   public from: PipelineStage | null;
   public to: PipelineStage;
   public legal: PipelineStage[];
-  constructor(from: PipelineStage | null, to: PipelineStage, legal: PipelineStage[]) {
+  constructor(
+    from: PipelineStage | null,
+    to: PipelineStage,
+    legal: PipelineStage[],
+  ) {
     super(
-      "illegal stage transition " + (from || "<start>") + " -> " + to +
-      "; legal next: " + (legal.length > 0 ? legal.join(", ") : "<none>")
+      "illegal stage transition " +
+        (from || "<start>") +
+        " -> " +
+        to +
+        "; legal next: " +
+        (legal.length > 0 ? legal.join(", ") : "<none>"),
     );
     this.name = "IllegalTransitionError";
     this.code = "ILLEGAL_TRANSITION";
@@ -56,7 +64,11 @@ export class ConflictRejectedError extends Error {
   constructor(winning: StageTransition) {
     super(
       "code-sourced transition rejected; last dashboard-sourced move " +
-      "to " + winning.to + " at " + winning.at + " is within the grace window"
+        "to " +
+        winning.to +
+        " at " +
+        winning.at +
+        " is within the grace window",
     );
     this.name = "ConflictRejectedError";
     this.code = "CONFLICT_REJECTED";
@@ -76,7 +88,10 @@ export function legalNextStages(from: PipelineStage | null): PipelineStage[] {
  * Throws IllegalTransitionError when `to` is not reachable from `from`.
  * Returns silently on success.
  */
-export function assertTransition(from: PipelineStage | null, to: PipelineStage): void {
+export function assertTransition(
+  from: PipelineStage | null,
+  to: PipelineStage,
+): void {
   var legal = legalNextStages(from);
   if (legal.indexOf(to) === -1) {
     throw new IllegalTransitionError(from, to, legal);
@@ -102,13 +117,14 @@ export interface ConflictResolution {
 export function checkConflict(
   history: StageTransition[],
   incomingSource: StageTransitionSource,
-  options: ConflictResolution = {}
+  options: ConflictResolution = {},
 ): void {
   if (incomingSource === "dashboard") return; // dashboard always wins
   if (history.length === 0) return;
   var last = history[history.length - 1];
   if (last.source !== "dashboard") return;
-  var graceMs = typeof options.graceMs === "number" ? options.graceMs : conflictGraceMs();
+  var graceMs =
+    typeof options.graceMs === "number" ? options.graceMs : conflictGraceMs();
   var now = typeof options.nowMs === "number" ? options.nowMs : Date.now();
   if (now - Date.parse(last.at) < graceMs) {
     throw new ConflictRejectedError(last);

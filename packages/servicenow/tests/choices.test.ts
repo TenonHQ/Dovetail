@@ -7,13 +7,13 @@ describe("addChoicesToField", function () {
     name: "x_cadso_core_event",
     element: "state",
     choice: "0",
-    sys_scope: "scope_core"
+    sys_scope: "scope_core",
   };
   var updateSetRow = {
     sys_id: "us1",
     name: "Tenon - Core - Sinch DLR Tables",
     state: "in progress",
-    application: "scope_core"
+    application: "scope_core",
   };
 
   it("creates new choices and flips sys_dictionary.choice to 3", async function () {
@@ -21,11 +21,25 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [dictRow];
         if (table === "sys_update_set") return [updateSetRow];
-        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
-        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_scope")
+          return [
+            {
+              sys_id: "scope_core",
+              scope: "x_cadso_core",
+              name: "x_cadso_core",
+            },
+          ];
+        if (table === "sys_scope")
+          return [
+            {
+              sys_id: "scope_core",
+              scope: "x_cadso_core",
+              name: "x_cadso_core",
+            },
+          ];
         if (table === "sys_choice") return [];
         return [];
-      }
+      },
     });
 
     var result = await addChoicesToField(ctx.client, {
@@ -34,13 +48,13 @@ describe("addChoicesToField", function () {
       updateSetSysId: "us1",
       choices: [
         { value: "delivered", label: "Delivered" },
-        { value: "failed", label: "Failed" }
-      ]
+        { value: "failed", label: "Failed" },
+      ],
     });
 
     expect(result.dictionary.choiceWas).toBe(0);
     expect(result.dictionary.choiceNow).toBe(3);
-    expect(result.choices.map(c => c.action)).toEqual(["created", "created"]);
+    expect(result.choices.map((c) => c.action)).toEqual(["created", "created"]);
     expect(ctx.calls.createRecord).toHaveLength(2);
     expect(ctx.calls.createRecord[0].table).toBe("sys_choice");
     expect(ctx.calls.createRecord[0].fields.name).toBe("x_cadso_core_event");
@@ -58,7 +72,14 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
         if (table === "sys_update_set") return [updateSetRow];
-        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_scope")
+          return [
+            {
+              sys_id: "scope_core",
+              scope: "x_cadso_core",
+              name: "x_cadso_core",
+            },
+          ];
         if (table === "sys_choice") {
           return [
             {
@@ -67,19 +88,19 @@ describe("addChoicesToField", function () {
               label: "Delivered",
               sequence: "",
               language: "en",
-              inactive: "false"
-            }
+              inactive: "false",
+            },
           ];
         }
         return [];
-      }
+      },
     });
 
     var result = await addChoicesToField(ctx.client, {
       table: "x_cadso_core_event",
       column: "state",
       updateSetSysId: "us1",
-      choices: [{ value: "delivered", label: "Delivered" }]
+      choices: [{ value: "delivered", label: "Delivered" }],
     });
 
     expect(result.choices[0].action).toBe("unchanged");
@@ -92,7 +113,14 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
         if (table === "sys_update_set") return [updateSetRow];
-        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_scope")
+          return [
+            {
+              sys_id: "scope_core",
+              scope: "x_cadso_core",
+              name: "x_cadso_core",
+            },
+          ];
         if (table === "sys_choice") {
           return [
             {
@@ -101,19 +129,19 @@ describe("addChoicesToField", function () {
               label: "OLD",
               sequence: "",
               language: "en",
-              inactive: "false"
-            }
+              inactive: "false",
+            },
           ];
         }
         return [];
-      }
+      },
     });
 
     var result = await addChoicesToField(ctx.client, {
       table: "x_cadso_core_event",
       column: "state",
       updateSetSysId: "us1",
-      choices: [{ value: "delivered", label: "Delivered" }]
+      choices: [{ value: "delivered", label: "Delivered" }],
     });
 
     expect(result.choices[0].action).toBe("updated");
@@ -126,9 +154,16 @@ describe("addChoicesToField", function () {
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [];
         if (table === "sys_update_set") return [updateSetRow];
-        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_scope")
+          return [
+            {
+              sys_id: "scope_core",
+              scope: "x_cadso_core",
+              name: "x_cadso_core",
+            },
+          ];
         return [];
-      }
+      },
     });
 
     await expect(
@@ -136,8 +171,8 @@ describe("addChoicesToField", function () {
         table: "bogus",
         column: "column",
         updateSetSysId: "us1",
-        choices: [{ value: "x", label: "X" }]
-      })
+        choices: [{ value: "x", label: "X" }],
+      }),
     ).rejects.toThrow(/sys_dictionary record not found/);
   });
 
@@ -145,10 +180,18 @@ describe("addChoicesToField", function () {
     var ctx = makeClient({
       query: async function (table: string, _query?: string) {
         if (table === "sys_dictionary") return [dictRow];
-        if (table === "sys_update_set") return [{ ...updateSetRow, state: "complete" }];
-        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_update_set")
+          return [{ ...updateSetRow, state: "complete" }];
+        if (table === "sys_scope")
+          return [
+            {
+              sys_id: "scope_core",
+              scope: "x_cadso_core",
+              name: "x_cadso_core",
+            },
+          ];
         return [];
-      }
+      },
     });
 
     await expect(
@@ -156,8 +199,8 @@ describe("addChoicesToField", function () {
         table: "x_cadso_core_event",
         column: "state",
         updateSetSysId: "us1",
-        choices: [{ value: "x", label: "X" }]
-      })
+        choices: [{ value: "x", label: "X" }],
+      }),
     ).rejects.toThrow(/in progress/);
   });
 
@@ -168,8 +211,8 @@ describe("addChoicesToField", function () {
         table: "t",
         column: "c",
         updateSetSysId: "",
-        choices: [{ value: "x", label: "X" }]
-      })
+        choices: [{ value: "x", label: "X" }],
+      }),
     ).rejects.toThrow(/updateSetSysId is required/);
   });
 });

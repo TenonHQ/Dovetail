@@ -24,35 +24,55 @@ import type { ServiceNowClientConfig } from "./types";
  * a complete credential pair — failing loudly rather than silently falling
  * back to whatever instance the host process happens to be pointed at.
  */
-export function resolveConfigFromEnvFile(envPath: string): ServiceNowClientConfig {
+export function resolveConfigFromEnvFile(
+  envPath: string,
+): ServiceNowClientConfig {
   if (typeof envPath !== "string" || envPath.length === 0) {
-    throw new Error("resolveConfigFromEnvFile: envPath must be a non-empty string.");
+    throw new Error(
+      "resolveConfigFromEnvFile: envPath must be a non-empty string.",
+    );
   }
   var raw: string;
   try {
     raw = fs.readFileSync(envPath, "utf8");
   } catch (e: any) {
     throw new Error(
-      "Cannot read env file '" + envPath + "': " + (e && e.message ? e.message : String(e))
+      "Cannot read env file '" +
+        envPath +
+        "': " +
+        (e && e.message ? e.message : String(e)),
     );
   }
 
   var parsed = dotenv.parse(raw);
 
-  var instance = parsed.SN_INSTANCE || parsed.SN_DEV_INSTANCE || parsed.SN_PROD_INSTANCE || "";
-  var user = parsed.SN_USER || parsed.SN_DEV_USERNAME || parsed.SN_PROD_USERNAME || "";
-  var password = parsed.SN_PASSWORD || parsed.SN_DEV_PASSWORD || parsed.SN_PROD_PASSWORD || "";
+  var instance =
+    parsed.SN_INSTANCE ||
+    parsed.SN_DEV_INSTANCE ||
+    parsed.SN_PROD_INSTANCE ||
+    "";
+  var user =
+    parsed.SN_USER || parsed.SN_DEV_USERNAME || parsed.SN_PROD_USERNAME || "";
+  var password =
+    parsed.SN_PASSWORD ||
+    parsed.SN_DEV_PASSWORD ||
+    parsed.SN_PROD_PASSWORD ||
+    "";
 
   if (!instance) {
     throw new Error(
-      "env file '" + envPath + "' does not define a ServiceNow instance — " +
-      "set SN_INSTANCE (preferred) or SN_DEV_INSTANCE / SN_PROD_INSTANCE."
+      "env file '" +
+        envPath +
+        "' does not define a ServiceNow instance — " +
+        "set SN_INSTANCE (preferred) or SN_DEV_INSTANCE / SN_PROD_INSTANCE.",
     );
   }
   if (!user || !password) {
     throw new Error(
-      "env file '" + envPath + "' is missing ServiceNow credentials — " +
-      "set SN_USER/SN_PASSWORD (preferred) or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
+      "env file '" +
+        envPath +
+        "' is missing ServiceNow credentials — " +
+        "set SN_USER/SN_PASSWORD (preferred) or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*).",
     );
   }
 

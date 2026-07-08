@@ -58,14 +58,24 @@ describe("diffRecords — classification", () => {
 
   it("reports a field present only on the branch and only on the instance", () => {
     const diff = diffRecords({
-      branch: [rec({ sys_id: "a", fields: { "script.js": "X", "extra.js": "Y" } })],
+      branch: [
+        rec({ sys_id: "a", fields: { "script.js": "X", "extra.js": "Y" } }),
+      ],
       live: [rec({ sys_id: "a", fields: { "script.js": "X", "old.js": "Z" } })],
       baselineSysIds: new Set(["a"]),
     });
     const deltas = diff.updates[0].fieldDeltas;
     const byField = Object.fromEntries(deltas.map((d) => [d.field, d]));
-    expect(byField["extra.js"]).toMatchObject({ onBranch: true, onLive: false, changed: false });
-    expect(byField["old.js"]).toMatchObject({ onBranch: false, onLive: true, changed: false });
+    expect(byField["extra.js"]).toMatchObject({
+      onBranch: true,
+      onLive: false,
+      changed: false,
+    });
+    expect(byField["old.js"]).toMatchObject({
+      onBranch: false,
+      onLive: true,
+      changed: false,
+    });
     // unchanged shared field is not emitted
     expect(byField["script.js"]).toBeUndefined();
   });

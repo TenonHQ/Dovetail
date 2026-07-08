@@ -8,7 +8,11 @@
 
 import type { ServiceNowClient } from "../src/client";
 
-export type QueryFn = (table: string, query?: string, limit?: number) => Promise<Array<any>>;
+export type QueryFn = (
+  table: string,
+  query?: string,
+  limit?: number,
+) => Promise<Array<any>>;
 
 export interface MockCalls {
   tableQuery: Array<{ table: string; query: string }>;
@@ -23,33 +27,44 @@ export interface MockClientCtx {
   calls: MockCalls;
 }
 
-export function makeMockClient(overrides: { query?: QueryFn } = {}): MockClientCtx {
+export function makeMockClient(
+  overrides: { query?: QueryFn } = {},
+): MockClientCtx {
   var calls: MockCalls = {
     tableQuery: [],
     createRecord: [],
     pushWithUpdateSet: [],
     deleteRecord: [],
-    changeUpdateSet: []
+    changeUpdateSet: [],
   };
-  var queryImpl: QueryFn = overrides.query || (async function () { return []; });
+  var queryImpl: QueryFn =
+    overrides.query ||
+    async function () {
+      return [];
+    };
   var queryFn = async function <T = any>(
     table: string,
     query: string,
-    limitOrOptions?: number | { limit?: number; fields?: string[] }
+    limitOrOptions?: number | { limit?: number; fields?: string[] },
   ): Promise<Array<T>> {
     calls.tableQuery.push({ table: table, query: query });
-    var limit = typeof limitOrOptions === "number"
-      ? limitOrOptions
-      : (limitOrOptions && limitOrOptions.limit);
+    var limit =
+      typeof limitOrOptions === "number"
+        ? limitOrOptions
+        : limitOrOptions && limitOrOptions.limit;
     return (await queryImpl(table, query, limit)) as Array<T>;
   };
   var client: ServiceNowClient = {
     table: {
-      query: queryFn as ServiceNowClient["table"]["query"]
+      query: queryFn as ServiceNowClient["table"]["query"],
     },
     buildAgent: {
-      runQuery: async function () { return [] as any; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; }
+      runQuery: async function () {
+        return [] as any;
+      },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
       createRecord: async function (params) {
@@ -70,12 +85,16 @@ export function makeMockClient(overrides: { query?: QueryFn } = {}): MockClientC
       deleteRecord: async function (params) {
         calls.deleteRecord.push(params);
         return { sys_id: params.sys_id };
-      }
+      },
     },
     now: {
-      get: async function () { return {} as any; },
-      post: async function () { return {} as any; }
-    }
+      get: async function () {
+        return {} as any;
+      },
+      post: async function () {
+        return {} as any;
+      },
+    },
   };
   return { client: client, calls: calls };
 }

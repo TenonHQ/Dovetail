@@ -56,15 +56,31 @@ export function discoverPlugins(): Sinc.InitPlugin[] {
     }
 
     dirs
-      .filter(name => PLUGIN_PACKAGE_PREFIXES.some(p => name.startsWith(p)) && !SKIP_PACKAGES.has(name) && !seen.has(name))
-      .forEach(dirName => {
+      .filter(
+        (name) =>
+          PLUGIN_PACKAGE_PREFIXES.some((p) => name.startsWith(p)) &&
+          !SKIP_PACKAGES.has(name) &&
+          !seen.has(name),
+      )
+      .forEach((dirName) => {
         seen.add(dirName);
 
         try {
           const pkg = require("@tenonhq/" + dirName);
-          if (pkg && pkg.sincPlugin && pkg.sincPlugin.name && pkg.sincPlugin.displayName) {
+          if (
+            pkg &&
+            pkg.sincPlugin &&
+            pkg.sincPlugin.name &&
+            pkg.sincPlugin.displayName
+          ) {
             plugins.push(pkg.sincPlugin);
-            logger.debug("Discovered init plugin: " + pkg.sincPlugin.displayName + " (" + dirName + ")");
+            logger.debug(
+              "Discovered init plugin: " +
+                pkg.sincPlugin.displayName +
+                " (" +
+                dirName +
+                ")",
+            );
           }
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);

@@ -6,12 +6,15 @@
  */
 
 export { createClient } from "./client";
-export { createClientFromEnvFile, resolveConfigFromEnvFile } from "./createClientFromEnvFile";
+export {
+  createClientFromEnvFile,
+  resolveConfigFromEnvFile,
+} from "./createClientFromEnvFile";
 export type {
   ServiceNowClient,
   TableQueryOptions,
   TableSchema,
-  TableSchemaField
+  TableSchemaField,
 } from "./client";
 
 export { addChoicesToField } from "./choices";
@@ -46,7 +49,7 @@ export {
   generateSysId,
   topoSort,
   executeWritePlan,
-  WriteOrderError
+  WriteOrderError,
 } from "./flowDesigner";
 
 export type {
@@ -89,7 +92,7 @@ export type {
   TestFlowParams,
   TestFlowResult,
   WriteOp,
-  WriteOpResult
+  WriteOpResult,
 } from "./flowDesigner";
 
 export type {
@@ -109,7 +112,7 @@ export type {
   FormSectionSpec,
   SetFormLayoutParams,
   SetListLayoutParams,
-  SetRelatedListsParams
+  SetRelatedListsParams,
 } from "./types";
 
 export {
@@ -122,7 +125,7 @@ export {
   defaultAccessFlags,
   TYPE_MAP,
   DEFAULT_SUPER_CLASS,
-  DEFAULT_SAVE_ACTION
+  DEFAULT_SAVE_ACTION,
 } from "./table";
 export type {
   CreateTableParams,
@@ -131,5 +134,5 @@ export type {
   NormalizedColumn,
   ColumnSpec,
   AccessFlags,
-  OverlaySpec
+  OverlaySpec,
 } from "./table";

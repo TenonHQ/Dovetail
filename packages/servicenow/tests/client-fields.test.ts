@@ -6,8 +6,14 @@ var mockHttp = {
 
 jest.mock("axios", function () {
   return {
-    default: { create: jest.fn(function () { return mockHttp; }) },
-    create: jest.fn(function () { return mockHttp; }),
+    default: {
+      create: jest.fn(function () {
+        return mockHttp;
+      }),
+    },
+    create: jest.fn(function () {
+      return mockHttp;
+    }),
   };
 });
 
@@ -77,7 +83,10 @@ describe("client.table.query overloads", function () {
   it("omits sysparm_fields when fields is an empty array", async function () {
     mockHttp.request.mockResolvedValueOnce(makeOk([]));
     var client = createClient();
-    await client.table.query("incident", "active=true", { limit: 10, fields: [] });
+    await client.table.query("incident", "active=true", {
+      limit: 10,
+      fields: [],
+    });
     var call = mockHttp.request.mock.calls[0][0];
     expect(call.params.sysparm_fields).toBeUndefined();
   });

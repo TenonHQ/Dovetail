@@ -89,7 +89,11 @@ export interface BuildFlowResult {
 
 const RX_SYS_ID = /^[0-9a-f]{32}$/;
 
-function unrecoverable(spec: BuildFlowSpec, stage: string, message: string): BuildFlowResult {
+function unrecoverable(
+  spec: BuildFlowSpec,
+  stage: string,
+  message: string,
+): BuildFlowResult {
   return {
     outcome: "unrecoverable",
     exitCode: 5,
@@ -110,12 +114,20 @@ async function publishArtifact(
   client: ServiceNowClient,
   spec: BuildFlowSpec,
   sysId: string,
-  opts: BuildFlowOptions
+  opts: BuildFlowOptions,
 ): Promise<TriggerPublicationResult> {
   try {
     if (spec.kind === "subflow") {
-      var pf = await publishFlow({ client: client, sysId: sysId, scopeSysId: spec.newScope });
-      return { status: "published", snapshotSysId: pf.snapshotSysId, pushSucceeded: true };
+      var pf = await publishFlow({
+        client: client,
+        sysId: sysId,
+        scopeSysId: spec.newScope,
+      });
+      return {
+        status: "published",
+        snapshotSysId: pf.snapshotSysId,
+        pushSucceeded: true,
+      };
     }
     // actionType: the real publisher needs a steps fixture (model GET => steps:null).
     if (spec.kind === "actionType" && opts.steps && opts.steps.length > 0) {
@@ -125,7 +137,11 @@ async function publishArtifact(
         scopeSysId: spec.newScope,
         steps: opts.steps,
       });
-      return { status: "published", snapshotSysId: pa.snapshotSysId, pushSucceeded: true };
+      return {
+        status: "published",
+        snapshotSysId: pa.snapshotSysId,
+        pushSucceeded: true,
+      };
     }
   } catch (err) {
     // Real publish failed — fall through to the degraded path below, which is
@@ -143,20 +159,35 @@ async function publishArtifact(
   } catch (err) {
     // triggerPublication is engineered to never throw on the happy path, but
     // defensive: treat unexpected throws as needs-ui-publish.
-    return { status: "needs-ui-publish", pushSucceeded: false, uiPublishUrl: undefined };
+    return {
+      status: "needs-ui-publish",
+      pushSucceeded: false,
+      uiPublishUrl: undefined,
+    };
   }
 }
 
 function validateSpec(spec: any): BuildFlowSpec {
-  if (!spec || typeof spec !== "object") throw new Error("spec must be a JSON object");
+  if (!spec || typeof spec !== "object")
+    throw new Error("spec must be a JSON object");
   if (spec.kind !== "subflow" && spec.kind !== "actionType") {
-    throw new Error("spec.kind must be 'subflow' or 'actionType', got " + JSON.stringify(spec.kind));
+    throw new Error(
+      "spec.kind must be 'subflow' or 'actionType', got " +
+        JSON.stringify(spec.kind),
+    );
   }
   if (spec.mode !== "clone" && spec.mode !== "create") {
-    throw new Error("spec.mode must be 'clone' or 'create', got " + JSON.stringify(spec.mode));
+    throw new Error(
+      "spec.mode must be 'clone' or 'create', got " + JSON.stringify(spec.mode),
+    );
   }
-  if (spec.mode === "clone" && (!spec.sourceSysId || !RX_SYS_ID.test(spec.sourceSysId))) {
-    throw new Error("spec.sourceSysId must be a 32-char sys_id when mode=clone");
+  if (
+    spec.mode === "clone" &&
+    (!spec.sourceSysId || !RX_SYS_ID.test(spec.sourceSysId))
+  ) {
+    throw new Error(
+      "spec.sourceSysId must be a 32-char sys_id when mode=clone",
+    );
   }
   if (typeof spec.newName !== "string" || spec.newName.trim().length === 0) {
     throw new Error("spec.newName is required");
@@ -170,8 +201,15 @@ function validateSpec(spec: any): BuildFlowSpec {
   return spec as BuildFlowSpec;
 }
 
-async function ensureUpdateSetInProgress(client: ServiceNowClient, sysId: string): Promise<void> {
-  var rows = await client.buildAgent.runQuery<{ sys_id: string; state: string; name: string }>({
+async function ensureUpdateSetInProgress(
+  client: ServiceNowClient,
+  sysId: string,
+): Promise<void> {
+  var rows = await client.buildAgent.runQuery<{
+    sys_id: string;
+    state: string;
+    name: string;
+  }>({
     table: "sys_update_set",
     query: "sys_id=" + sysId,
     limit: 1,
@@ -181,7 +219,13 @@ async function ensureUpdateSetInProgress(client: ServiceNowClient, sysId: string
   }
   var us = rows[0];
   if (us.state !== "in progress" && us.state !== "in_progress") {
-    throw new Error("update set '" + us.name + "' is in state '" + us.state + "' — only 'in progress' update sets can capture new changes.");
+    throw new Error(
+      "update set '" +
+        us.name +
+        "' is in state '" +
+        us.state +
+        "' — only 'in progress' update sets can capture new changes.",
+    );
   }
 }
 
@@ -199,7 +243,11 @@ export async function runBuildFlow(
   }
 
   if (spec.mode === "create") {
-    return unrecoverable(spec, "dispatch", "mode=create is not implemented in Phase 1 (clone only). Filed for Phase 1.C.2.");
+    return unrecoverable(
+      spec,
+      "dispatch",
+      "mode=create is not implemented in Phase 1 (clone only). Filed for Phase 1.C.2.",
+    );
   }
 
   // Phase 1: update set check (network).
@@ -240,7 +288,10 @@ export async function runBuildFlow(
       outcome: "write-failed",
       exitCode: 4,
       spec: spec,
-      error: { stage: spec.kind === "subflow" ? "cloneSubflow" : "cloneActionType", message: err.message || String(err) },
+      error: {
+        stage: spec.kind === "subflow" ? "cloneSubflow" : "cloneActionType",
+        message: err.message || String(err),
+      },
     };
   }
 
@@ -250,7 +301,11 @@ export async function runBuildFlow(
       outcome: "dry-run",
       exitCode: 0,
       spec: spec,
-      artifact: { sysId: cloneResult.sysId, action: cloneResult.action, writtenCount: 0 },
+      artifact: {
+        sysId: cloneResult.sysId,
+        action: cloneResult.action,
+        writtenCount: 0,
+      },
       plan: (cloneResult.plan || []).map(function (op) {
         return { id: op.id, table: op.table, logicalName: op.logicalName };
       }),
@@ -263,7 +318,11 @@ export async function runBuildFlow(
       outcome: "unchanged",
       exitCode: 0,
       spec: spec,
-      artifact: { sysId: cloneResult.sysId, action: "unchanged", writtenCount: 0 },
+      artifact: {
+        sysId: cloneResult.sysId,
+        action: "unchanged",
+        writtenCount: 0,
+      },
     };
   }
 
@@ -280,7 +339,11 @@ export async function runBuildFlow(
       outcome: "verify-mismatch",
       exitCode: 3,
       spec: spec,
-      artifact: { sysId: cloneResult.sysId, action: cloneResult.action, writtenCount: cloneResult.written.length },
+      artifact: {
+        sysId: cloneResult.sysId,
+        action: cloneResult.action,
+        writtenCount: cloneResult.written.length,
+      },
       error: { stage: "verifyArtifact", message: err.message || String(err) },
     };
   }
@@ -290,7 +353,11 @@ export async function runBuildFlow(
       outcome: "verify-mismatch",
       exitCode: 3,
       spec: spec,
-      artifact: { sysId: cloneResult.sysId, action: cloneResult.action, writtenCount: cloneResult.written.length },
+      artifact: {
+        sysId: cloneResult.sysId,
+        action: cloneResult.action,
+        writtenCount: cloneResult.written.length,
+      },
       verify: verify,
     };
   }
@@ -311,7 +378,11 @@ export async function runBuildFlow(
     writtenCount: cloneResult.written.length,
   };
 
-  if (!publish || publish.status === "needs-ui-publish" || publish.status === "snapshot-pending") {
+  if (
+    !publish ||
+    publish.status === "needs-ui-publish" ||
+    publish.status === "snapshot-pending"
+  ) {
     return {
       outcome: "needs-ui-publish",
       exitCode: 2,

@@ -20,7 +20,7 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'skip-doc-request')
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: read   # least-privilege: pulls.listFiles only (R-3)
+      pull-requests: read # least-privilege: pulls.listFiles only (R-3)
     outputs:
       changed_paths: ${{ steps.files.outputs.paths }}
     steps:

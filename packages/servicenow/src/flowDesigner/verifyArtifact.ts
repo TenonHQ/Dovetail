@@ -65,21 +65,53 @@ interface ChildTableSpec {
 function childTablesFor(kind: FlowKind): Array<ChildTableSpec> {
   if (kind === "actionType") {
     return [
-      { table: "sys_hub_action_input", fkColumn: "model_id", contributes: "inputCount" },
-      { table: "sys_hub_action_output", fkColumn: "model_id", contributes: "outputCount" },
-      { table: "sys_hub_step_instance", fkColumn: "model_id", contributes: "stepCount" },
+      {
+        table: "sys_hub_action_input",
+        fkColumn: "model_id",
+        contributes: "inputCount",
+      },
+      {
+        table: "sys_hub_action_output",
+        fkColumn: "model_id",
+        contributes: "outputCount",
+      },
+      {
+        table: "sys_hub_step_instance",
+        fkColumn: "model_id",
+        contributes: "stepCount",
+      },
     ];
   }
   // subflow
   return [
-    { table: "sys_hub_flow_input", fkColumn: "flow", contributes: "inputCount" },
-    { table: "sys_hub_flow_output", fkColumn: "flow", contributes: "outputCount" },
-    { table: "sys_hub_action_instance_v2", fkColumn: "flow", contributes: "stepCount" },
-    { table: "sys_hub_flow_logic_instance_v2", fkColumn: "flow", contributes: "stepCount" },
+    {
+      table: "sys_hub_flow_input",
+      fkColumn: "flow",
+      contributes: "inputCount",
+    },
+    {
+      table: "sys_hub_flow_output",
+      fkColumn: "flow",
+      contributes: "outputCount",
+    },
+    {
+      table: "sys_hub_action_instance_v2",
+      fkColumn: "flow",
+      contributes: "stepCount",
+    },
+    {
+      table: "sys_hub_flow_logic_instance_v2",
+      fkColumn: "flow",
+      contributes: "stepCount",
+    },
   ];
 }
 
-async function countRows(client: ServiceNowClient, table: string, query: string): Promise<number> {
+async function countRows(
+  client: ServiceNowClient,
+  table: string,
+  query: string,
+): Promise<number> {
   // Cap the read at 500 — we just need a count, not the bodies. If a flow has
   // >500 child rows of any one type, something has gone very wrong upstream.
   var rows = await client.buildAgent.runQuery<{ sys_id: string }>({
@@ -90,14 +122,26 @@ async function countRows(client: ServiceNowClient, table: string, query: string)
   return rows.length;
 }
 
-export async function verifyArtifact(params: VerifyArtifactParams): Promise<VerifyReport> {
+export async function verifyArtifact(
+  params: VerifyArtifactParams,
+): Promise<VerifyReport> {
   if (!RX_SYS_ID.test(params.sysId)) {
-    throw new Error("verifyArtifact: sysId must be a 32-char ServiceNow sys_id, got '" + params.sysId + "'");
+    throw new Error(
+      "verifyArtifact: sysId must be a 32-char ServiceNow sys_id, got '" +
+        params.sysId +
+        "'",
+    );
   }
-  var parentTable = params.kind === "actionType" ? "sys_hub_action_type_definition" : "sys_hub_flow";
+  var parentTable =
+    params.kind === "actionType"
+      ? "sys_hub_action_type_definition"
+      : "sys_hub_flow";
 
   // L1.a — parent row exists.
-  var parentRows = await params.client.buildAgent.runQuery<{ sys_id: string; type?: string }>({
+  var parentRows = await params.client.buildAgent.runQuery<{
+    sys_id: string;
+    type?: string;
+  }>({
     table: parentTable,
     query: "sys_id=" + params.sysId,
     limit: 1,
@@ -114,7 +158,11 @@ export async function verifyArtifact(params: VerifyArtifactParams): Promise<Veri
     var specs = childTablesFor(params.kind);
     for (var i = 0; i < specs.length; i++) {
       var spec = specs[i];
-      var n = await countRows(params.client, spec.table, spec.fkColumn + "=" + params.sysId);
+      var n = await countRows(
+        params.client,
+        spec.table,
+        spec.fkColumn + "=" + params.sysId,
+      );
       counts[spec.contributes] = counts[spec.contributes] + n;
     }
   }
@@ -142,20 +190,51 @@ export async function verifyArtifact(params: VerifyArtifactParams): Promise<Veri
 
   var failures: Array<VerifyFailure> = [];
   if (!parent) {
-    failures.push({ layer: "L1", field: "parent", expected: true, actual: false });
+    failures.push({
+      layer: "L1",
+      field: "parent",
+      expected: true,
+      actual: false,
+    });
   }
   var expected = params.expected || {};
-  if (expected.inputCount != null && expected.inputCount !== counts.inputCount) {
-    failures.push({ layer: "L1", field: "inputCount", expected: expected.inputCount, actual: counts.inputCount });
+  if (
+    expected.inputCount != null &&
+    expected.inputCount !== counts.inputCount
+  ) {
+    failures.push({
+      layer: "L1",
+      field: "inputCount",
+      expected: expected.inputCount,
+      actual: counts.inputCount,
+    });
   }
-  if (expected.outputCount != null && expected.outputCount !== counts.outputCount) {
-    failures.push({ layer: "L1", field: "outputCount", expected: expected.outputCount, actual: counts.outputCount });
+  if (
+    expected.outputCount != null &&
+    expected.outputCount !== counts.outputCount
+  ) {
+    failures.push({
+      layer: "L1",
+      field: "outputCount",
+      expected: expected.outputCount,
+      actual: counts.outputCount,
+    });
   }
   if (expected.stepCount != null && expected.stepCount !== counts.stepCount) {
-    failures.push({ layer: "L1", field: "stepCount", expected: expected.stepCount, actual: counts.stepCount });
+    failures.push({
+      layer: "L1",
+      field: "stepCount",
+      expected: expected.stepCount,
+      actual: counts.stepCount,
+    });
   }
   if (expected.publishedSnapshotPresent === true && !snapshotPresent) {
-    failures.push({ layer: "L4", field: "publishedSnapshotPresent", expected: true, actual: false });
+    failures.push({
+      layer: "L4",
+      field: "publishedSnapshotPresent",
+      expected: true,
+      actual: false,
+    });
   }
 
   return {

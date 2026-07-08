@@ -39,10 +39,7 @@ describe("discoverPlugins", function () {
   });
 
   it("skips sincronia-core and sincronia-types", function () {
-    mockReaddirSync.mockReturnValue([
-      "sincronia-core",
-      "sincronia-types",
-    ]);
+    mockReaddirSync.mockReturnValue(["sincronia-core", "sincronia-types"]);
 
     const plugins = discoverPlugins();
     expect(plugins).toEqual([]);
@@ -60,7 +57,9 @@ describe("discoverPlugins", function () {
 
     // sass-plugin exists but doesn't export sincPlugin — it just won't be added
     const plugins = discoverPlugins();
-    const names = plugins.map(function (p) { return p.name; });
+    const names = plugins.map(function (p) {
+      return p.name;
+    });
     expect(names).not.toContain("sass-plugin");
   });
 

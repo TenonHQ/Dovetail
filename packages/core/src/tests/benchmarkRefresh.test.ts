@@ -27,7 +27,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "warn"; },
+  getLogLevel: function () {
+    return "warn";
+  },
 };
 
 var mockFileLogger = {
@@ -42,12 +44,22 @@ var mockClient = {
   getMissingFiles: jest.fn(),
 };
 
-jest.mock("../Logger", function () { return { logger: mockLogger }; });
-jest.mock("../FileLogger", function () { return { fileLogger: mockFileLogger }; });
+jest.mock("../Logger", function () {
+  return { logger: mockLogger };
+});
+jest.mock("../FileLogger", function () {
+  return { fileLogger: mockFileLogger };
+});
 jest.mock("../snClient", function () {
   return {
-    defaultClient: function () { return mockClient; },
-    unwrapSNResponse: function (p: any) { return Promise.resolve(p).then(function (r: any) { return r; }); },
+    defaultClient: function () {
+      return mockClient;
+    },
+    unwrapSNResponse: function (p: any) {
+      return Promise.resolve(p).then(function (r: any) {
+        return r;
+      });
+    },
     processPushResponse: jest.fn(),
     retryOnErr: jest.fn(),
     retryOnHttpErr: jest.fn(),
@@ -57,7 +69,9 @@ jest.mock("../snClient", function () {
 });
 
 var mockConfig: any = {
-  getConfig: jest.fn().mockReturnValue({ scopes: { x_cadso_core: {} }, tableOptions: {} }),
+  getConfig: jest
+    .fn()
+    .mockReturnValue({ scopes: { x_cadso_core: {} }, tableOptions: {} }),
   getManifest: jest.fn().mockResolvedValue({
     x_cadso_core: { scope: "x_cadso_core", tables: {} },
   }),
@@ -65,15 +79,24 @@ var mockConfig: any = {
   getSourcePath: jest.fn(),
   getManifestPath: jest.fn().mockReturnValue("/tmp/dove.manifest.json"),
   resolveConfigForScope: jest.fn().mockImplementation(function () {
-    return { tables: ["sys_script_include"], fieldOverrides: {}, apiIncludes: {}, apiExcludes: {} };
+    return {
+      tables: ["sys_script_include"],
+      fieldOverrides: {},
+      apiIncludes: {},
+      apiExcludes: {},
+    };
   }),
   isMultiScopeManifest: jest.fn().mockReturnValue(true),
   updateManifest: jest.fn(),
 };
-jest.mock("../config", function () { return mockConfig; });
+jest.mock("../config", function () {
+  return mockConfig;
+});
 
 jest.mock("progress", function () {
-  return jest.fn().mockImplementation(function () { return { tick: jest.fn() }; });
+  return jest.fn().mockImplementation(function () {
+    return { tick: jest.fn() };
+  });
 });
 
 jest.mock("../FileUtils", function () {
@@ -149,15 +172,33 @@ describe("BenchmarkCollector", function () {
 
   test("formatBytes switches units at KB and MB thresholds", function () {
     var collector = new BenchmarkCollector();
-    collector.recordHttp({ path: "/a", tableCount: 1, durationMs: 1, statusCode: 200, responseBytes: 500 });
+    collector.recordHttp({
+      path: "/a",
+      tableCount: 1,
+      durationMs: 1,
+      statusCode: 200,
+      responseBytes: 500,
+    });
     expect(collector.formatSummary()).toContain("500B received");
 
     var collector2 = new BenchmarkCollector();
-    collector2.recordHttp({ path: "/a", tableCount: 1, durationMs: 1, statusCode: 200, responseBytes: 2048 });
+    collector2.recordHttp({
+      path: "/a",
+      tableCount: 1,
+      durationMs: 1,
+      statusCode: 200,
+      responseBytes: 2048,
+    });
     expect(collector2.formatSummary()).toContain("2.0KB received");
 
     var collector3 = new BenchmarkCollector();
-    collector3.recordHttp({ path: "/a", tableCount: 1, durationMs: 1, statusCode: 200, responseBytes: 2 * 1024 * 1024 });
+    collector3.recordHttp({
+      path: "/a",
+      tableCount: 1,
+      durationMs: 1,
+      statusCode: 200,
+      responseBytes: 2 * 1024 * 1024,
+    });
     expect(collector3.formatSummary()).toContain("2.00MB received");
   });
 
@@ -181,18 +222,24 @@ describe("refreshAllFiles — benchmarkCollector lifecycle", function () {
   });
 
   afterEach(function () {
-    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (e) {}
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch (e) {}
   });
 
   test("endScope captures filesWritten and filesUnchanged for a refresh pass", async function () {
     // "Stale" file — content diverges from what the mock returns → will be written.
-    fs.mkdirSync(path.join(tmpRoot, "sys_script_include", "StaleRec"), { recursive: true });
+    fs.mkdirSync(path.join(tmpRoot, "sys_script_include", "StaleRec"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(tmpRoot, "sys_script_include", "StaleRec", "script.js"),
       "var x = 1;",
     );
     // "Matching" file — content matches → counted as unchanged.
-    fs.mkdirSync(path.join(tmpRoot, "sys_script_include", "SameRec"), { recursive: true });
+    fs.mkdirSync(path.join(tmpRoot, "sys_script_include", "SameRec"), {
+      recursive: true,
+    });
     var matching = "var same = true;";
     fs.writeFileSync(
       path.join(tmpRoot, "sys_script_include", "SameRec", "script.js"),
@@ -204,8 +251,16 @@ describe("refreshAllFiles — benchmarkCollector lifecycle", function () {
       tables: {
         sys_script_include: {
           records: {
-            StaleRec: { name: "StaleRec", sys_id: "sysid_Stale", files: [{ name: "script", type: "js" }] },
-            SameRec: { name: "SameRec", sys_id: "sysid_Same", files: [{ name: "script", type: "js" }] },
+            StaleRec: {
+              name: "StaleRec",
+              sys_id: "sysid_Stale",
+              files: [{ name: "script", type: "js" }],
+            },
+            SameRec: {
+              name: "SameRec",
+              sys_id: "sysid_Same",
+              files: [{ name: "script", type: "js" }],
+            },
           },
         },
       },
@@ -215,11 +270,19 @@ describe("refreshAllFiles — benchmarkCollector lifecycle", function () {
       sys_script_include: {
         records: {
           StaleRec: {
-            name: "StaleRec", sys_id: "sysid_Stale",
-            files: [{ name: "script", type: "js", content: "var x = 99; // new from instance" }],
+            name: "StaleRec",
+            sys_id: "sysid_Stale",
+            files: [
+              {
+                name: "script",
+                type: "js",
+                content: "var x = 99; // new from instance",
+              },
+            ],
           },
           SameRec: {
-            name: "SameRec", sys_id: "sysid_Same",
+            name: "SameRec",
+            sys_id: "sysid_Same",
             files: [{ name: "script", type: "js", content: matching }],
           },
         },
@@ -249,7 +312,11 @@ describe("refreshAllFiles — benchmarkCollector lifecycle", function () {
       tables: {
         sys_script_include: {
           records: {
-            Rec: { name: "Rec", sys_id: "sysid_Rec", files: [{ name: "script", type: "js" }] },
+            Rec: {
+              name: "Rec",
+              sys_id: "sysid_Rec",
+              files: [{ name: "script", type: "js" }],
+            },
           },
         },
       },
@@ -259,7 +326,9 @@ describe("refreshAllFiles — benchmarkCollector lifecycle", function () {
     collector.startScope("x_cadso_core");
 
     await expect(
-      AppUtils.refreshAllFiles(manifest as any, tmpRoot, { benchmarkCollector: collector }),
+      AppUtils.refreshAllFiles(manifest as any, tmpRoot, {
+        benchmarkCollector: collector,
+      }),
     ).rejects.toThrow("boom");
 
     var scopes = collector.getScopeSamples();

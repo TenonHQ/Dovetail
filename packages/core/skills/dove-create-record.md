@@ -1,6 +1,7 @@
 # Create ServiceNow Records
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -25,13 +27,13 @@ npx dove create <table> [options]
 
 ### Options
 
-| Flag | Alias | Type | Description |
-|------|-------|------|-------------|
-| `--name` | `-n` | string | Record name |
-| `--scope` | `-s` | string | Target scope (e.g., x_cadso_core) |
-| `--from` | `-f` | string | Path to JSON file with field values |
-| `--field` | | array | Inline field values (key=value) |
-| `--ci` | | boolean | Skip interactive prompts |
+| Flag      | Alias | Type    | Description                         |
+| --------- | ----- | ------- | ----------------------------------- |
+| `--name`  | `-n`  | string  | Record name                         |
+| `--scope` | `-s`  | string  | Target scope (e.g., x_cadso_core)   |
+| `--from`  | `-f`  | string  | Path to JSON file with field values |
+| `--field` |       | array   | Inline field values (key=value)     |
+| `--ci`    |       | boolean | Skip interactive prompts            |
 
 ### Examples
 
@@ -65,6 +67,7 @@ npx dove create sys_script_include --from new-script.json --scope x_cadso_core
 ```
 
 **JSON file format (`new-script.json`):**
+
 ```json
 {
   "name": "MyNewUtil",
@@ -112,18 +115,18 @@ npx dove create sys_script_include --name "NewFeature" --scope x_cadso_core
 
 ### Common Table Names
 
-| Table | Creates |
-|-------|---------|
-| `sys_script_include` | Script Include (server-side utility class) |
-| `sys_script` | Business Rule |
-| `sys_ui_script` | UI Script (client-side) |
-| `sys_ui_page` | UI Page |
-| `sys_ux_client_script` | UX Client Script |
-| `sys_processor` | Processor |
-| `sys_ws_operation` | REST API Operation |
-| `sys_rest_message_fn` | REST Message Function |
-| `sys_ui_action` | UI Action |
-| `sysevent_script_action` | Event Script Action |
+| Table                    | Creates                                    |
+| ------------------------ | ------------------------------------------ |
+| `sys_script_include`     | Script Include (server-side utility class) |
+| `sys_script`             | Business Rule                              |
+| `sys_ui_script`          | UI Script (client-side)                    |
+| `sys_ui_page`            | UI Page                                    |
+| `sys_ux_client_script`   | UX Client Script                           |
+| `sys_processor`          | Processor                                  |
+| `sys_ws_operation`       | REST API Operation                         |
+| `sys_rest_message_fn`    | REST Message Function                      |
+| `sys_ui_action`          | UI Action                                  |
+| `sysevent_script_action` | Event Script Action                        |
 
 ### Troubleshooting
 

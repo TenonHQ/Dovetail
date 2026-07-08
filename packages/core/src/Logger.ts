@@ -16,11 +16,11 @@ class SincLogger {
 
   private genLoggerOpts(level: string = "info"): winston.LoggerOptions {
     return {
-      format: format.printf(info => {
+      format: format.printf((info) => {
         return `${info.message}`;
       }),
       level,
-      transports: [new transports.Console()]
+      transports: [new transports.Console()],
     };
   }
 

@@ -25,7 +25,9 @@ const FILE_RENAMES: Array<{ legacy: string; next: string }> = [
 ];
 
 // Per-scope manifests follow the pattern sinc.manifest.<scope>.json. Glob from disk.
-function collectScopeManifestRenames(rootDir: string): Array<{ legacy: string; next: string }> {
+function collectScopeManifestRenames(
+  rootDir: string,
+): Array<{ legacy: string; next: string }> {
   let entries: string[] = [];
   try {
     entries = fs.readdirSync(rootDir);
@@ -33,7 +35,12 @@ function collectScopeManifestRenames(rootDir: string): Array<{ legacy: string; n
     return [];
   }
   return entries
-    .filter((f) => f.startsWith("sinc.manifest.") && f !== "sinc.manifest.json" && f.endsWith(".json"))
+    .filter(
+      (f) =>
+        f.startsWith("sinc.manifest.") &&
+        f !== "sinc.manifest.json" &&
+        f.endsWith(".json"),
+    )
     .map((f) => ({
       legacy: f,
       next: f.replace(/^sinc\.manifest\./, "dove.manifest."),
@@ -61,20 +68,29 @@ function buildPackageJsonStep(rootDir: string): MigrationStep | null {
   if (updated === original) return null;
 
   return {
-    description: "Update package.json (rename @tenonhq/sincronia-* deps and `sinc` scripts to `dove`)",
+    description:
+      "Update package.json (rename @tenonhq/sincronia-* deps and `sinc` scripts to `dove`)",
     apply: () => {
       fs.writeFileSync(pkgPath, updated);
     },
   };
 }
 
-function buildFileRenameStep(rootDir: string, legacy: string, next: string): MigrationStep | null {
+function buildFileRenameStep(
+  rootDir: string,
+  legacy: string,
+  next: string,
+): MigrationStep | null {
   const legacyPath = path.join(rootDir, legacy);
   const nextPath = path.join(rootDir, next);
   if (!fs.existsSync(legacyPath)) return null;
   if (fs.existsSync(nextPath)) {
     logger.warn(
-      "Skipping rename of " + legacy + " — " + next + " already exists. Resolve manually.",
+      "Skipping rename of " +
+        legacy +
+        " — " +
+        next +
+        " already exists. Resolve manually.",
     );
     return null;
   }
@@ -111,18 +127,28 @@ export async function migrateCommand(args: MigrateCmdArgs) {
   if (pkgStep) steps.push(pkgStep);
 
   if (steps.length === 0) {
-    logger.success("Nothing to migrate — project already uses Dovetail filenames.");
+    logger.success(
+      "Nothing to migrate — project already uses Dovetail filenames.",
+    );
     return;
   }
 
-  logger.info("Migration plan (" + steps.length + " step" + (steps.length === 1 ? "" : "s") + "):");
+  logger.info(
+    "Migration plan (" +
+      steps.length +
+      " step" +
+      (steps.length === 1 ? "" : "s") +
+      "):",
+  );
   steps.forEach((s, i) => {
     logger.info("  " + (i + 1) + ". " + s.description);
   });
 
   if (!apply) {
     logger.info("");
-    logger.warn("Dry run only — re-run with `--apply` to perform the migration.");
+    logger.warn(
+      "Dry run only — re-run with `--apply` to perform the migration.",
+    );
     return;
   }
 
@@ -131,7 +157,12 @@ export async function migrateCommand(args: MigrateCmdArgs) {
       step.apply();
       logger.success("✓ " + step.description);
     } catch (e) {
-      logger.error("✗ " + step.description + ": " + (e instanceof Error ? e.message : String(e)));
+      logger.error(
+        "✗ " +
+          step.description +
+          ": " +
+          (e instanceof Error ? e.message : String(e)),
+      );
     }
   }
 

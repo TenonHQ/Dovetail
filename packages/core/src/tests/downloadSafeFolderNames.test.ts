@@ -29,7 +29,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "warn"; },
+  getLogLevel: function () {
+    return "warn";
+  },
 };
 
 var mockFileLogger = {
@@ -39,19 +41,31 @@ var mockFileLogger = {
   error: jest.fn(),
 };
 
-jest.mock("../Logger", function () { return { logger: mockLogger }; });
-jest.mock("../FileLogger", function () { return { fileLogger: mockFileLogger }; });
-jest.mock("../config", function () { return {}; });
+jest.mock("../Logger", function () {
+  return { logger: mockLogger };
+});
+jest.mock("../FileLogger", function () {
+  return { fileLogger: mockFileLogger };
+});
+jest.mock("../config", function () {
+  return {};
+});
 jest.mock("../snClient", function () {
   return {
-    defaultClient: function () { return {}; },
-    unwrapSNResponse: function (p: any) { return Promise.resolve(p); },
+    defaultClient: function () {
+      return {};
+    },
+    unwrapSNResponse: function (p: any) {
+      return Promise.resolve(p);
+    },
   };
 });
 jest.mock("../wizard", function () {
   return { setupDotEnv: jest.fn(), getLoginInfo: jest.fn() };
 });
-jest.mock("../commands", function () { return { setLogLevel: jest.fn() }; });
+jest.mock("../commands", function () {
+  return { setLogLevel: jest.fn() };
+});
 jest.mock("progress", function () {
   return jest.fn().mockImplementation(function () {
     return { tick: jest.fn() };
@@ -67,7 +81,11 @@ var UI_SYS_ID = "89295b86334983d07b18bc534d5c7b8a";
 var SAFE_SYS_ID = "aa11bb22cc33dd44ee55ff6600112233";
 
 function listFolders(table: string): string[] {
-  try { return fs.readdirSync(path.join(tmpRoot, table)).sort(); } catch (e) { return []; }
+  try {
+    return fs.readdirSync(path.join(tmpRoot, table)).sort();
+  } catch (e) {
+    return [];
+  }
 }
 
 describe("download — folder names are filesystem-safe (self-sufficient writer)", function () {
@@ -77,7 +95,9 @@ describe("download — folder names are filesystem-safe (self-sufficient writer)
   });
 
   afterEach(function () {
-    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (e) {}
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch (e) {}
   });
 
   test("a trailing-dot record name is written to its sys_id folder, never `x_cadso_core.`", async function () {
@@ -104,11 +124,16 @@ describe("download — folder names are filesystem-safe (self-sufficient writer)
     expect(folders).not.toContain("x_cadso_core.");
     // File landed inside the sys_id folder.
     expect(
-      fs.readFileSync(path.join(tmpRoot, "sys_ui_script", UI_SYS_ID, "script.js"), "utf8"),
+      fs.readFileSync(
+        path.join(tmpRoot, "sys_ui_script", UI_SYS_ID, "script.js"),
+        "utf8",
+      ),
     ).toBe("// ui");
     // Folder ≡ manifest-key invariant: the manifest was re-keyed to the sys_id
     // so `dove push` (which looks records up by folder name) still resolves it.
-    expect(Object.keys(manifest.tables.sys_ui_script.records)).toEqual([UI_SYS_ID]);
+    expect(Object.keys(manifest.tables.sys_ui_script.records)).toEqual([
+      UI_SYS_ID,
+    ]);
   });
 
   test("other Windows-illegal names also fall back to sys_id (wildcard ACL, trailing space)", async function () {

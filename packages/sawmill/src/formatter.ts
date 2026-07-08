@@ -14,10 +14,14 @@ export function formatPromoteResult(result: PromoteResponse): string {
   var lines: string[] = [];
 
   var isCommitted = result.committed === true;
-  lines.push("Sawmill promote: " + (isCommitted ? "committed" : "previewed (not committed)"));
+  lines.push(
+    "Sawmill promote: " +
+      (isCommitted ? "committed" : "previewed (not committed)"),
+  );
 
   var sysId =
-    result.remoteUpdateSetSysId !== undefined && result.remoteUpdateSetSysId !== ""
+    result.remoteUpdateSetSysId !== undefined &&
+    result.remoteUpdateSetSysId !== ""
       ? result.remoteUpdateSetSysId
       : "(unknown)";
   lines.push("Remote update set: " + sysId);
@@ -53,7 +57,10 @@ export function formatPreviewErrors(errors: PreviewError[]): string {
   for (var i = 0; i < errors.length; i++) {
     var err = errors[i];
     var type = err.type !== undefined && err.type !== "" ? err.type : "unknown";
-    var message = err.message !== undefined && err.message !== "" ? err.message : "(no message)";
+    var message =
+      err.message !== undefined && err.message !== ""
+        ? err.message
+        : "(no message)";
     var line = "  - [" + type + "] " + message;
 
     var target = formatTarget(err);

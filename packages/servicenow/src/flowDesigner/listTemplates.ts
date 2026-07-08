@@ -41,17 +41,27 @@ export interface ListTemplatesParams {
 
 const RX_SYS_ID = /^[0-9a-f]{32}$/;
 
-async function resolveScopeSysId(client: ServiceNowClient, raw: string): Promise<string> {
+async function resolveScopeSysId(
+  client: ServiceNowClient,
+  raw: string,
+): Promise<string> {
   if (RX_SYS_ID.test(raw)) return raw;
   // Treat as scope name and look it up. sys_scope.scope is the bare prefix
   // (e.g. "x_cadso_core"); sys_scope.name is the human label.
-  var rows = await client.buildAgent.runQuery<{ sys_id: string; scope: string }>({
+  var rows = await client.buildAgent.runQuery<{
+    sys_id: string;
+    scope: string;
+  }>({
     table: "sys_scope",
     query: "scope=" + raw,
     limit: 1,
   });
   if (!rows.length) {
-    throw new Error("listTemplates: scope name '" + raw + "' did not resolve to a sys_scope record.");
+    throw new Error(
+      "listTemplates: scope name '" +
+        raw +
+        "' did not resolve to a sys_scope record.",
+    );
   }
   return rows[0].sys_id;
 }
@@ -84,7 +94,10 @@ async function fetchActionTypes(
       name: r.name || r.internal_name,
       internalName: r.internal_name || r.name,
       kind: "actionType",
-      scopeSysId: typeof r.sys_scope === "string" ? r.sys_scope : (r.sys_scope && r.sys_scope.value) || "",
+      scopeSysId:
+        typeof r.sys_scope === "string"
+          ? r.sys_scope
+          : (r.sys_scope && r.sys_scope.value) || "",
       category: r.category || null,
       source: "instance",
     };
@@ -113,21 +126,32 @@ async function fetchSubflows(
       name: r.name,
       internalName: r.internal_name || r.name,
       kind: "subflow",
-      scopeSysId: typeof r.sys_scope === "string" ? r.sys_scope : (r.sys_scope && r.sys_scope.value) || "",
+      scopeSysId:
+        typeof r.sys_scope === "string"
+          ? r.sys_scope
+          : (r.sys_scope && r.sys_scope.value) || "",
       category: r.category || null,
       source: "instance",
     };
   });
 }
 
-export async function listTemplates(params: ListTemplatesParams): Promise<Array<TemplateRef>> {
+export async function listTemplates(
+  params: ListTemplatesParams,
+): Promise<Array<TemplateRef>> {
   var lim = params.limit != null ? params.limit : 100;
   var scopeSysId: string | undefined;
-  if (params.scope) scopeSysId = await resolveScopeSysId(params.client, params.scope);
+  if (params.scope)
+    scopeSysId = await resolveScopeSysId(params.client, params.scope);
 
   var out: Array<TemplateRef> = [];
   if (params.kind === "actionType" || params.kind === "both") {
-    var ats = await fetchActionTypes(params.client, scopeSysId, params.query, lim);
+    var ats = await fetchActionTypes(
+      params.client,
+      scopeSysId,
+      params.query,
+      lim,
+    );
     out = out.concat(ats);
   }
   if (params.kind === "subflow" || params.kind === "both") {

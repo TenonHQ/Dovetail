@@ -13,12 +13,20 @@ function mockClient(opts: {
 }): { client: ServiceNowClient; cap: Cap } {
   var cap: Cap = { pushes: [], queries: [] };
   var pollAttempt = 0;
-  var snapshotAt = opts.snapshotRowsAfterAttempt != null ? opts.snapshotRowsAfterAttempt : 1;
+  var snapshotAt =
+    opts.snapshotRowsAfterAttempt != null ? opts.snapshotRowsAfterAttempt : 1;
   var rows = opts.snapshotRows || [{ sys_id: "snap1" }];
   var client: ServiceNowClient = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function <T>(p: { table: string; query: string }): Promise<Array<T>> {
+      runQuery: async function <T>(p: {
+        table: string;
+        query: string;
+      }): Promise<Array<T>> {
         cap.queries.push({ table: p.table, query: p.query });
         if (p.table === "sys_hub_flow_snapshot") {
           pollAttempt++;
@@ -27,22 +35,36 @@ function mockClient(opts: {
         }
         return [] as Array<T>;
       },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
-      createRecord: async function () { return { sys_id: "x" }; },
+      createRecord: async function () {
+        return { sys_id: "x" };
+      },
       pushWithUpdateSet: async function (p: any) {
         cap.pushes.push(p);
         if (opts.pushThrows) throw new Error("ACL violation");
         return { sys_id: p.record_sys_id };
       },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function () { return {}; },
-      deleteRecord: async function () { return {}; },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
     now: {
-      get: async function () { return {} as any; },
-      post: async function () { return {} as any; },
+      get: async function () {
+        return {} as any;
+      },
+      post: async function () {
+        return {} as any;
+      },
     },
   };
   return { client: client, cap: cap };

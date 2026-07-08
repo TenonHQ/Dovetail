@@ -18,7 +18,7 @@ function getClickUpToken(): string {
   var token = process.env.CLICKUP_API_TOKEN;
   if (!token || token === "") {
     throw new Error(
-      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add CLICKUP_API_TOKEN to your .env file."
+      "CLICKUP_API_TOKEN not set. Run 'dove clickup setup' or add CLICKUP_API_TOKEN to your .env file.",
     );
   }
   return token;
@@ -322,7 +322,7 @@ export async function clickupSetupCommand(args: any): Promise<void> {
     var teams = await api.getTeams();
     if (teams.length === 0) {
       throw new Error(
-        "Token is valid but no workspaces found. Check your ClickUp permissions."
+        "Token is valid but no workspaces found. Check your ClickUp permissions.",
       );
     }
 
@@ -331,21 +331,23 @@ export async function clickupSetupCommand(args: any): Promise<void> {
     // Show discovered workspaces
     for (var i = 0; i < teams.length; i++) {
       var memberCount = teams[i].members ? teams[i].members.length : 0;
-      logger.info("  Workspace: " + teams[i].name + " (" + memberCount + " members)");
+      logger.info(
+        "  Workspace: " + teams[i].name + " (" + memberCount + " members)",
+      );
     }
 
     // Write token to .env file
     writeEnvVar({ key: "CLICKUP_API_TOKEN", value: token });
 
     logger.info("");
-    logger.success(
-      chalk.green("✓ ClickUp configured! Token saved to .env")
-    );
+    logger.success(chalk.green("✓ ClickUp configured! Token saved to .env"));
     logger.info("");
     logger.info("You can now use:");
     logger.info("  dove clickup tasks        — List your tasks");
     logger.info("  dove clickup task <id>     — Get task details");
-    logger.info("  dove createUpdateSet -cu <task-id> — Create update set from task");
+    logger.info(
+      "  dove createUpdateSet -cu <task-id> — Create update set from task",
+    );
   } catch (e) {
     logger.error("ClickUp setup failed");
     if (e instanceof Error) logger.error(e.message);
@@ -378,7 +380,13 @@ export async function clickupTeamsCommand(args: any): Promise<void> {
       var memberCount = team.members ? team.members.length : 0;
 
       console.log(
-        "  " + team.name + " — ID: " + team.id + " (" + memberCount + " members)"
+        "  " +
+          team.name +
+          " — ID: " +
+          team.id +
+          " (" +
+          memberCount +
+          " members)",
       );
     }
     console.log("");
@@ -460,9 +468,11 @@ export async function clickupListsCommand(args: any): Promise<void> {
           for (var l = 0; l < folder.lists.length; l++) {
             var fList = folder.lists[l];
             var countLabel =
-              fList.task_count !== null ? " (" + fList.task_count + " tasks)" : "";
+              fList.task_count !== null
+                ? " (" + fList.task_count + " tasks)"
+                : "";
             console.log(
-              "     " + fList.name + " — ID: " + fList.id + countLabel
+              "     " + fList.name + " — ID: " + fList.id + countLabel,
             );
           }
         }
@@ -517,13 +527,17 @@ export function refineUpdateSetName(params: {
     var prompt =
       "Generate a concise ServiceNow update set name (under 80 chars) for this ClickUp task. " +
       "The name should be descriptive and professional. " +
-      "Task: " + safeName + ". " +
-      "Description: " + safeDesc + ". " +
+      "Task: " +
+      safeName +
+      ". " +
+      "Description: " +
+      safeDesc +
+      ". " +
       "Return ONLY the update set name, nothing else.";
 
     var result = execSync(
       'claude -p "' + prompt.replace(/"/g, '\\"') + '" --output-format text',
-      { encoding: "utf8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] }
+      { encoding: "utf8", timeout: 30000, stdio: ["pipe", "pipe", "pipe"] },
     );
 
     var refined = result.trim();
@@ -540,4 +554,3 @@ export function refineUpdateSetName(params: {
     .trim()
     .substring(0, 80);
 }
-

@@ -9,7 +9,9 @@ function makePreviewError(overrides: Partial<PreviewError>): PreviewError {
   return Object.assign({}, base, overrides);
 }
 
-function makePromoteResponse(overrides: Partial<PromoteResponse>): PromoteResponse {
+function makePromoteResponse(
+  overrides: Partial<PromoteResponse>,
+): PromoteResponse {
   var base: PromoteResponse = {
     remoteUpdateSetSysId: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
     previewErrors: [],
@@ -38,7 +40,9 @@ describe("formatPromoteResult", function () {
       remoteUpdateSetSysId: "deadbeefdeadbeefdeadbeefdeadbeef",
     });
     var text = formatPromoteResult(result);
-    expect(text).toContain("Remote update set: deadbeefdeadbeefdeadbeefdeadbeef");
+    expect(text).toContain(
+      "Remote update set: deadbeefdeadbeefdeadbeefdeadbeef",
+    );
   });
 
   it("renders elapsedMs as seconds with one decimal", function () {
@@ -70,7 +74,10 @@ describe("formatPromoteResult", function () {
           targetName: "DovetailUtils",
           sysId: "11112222333344445555666677778888",
         }),
-        makePreviewError({ type: "DataLoss", message: "Field will be deleted" }),
+        makePreviewError({
+          type: "DataLoss",
+          message: "Field will be deleted",
+        }),
       ],
     });
     var text = formatPromoteResult(result);
@@ -121,7 +128,9 @@ describe("formatPreviewErrors", function () {
   });
 
   it("omits the target parenthetical when no target fields are set", function () {
-    var errors = [makePreviewError({ type: "Info", message: "Nothing to preview" })];
+    var errors = [
+      makePreviewError({ type: "Info", message: "Nothing to preview" }),
+    ];
     var text = formatPreviewErrors(errors);
     expect(text).toBe("  - [Info] Nothing to preview");
   });

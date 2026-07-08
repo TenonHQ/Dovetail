@@ -1,7 +1,7 @@
-import {Sinc} from "@tenonhq/dovetail-types";
+import { Sinc } from "@tenonhq/dovetail-types";
 import sanitizePlugin from "./sanitizer";
-export default function() {
+export default function () {
   return {
-    plugins: [sanitizePlugin]
+    plugins: [sanitizePlugin],
   };
 }

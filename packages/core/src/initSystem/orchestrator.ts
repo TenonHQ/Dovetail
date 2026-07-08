@@ -48,8 +48,10 @@ function buildInitContext(plugins: Sinc.InitPlugin[]): Sinc.InitContext {
   }
 
   // Pull from process.env for keys declared by plugins but missing from .env
-  const pluginEnvKeys = plugins.flatMap(p => (p.login || []).map(h => h.envKey));
-  pluginEnvKeys.forEach(key => {
+  const pluginEnvKeys = plugins.flatMap((p) =>
+    (p.login || []).map((h) => h.envKey),
+  );
+  pluginEnvKeys.forEach((key) => {
     if (process.env[key] && !env[key]) {
       env[key] = process.env[key] as string;
     }
@@ -75,26 +77,30 @@ function buildInitContext(plugins: Sinc.InitPlugin[]): Sinc.InitContext {
 // Plugin Selection
 // ============================================================================
 
-async function promptPluginSelection(externalPlugins: Sinc.InitPlugin[]): Promise<Sinc.InitPlugin[]> {
+async function promptPluginSelection(
+  externalPlugins: Sinc.InitPlugin[],
+): Promise<Sinc.InitPlugin[]> {
   if (externalPlugins.length === 0) {
     return [corePlugin];
   }
 
-  const choices = externalPlugins.map(plugin => ({
+  const choices = externalPlugins.map((plugin) => ({
     name: plugin.displayName + " — " + plugin.description,
     value: plugin.name,
     checked: false,
   }));
 
-  const answer = await inquirer.prompt([{
-    type: "checkbox",
-    name: "plugins",
-    message: "Which integrations would you like to configure?",
-    choices,
-  }]);
+  const answer = await inquirer.prompt([
+    {
+      type: "checkbox",
+      name: "plugins",
+      message: "Which integrations would you like to configure?",
+      choices,
+    },
+  ]);
 
   const selectedNames = new Set<string>(answer.plugins);
-  const selected = externalPlugins.filter(p => selectedNames.has(p.name));
+  const selected = externalPlugins.filter((p) => selectedNames.has(p.name));
   return [corePlugin, ...selected];
 }
 
@@ -111,14 +117,17 @@ interface InquirerPromptConfig {
   validate?: (input: string) => boolean | string;
 }
 
-async function collectLoginHooks(hooks: Sinc.InitLoginHook[], context: Sinc.InitContext): Promise<void> {
+async function collectLoginHooks(
+  hooks: Sinc.InitLoginHook[],
+  context: Sinc.InitContext,
+): Promise<void> {
   for (const hook of hooks) {
     const existingValue = context.env[hook.envKey] || "";
 
     // Show instructions if provided
     if (hook.instructions && hook.instructions.length > 0) {
       logger.info("");
-      hook.instructions.forEach(line => logger.info(line));
+      hook.instructions.forEach((line) => logger.info(line));
       logger.info("");
     }
 
@@ -151,14 +160,18 @@ async function collectLoginHooks(hooks: Sinc.InitLoginHook[], context: Sinc.Init
   }
 }
 
-async function runLoginPhase(plugin: Sinc.InitPlugin, context: Sinc.InitContext): Promise<void> {
+async function runLoginPhase(
+  plugin: Sinc.InitPlugin,
+  context: Sinc.InitContext,
+): Promise<void> {
   const hooks = plugin.login;
   if (!hooks || hooks.length === 0) return;
 
   // Core plugin: retry loop with specific error messages
   if (plugin.name === "core") {
     // If .env already has all required credentials, offer to skip login
-    const hasAllCreds = context.env.SN_INSTANCE && context.env.SN_USER && context.env.SN_PASSWORD;
+    const hasAllCreds =
+      context.env.SN_INSTANCE && context.env.SN_USER && context.env.SN_PASSWORD;
 
     if (hasAllCreds) {
       logger.info("Found existing credentials:");
@@ -166,19 +179,23 @@ async function runLoginPhase(plugin: Sinc.InitPlugin, context: Sinc.InitContext)
       logger.info("  User:     " + context.env.SN_USER);
       logger.info("");
 
-      const useExisting = await inquirer.prompt([{
-        type: "confirm",
-        name: "confirmed",
-        message: "Use these credentials?",
-        default: true,
-      }]);
+      const useExisting = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirmed",
+          message: "Use these credentials?",
+          default: true,
+        },
+      ]);
 
       if (useExisting.confirmed) {
         logger.info("Validating credentials...");
         const result = await validateCoreLogin(context);
 
         if (result === true) {
-          logger.success(chalk.green("✓ Connected to " + context.env.SN_INSTANCE));
+          logger.success(
+            chalk.green("✓ Connected to " + context.env.SN_INSTANCE),
+          );
           return;
         }
 
@@ -205,12 +222,14 @@ async function runLoginPhase(plugin: Sinc.InitPlugin, context: Sinc.InitContext)
       }
 
       if (hookFailed) {
-        const retry = await inquirer.prompt([{
-          type: "confirm",
-          name: "again",
-          message: "Try again?",
-          default: true,
-        }]);
+        const retry = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "again",
+            message: "Try again?",
+            default: true,
+          },
+        ]);
         if (!retry.again) {
           throw new Error("Login cancelled");
         }
@@ -222,19 +241,23 @@ async function runLoginPhase(plugin: Sinc.InitPlugin, context: Sinc.InitContext)
       const coreResult = await validateCoreLogin(context);
 
       if (coreResult === true) {
-        logger.success(chalk.green("✓ Connected to " + context.env.SN_INSTANCE));
+        logger.success(
+          chalk.green("✓ Connected to " + context.env.SN_INSTANCE),
+        );
         return;
       }
 
       logger.error(chalk.red("✗ " + coreResult));
       logger.info("");
 
-      const retry = await inquirer.prompt([{
-        type: "confirm",
-        name: "again",
-        message: "Try again?",
-        default: true,
-      }]);
+      const retry = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "again",
+          message: "Try again?",
+          default: true,
+        },
+      ]);
 
       if (!retry.again) {
         throw new Error("Login cancelled");
@@ -261,15 +284,21 @@ async function runLoginPhase(plugin: Sinc.InitPlugin, context: Sinc.InitContext)
 
 async function runConfigPhase(context: Sinc.InitContext): Promise<void> {
   if (context.hasConfig) {
-    var answer = await inquirer.prompt([{
-      type: "list",
-      name: "configAction",
-      message: "Existing config (dove.config.js or legacy sinc.config.js) found:",
-      choices: [
-        { name: "Use current config", value: "keep" },
-        { name: "Replace config (regenerate after scope selection)", value: "replace" },
-      ],
-    }]);
+    var answer = await inquirer.prompt([
+      {
+        type: "list",
+        name: "configAction",
+        message:
+          "Existing config (dove.config.js or legacy sinc.config.js) found:",
+        choices: [
+          { name: "Use current config", value: "keep" },
+          {
+            name: "Replace config (regenerate after scope selection)",
+            value: "replace",
+          },
+        ],
+      },
+    ]);
 
     context.answers.configAction = answer.configAction;
 
@@ -283,7 +312,10 @@ async function runConfigPhase(context: Sinc.InitContext): Promise<void> {
   context.answers.configAction = "generate";
 }
 
-async function runConfigurePhase(plugin: Sinc.InitPlugin, context: Sinc.InitContext): Promise<void> {
+async function runConfigurePhase(
+  plugin: Sinc.InitPlugin,
+  context: Sinc.InitContext,
+): Promise<void> {
   const hooks = plugin.configure;
   if (!hooks || hooks.length === 0) return;
 
@@ -301,26 +333,35 @@ async function runConfigurePhase(plugin: Sinc.InitPlugin, context: Sinc.InitCont
  * Only writes keys that plugins explicitly declared via login hooks or
  * configure hooks — never writes transient context values.
  */
-function saveEnvVars(context: Sinc.InitContext, plugins: Sinc.InitPlugin[]): void {
+function saveEnvVars(
+  context: Sinc.InitContext,
+  plugins: Sinc.InitPlugin[],
+): void {
   const pluginKeys = new Set<string>();
 
-  plugins.forEach(plugin => {
-    (plugin.login || []).forEach(hook => pluginKeys.add(hook.envKey));
-    (plugin.configure || []).forEach(hook => {
+  plugins.forEach((plugin) => {
+    (plugin.login || []).forEach((hook) => pluginKeys.add(hook.envKey));
+    (plugin.configure || []).forEach((hook) => {
       if (context.env[hook.key]) pluginKeys.add(hook.key);
     });
   });
 
   const vars = Array.from(pluginKeys)
-    .filter(key => context.env[key])
-    .map(key => ({ key, value: context.env[key] }));
+    .filter((key) => context.env[key])
+    .map((key) => ({ key, value: context.env[key] }));
 
   if (vars.length > 0) {
     const envPath = resolveLoginEnvPath(process.cwd());
     writeEnvVars({ vars, envPath });
     // Also set on process.env for immediate use
-    vars.forEach(({ key, value }) => { process.env[key] = value; });
-    logger.success(chalk.green("✓ Saved to " + path.basename(envPath) + " (existing values preserved)"));
+    vars.forEach(({ key, value }) => {
+      process.env[key] = value;
+    });
+    logger.success(
+      chalk.green(
+        "✓ Saved to " + path.basename(envPath) + " (existing values preserved)",
+      ),
+    );
   }
 }
 
@@ -356,8 +397,10 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
     if (externalPlugins.length > 0) {
       logger.info("  Detected packages:");
       logger.info("    ● dovetail-core (" + chalk.cyan("ServiceNow") + ")");
-      externalPlugins.forEach(p => {
-        logger.info("    ● dovetail-" + p.name + " (" + chalk.cyan(p.displayName) + ")");
+      externalPlugins.forEach((p) => {
+        logger.info(
+          "    ● dovetail-" + p.name + " (" + chalk.cyan(p.displayName) + ")",
+        );
       });
       logger.info("");
     }
@@ -407,7 +450,9 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
           await plugin.initialize(context);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          logger.error("Initialization failed for " + plugin.displayName + ": " + msg);
+          logger.error(
+            "Initialization failed for " + plugin.displayName + ": " + msg,
+          );
           failed = true;
         }
       }
@@ -419,7 +464,12 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
     if (failed) {
       logger.warn("  Setup completed with errors. Review the output above.");
     } else {
-      logger.success(chalk.green("  Setup complete!") + " Run " + chalk.cyan("dove watch") + " to start.");
+      logger.success(
+        chalk.green("  Setup complete!") +
+          " Run " +
+          chalk.cyan("dove watch") +
+          " to start.",
+      );
     }
     logger.info("");
   } catch (e) {
@@ -441,10 +491,14 @@ export async function runLogin(options?: RunLoginOptions): Promise<void> {
         pluginsToLogin = [corePlugin];
       } else {
         const externalPlugins = discoverPlugins();
-        const match = externalPlugins.find(p => p.name === opts.pluginName);
+        const match = externalPlugins.find((p) => p.name === opts.pluginName);
         if (!match) {
-          logger.error("Plugin '" + opts.pluginName + "' not found. Available plugins:");
-          externalPlugins.forEach(p => logger.info("  - " + p.name + " (" + p.displayName + ")"));
+          logger.error(
+            "Plugin '" + opts.pluginName + "' not found. Available plugins:",
+          );
+          externalPlugins.forEach((p) =>
+            logger.info("  - " + p.name + " (" + p.displayName + ")"),
+          );
           return;
         }
         pluginsToLogin = [match];
@@ -464,7 +518,7 @@ export async function runLogin(options?: RunLoginOptions): Promise<void> {
     if (opts.password) context.env.SN_PASSWORD = opts.password;
 
     // Dynamic header based on which plugins are being logged in
-    const pluginNames = pluginsToLogin.map(p => p.displayName).join(" + ");
+    const pluginNames = pluginsToLogin.map((p) => p.displayName).join(" + ");
     logger.info("");
     logger.info(chalk.bold("  " + pluginNames + " Login"));
     logger.info("  " + "─".repeat(40));
@@ -472,7 +526,11 @@ export async function runLogin(options?: RunLoginOptions): Promise<void> {
 
     // Check if all core credentials provided via flags (non-interactive mode)
     const hasAllCoreFlags = opts.instance && opts.user && opts.password;
-    if (hasAllCoreFlags && pluginsToLogin.length === 1 && pluginsToLogin[0].name === "core") {
+    if (
+      hasAllCoreFlags &&
+      pluginsToLogin.length === 1 &&
+      pluginsToLogin[0].name === "core"
+    ) {
       logger.info("Validating credentials...");
       const result = await validateCoreLogin(context);
       if (result !== true) {

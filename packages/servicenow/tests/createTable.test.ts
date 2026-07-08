@@ -11,25 +11,50 @@ import {
   parseFormInputs,
   parseSysIdFromLocation,
   type OverlaySpec,
-  type NormalizedColumn
+  type NormalizedColumn,
 } from "../src/table";
 import type { ServiceNowClient } from "../src/client";
 
 function fakeClient(): ServiceNowClient {
   return {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function () { return []; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; }
+      runQuery: async function () {
+        return [];
+      },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
-      createRecord: async function () { return { sys_id: "x" }; },
-      pushWithUpdateSet: async function () { return { sys_id: "x" }; },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function () { return {}; },
-      deleteRecord: async function () { return {}; }
+      createRecord: async function () {
+        return { sys_id: "x" };
+      },
+      pushWithUpdateSet: async function () {
+        return { sys_id: "x" };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
-    now: { get: async function () { return undefined; }, post: async function () { return undefined; } }
+    now: {
+      get: async function () {
+        return undefined;
+      },
+      post: async function () {
+        return undefined;
+      },
+    },
   } as ServiceNowClient;
 }
 
@@ -44,7 +69,9 @@ describe("resolveType", function () {
     expect(resolveType("choice")).toBe("choice");
   });
   it("throws on an unknown type", function () {
-    expect(function () { resolveType("frobnicate"); }).toThrow(/unknown column type/);
+    expect(function () {
+      resolveType("frobnicate");
+    }).toThrow(/unknown column type/);
   });
 });
 
@@ -54,7 +81,7 @@ describe("normalizeColumns", function () {
       { label: "Key", type: "string", max_length: 255 },
       { label: "Severity", type: "choice", max_length: 50 },
       { label: "First Seen On", type: "datetime" },
-      { label: "Occurence Count", type: "integer", max_length: 5 }
+      { label: "Occurence Count", type: "integer", max_length: 5 },
     ]);
     expect(cols[0].type).toBe("string_full_utf8");
     expect(cols[0].maxLength).toBe("255");
@@ -64,19 +91,33 @@ describe("normalizeColumns", function () {
     expect(cols[3].type).toBe("integer");
   });
   it("rejects an empty list, a missing label, a dup label, and a ref without target", function () {
-    expect(function () { normalizeColumns([]); }).toThrow(/at least one column/);
-    expect(function () { normalizeColumns([{ label: "", type: "string" }]); }).toThrow(/missing a label/);
     expect(function () {
-      normalizeColumns([{ label: "A", type: "string" }, { label: "a", type: "integer" }]);
+      normalizeColumns([]);
+    }).toThrow(/at least one column/);
+    expect(function () {
+      normalizeColumns([{ label: "", type: "string" }]);
+    }).toThrow(/missing a label/);
+    expect(function () {
+      normalizeColumns([
+        { label: "A", type: "string" },
+        { label: "a", type: "integer" },
+      ]);
     }).toThrow(/duplicate column/);
-    expect(function () { normalizeColumns([{ label: "Owner", type: "reference" }]); }).toThrow(/reference target/);
+    expect(function () {
+      normalizeColumns([{ label: "Owner", type: "reference" }]);
+    }).toThrow(/reference target/);
   });
 });
 
 describe("buildColumnXml", function () {
   var cols: Array<NormalizedColumn> = [
     { label: "Key", type: "string_full_utf8", maxLength: "255", reference: "" },
-    { label: "First Seen On", type: "glide_date_time", maxLength: "", reference: "" }
+    {
+      label: "First Seen On",
+      type: "glide_date_time",
+      maxLength: "",
+      reference: "",
+    },
   ];
   it("wraps one <record operation=add> per column in a sys_dictionary record_update", function () {
     var xml = buildColumnXml(cols, ["aaaa", "bbbb"]);
@@ -93,11 +134,16 @@ describe("buildColumnXml", function () {
     expect(xml).toContain("<display_value>255</display_value>");
   });
   it("escapes XML-significant characters in labels", function () {
-    var xml = buildColumnXml([{ label: "A & B <c>", type: "choice", maxLength: "", reference: "" }], ["z"]);
+    var xml = buildColumnXml(
+      [{ label: "A & B <c>", type: "choice", maxLength: "", reference: "" }],
+      ["z"],
+    );
     expect(xml).toContain("A &amp; B &lt;c&gt;");
   });
   it("throws when sys_ids don't match column count", function () {
-    expect(function () { buildColumnXml(cols, ["only-one"]); }).toThrow(/one sys_id per column/);
+    expect(function () {
+      buildColumnXml(cols, ["only-one"]);
+    }).toThrow(/one sys_id per column/);
   });
 });
 
@@ -122,16 +168,33 @@ describe("projectTableGraph", function () {
 describe("applyTableSaveOverlay", function () {
   function overlay(): OverlaySpec {
     return {
-      name: "x_cadso_core_error", label: "Error", tableSysId: "TBL", saveActionSysId: "SAVE",
-      superClassSysId: "SUP", superClassLabel: "Application File", scopeSysId: "SCOPE",
-      scopeLabel: "Tenon - Core", transactionScopeSysId: "SCOPE", numberPrefix: "ERR", userRoleSysId: "ROLE",
-      userRoleLabel: "x_cadso_core.user", createAccessControls: true, access: "public",
-      accessFlags: defaultAccessFlags(), selectedApplicationSysId: "APP", menuName: "Error",
-      listEditKey: listEditKey("REL1"), columnXml: "<record_update/>"
+      name: "x_cadso_core_error",
+      label: "Error",
+      tableSysId: "TBL",
+      saveActionSysId: "SAVE",
+      superClassSysId: "SUP",
+      superClassLabel: "Application File",
+      scopeSysId: "SCOPE",
+      scopeLabel: "Tenon - Core",
+      transactionScopeSysId: "SCOPE",
+      numberPrefix: "ERR",
+      userRoleSysId: "ROLE",
+      userRoleLabel: "x_cadso_core.user",
+      createAccessControls: true,
+      access: "public",
+      accessFlags: defaultAccessFlags(),
+      selectedApplicationSysId: "APP",
+      menuName: "Error",
+      listEditKey: listEditKey("REL1"),
+      columnXml: "<record_update/>",
     };
   }
   it("overlays the capability fields and preserves harvested defaults", function () {
-    var base = { sysparm_ck: "CK", sysparm_encoded_record: "ENC", "69abc_text": "" };
+    var base = {
+      sysparm_ck: "CK",
+      sysparm_encoded_record: "ENC",
+      "69abc_text": "",
+    };
     var f = applyTableSaveOverlay(base, overlay());
     expect(f["sysparm_ck"]).toBe("CK"); // preserved
     expect(f["sysparm_encoded_record"]).toBe("ENC"); // preserved
@@ -173,8 +236,11 @@ describe("applyTableSaveOverlay", function () {
 
 describe("parseSysIdFromLocation", function () {
   it("extracts the assigned sys_id from a 302 Location", function () {
-    var loc = "sys_db_object.do?sys_id=1e539858c3ad4bd0d4ddf1db05013151&sysparm_view=";
-    expect(parseSysIdFromLocation(loc)).toBe("1e539858c3ad4bd0d4ddf1db05013151");
+    var loc =
+      "sys_db_object.do?sys_id=1e539858c3ad4bd0d4ddf1db05013151&sysparm_view=";
+    expect(parseSysIdFromLocation(loc)).toBe(
+      "1e539858c3ad4bd0d4ddf1db05013151",
+    );
   });
   it("returns empty string when no sys_id is present", function () {
     expect(parseSysIdFromLocation("sys_db_object_list.do")).toBe("");
@@ -184,7 +250,8 @@ describe("parseSysIdFromLocation", function () {
 
 describe("parseFormInputs", function () {
   it("harvests name/value pairs and decodes HTML entities", function () {
-    var html = '<input name="sysparm_ck" value="abc123"><input type="hidden" name="x" value="a &amp; b">';
+    var html =
+      '<input name="sysparm_ck" value="abc123"><input type="hidden" name="x" value="a &amp; b">';
     var f = parseFormInputs(html);
     expect(f["sysparm_ck"]).toBe("abc123");
     expect(f["x"]).toBe("a & b");
@@ -195,13 +262,15 @@ describe("createTable dryRun", function () {
   it("returns a pure plan with the column XML and projected graph, no network", async function () {
     var result = await createTable({
       client: fakeClient(),
-      name: "x_cadso_core_error", label: "Error", scope: "x_cadso_core",
+      name: "x_cadso_core_error",
+      label: "Error",
+      scope: "x_cadso_core",
       columns: [
         { label: "Key", type: "string", max_length: 255 },
-        { label: "Severity", type: "choice", max_length: 50 }
+        { label: "Severity", type: "choice", max_length: 50 },
       ],
       userRole: "x_cadso_core.user",
-      dryRun: true
+      dryRun: true,
     });
     expect(result.status).toBe("dry-run");
     expect(result.tableSysId).toBe("");
@@ -211,9 +280,15 @@ describe("createTable dryRun", function () {
     expect(result.columnXml).toContain('<record_update table="sys_dictionary"');
   });
   it("validates the table identifier", async function () {
-    await expect(createTable({
-      client: fakeClient(), name: "Bad Name", label: "X", scope: "x_cadso_core",
-      columns: [{ label: "A", type: "string" }], dryRun: true
-    })).rejects.toThrow(/valid table identifier/);
+    await expect(
+      createTable({
+        client: fakeClient(),
+        name: "Bad Name",
+        label: "X",
+        scope: "x_cadso_core",
+        columns: [{ label: "A", type: "string" }],
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/valid table identifier/);
   });
 });

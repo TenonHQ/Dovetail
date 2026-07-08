@@ -42,7 +42,9 @@ describe("stampMetadataContent — _record_link host stripping", () => {
           _record_link: `https://${host}.service-now.com/x_cadso_core_setting.do?sys_id=abc`,
         }),
       );
-      expect(parse(out)._record_link).toBe("/x_cadso_core_setting.do?sys_id=abc");
+      expect(parse(out)._record_link).toBe(
+        "/x_cadso_core_setting.do?sys_id=abc",
+      );
     }
   });
 
@@ -69,7 +71,8 @@ describe("stampMetadataContent — _record_link host stripping", () => {
     const out = stampMetadataContent(
       metaFile({
         sys_updated_on: { value: "2025-08-21 17:09:02" },
-        _record_link: "https://tenonworkstudio.service-now.com/incident.do?sys_id=1",
+        _record_link:
+          "https://tenonworkstudio.service-now.com/incident.do?sys_id=1",
       }),
     );
     const parsed = parse(out);
@@ -78,7 +81,11 @@ describe("stampMetadataContent — _record_link host stripping", () => {
   });
 
   it("passes through non-metaData files verbatim", () => {
-    const script: SN.File = { name: "script", type: "js", content: "var x = 1;" };
+    const script: SN.File = {
+      name: "script",
+      type: "js",
+      content: "var x = 1;",
+    };
     expect(stampMetadataContent(script)).toEqual(script);
   });
 });

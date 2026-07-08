@@ -66,7 +66,9 @@ jest.mock("../config", () => ({
   updateManifest: jest.fn(),
   getManifest: jest.fn(),
   getSourcePath: jest.fn().mockReturnValue("/project/src"),
-  getScopeManifestPath: jest.fn((scope: string) => `/project/dove.manifest.${scope}.json`),
+  getScopeManifestPath: jest.fn(
+    (scope: string) => `/project/dove.manifest.${scope}.json`,
+  ),
   getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
 }));
 
@@ -124,7 +126,10 @@ jest.mock("axios", () => ({
 
 // --- Imports ---
 import { logger } from "../Logger";
-import { multiScopeWatcher, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 
 // --- Tests ---
 
@@ -136,7 +141,9 @@ describe("US-007: Verify update set is active after creation", () => {
     // Default: scope switching succeeds
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.createCurrentAppUserPref.mockResolvedValue({});
   });
@@ -147,7 +154,10 @@ describe("US-007: Verify update set is active after creation", () => {
 
   it("verifies update set switch by calling getCurrentUpdateSet after changeUpdateSet", async () => {
     // Setup: active task + no existing config
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -163,7 +173,7 @@ describe("US-007: Verify update set is active after creation", () => {
 
     // Search returns existing update set
     mockSNClient.client.get.mockResolvedValue({
-      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] }
+      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] },
     });
 
     // changeUpdateSet succeeds
@@ -171,25 +181,32 @@ describe("US-007: Verify update set is active after creation", () => {
 
     // getCurrentUpdateSet confirms the correct sys_id
     mockSNClient.getCurrentUpdateSet.mockResolvedValue({
-      data: { result: { sysId: "us_123", name: "CU-abc123 Test Task" } }
+      data: { result: { sysId: "us_123", name: "CU-abc123 Test Task" } },
     });
 
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_scope");
 
     // changeUpdateSet was called
-    expect(mockSNClient.changeUpdateSet).toHaveBeenCalledWith({ sysId: "us_123" });
+    expect(mockSNClient.changeUpdateSet).toHaveBeenCalledWith({
+      sysId: "us_123",
+    });
 
     // getCurrentUpdateSet was called for verification
-    expect(mockSNClient.getCurrentUpdateSet).toHaveBeenCalledWith("x_test_scope");
+    expect(mockSNClient.getCurrentUpdateSet).toHaveBeenCalledWith(
+      "x_test_scope",
+    );
 
     // Verify debug confirmation logged
     expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining("Update set switch verified")
+      expect.stringContaining("Update set switch verified"),
     );
   });
 
   it("retries switch when verification shows wrong update set, succeeds on retry", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -202,17 +219,17 @@ describe("US-007: Verify update set is active after creation", () => {
 
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.client.get.mockResolvedValue({
-      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] }
+      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] },
     });
     mockSNClient.changeUpdateSet.mockResolvedValue(undefined);
 
     // First verification fails (wrong sys_id), second succeeds
     mockSNClient.getCurrentUpdateSet
       .mockResolvedValueOnce({
-        data: { result: { sysId: "wrong_us_id", name: "Default" } }
+        data: { result: { sysId: "wrong_us_id", name: "Default" } },
       })
       .mockResolvedValueOnce({
-        data: { result: { sysId: "us_123", name: "CU-abc123 Test Task" } }
+        data: { result: { sysId: "us_123", name: "CU-abc123 Test Task" } },
       });
 
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_scope");
@@ -222,19 +239,28 @@ describe("US-007: Verify update set is active after creation", () => {
 
     // Warning logged about retry
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("verification failed, retrying")
+      expect.stringContaining("verification failed, retrying"),
     );
 
     // Should succeed — no error about "could not be activated"
-    var errorCalls = (logger.error as jest.Mock).mock.calls.map(function (c: any[]) { return c[0]; });
+    var errorCalls = (logger.error as jest.Mock).mock.calls.map(function (
+      c: any[],
+    ) {
+      return c[0];
+    });
     var hasActivationError = errorCalls.some(function (msg: string) {
-      return typeof msg === "string" && msg.indexOf("could not be activated") !== -1;
+      return (
+        typeof msg === "string" && msg.indexOf("could not be activated") !== -1
+      );
     });
     expect(hasActivationError).toBe(false);
   });
 
   it("logs explicit error when both switch attempts fail verification", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -247,13 +273,13 @@ describe("US-007: Verify update set is active after creation", () => {
 
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.client.get.mockResolvedValue({
-      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] }
+      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] },
     });
     mockSNClient.changeUpdateSet.mockResolvedValue(undefined);
 
     // Both verifications fail — always returns wrong sys_id
     mockSNClient.getCurrentUpdateSet.mockResolvedValue({
-      data: { result: { sysId: "wrong_us_id", name: "Default" } }
+      data: { result: { sysId: "wrong_us_id", name: "Default" } },
     });
 
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_scope");
@@ -263,15 +289,18 @@ describe("US-007: Verify update set is active after creation", () => {
 
     // Error message should include both the update set name and the actual active one
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("could not be activated")
+      expect.stringContaining("could not be activated"),
     );
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("Default")
+      expect.stringContaining("Default"),
     );
   });
 
   it("does not retry when verification passes on first attempt", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -284,13 +313,13 @@ describe("US-007: Verify update set is active after creation", () => {
 
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.client.get.mockResolvedValue({
-      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] }
+      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] },
     });
     mockSNClient.changeUpdateSet.mockResolvedValue(undefined);
 
     // Verification passes on first attempt
     mockSNClient.getCurrentUpdateSet.mockResolvedValue({
-      data: { result: { sysId: "us_123", name: "CU-abc123 Test Task" } }
+      data: { result: { sysId: "us_123", name: "CU-abc123 Test Task" } },
     });
 
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_scope");
@@ -303,12 +332,15 @@ describe("US-007: Verify update set is active after creation", () => {
 
     // No retry warning
     expect(logger.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining("verification failed, retrying")
+      expect.stringContaining("verification failed, retrying"),
     );
   });
 
   it("handles getCurrentUpdateSet throwing during verification gracefully", async () => {
-    var taskPath = require("path").resolve(process.cwd(), ".dove-active-task.json");
+    var taskPath = require("path").resolve(
+      process.cwd(),
+      ".dove-active-task.json",
+    );
     mockFsStore[taskPath] = JSON.stringify({
       taskId: "abc123",
       taskName: "Test Task",
@@ -321,12 +353,14 @@ describe("US-007: Verify update set is active after creation", () => {
 
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.client.get.mockResolvedValue({
-      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] }
+      data: { result: [{ sys_id: "us_123", name: "CU-abc123 Test Task" }] },
     });
     mockSNClient.changeUpdateSet.mockResolvedValue(undefined);
 
     // getCurrentUpdateSet throws (network error etc.)
-    mockSNClient.getCurrentUpdateSet.mockRejectedValue(new Error("Network error"));
+    mockSNClient.getCurrentUpdateSet.mockRejectedValue(
+      new Error("Network error"),
+    );
 
     // Should not crash — the outer try/catch in ensureUpdateSetForScope handles it
     await (multiScopeWatcher as any).ensureUpdateSetForScope("x_test_scope");

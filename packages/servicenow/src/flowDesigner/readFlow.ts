@@ -80,13 +80,23 @@ function flowPath(sysId: string): string {
 
 /** Normalize ServiceNow's `{ result: { data } }` / `{ data }` / bare envelopes to the model. */
 function unwrapModel(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     if (data.result.data && typeof data.result.data === "object") {
       return data.result.data;
     }
     return data.result;
   }
-  if (data && typeof data === "object" && data.data && typeof data.data === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.data &&
+    typeof data.data === "object"
+  ) {
     return data.data;
   }
   return data;
@@ -98,7 +108,9 @@ function val(field: any): string {
     return "";
   }
   if (typeof field === "object") {
-    return field.value !== undefined && field.value !== null ? String(field.value) : "";
+    return field.value !== undefined && field.value !== null
+      ? String(field.value)
+      : "";
   }
   return String(field);
 }
@@ -124,7 +136,9 @@ function isDeleted(inst: any): boolean {
   return inst.deleted === true || val(inst.deleted) === "true";
 }
 
-export async function readFlow(params: ReadFlowParams): Promise<ReadFlowResult> {
+export async function readFlow(
+  params: ReadFlowParams,
+): Promise<ReadFlowResult> {
   var client = params.client;
   var sysId = params.sysId;
 
@@ -136,14 +150,22 @@ export async function readFlow(params: ReadFlowParams): Promise<ReadFlowResult> 
   var model = unwrapModel(resp);
   if (!model || typeof model !== "object") {
     throw new Error(
-      "readFlow: unexpected response for flow " + sysId
-        + " — expected a model object, got: " + JSON.stringify(resp).substring(0, 300)
+      "readFlow: unexpected response for flow " +
+        sysId +
+        " — expected a model object, got: " +
+        JSON.stringify(resp).substring(0, 300),
     );
   }
 
-  var actions: Array<any> = Array.isArray(model.actionInstances) ? model.actionInstances : [];
-  var logic: Array<any> = Array.isArray(model.flowLogicInstances) ? model.flowLogicInstances : [];
-  var variables: Array<any> = Array.isArray(model.flowVariables) ? model.flowVariables : [];
+  var actions: Array<any> = Array.isArray(model.actionInstances)
+    ? model.actionInstances
+    : [];
+  var logic: Array<any> = Array.isArray(model.flowLogicInstances)
+    ? model.flowLogicInstances
+    : [];
+  var variables: Array<any> = Array.isArray(model.flowVariables)
+    ? model.flowVariables
+    : [];
 
   // Merge, drop deleted, sort by numeric order.
   var merged: Array<{ kind: "action" | "logic"; inst: any }> = [];
@@ -182,7 +204,7 @@ export async function readFlow(params: ReadFlowParams): Promise<ReadFlowResult> 
       label: instanceLabel(inst),
       uiId: uiId,
       parent: parent,
-      depth: depth
+      depth: depth,
     });
   }
 
@@ -192,7 +214,7 @@ export async function readFlow(params: ReadFlowParams): Promise<ReadFlowResult> 
     vars.push({
       name: val(v.name),
       label: val(v.label) || val(v.name),
-      type: val(v.type_label) || val(v.type)
+      type: val(v.type_label) || val(v.type),
     });
   }
 
@@ -203,11 +225,16 @@ export async function readFlow(params: ReadFlowParams): Promise<ReadFlowResult> 
     type: val(model.type),
     scopeSysId: val(model.scope),
     published: model.isPublished === true || val(model.isPublished) === "true",
-    userCanRead: model.userCanRead === true || val(model.userCanRead) === "true",
+    userCanRead:
+      model.userCanRead === true || val(model.userCanRead) === "true",
     status: val(model.status),
     steps: steps,
     variables: vars,
-    counts: { action: actions.length, logic: logic.length, total: actions.length + logic.length }
+    counts: {
+      action: actions.length,
+      logic: logic.length,
+      total: actions.length + logic.length,
+    },
   };
 
   if (params.raw) {

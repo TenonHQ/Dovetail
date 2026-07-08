@@ -10,7 +10,7 @@
 
 <!-- List the components, scopes, or modules modified in this PR. -->
 
-- 
+-
 
 ## Environment
 
@@ -25,7 +25,7 @@
 
 <!-- Step-by-step instructions for QA. Include edge cases. -->
 
-1. 
+1.
 
 ## Checklist
 

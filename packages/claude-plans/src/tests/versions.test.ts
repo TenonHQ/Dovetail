@@ -8,7 +8,7 @@ import {
   listVersions,
   pushPlan,
   restoreVersion,
-  MAX_PLAN_VERSIONS
+  MAX_PLAN_VERSIONS,
 } from "../storage";
 
 function mkTmp(): string {
@@ -46,8 +46,12 @@ describe("plan version history", function () {
     var current = getPlan("p", { rootDir: root });
     expect(current && current.plan.content_md).toBe("v-a");
     var contents = listVersions("p", { rootDir: root })
-      .map(function (m) { return getVersion("p", m.version, { rootDir: root }); })
-      .map(function (v) { return v && v.plan.content_md; });
+      .map(function (m) {
+        return getVersion("p", m.version, { rootDir: root });
+      })
+      .map(function (v) {
+        return v && v.plan.content_md;
+      });
     expect(contents).toContain("v-c"); // nothing lost
   });
 
@@ -57,8 +61,12 @@ describe("plan version history", function () {
     pushPlan({ slug: "p", title: "P", content_md: "b" }, { rootDir: root }); // p has v1
     // A separator-laden slug fails the anchored-regex guard and throws before
     // any path is built — it can never read a file outside the storage root.
-    expect(function () { getVersion("../../../etc/passwd", 1, { rootDir: root }); }).toThrow(/invalid plan slug/);
-    expect(function () { listVersions("q/../../p", { rootDir: root }); }).toThrow(/invalid plan slug/);
+    expect(function () {
+      getVersion("../../../etc/passwd", 1, { rootDir: root });
+    }).toThrow(/invalid plan slug/);
+    expect(function () {
+      listVersions("q/../../p", { rootDir: root });
+    }).toThrow(/invalid plan slug/);
     // p's own history is intact and addressable by its real slug.
     expect(listVersions("p", { rootDir: root }).length).toBe(1);
   });
@@ -66,11 +74,16 @@ describe("plan version history", function () {
   it("caps history at MAX_PLAN_VERSIONS, pruning oldest", function () {
     var root = mkTmp();
     for (var i = 0; i < MAX_PLAN_VERSIONS + 5; i++) {
-      pushPlan({ slug: "p", title: "P", content_md: "body-" + i }, { rootDir: root });
+      pushPlan(
+        { slug: "p", title: "P", content_md: "body-" + i },
+        { rootDir: root },
+      );
     }
     var versions = listVersions("p", { rootDir: root });
     expect(versions.length).toBe(MAX_PLAN_VERSIONS);
     // Newest-first; oldest snapshots pruned.
-    expect(versions[0].version).toBeGreaterThan(versions[versions.length - 1].version);
+    expect(versions[0].version).toBeGreaterThan(
+      versions[versions.length - 1].version,
+    );
   });
 });

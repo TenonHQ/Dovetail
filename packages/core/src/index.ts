@@ -6,14 +6,20 @@ import { fileLogger } from "./FileLogger";
 // Library exports — consumers can `import { decodeV2Values } from "@tenonhq/dovetail-core"`.
 // Keep exports above the CLI entry so bundlers/TS can tree-shake and require() consumers
 // never accidentally invoke main().
-export { decodeV2Values, encodeV2Values, V2ValueEntry } from "./flowDesigner/values";
+export {
+  decodeV2Values,
+  encodeV2Values,
+  V2ValueEntry,
+} from "./flowDesigner/values";
 
 async function main() {
   // Initialize file logging as early as possible
   fileLogger.info("Starting Dovetail...");
   // Deprecated alias: warn once when the CLI is invoked as `sinc` instead of `dove`.
   // The `sinc` bin shim is kept for one minor version to avoid breaking existing scripts.
-  const invokedAs = path.basename(process.argv[1] || "").replace(/\.(js|cmd|exe)$/i, "");
+  const invokedAs = path
+    .basename(process.argv[1] || "")
+    .replace(/\.(js|cmd|exe)$/i, "");
   if (invokedAs === "sinc") {
     process.stderr.write(
       "[deprecation] The 'sinc' command has been renamed to 'dove'. Run 'npx dove migrate' to update your project, then call 'dove' going forward. The 'sinc' alias will be removed in the next major release.\n",

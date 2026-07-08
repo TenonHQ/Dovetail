@@ -23,7 +23,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "info"; },
+  getLogLevel: function () {
+    return "info";
+  },
 };
 
 var mockFileLogger = {
@@ -44,13 +46,25 @@ var mockFUtils = {
   createDirRecursively: jest.fn().mockResolvedValue(undefined),
 };
 
-jest.mock("../Logger", function () { return { logger: mockLogger }; });
-jest.mock("../FileLogger", function () { return { fileLogger: mockFileLogger }; });
-jest.mock("../FileUtils", function () { return mockFUtils; });
+jest.mock("../Logger", function () {
+  return { logger: mockLogger };
+});
+jest.mock("../FileLogger", function () {
+  return { fileLogger: mockFileLogger };
+});
+jest.mock("../FileUtils", function () {
+  return mockFUtils;
+});
 jest.mock("../snClient", function () {
   return {
-    defaultClient: function () { return mockClient; },
-    unwrapSNResponse: function (p: any) { return Promise.resolve(p).then(function (r: any) { return r; }); },
+    defaultClient: function () {
+      return mockClient;
+    },
+    unwrapSNResponse: function (p: any) {
+      return Promise.resolve(p).then(function (r: any) {
+        return r;
+      });
+    },
     processPushResponse: jest.fn(),
     retryOnErr: jest.fn(),
     retryOnHttpErr: jest.fn(),
@@ -70,7 +84,9 @@ var mockConfig: any = {
   updateManifest: jest.fn(),
 };
 
-jest.mock("../config", function () { return mockConfig; });
+jest.mock("../config", function () {
+  return mockConfig;
+});
 
 // Prevent processMissingFiles' progress bar from touching stdout in tests.
 jest.mock("progress", function () {
@@ -91,7 +107,9 @@ describe("syncManifest — scope + table whitelist gates", function () {
   beforeEach(function () {
     jest.clearAllMocks();
     mockConfig.isMultiScopeManifest.mockReturnValue(true);
-    mockConfig.resolveConfigForScope.mockImplementation(function (_scope: string) {
+    mockConfig.resolveConfigForScope.mockImplementation(function (
+      _scope: string,
+    ) {
       return {
         tables: ["sys_script_include", "sys_script", "sys_ux_macroponent"],
         fieldOverrides: {},
@@ -115,7 +133,9 @@ describe("syncManifest — scope + table whitelist gates", function () {
     expect(mockClient.getManifest).not.toHaveBeenCalled();
     expect(mockFUtils.writeScopeManifest).not.toHaveBeenCalled();
     var warnedAboutScope = mockLogger.warn.mock.calls.some(function (args) {
-      return typeof args[0] === "string" && args[0].indexOf("x_cadso_click") !== -1;
+      return (
+        typeof args[0] === "string" && args[0].indexOf("x_cadso_click") !== -1
+      );
     });
     expect(warnedAboutScope).toBe(true);
   });
@@ -132,15 +152,28 @@ describe("syncManifest — scope + table whitelist gates", function () {
     mockClient.getManifest.mockResolvedValue({
       scope: "x_cadso_core",
       tables: {
-        sys_script_include: { records: { FooInclude: { name: "FooInclude", sys_id: "a1", files: [] } } },
-        sys_script: { records: { BarBR: { name: "BarBR", sys_id: "a2", files: [] } } },
-        sys_alias: { records: { DebrisRec: { name: "DebrisRec", sys_id: "a3", files: [] } } },
+        sys_script_include: {
+          records: {
+            FooInclude: { name: "FooInclude", sys_id: "a1", files: [] },
+          },
+        },
+        sys_script: {
+          records: { BarBR: { name: "BarBR", sys_id: "a2", files: [] } },
+        },
+        sys_alias: {
+          records: {
+            DebrisRec: { name: "DebrisRec", sys_id: "a3", files: [] },
+          },
+        },
       },
     });
 
     await AppUtils.syncManifest("x_cadso_core");
 
-    expect(mockClient.getManifest).toHaveBeenCalledWith("x_cadso_core", expect.any(Object));
+    expect(mockClient.getManifest).toHaveBeenCalledWith(
+      "x_cadso_core",
+      expect.any(Object),
+    );
     expect(mockFUtils.writeScopeManifest).toHaveBeenCalledTimes(1);
 
     var writtenScope = mockFUtils.writeScopeManifest.mock.calls[0][0];
@@ -170,7 +203,11 @@ describe("syncManifest — scope + table whitelist gates", function () {
 
     await AppUtils.syncManifest();
 
-    var refreshedScopes = mockClient.getManifest.mock.calls.map(function (c: any[]) { return c[0]; });
+    var refreshedScopes = mockClient.getManifest.mock.calls.map(function (
+      c: any[],
+    ) {
+      return c[0];
+    });
     expect(refreshedScopes.sort()).toEqual(["x_cadso_core", "x_cadso_work"]);
     expect(refreshedScopes).not.toContain("x_cadso_click");
     expect(refreshedScopes).not.toContain("x_nuvo_sinc");

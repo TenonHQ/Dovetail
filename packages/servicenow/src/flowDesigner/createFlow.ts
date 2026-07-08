@@ -97,38 +97,66 @@ function slug(s: string): string {
   // The first replace collapses every run of non-alphanumerics to a single "_",
   // so consecutive underscores can never occur here — a single-char trim (no "+"
   // quantifier) is sufficient and avoids the polynomial-backtracking pattern.
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 /** Normalize `{ result: { data } }` / `{ data }` / `{ result }` / bare to the model. */
 function unwrapModel(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     if (data.result.data && typeof data.result.data === "object") {
       return data.result.data;
     }
     return data.result;
   }
-  if (data && typeof data === "object" && data.data && typeof data.data === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.data &&
+    typeof data.data === "object"
+  ) {
     return data.data;
   }
   return data;
 }
 
 function flowGetPath(sysId: string, scopeSysId: string): string {
-  return "/api/now/processflow/flow/" + encodeURIComponent(sysId)
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/flow/" +
+    encodeURIComponent(sysId) +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 function flowCreatePath(scopeSysId: string): string {
-  return "/api/now/processflow/flow?param_only_properties=true"
-    + "&sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/flow?param_only_properties=true" +
+    "&sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 function createVersionPath(scopeSysId: string): string {
-  return "/api/now/processflow/versioning/create_version"
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/versioning/create_version" +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 function snapshotPath(sysId: string, scopeSysId: string): string {
-  return "/api/now/processflow/flow/" + encodeURIComponent(sysId) + "/snapshot"
-    + "?sysparm_transaction_scope=" + encodeURIComponent(scopeSysId);
+  return (
+    "/api/now/processflow/flow/" +
+    encodeURIComponent(sysId) +
+    "/snapshot" +
+    "?sysparm_transaction_scope=" +
+    encodeURIComponent(scopeSysId)
+  );
 }
 
 function patchInputs(inst: any, kv: Record<string, any>): void {
@@ -144,13 +172,18 @@ function patchInputs(inst: any, kv: Record<string, any>): void {
   }
 }
 
-function remapInstances(arr: Array<any> | undefined, newFlow: string): Array<any> {
+function remapInstances(
+  arr: Array<any> | undefined,
+  newFlow: string,
+): Array<any> {
   if (!Array.isArray(arr)) return [];
   return arr.map(function (src) {
     var inst = JSON.parse(JSON.stringify(src));
-    if (Object.prototype.hasOwnProperty.call(inst, "flowSysId")) inst.flowSysId = newFlow;
+    if (Object.prototype.hasOwnProperty.call(inst, "flowSysId"))
+      inst.flowSysId = newFlow;
     if (Object.prototype.hasOwnProperty.call(inst, "id")) inst.id = newId();
-    if (Object.prototype.hasOwnProperty.call(inst, "uiUniqueIdentifier")) inst.uiUniqueIdentifier = uuid();
+    if (Object.prototype.hasOwnProperty.call(inst, "uiUniqueIdentifier"))
+      inst.uiUniqueIdentifier = uuid();
     return inst;
   });
 }
@@ -163,7 +196,7 @@ export function buildPublishModel(
   envelope: any,
   template: any,
   newFlow: string,
-  params: CreateFlowParams
+  params: CreateFlowParams,
 ): any {
   var M = JSON.parse(JSON.stringify(envelope));
   M.id = newFlow;
@@ -188,7 +221,8 @@ export function buildPublishModel(
   for (ti = 0; ti < M.triggerInstances.length; ti += 1) {
     var kv: Record<string, any> = {};
     if (params.triggerTable) kv.table = params.triggerTable;
-    if (params.triggerCondition !== undefined) kv.condition = params.triggerCondition;
+    if (params.triggerCondition !== undefined)
+      kv.condition = params.triggerCondition;
     patchInputs(M.triggerInstances[ti], kv);
   }
   var ai;
@@ -196,7 +230,10 @@ export function buildPublishModel(
     var act = M.actionInstances[ai];
     if (params.logMessage) {
       patchInputs(act, { message: params.logMessage });
-      if (act.data && Object.prototype.hasOwnProperty.call(act.data, "values")) {
+      if (
+        act.data &&
+        Object.prototype.hasOwnProperty.call(act.data, "values")
+      ) {
         act.data.values = "short_description=" + params.logMessage;
       }
     }
@@ -206,8 +243,12 @@ export function buildPublishModel(
 
 function extractSnapshotSysId(body: any): string | undefined {
   if (!body || typeof body !== "object") return undefined;
-  var snap = body.latestSnapshot || body.masterSnapshot
-    || body.latest_snapshot || body.master_snapshot || body.snapshot;
+  var snap =
+    body.latestSnapshot ||
+    body.masterSnapshot ||
+    body.latest_snapshot ||
+    body.master_snapshot ||
+    body.snapshot;
   if (snap && typeof snap === "object") {
     return typeof snap.sys_id === "string" ? snap.sys_id : undefined;
   }
@@ -215,13 +256,17 @@ function extractSnapshotSysId(body: any): string | undefined {
   return undefined;
 }
 
-export async function createFlow(params: CreateFlowParams): Promise<CreateFlowResult> {
+export async function createFlow(
+  params: CreateFlowParams,
+): Promise<CreateFlowResult> {
   var client = params.client;
   if (!params.name || params.name.trim().length === 0) {
     throw new Error("createFlow: name is required.");
   }
   if (!params.templateSysId) {
-    throw new Error("createFlow: templateSysId is required (the trigger/action shape is grafted from it).");
+    throw new Error(
+      "createFlow: templateSysId is required (the trigger/action shape is grafted from it).",
+    );
   }
   if (!params.scopeSysId) {
     throw new Error("createFlow: scopeSysId is required.");
@@ -229,9 +274,21 @@ export async function createFlow(params: CreateFlowParams): Promise<CreateFlowRe
   var internalName = params.internalName || slug(params.name);
 
   // 1/2 (read): pull the template graph first — also validates the template exists.
-  var template = unwrapModel(await client.now.get<any>(flowGetPath(params.templateSysId, params.scopeSysId)));
-  if (!template || !Array.isArray(template.triggerInstances) || template.triggerInstances.length === 0) {
-    throw new Error("createFlow: template flow " + params.templateSysId + " has no trigger to graft.");
+  var template = unwrapModel(
+    await client.now.get<any>(
+      flowGetPath(params.templateSysId, params.scopeSysId),
+    ),
+  );
+  if (
+    !template ||
+    !Array.isArray(template.triggerInstances) ||
+    template.triggerInstances.length === 0
+  ) {
+    throw new Error(
+      "createFlow: template flow " +
+        params.templateSysId +
+        " has no trigger to graft.",
+    );
   }
   var graph = {
     triggers: (template.triggerInstances || []).length,
@@ -270,12 +327,15 @@ export async function createFlow(params: CreateFlowParams): Promise<CreateFlowRe
     status: "draft",
     userHasRolesAssignedToFlow: true,
   };
-  var createResp = await client.now.post<any>(flowCreatePath(params.scopeSysId), props);
+  var createResp = await client.now.post<any>(
+    flowCreatePath(params.scopeSysId),
+    props,
+  );
   var envelope = unwrapModel(createResp);
   if (!envelope || typeof envelope.id !== "string" || envelope.id.length < 32) {
     throw new Error(
-      "createFlow: create did not return an initialised flow id: "
-        + JSON.stringify(createResp).substring(0, 300)
+      "createFlow: create did not return an initialised flow id: " +
+        JSON.stringify(createResp).substring(0, 300),
     );
   }
   var newFlow = envelope.id;
@@ -297,11 +357,19 @@ export async function createFlow(params: CreateFlowParams): Promise<CreateFlowRe
   }
 
   // 4: publish (compile the snapshot). request() throws on non-2xx.
-  var snapResp = await client.now.post<any>(snapshotPath(newFlow, params.scopeSysId), model);
+  var snapResp = await client.now.post<any>(
+    snapshotPath(newFlow, params.scopeSysId),
+    model,
+  );
   var snapBody = unwrapModel(snapResp);
-  var publishedFlag = snapBody && (snapBody.isPublished === true || snapBody.status === "published");
+  var publishedFlag =
+    snapBody &&
+    (snapBody.isPublished === true || snapBody.status === "published");
   var snapshotSysId = extractSnapshotSysId(snapBody);
-  var active = snapBody && typeof snapBody.active === "boolean" ? snapBody.active : undefined;
+  var active =
+    snapBody && typeof snapBody.active === "boolean"
+      ? snapBody.active
+      : undefined;
 
   return {
     status: publishedFlag || snapshotSysId ? "published" : "not-published",

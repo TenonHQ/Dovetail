@@ -78,7 +78,9 @@ export async function processManifestForScope(
       // Process each record in the table
       const recordNames = Object.keys(tableRecords.records || {});
 
-      fileLogger.debug("Table " + tableName + ": " + recordNames.length + " records");
+      fileLogger.debug(
+        "Table " + tableName + ": " + recordNames.length + " records",
+      );
 
       for (const recordName of recordNames) {
         const record = tableRecords.records[recordName];
@@ -89,9 +91,11 @@ export async function processManifestForScope(
         const recordPath = path.join(tablePath, recordDirName);
 
         // Check if metadata file exists in the files from server
-        const hasMetadataFromServer = record.files && record.files.some(
-          (f: any) => f.name === 'metaData' && f.type === 'json'
-        );
+        const hasMetadataFromServer =
+          record.files &&
+          record.files.some(
+            (f: any) => f.name === "metaData" && f.type === "json",
+          );
 
         // Ensure the record directory exists
         await fsp.mkdir(recordPath, { recursive: true });
@@ -100,7 +104,7 @@ export async function processManifestForScope(
         for (const file of record.files || []) {
           const filePath = path.join(recordPath, `${file.name}.${file.type}`);
           const fileContent = file.content || "";
-          
+
           const fileDir = path.dirname(filePath);
           await fsp.mkdir(fileDir, { recursive: true });
 
@@ -111,17 +115,21 @@ export async function processManifestForScope(
             throw writeError;
           }
         }
-        
+
         // If no metadata from server, create a basic one
         if (!hasMetadataFromServer) {
           const metadataFilePath = path.join(recordPath, "metaData.json");
           const metadataContent = {
             _generatedAt: new Date().toISOString(),
-            _note: "Generated locally - metadata not provided by server"
+            _note: "Generated locally - metadata not provided by server",
           };
-          
+
           try {
-            await fsp.writeFile(metadataFilePath, JSON.stringify(metadataContent, null, 2), "utf8");
+            await fsp.writeFile(
+              metadataFilePath,
+              JSON.stringify(metadataContent, null, 2),
+              "utf8",
+            );
           } catch (metaError) {
             logger.error("Failed to write metadata: " + metadataFilePath);
           }
@@ -131,7 +139,9 @@ export async function processManifestForScope(
       }
     }
   } catch (error) {
-    logger.error("Error processing files for " + sourceDirectory + ": " + error);
+    logger.error(
+      "Error processing files for " + sourceDirectory + ": " + error,
+    );
     throw error;
   }
 }
@@ -167,7 +177,9 @@ export async function processScope(
       );
     }
 
-    fileLogger.debug("Source directory for " + scopeName + ": " + sourceDirectory);
+    fileLogger.debug(
+      "Source directory for " + scopeName + ": " + sourceDirectory,
+    );
 
     const apps = await unwrapSNResponse(client.getAppList());
 
@@ -214,14 +226,29 @@ export async function processScope(
       var keptCount = Object.keys(filteredTables).length;
       if (skippedCount > 0) {
         fileLogger.debug(
-          "Filtered " + skippedCount + " tables not in _tables whitelist for " + scopeName +
-          ". Keeping " + keptCount + " of " + manifestTableNames.length
+          "Filtered " +
+            skippedCount +
+            " tables not in _tables whitelist for " +
+            scopeName +
+            ". Keeping " +
+            keptCount +
+            " of " +
+            manifestTableNames.length,
         );
       }
-      logger.info(scopeName + ": " + keptCount + " tables match config (" + skippedCount + " filtered out)");
+      logger.info(
+        scopeName +
+          ": " +
+          keptCount +
+          " tables match config (" +
+          skippedCount +
+          " filtered out)",
+      );
       manifest.tables = filteredTables;
     } else {
-      logger.warn("No _tables whitelist defined — writing ALL tables for " + scopeName);
+      logger.warn(
+        "No _tables whitelist defined — writing ALL tables for " + scopeName,
+      );
     }
 
     // Record-key normalization now happens inside processManifestForScope (the
@@ -237,7 +264,9 @@ export async function processScope(
 
       for (var recordName in table.records || {}) {
         var record = table.records[recordName];
-        allMissingFiles[tableName][record.sys_id] = record.files.map(function(f: any) {
+        allMissingFiles[tableName][record.sys_id] = record.files.map(function (
+          f: any,
+        ) {
           return { name: f.name, type: f.type };
         });
       }
@@ -247,13 +276,28 @@ export async function processScope(
     var CHUNK_SIZE = 5;
     var tableNames = Object.keys(allMissingFiles);
     var totalChunks = Math.ceil(tableNames.length / CHUNK_SIZE);
-    logger.info("Downloading file contents for " + scopeName + " (" + tableNames.length + " tables in " + totalChunks + " batch" + (totalChunks !== 1 ? "es" : "") + ")...");
+    logger.info(
+      "Downloading file contents for " +
+        scopeName +
+        " (" +
+        tableNames.length +
+        " tables in " +
+        totalChunks +
+        " batch" +
+        (totalChunks !== 1 ? "es" : "") +
+        ")...",
+    );
 
-    for (var chunkIdx = 0; chunkIdx < tableNames.length; chunkIdx += CHUNK_SIZE) {
+    for (
+      var chunkIdx = 0;
+      chunkIdx < tableNames.length;
+      chunkIdx += CHUNK_SIZE
+    ) {
       var chunkTableNames = tableNames.slice(chunkIdx, chunkIdx + CHUNK_SIZE);
       var chunkMissing: any = {};
       for (var ci = 0; ci < chunkTableNames.length; ci++) {
-        chunkMissing[chunkTableNames[ci]] = allMissingFiles[chunkTableNames[ci]];
+        chunkMissing[chunkTableNames[ci]] =
+          allMissingFiles[chunkTableNames[ci]];
       }
 
       if (apiDelay > 0) {
@@ -261,7 +305,16 @@ export async function processScope(
       }
 
       var batchNum = Math.floor(chunkIdx / CHUNK_SIZE) + 1;
-      fileLogger.debug("Downloading batch " + batchNum + "/" + totalChunks + " for " + scopeName + ": " + chunkTableNames.join(", "));
+      fileLogger.debug(
+        "Downloading batch " +
+          batchNum +
+          "/" +
+          totalChunks +
+          " for " +
+          scopeName +
+          ": " +
+          chunkTableNames.join(", "),
+      );
 
       var chunkContent = await unwrapSNResponse(
         client.getMissingFiles(chunkMissing, config.tableOptions || {}),
@@ -271,9 +324,12 @@ export async function processScope(
       for (var chunkTable in chunkContent || {}) {
         if (manifest.tables[chunkTable]) {
           for (var chunkRecName in chunkContent[chunkTable].records || {}) {
-            var recordWithContent = chunkContent[chunkTable].records[chunkRecName];
+            var recordWithContent =
+              chunkContent[chunkTable].records[chunkRecName];
             var manifestRecords = manifest.tables[chunkTable].records;
-            var matchingRecord = Object.values(manifestRecords).find(function(r: any) {
+            var matchingRecord = Object.values(manifestRecords).find(function (
+              r: any,
+            ) {
               return r.sys_id === recordWithContent.sys_id;
             });
             if (matchingRecord) {
@@ -294,7 +350,9 @@ export async function processScope(
       scope: scopeName,
     };
 
-    logger.success("Scope " + scopeName + " complete — files saved to " + sourceDirectory);
+    logger.success(
+      "Scope " + scopeName + " complete — files saved to " + sourceDirectory,
+    );
 
     return {
       scope: scopeName,
@@ -315,17 +373,21 @@ export async function processScope(
 // Helper function to add delay between API calls
 async function delay(ms: number): Promise<void> {
   if (ms > 0) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
-export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: number }) {
+export async function initScopesCommand(
+  args: Sinc.SharedCmdArgs & { delay?: number },
+) {
   setLogLevel(args);
-  
+
   // Get API delay from args, default to 0ms (no delay)
   const apiDelay = args.delay || 0;
   if (apiDelay > 0) {
-    logger.info(`Using ${apiDelay}ms delay between API calls to prevent server overload`);
+    logger.info(
+      `Using ${apiDelay}ms delay between API calls to prevent server overload`,
+    );
   }
 
   try {
@@ -365,7 +427,14 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
 
     const scopes = Object.keys(config.scopes);
     const instance = process.env.SN_INSTANCE || "unknown";
-    logger.info("Initializing " + scopes.length + " scopes from " + instance + ": " + scopes.join(", "));
+    logger.info(
+      "Initializing " +
+        scopes.length +
+        " scopes from " +
+        instance +
+        ": " +
+        scopes.join(", "),
+    );
 
     const scopePromises = scopes.map((scopeName) =>
       processScope(scopeName, config.scopes![scopeName], apiDelay),
@@ -386,7 +455,9 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
       } else {
         failCount++;
         const error =
-          result.status === "rejected" ? result.reason : (result.value && result.value.error);
+          result.status === "rejected"
+            ? result.reason
+            : result.value && result.value.error;
         logger.error(
           `Failed to process ${scopeName}: ${
             (error && error.message) || "Unknown error"
@@ -406,7 +477,13 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
     }
 
     logger.info("─".repeat(50));
-    logger.success("Scope initialization complete — " + successCount + "/" + scopes.length + " scopes processed");
+    logger.success(
+      "Scope initialization complete — " +
+        successCount +
+        "/" +
+        scopes.length +
+        " scopes processed",
+    );
     if (failCount > 0) {
       logger.warn(failCount + " scope(s) failed — check errors above");
     }
@@ -447,7 +524,9 @@ export async function watchAllScopesCommand(args: Sinc.WatchCmdArgs) {
 
     // Start watching all scopes with monitoring options
     await startMultiScopeWatching({
-      monitorIntervalMs: args.noMonitoring ? 0 : (args.monitorInterval || 120) * 1000,
+      monitorIntervalMs: args.noMonitoring
+        ? 0
+        : (args.monitorInterval || 120) * 1000,
     });
 
     // Keep the process running
@@ -480,7 +559,9 @@ function startDashboardProcess(portOverride?: number): ChildProcess | null {
     return null;
   }
 
-  var port = portOverride ? String(portOverride) : (process.env.DASHBOARD_PORT || "3456");
+  var port = portOverride
+    ? String(portOverride)
+    : process.env.DASHBOARD_PORT || "3456";
 
   var server = spawn("node", [serverPath], {
     cwd: process.cwd(),

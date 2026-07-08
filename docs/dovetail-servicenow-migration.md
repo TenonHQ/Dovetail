@@ -6,15 +6,15 @@ This document describes the changes needed **on the ServiceNow instance** (and i
 
 The Dovetail CLI talks to a Scripted REST API on every connected ServiceNow instance. Today that API is named **"Claude"** with base path `/api/cadso/claude/`. After this rebrand:
 
-| Field | Old value | New value |
-|---|---|---|
-| Scripted REST API record `name` | `Claude` | `Dovetail` |
-| Scripted REST API `service_id` (URL component) | `claude` | `dovetail` |
-| Full base path | `/api/cadso/claude/` | `/api/cadso/dovetail/` |
-| Web service definition `sys_id` | `b8a9db8d33d7a6107b18bc534d5c7b7b` | **unchanged** (we update the record in place) |
-| Operation `name` prefix | `Sinc - …` (where present) | `Dovetail - …` |
-| Operation `relative_path` | unchanged (e.g. `/createRecord`) | unchanged |
-| Operation `sys_id` values | unchanged | unchanged |
+| Field                                          | Old value                          | New value                                     |
+| ---------------------------------------------- | ---------------------------------- | --------------------------------------------- |
+| Scripted REST API record `name`                | `Claude`                           | `Dovetail`                                    |
+| Scripted REST API `service_id` (URL component) | `claude`                           | `dovetail`                                    |
+| Full base path                                 | `/api/cadso/claude/`               | `/api/cadso/dovetail/`                        |
+| Web service definition `sys_id`                | `b8a9db8d33d7a6107b18bc534d5c7b7b` | **unchanged** (we update the record in place) |
+| Operation `name` prefix                        | `Sinc - …` (where present)         | `Dovetail - …`                                |
+| Operation `relative_path`                      | unchanged (e.g. `/createRecord`)   | unchanged                                     |
+| Operation `sys_id` values                      | unchanged                          | unchanged                                     |
 
 The six operations under this API stay the same in shape, payload, and behavior: `changeScope`, `currentUpdateSet`, `changeUpdateSet`, `pushWithUpdateSet`, `createRecord` (a.k.a. `Sinc - Create Record`), `deleteRecord` (a.k.a. `Sinc - Delete Record`).
 
@@ -36,11 +36,11 @@ The six operations under this API stay the same in shape, payload, and behavior:
 5. **Search ServiceNow-side scripts** (script includes, business rules, etc.) for hardcoded references to the old API path:
    - In the Sincronia source repo: `servicenow/sys_script_include/SincUtils.js` and `servicenow/sys_script_include/SincUtilsMS.js` — confirm they don't call `/api/cadso/claude/...` directly. If they do, swap to `/api/cadso/dovetail/...`.
    - Same for any related script includes living only on the instance (not in a repo).
-6. **Optional, for safety during rollout:** before removing the old `claude` `service_id`, you can temporarily clone the API record under both `claude` and `dovetail` paths so existing CLI clients keep working during the upgrade window. Approach: leave the existing record as-is, create a *second* Scripted REST API named "Dovetail" with `service_id = dovetail` and identical operations, point new clients at it, then delete the old "Claude" record after all clients have migrated. This is more work but eliminates the brittle re-import-during-maintenance-window concern below.
+6. **Optional, for safety during rollout:** before removing the old `claude` `service_id`, you can temporarily clone the API record under both `claude` and `dovetail` paths so existing CLI clients keep working during the upgrade window. Approach: leave the existing record as-is, create a _second_ Scripted REST API named "Dovetail" with `service_id = dovetail` and identical operations, point new clients at it, then delete the old "Claude" record after all clients have migrated. This is more work but eliminates the brittle re-import-during-maintenance-window concern below.
 
 ## Coordination caveat
 
-Because the web service definition's `sys_id` does not change, importing the renamed XML over an existing instance updates the record in place — the old `claude` path stops working as soon as the import completes. The Dovetail CLI ships a client-side fallback that retries `/api/cadso/dovetail/<op>` requests against `/api/cadso/claude/<op>` on 404, so customers who have updated their npm packages but have *not yet* re-imported the API XML will keep working with a deprecation warning. After they re-import, the fallback path stops responding (the old path is gone) and only the new path works.
+Because the web service definition's `sys_id` does not change, importing the renamed XML over an existing instance updates the record in place — the old `claude` path stops working as soon as the import completes. The Dovetail CLI ships a client-side fallback that retries `/api/cadso/dovetail/<op>` requests against `/api/cadso/claude/<op>` on 404, so customers who have updated their npm packages but have _not yet_ re-imported the API XML will keep working with a deprecation warning. After they re-import, the fallback path stops responding (the old path is gone) and only the new path works.
 
 **Document this for customers:** "Update the Dovetail npm packages and re-import the new ServiceNow API XML in the same maintenance window." The fallback cushions the seam, it doesn't eliminate it.
 

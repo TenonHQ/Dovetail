@@ -4,10 +4,7 @@ import * as AppUtils from "./appUtils";
 import { runInit } from "./initSystem/orchestrator";
 import { logger } from "./Logger";
 import { fileLogger } from "./FileLogger";
-import {
-  logPushResults,
-  logBuildResults,
-} from "./logMessages";
+import { logPushResults, logBuildResults } from "./logMessages";
 import { defaultClient, unwrapSNResponse } from "./snClient";
 import inquirer from "inquirer";
 import { gitDiffToEncodedPaths } from "./gitUtils";
@@ -21,13 +18,23 @@ export function setLogLevel(args: Sinc.SharedCmdArgs) {
 }
 
 export async function refreshCommand(
-  args: Sinc.SharedCmdArgs & { force?: boolean; scope?: string; benchmark?: boolean },
+  args: Sinc.SharedCmdArgs & {
+    force?: boolean;
+    scope?: string;
+    benchmark?: boolean;
+  },
   log: boolean = true,
 ) {
   setLogLevel(args);
   try {
     if (!log) setLogLevel({ logLevel: "warn" });
-    fileLogger.debug("Syncing manifest from instance (force=" + !!args.force + ", benchmark=" + !!args.benchmark + ")");
+    fileLogger.debug(
+      "Syncing manifest from instance (force=" +
+        !!args.force +
+        ", benchmark=" +
+        !!args.benchmark +
+        ")",
+    );
     await AppUtils.syncManifest(args.scope, {
       force: !!args.force,
       benchmark: !!args.benchmark,
@@ -116,7 +123,10 @@ export async function pushCommand(args: Sinc.PushCmdArgs): Promise<void> {
         }
       }
 
-      const newUpdateSet = await AppUtils.createAndAssignUpdateSet(resolvedUpdateSet, pushScope);
+      const newUpdateSet = await AppUtils.createAndAssignUpdateSet(
+        resolvedUpdateSet,
+        pushScope,
+      );
       logger.debug(
         `New Update Set Created(${newUpdateSet.name}) sys_id:${newUpdateSet.id}`,
       );
@@ -144,7 +154,13 @@ export async function downloadCommand(args: Sinc.CmdDownloadArgs) {
       return;
     }
     const instance = process.env.SN_INSTANCE || "unknown";
-    logger.info("Downloading from " + instance + " (scope: " + (args.scope || "default") + ")...");
+    logger.info(
+      "Downloading from " +
+        instance +
+        " (scope: " +
+        (args.scope || "default") +
+        ")...",
+    );
 
     const client = defaultClient();
     const config = ConfigManager.getConfig();
@@ -171,18 +187,28 @@ export async function downloadCommand(args: Sinc.CmdDownloadArgs) {
       }
       var filteredOut = allTableNames.length - Object.keys(filtered).length;
       if (filteredOut > 0) {
-        logger.info("Filtered " + filteredOut + " tables not in _tables whitelist");
+        logger.info(
+          "Filtered " + filteredOut + " tables not in _tables whitelist",
+        );
       }
       man.tables = filtered;
     }
 
     const tableCount = Object.keys(man.tables).length;
     var recordCount = 0;
-    Object.keys(man.tables).forEach(function(tableName) {
+    Object.keys(man.tables).forEach(function (tableName) {
       recordCount += Object.keys(man.tables[tableName].records).length;
     });
-    logger.info("Received " + tableCount + " tables, " + recordCount + " records");
-    fileLogger.debug("Download manifest: " + tableCount + " tables, " + recordCount + " records");
+    logger.info(
+      "Received " + tableCount + " tables, " + recordCount + " records",
+    );
+    fileLogger.debug(
+      "Download manifest: " +
+        tableCount +
+        " tables, " +
+        recordCount +
+        " records",
+    );
 
     await AppUtils.processManifest(man, true);
     logger.success("Download complete — " + recordCount + " records written");
@@ -322,10 +348,17 @@ export async function statusCommand() {
     var updateSetConfigPath = getUpdateSetsConfigPath();
     try {
       if (fs.existsSync(updateSetConfigPath)) {
-        updateSetConfig = JSON.parse(fs.readFileSync(updateSetConfigPath, "utf8"));
+        updateSetConfig = JSON.parse(
+          fs.readFileSync(updateSetConfigPath, "utf8"),
+        );
       }
     } catch (e) {
-      logger.warn("Failed to parse update-sets config at " + updateSetConfigPath + ": " + (e instanceof Error ? e.message : String(e)));
+      logger.warn(
+        "Failed to parse update-sets config at " +
+          updateSetConfigPath +
+          ": " +
+          (e instanceof Error ? e.message : String(e)),
+      );
     }
 
     if (config.scopes) {
@@ -334,9 +367,10 @@ export async function statusCommand() {
       for (var i = 0; i < scopeNames.length; i++) {
         var scopeName = scopeNames[i];
         var scopeConf = config.scopes[scopeName];
-        var srcDir = (typeof scopeConf === "object" && scopeConf.sourceDirectory)
-          ? scopeConf.sourceDirectory
-          : "src/" + scopeName;
+        var srcDir =
+          typeof scopeConf === "object" && scopeConf.sourceDirectory
+            ? scopeConf.sourceDirectory
+            : "src/" + scopeName;
         var marker = scopeName === scopeObj.scope ? " (active)" : "";
         var updateSetInfo = updateSetConfig[scopeName]
           ? " [update set: " + updateSetConfig[scopeName].name + "]"

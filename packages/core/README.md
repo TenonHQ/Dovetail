@@ -41,14 +41,14 @@ Dovetail's build pipeline is plugin-driven. Each plugin is an npm package implem
 
 ## Related packages
 
-| Package | Purpose |
-|---|---|
-| `@tenonhq/dovetail-types` | Shared `Sinc.*` + `SN.*` type namespaces |
-| `@tenonhq/dovetail-schema` | ServiceNow table schema fetcher |
-| `@tenonhq/dovetail-dashboard` | Update-set dashboard web UI |
-| `@tenonhq/dovetail-servicenow` | Platform helpers + `dove-sn` build-flow CLI |
-| `@tenonhq/dovetail-sawmill` | Cross-instance update-set retrieve/preview/commit |
-| `@tenonhq/dovetail-mcp` | Read-only MCP server (ClickUp, Gmail, Calendar, ServiceNow) |
+| Package                        | Purpose                                                     |
+| ------------------------------ | ----------------------------------------------------------- |
+| `@tenonhq/dovetail-types`      | Shared `Sinc.*` + `SN.*` type namespaces                    |
+| `@tenonhq/dovetail-schema`     | ServiceNow table schema fetcher                             |
+| `@tenonhq/dovetail-dashboard`  | Update-set dashboard web UI                                 |
+| `@tenonhq/dovetail-servicenow` | Platform helpers + `dove-sn` build-flow CLI                 |
+| `@tenonhq/dovetail-sawmill`    | Cross-instance update-set retrieve/preview/commit           |
+| `@tenonhq/dovetail-mcp`        | Read-only MCP server (ClickUp, Gmail, Calendar, ServiceNow) |
 
 ## Full spec
 

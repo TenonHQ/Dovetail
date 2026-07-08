@@ -3,7 +3,9 @@ import { setLogLevel } from "./commands";
 import { logger } from "./Logger";
 import { spawn } from "child_process";
 
-export async function dashboardCommand(args: Sinc.SharedCmdArgs & { port?: number }): Promise<void> {
+export async function dashboardCommand(
+  args: Sinc.SharedCmdArgs & { port?: number },
+): Promise<void> {
   setLogLevel(args);
 
   let serverPath: string;
@@ -15,7 +17,9 @@ export async function dashboardCommand(args: Sinc.SharedCmdArgs & { port?: numbe
     );
   }
 
-  var port = args.port ? String(args.port) : (process.env.DASHBOARD_PORT || "3456");
+  var port = args.port
+    ? String(args.port)
+    : process.env.DASHBOARD_PORT || "3456";
 
   logger.info("Starting Update Set Dashboard...");
 

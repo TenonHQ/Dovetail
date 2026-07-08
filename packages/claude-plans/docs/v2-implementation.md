@@ -7,7 +7,7 @@ schema_version: 2
 
 # claude-plans v2 — As-Built Implementation Reference
 
-> **Scope.** This document describes the v2 bidirectional pipeline **as it was actually merged** (PRs #100–#104), grounded entirely in the source under `packages/claude-plans/src/` and `packages/dashboard/`. Its companion, [`v2-design.md`](./v2-design.md), is the *pre-implementation* design. Where the build diverged from the design, this doc flags it honestly — see [§9 Deviations](#9-deviations-from-the-design-doc).
+> **Scope.** This document describes the v2 bidirectional pipeline **as it was actually merged** (PRs #100–#104), grounded entirely in the source under `packages/claude-plans/src/` and `packages/dashboard/`. Its companion, [`v2-design.md`](./v2-design.md), is the _pre-implementation_ design. Where the build diverged from the design, this doc flags it honestly — see [§9 Deviations](#9-deviations-from-the-design-doc).
 >
 > Code conventions in this package: `var` everywhere (no `const`/`let` at runtime), no optional chaining, factory-injected side effects for testability.
 
@@ -32,22 +32,22 @@ schema_version: 2
 
 v1 was a **one-directional** publish surface: Claude Code pushed plans, artifacts, prompts, questions, and lint events into a JSON store under `~/.dovetail/claude-plans/`, and the dashboard rendered them read-only (plus answer/delete). v2 makes the pipeline **bidirectional** by adding three capabilities:
 
-| Capability | Surface | What it enables |
-|---|---|---|
-| **Stage state machine** | `set_stage` + `state-machine.ts` | A plan can be moved through 10 pipeline stages with a legal-transition table and a dashboard-wins conflict rule. |
-| **Single-read snapshot** | `pull_plan` + `loadPlanFull` | One call returns plan + artifacts + prompts + questions + stage state + dispatch log — for a resuming session or the dashboard detail page. |
-| **Stage dispatch** | `dispatch_stage` + `dispatch.ts` | The dashboard (or a session) can spawn a new Claude Code subprocess to drive a plan at a stage, gated by a dry-run default and a single-use token. |
+| Capability               | Surface                          | What it enables                                                                                                                                    |
+| ------------------------ | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Stage state machine**  | `set_stage` + `state-machine.ts` | A plan can be moved through 10 pipeline stages with a legal-transition table and a dashboard-wins conflict rule.                                   |
+| **Single-read snapshot** | `pull_plan` + `loadPlanFull`     | One call returns plan + artifacts + prompts + questions + stage state + dispatch log — for a resuming session or the dashboard detail page.        |
+| **Stage dispatch**       | `dispatch_stage` + `dispatch.ts` | The dashboard (or a session) can spawn a new Claude Code subprocess to drive a plan at a stage, gated by a dry-run default and a single-use token. |
 
 The MCP tool count goes from 14 to **17** (`src/registry.ts:49`, `TOOL_NAMES`): the existing 14 are preserved byte-for-byte, and `set_stage`, `pull_plan`, `dispatch_stage` are appended.
 
 ### 1.2 The five-phase delivery
 
-| Phase | PR | Delivered |
-|---|---|---|
-| **A** | #100 | Design doc (`docs/v2-design.md`) + v1-contract fixtures under `src/tests/fixtures/v1/`. |
-| **B** | #101 | `schema_version` field on `ClaudePlan`, `CURRENT_SCHEMA_VERSION=2`, `migrateV1OnLoad()`, schema stamped on every write. |
-| **C** | #102 | `state-machine.ts` (legal transitions + conflict rule), `setStage`/`set_stage`, `loadPlanFull`/`pull_plan`, token issuance. |
-| **D** | #103 | `dispatch.ts` (error taxonomy, command resolution, token validation, production spawn) + `dispatchStage`/`dispatch_stage`. |
+| Phase | PR   | Delivered                                                                                                                                                             |
+| ----- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** | #100 | Design doc (`docs/v2-design.md`) + v1-contract fixtures under `src/tests/fixtures/v1/`.                                                                               |
+| **B** | #101 | `schema_version` field on `ClaudePlan`, `CURRENT_SCHEMA_VERSION=2`, `migrateV1OnLoad()`, schema stamped on every write.                                               |
+| **C** | #102 | `state-machine.ts` (legal transitions + conflict rule), `setStage`/`set_stage`, `loadPlanFull`/`pull_plan`, token issuance.                                           |
+| **D** | #103 | `dispatch.ts` (error taxonomy, command resolution, token validation, production spawn) + `dispatchStage`/`dispatch_stage`.                                            |
 | **E** | #104 | Dashboard HTTP routes (`/stage`, `/dispatch`, `/answers`) + `sendTypedError`, and client surfaces (Stage Map, Questions tab, Dispatch dialog with `stageTokenCache`). |
 
 ### 1.3 Backward-compatibility guarantee
@@ -79,17 +79,17 @@ Supporting shapes (`src/types.ts:98`–`132`):
 interface StageTransition {
   from: PipelineStage | null;
   to: PipelineStage;
-  at: string;                         // ISO 8601
-  by: string;                         // session id or "unknown"
-  source: "code" | "dashboard";       // drives conflict resolution
+  at: string; // ISO 8601
+  by: string; // session id or "unknown"
+  source: "code" | "dashboard"; // drives conflict resolution
 }
 
 interface DispatchToken {
-  token: string;                      // tok_<24-hex>  (12 bytes of crypto.randomBytes)
+  token: string; // tok_<24-hex>  (12 bytes of crypto.randomBytes)
   issued_for_stage: PipelineStage;
   issued_at: string;
   expires_at: string;
-  consumed_at?: string;               // set when dispatch_stage consumes it
+  consumed_at?: string; // set when dispatch_stage consumes it
 }
 
 interface DispatchEvent {
@@ -120,7 +120,7 @@ It is **idempotent** (no-op on an already-v2 record) and does **not** write to d
 
 The disk upgrade is **lazy**: the next write that touches the record stamps `schema_version: CURRENT_SCHEMA_VERSION`. Every write surface does this — `pushPlan` (`src/storage.ts:212`), `updatePlanStatus` (`:246`), `pushQuestion` (`:739`), `recordAnswer` (`:764`), `setStage` (`:928`), and all three `dispatchStage` write paths (`:1038`, `:1077`, `:1095`).
 
-> **Preservation note.** `pushPlan` is a *content*-write surface, not a *stage*-write surface. It explicitly carries forward any existing `stage`, `stage_history`, `dispatch_token`, and `dispatch_log` from the prior record (`src/storage.ts:215`–`221`) so a content update never clobbers pipeline state. Only `setStage` may mutate stage fields.
+> **Preservation note.** `pushPlan` is a _content_-write surface, not a _stage_-write surface. It explicitly carries forward any existing `stage`, `stage_history`, `dispatch_token`, and `dispatch_log` from the prior record (`src/storage.ts:215`–`221`) so a content update never clobbers pipeline state. Only `setStage` may mutate stage fields.
 
 ### 2.3 Atomic writes
 
@@ -141,7 +141,7 @@ research · pre-stage-improve · planning · post-plan-improve · test-first
 code · per-step-review · architectural-review · test-reality · documentation
 ```
 
-These are the 10 *surface* stages the 13-agent pipeline from the brief collapses to. Two of them — `test-first` and `test-reality` — target net-new agents that ship in sibling PR #160; until then `dispatch_stage` raises `MissingAgentError` against them (see [§5.4](#54-the-missing-agent-gate)).
+These are the 10 _surface_ stages the 13-agent pipeline from the brief collapses to. Two of them — `test-first` and `test-reality` — target net-new agents that ship in sibling PR #160; until then `dispatch_stage` raises `MissingAgentError` against them (see [§5.4](#54-the-missing-agent-gate)).
 
 ### 3.2 The `LEGAL_TRANSITIONS` table
 
@@ -149,17 +149,17 @@ Reproduced verbatim from `src/state-machine.ts:21`. The synthetic `__START__` ke
 
 ```ts
 LEGAL_TRANSITIONS = {
-  __START__:               ["research", "planning"],
-  research:                ["pre-stage-improve", "planning", "research"],
-  "pre-stage-improve":     ["planning", "research"],
-  planning:                ["post-plan-improve", "test-first", "research", "planning"],
-  "post-plan-improve":     ["test-first", "planning"],
-  "test-first":            ["code", "planning"],
-  code:                    ["per-step-review", "test-first"],
-  "per-step-review":       ["code", "architectural-review"],
-  "architectural-review":  ["per-step-review", "test-reality", "documentation"],
-  "test-reality":          ["documentation", "code"],
-  documentation:           ["documentation"]
+  __START__: ["research", "planning"],
+  research: ["pre-stage-improve", "planning", "research"],
+  "pre-stage-improve": ["planning", "research"],
+  planning: ["post-plan-improve", "test-first", "research", "planning"],
+  "post-plan-improve": ["test-first", "planning"],
+  "test-first": ["code", "planning"],
+  code: ["per-step-review", "test-first"],
+  "per-step-review": ["code", "architectural-review"],
+  "architectural-review": ["per-step-review", "test-reality", "documentation"],
+  "test-reality": ["documentation", "code"],
+  documentation: ["documentation"],
 };
 ```
 
@@ -208,14 +208,14 @@ The conflict rule (`checkConflict`, `src/state-machine.ts:102`) arbitrates concu
 
 ```ts
 export function checkConflict(history, incomingSource, options = {}) {
-  if (incomingSource === "dashboard") return;          // dashboard always wins
+  if (incomingSource === "dashboard") return; // dashboard always wins
   if (history.length === 0) return;
   var last = history[history.length - 1];
-  if (last.source !== "dashboard") return;             // last move wasn't dashboard — accept
-  var graceMs = options.graceMs ?? conflictGraceMs();  // default 30_000
+  if (last.source !== "dashboard") return; // last move wasn't dashboard — accept
+  var graceMs = options.graceMs ?? conflictGraceMs(); // default 30_000
   var now = options.nowMs ?? Date.now();
   if (now - Date.parse(last.at) < graceMs) {
-    throw new ConflictRejectedError(last);             // code CONFLICT_REJECTED
+    throw new ConflictRejectedError(last); // code CONFLICT_REJECTED
   }
 }
 ```
@@ -327,7 +327,7 @@ This is the riskiest surface in v2: it can spawn a Claude Code subprocess. The i
 The flow is deliberately ordered so the cheapest, most-informative failure happens first:
 
 1. Load plan (`loadPlan` → throws `plan not found`).
-2. **Missing-agent gate** (`assertAgentAvailable`) — runs *before any I/O state change* so a not-yet-authored stage fails loudly and immediately.
+2. **Missing-agent gate** (`assertAgentAvailable`) — runs _before any I/O state change_ so a not-yet-authored stage fails loudly and immediately.
 3. Resolve command (`resolveDispatchCommand`).
 4. If `!confirm` → dry-run path, return.
 5. Live path → validate token; on failure, log + throw.
@@ -355,7 +355,7 @@ The rationale (comment at `:1089`): "we'd rather replay than risk a double-spawn
 ```ts
 KNOWN_MISSING_AGENTS = {
   "test-first": "test-author",
-  "test-reality": "test-reality-checker"
+  "test-reality": "test-reality-checker",
 };
 ```
 
@@ -366,7 +366,15 @@ KNOWN_MISSING_AGENTS = {
 `resolveDispatchCommand` (`src/dispatch.ts:110`) builds an **argv array**, never a shell string:
 
 ```ts
-argv = ["claude", "--resume-plan", plan.slug, "--target-stage", stage, "--session-source", "dispatch"];
+argv = [
+  "claude",
+  "--resume-plan",
+  plan.slug,
+  "--target-stage",
+  stage,
+  "--session-source",
+  "dispatch",
+];
 ```
 
 `productionSpawn` (`:140`) passes `argv[0]` + `argv.slice(1)` straight to `child_process.spawn` with `{ cwd, stdio: "inherit", detached: true }` and calls `child.unref()`. There is no shell interpolation, so plan slugs/stages can't inject shell. The `command` string in events/responses is `argv.join(" ")` — a display convenience only. The spawn primitive is injected (`SpawnFn`, `:133`) so tests stub it; production wires `productionSpawn`.
@@ -426,36 +434,36 @@ sequenceDiagram
 
 The dashboard's `sendTypedError` (`packages/dashboard/server.js:1128`) maps each storage/dispatch error class to an HTTP status by its `code`:
 
-| Error class | `code` | HTTP status | Origin |
-|---|---|---|---|
-| `MissingAgentError` | `MISSING_AGENT` | **424** Failed Dependency | `dispatch.ts:34` |
-| `NoTokenError` | `NO_TOKEN` | **400** Bad Request | `dispatch.ts:50` |
-| `StaleTokenError` | `STALE_TOKEN` | **410** Gone | `dispatch.ts:59` |
-| `SpawnError` | `SPAWN_ERROR` | **500** Internal | `dispatch.ts:70` |
-| `IllegalTransitionError` | `ILLEGAL_TRANSITION` | **409** Conflict (default for any `code`) | `state-machine.ts:35` |
-| `ConflictRejectedError` | `CONFLICT_REJECTED` | **409** Conflict (default) | `state-machine.ts:53` |
-| `ZodError` | — | **400** `validation_failed` (`details: issues`) | zod `.parse()` |
-| `Error("plan not found")` | — | **404** `plan_not_found` | regex match on message |
-| anything else | — | **500** `internal` | fallthrough |
+| Error class               | `code`               | HTTP status                                     | Origin                 |
+| ------------------------- | -------------------- | ----------------------------------------------- | ---------------------- |
+| `MissingAgentError`       | `MISSING_AGENT`      | **424** Failed Dependency                       | `dispatch.ts:34`       |
+| `NoTokenError`            | `NO_TOKEN`           | **400** Bad Request                             | `dispatch.ts:50`       |
+| `StaleTokenError`         | `STALE_TOKEN`        | **410** Gone                                    | `dispatch.ts:59`       |
+| `SpawnError`              | `SPAWN_ERROR`        | **500** Internal                                | `dispatch.ts:70`       |
+| `IllegalTransitionError`  | `ILLEGAL_TRANSITION` | **409** Conflict (default for any `code`)       | `state-machine.ts:35`  |
+| `ConflictRejectedError`   | `CONFLICT_REJECTED`  | **409** Conflict (default)                      | `state-machine.ts:53`  |
+| `ZodError`                | —                    | **400** `validation_failed` (`details: issues`) | zod `.parse()`         |
+| `Error("plan not found")` | —                    | **404** `plan_not_found`                        | regex match on message |
+| anything else             | —                    | **500** `internal`                              | fallthrough            |
 
 The mapping logic: `ZodError` → 400 first; then any error with a string `code` defaults to **409** and is overridden to 424/400/410/500 for the four dispatch codes; then a "plan not found" message → 404; else 500. The JSON body for a typed error is `{ error: code, name, message }`, which the client re-hydrates into an `Error` with `.code`/`.name`/`.status` (`public/claude-plans.js:758`).
 
-> `424` for `MISSING_AGENT` is the deliberate choice: the request is well-formed but a *dependency* (the agent) is absent. `410 Gone` for `STALE_TOKEN` signals the token *existed* but is no longer usable (expired/consumed/rotated), distinct from `400 NO_TOKEN` where no usable token was supplied at all.
+> `424` for `MISSING_AGENT` is the deliberate choice: the request is well-formed but a _dependency_ (the agent) is absent. `410 Gone` for `STALE_TOKEN` signals the token _existed_ but is no longer usable (expired/consumed/rotated), distinct from `400 NO_TOKEN` where no usable token was supplied at all.
 
 ---
 
 ## 7. Dashboard surfaces (Phase E)
 
-Three operator surfaces in `packages/dashboard/public/claude-plans.js`, all driven by the v2 HTTP routes. The client enforces *nothing* security-relevant — every rule (state machine, conflict resolution, token lifecycle) is enforced server-side in the storage layer (comment at `public/claude-plans.js:720`).
+Three operator surfaces in `packages/dashboard/public/claude-plans.js`, all driven by the v2 HTTP routes. The client enforces _nothing_ security-relevant — every rule (state machine, conflict resolution, token lifecycle) is enforced server-side in the storage layer (comment at `public/claude-plans.js:720`).
 
 ### 7.1 Routes
 
-| Route | Method | Maps to | Notes |
-|---|---|---|---|
-| `/api/claude-plans/:slug` | GET | `safeReadJson` + `listClaudeArtifacts` + `listClaudePrompts` | Reads the file **directly**, not `loadPlanFull` — see [§9](#9-deviations-from-the-design-doc). |
-| `/api/claude-plans/:slug/answers` | POST | `claudePlansLib.recordAnswer` | `answered_by` defaults to `"dashboard"`. |
-| `/api/claude-plans/:slug/stage` | POST | `claudePlansLib.setStage` | Forces `source: "dashboard"`, `by` defaults to `"dashboard"`. |
-| `/api/claude-plans/:slug/dispatch` | POST | `claudePlansLib.dispatchStage` | `confirm === true` only when explicitly true; `by` defaults to `"dashboard"`. |
+| Route                              | Method | Maps to                                                      | Notes                                                                                          |
+| ---------------------------------- | ------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `/api/claude-plans/:slug`          | GET    | `safeReadJson` + `listClaudeArtifacts` + `listClaudePrompts` | Reads the file **directly**, not `loadPlanFull` — see [§9](#9-deviations-from-the-design-doc). |
+| `/api/claude-plans/:slug/answers`  | POST   | `claudePlansLib.recordAnswer`                                | `answered_by` defaults to `"dashboard"`.                                                       |
+| `/api/claude-plans/:slug/stage`    | POST   | `claudePlansLib.setStage`                                    | Forces `source: "dashboard"`, `by` defaults to `"dashboard"`.                                  |
+| `/api/claude-plans/:slug/dispatch` | POST   | `claudePlansLib.dispatchStage`                               | `confirm === true` only when explicitly true; `by` defaults to `"dashboard"`.                  |
 
 The three write routes share the `claudePlansLimiter` rate limiter and `express.json()` body parsing, and funnel errors through `sendTypedError`. They `require("@tenonhq/dovetail-claude-plans/dist/storage")` directly (`server.js:1126`) so the state machine and token lifecycle are enforced in exactly one place.
 
@@ -481,7 +489,7 @@ A per-plan, in-memory `{ slug → token }` map (`:747`):
 1. **Issued** — `set_stage` returns a token → cached under the plan slug.
 2. **Consumed** — live dispatch reads it from the cache and sends it.
 3. **Cleared (success)** — deleted after a successful live dispatch (`:865`).
-4. **Cleared (plan switch)** — on switching plans, all entries for *other* slugs are pruned (`:996`), so a token never bleeds across plans.
+4. **Cleared (plan switch)** — on switching plans, all entries for _other_ slugs are pruned (`:996`), so a token never bleeds across plans.
 
 ---
 
@@ -511,11 +519,11 @@ Honest accounting of where the as-built differs from [`v2-design.md`](./v2-desig
 
 1. **`pull_plan` is not the dashboard's single read.** The design (`v2-design.md` §2.2 intro, line 16) frames `pull_plan` / `loadPlanFull` as the dashboard's one-call read. **As built, the dashboard's `GET /api/claude-plans/:slug` reads the plan file directly** via `safeReadJson` plus its own `listClaudeArtifacts`/`listClaudePrompts` (`server.js:1109`–`1115`) and does **not** call `loadPlanFull`. Consequently the GET response is `{ plan, artifacts, prompts }` — it does **not** include the separate `questions`/`stage`/`stage_history`/`dispatch_log` top-level keys that `pull_plan` returns (those fields live inside `plan` for the dashboard, since it reads the raw record). `loadPlanFull` is still exposed as the MCP `pull_plan` tool for resuming sessions; the dashboard simply doesn't route through it.
 
-2. **Conflict helper is `checkConflict`, not `resolveConflict`.** The design (§4, line 284) names a single helper `resolveConflict(currentOnDisk, incoming)` returning `"accept" | "reject"`. **As built it is `checkConflict(history, incomingSource, options)`** (`state-machine.ts:102`) — same rule, but it takes the transition *history* and the incoming *source* (not two full plan objects), and it signals rejection by **throwing `ConflictRejectedError`** rather than returning a string.
+2. **Conflict helper is `checkConflict`, not `resolveConflict`.** The design (§4, line 284) names a single helper `resolveConflict(currentOnDisk, incoming)` returning `"accept" | "reject"`. **As built it is `checkConflict(history, incomingSource, options)`** (`state-machine.ts:102`) — same rule, but it takes the transition _history_ and the incoming _source_ (not two full plan objects), and it signals rejection by **throwing `ConflictRejectedError`** rather than returning a string.
 
-3. **`pull_plan` does not re-run conflict resolution at read time.** The design (§4, line 284) lists `pull_plan` among the three consumers of the conflict helper ("read-time normalization"). **As built, `loadPlanFull` only runs `migrateV1OnLoad`** — it does no conflict re-check. Only `setStage` (write-time) invokes `checkConflict`. `dispatch_stage` likewise relies on the *token* (which a conflicting `set_stage` would have rotated) rather than re-running `checkConflict`, so the design's "dispatch_stage re-checks before consuming a token" is realized through token rotation, not an explicit conflict call.
+3. **`pull_plan` does not re-run conflict resolution at read time.** The design (§4, line 284) lists `pull_plan` among the three consumers of the conflict helper ("read-time normalization"). **As built, `loadPlanFull` only runs `migrateV1OnLoad`** — it does no conflict re-check. Only `setStage` (write-time) invokes `checkConflict`. `dispatch_stage` likewise relies on the _token_ (which a conflicting `set_stage` would have rotated) rather than re-running `checkConflict`, so the design's "dispatch_stage re-checks before consuming a token" is realized through token rotation, not an explicit conflict call.
 
-4. **`DispatchEvent.outcome` enum is richer than implied.** The shipped enum is `"ok" | "missing-agent" | "stale-token" | "no-token" | "spawn-error"` (`types.ts:129`). The dry-run/fail/success paths use `ok`, `no-token`, `stale-token`, `spawn-error`; `missing-agent` is defined on the type but the missing-agent path throws *before* writing an event (`assertAgentAvailable` precedes any write), so no `missing-agent` event is ever persisted by `dispatchStage` itself.
+4. **`DispatchEvent.outcome` enum is richer than implied.** The shipped enum is `"ok" | "missing-agent" | "stale-token" | "no-token" | "spawn-error"` (`types.ts:129`). The dry-run/fail/success paths use `ok`, `no-token`, `stale-token`, `spawn-error`; `missing-agent` is defined on the type but the missing-agent path throws _before_ writing an event (`assertAgentAvailable` precedes any write), so no `missing-agent` event is ever persisted by `dispatchStage` itself.
 
 These deviations are pragmatic, not regressions: the dashboard's direct read predates `loadPlanFull` and the v2 fields it needs are already inside the plan record, and the throw-based conflict signal composes cleanly with `sendTypedError`'s code-based mapping.
 
@@ -523,11 +531,11 @@ These deviations are pragmatic, not regressions: the dashboard's direct read pre
 
 ## 10. Appendix: environment knobs
 
-| Env var | Default | Effect | Source |
-|---|---|---|---|
-| `DOVE_CLAUDE_PLANS_DASHBOARD_GRACE_MS` | `30000` | Conflict grace window for the dashboard-wins rule. | `state-machine.ts:118` |
-| `DOVE_CLAUDE_PLANS_TOKEN_TTL_MS` | `300000` (5 min) | Dispatch-token TTL. | `storage.ts:874` |
-| `DOVE_CLAUDE_PLANS_DISPATCH_CWD` | `process.cwd()` | Working directory for the spawned subprocess. | `dispatch.ts:111` |
-| `CLAUDE_CODE_SESSION_ID` | `"unknown"` | Default `by` for stage transitions and dispatch events. | `storage.ts:918`, `:1013` |
+| Env var                                | Default          | Effect                                                  | Source                    |
+| -------------------------------------- | ---------------- | ------------------------------------------------------- | ------------------------- |
+| `DOVE_CLAUDE_PLANS_DASHBOARD_GRACE_MS` | `30000`          | Conflict grace window for the dashboard-wins rule.      | `state-machine.ts:118`    |
+| `DOVE_CLAUDE_PLANS_TOKEN_TTL_MS`       | `300000` (5 min) | Dispatch-token TTL.                                     | `storage.ts:874`          |
+| `DOVE_CLAUDE_PLANS_DISPATCH_CWD`       | `process.cwd()`  | Working directory for the spawned subprocess.           | `dispatch.ts:111`         |
+| `CLAUDE_CODE_SESSION_ID`               | `"unknown"`      | Default `by` for stage transitions and dispatch events. | `storage.ts:918`, `:1013` |
 
 > Reminder per package convention: these are read at call time (not cached at module load), so a test can set/unset them per case. All three numeric knobs are parsed defensively — a non-numeric or out-of-range value falls back to the default.

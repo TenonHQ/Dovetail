@@ -60,14 +60,20 @@ const CHILD_TABLES: ReadonlyArray<ChildPullSpec> = [
   { table: "sys_hub_step_instance", fkColumn: "model_id", prefix: "step" },
 ];
 
-async function fetchSourceParent(client: ServiceNowClient, sourceSysId: string): Promise<Record<string, any>> {
+async function fetchSourceParent(
+  client: ServiceNowClient,
+  sourceSysId: string,
+): Promise<Record<string, any>> {
   var rows = await client.buildAgent.runQuery<any>({
     table: "sys_hub_action_type_definition",
     query: "sys_id=" + sourceSysId,
     limit: 1,
   });
   if (!rows.length) {
-    throw new Error("cloneActionType: source sys_hub_action_type_definition not found: " + sourceSysId);
+    throw new Error(
+      "cloneActionType: source sys_hub_action_type_definition not found: " +
+        sourceSysId,
+    );
   }
   return rows[0];
 }
@@ -76,7 +82,8 @@ async function fetchChildren(
   client: ServiceNowClient,
   sourceSysId: string,
 ): Promise<Array<{ spec: ChildPullSpec; rows: Array<Record<string, any>> }>> {
-  var out: Array<{ spec: ChildPullSpec; rows: Array<Record<string, any>> }> = [];
+  var out: Array<{ spec: ChildPullSpec; rows: Array<Record<string, any>> }> =
+    [];
   for (var i = 0; i < CHILD_TABLES.length; i++) {
     var spec = CHILD_TABLES[i];
     var rows = await client.buildAgent.runQuery<any>({
@@ -89,7 +96,9 @@ async function fetchChildren(
   return out;
 }
 
-export async function cloneActionType(opts: CloneActionTypeParams): Promise<CloneActionTypeResult> {
+export async function cloneActionType(
+  opts: CloneActionTypeParams,
+): Promise<CloneActionTypeResult> {
   assertSysId(opts.sourceSysId, "sourceSysId");
   assertSysId(opts.newScope, "newScope");
   assertSysId(opts.updateSetSysId, "updateSetSysId");
@@ -126,9 +135,14 @@ export async function cloneActionType(opts: CloneActionTypeParams): Promise<Clon
     parentFields.internal_name = opts.newName;
   }
   if (opts.modifications) {
-    if (opts.modifications.description != null) parentFields.description = opts.modifications.description;
+    if (opts.modifications.description != null)
+      parentFields.description = opts.modifications.description;
     if (opts.modifications.fieldPatch) {
-      parentFields = Object.assign({}, parentFields, opts.modifications.fieldPatch);
+      parentFields = Object.assign(
+        {},
+        parentFields,
+        opts.modifications.fieldPatch,
+      );
     }
   }
 

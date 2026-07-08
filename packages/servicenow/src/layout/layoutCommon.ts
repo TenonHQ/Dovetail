@@ -17,7 +17,9 @@ import type { LayoutAction } from "../types";
  */
 export function encodeQueryValue(value: string): string {
   if (/[,^=]/.test(value)) {
-    throw new Error("Invalid character in query value: " + JSON.stringify(value));
+    throw new Error(
+      "Invalid character in query value: " + JSON.stringify(value),
+    );
   }
   return value;
 }
@@ -54,28 +56,33 @@ export interface UpdateSetRef {
  */
 export async function assertUpdateSet(
   client: ServiceNowClient,
-  updateSetSysId: string
+  updateSetSysId: string,
 ): Promise<UpdateSetRef> {
   if (!updateSetSysId) {
     throw new Error(
-      "updateSetSysId is required — every layout write must be captured in a named update set."
+      "updateSetSysId is required — every layout write must be captured in a named update set.",
     );
   }
   var rows = await client.table.query<any>(
     "sys_update_set",
     "sys_id=" + encodeQueryValue(updateSetSysId),
-    1
+    1,
   );
   if (rows.length === 0) {
     throw new Error(
-      "Update set " + updateSetSysId + " not found — verify the sys_id and your access."
+      "Update set " +
+        updateSetSysId +
+        " not found — verify the sys_id and your access.",
     );
   }
   var state = plain(rows[0].state);
   if (state && state !== "in progress" && state !== "in_progress") {
     throw new Error(
-      "Update set " + (plain(rows[0].name) || updateSetSysId) + " is in state '" + state +
-      "' — only 'in progress' update sets can capture new changes."
+      "Update set " +
+        (plain(rows[0].name) || updateSetSysId) +
+        " is in state '" +
+        state +
+        "' — only 'in progress' update sets can capture new changes.",
     );
   }
   return { sysId: updateSetSysId, name: plain(rows[0].name) || updateSetSysId };
@@ -89,7 +96,7 @@ export async function assertUpdateSet(
 export async function resolveScope(
   client: ServiceNowClient,
   table: string,
-  explicitScope?: string
+  explicitScope?: string,
 ): Promise<string> {
   if (explicitScope) {
     return explicitScope;
@@ -97,11 +104,13 @@ export async function resolveScope(
   var dbo = await client.table.query<any>(
     "sys_db_object",
     "name=" + encodeQueryValue(table),
-    1
+    1,
   );
   if (dbo.length === 0) {
     throw new Error(
-      "Table '" + table + "' not found in sys_db_object — verify the table name."
+      "Table '" +
+        table +
+        "' not found in sys_db_object — verify the table name.",
     );
   }
   var scopeSysId = plain(dbo[0].sys_scope);
@@ -111,7 +120,7 @@ export async function resolveScope(
   var scopeRows = await client.table.query<any>(
     "sys_scope",
     "sys_id=" + encodeQueryValue(scopeSysId),
-    1
+    1,
   );
   if (scopeRows.length === 0) {
     return "global";
@@ -147,7 +156,7 @@ export interface ResolveViewOptions {
  */
 export async function resolveView(
   client: ServiceNowClient,
-  options: ResolveViewOptions
+  options: ResolveViewOptions,
 ): Promise<ResolvedView> {
   var name = (options.viewName || "").trim();
   if (!name) {
@@ -156,7 +165,7 @@ export async function resolveView(
   var rows = await client.table.query<any>(
     "sys_ui_view",
     "name=" + encodeQueryValue(name),
-    1
+    1,
   );
   if (rows.length > 0) {
     return { sysId: plain(rows[0].sys_id), name: name, action: "unchanged" };
@@ -168,7 +177,7 @@ export async function resolveView(
     table: "sys_ui_view",
     fields: { name: name, title: options.title || name },
     scope: options.scope || "global",
-    update_set_sys_id: options.updateSetSysId
+    update_set_sys_id: options.updateSetSysId,
   });
   return { sysId: created.sys_id, name: name, action: "created" };
 }
@@ -177,7 +186,10 @@ export async function resolveView(
  * The view + view_name field pair to stamp on a sys_ui_form / sys_ui_section /
  * sys_ui_list / sys_ui_related_list record. Both are blank for the Default view.
  */
-export function viewFields(view: ResolvedView): { view: string; view_name: string } {
+export function viewFields(view: ResolvedView): {
+  view: string;
+  view_name: string;
+} {
   return { view: view.sysId, view_name: view.name };
 }
 
@@ -209,7 +221,7 @@ export interface ChildPlan {
 export function diffChildren(
   desiredKeys: Array<string>,
   existing: Array<ExistingChild>,
-  prune: boolean
+  prune: boolean,
 ): Array<ChildPlan> {
   var byKey: Record<string, ExistingChild> = {};
   var extras: Array<ExistingChild> = [];
@@ -233,7 +245,7 @@ export function diffChildren(
         action: match.position === i ? "unchanged" : "update",
         key: key,
         sysId: match.sysId,
-        position: i
+        position: i,
       });
     } else {
       plan.push({ action: "create", key: key, sysId: "", position: i });
@@ -245,10 +257,17 @@ export function diffChildren(
       leftover.push(byKey[k]);
     }
   });
-  leftover.sort(function (a, b) { return a.position - b.position; });
+  leftover.sort(function (a, b) {
+    return a.position - b.position;
+  });
   if (prune) {
     for (i = 0; i < leftover.length; i += 1) {
-      plan.push({ action: "delete", key: leftover[i].key, sysId: leftover[i].sysId, position: -1 });
+      plan.push({
+        action: "delete",
+        key: leftover[i].key,
+        sysId: leftover[i].sysId,
+        position: -1,
+      });
     }
   } else {
     var next = desiredKeys.length;
@@ -257,7 +276,7 @@ export function diffChildren(
         action: leftover[i].position === next ? "unchanged" : "update",
         key: leftover[i].key,
         sysId: leftover[i].sysId,
-        position: next
+        position: next,
       });
       next += 1;
     }

@@ -36,7 +36,7 @@ import {
   PromptDraft,
   ActiveDraftPointer,
   StageTransition,
-  StageTransitionSource
+  StageTransitionSource,
 } from "./types";
 import { assertTransition, checkConflict } from "./state-machine";
 import {
@@ -47,7 +47,7 @@ import {
   validateToken,
   makeEvent,
   NoTokenError,
-  StaleTokenError
+  StaleTokenError,
 } from "./dispatch";
 import { StructuredPlan, renderStructured } from "./renderer";
 import { promptCyclePayloadSchema } from "./schemas";
@@ -65,11 +65,13 @@ export function storageRoot(options: StorageOptions = {}): string {
 }
 
 export function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64) || "untitled";
+  return (
+    input
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "untitled"
+  );
 }
 
 function ensureDir(dir: string): void {
@@ -86,7 +88,12 @@ function sha256(input: string): string {
 
 function atomicWriteJson(filePath: string, value: unknown): void {
   ensureDir(path.dirname(filePath));
-  var tmp = filePath + ".tmp." + process.pid + "." + crypto.randomBytes(4).toString("hex");
+  var tmp =
+    filePath +
+    ".tmp." +
+    process.pid +
+    "." +
+    crypto.randomBytes(4).toString("hex");
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2));
   fs.renameSync(tmp, filePath);
 }
@@ -167,15 +174,25 @@ function versionNumbers(root: string, planSlug: string): number[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
-    .filter(function (n) { return /^\d+\.json$/.test(n); })
-    .map(function (n) { return parseInt(n, 10); })
-    .sort(function (a, b) { return a - b; });
+    .filter(function (n) {
+      return /^\d+\.json$/.test(n);
+    })
+    .map(function (n) {
+      return parseInt(n, 10);
+    })
+    .sort(function (a, b) {
+      return a - b;
+    });
 }
 
 // Snapshot `plan` as the next version under its slug, then prune the oldest
 // snapshots beyond MAX_PLAN_VERSIONS. Called by pushPlan before it overwrites
 // an existing record whose content changed.
-function snapshotVersion(root: string, plan: ClaudePlan, savedAt: string): void {
+function snapshotVersion(
+  root: string,
+  plan: ClaudePlan,
+  savedAt: string,
+): void {
   var nums = versionNumbers(root, plan.slug);
   var next = (nums.length ? nums[nums.length - 1] : 0) + 1;
   var snapshot: PlanVersion = { version: next, saved_at: savedAt, plan: plan };
@@ -184,7 +201,11 @@ function snapshotVersion(root: string, plan: ClaudePlan, savedAt: string): void 
   var all = versionNumbers(root, plan.slug);
   var excess = all.length - MAX_PLAN_VERSIONS;
   for (var i = 0; i < excess; i++) {
-    try { fs.unlinkSync(versionPath(root, plan.slug, all[i])); } catch (_e) { /* best effort */ }
+    try {
+      fs.unlinkSync(versionPath(root, plan.slug, all[i]));
+    } catch (_e) {
+      /* best effort */
+    }
   }
 }
 
@@ -219,7 +240,10 @@ export interface PushPlanInput {
   categories?: string[];
 }
 
-export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): ClaudePlan {
+export function pushPlan(
+  input: PushPlanInput,
+  options: StorageOptions = {},
+): ClaudePlan {
   var root = storageRoot(options);
   var slug = slugify(input.slug || input.title);
   var existing = readPlan(planPath(root, slug));
@@ -245,7 +269,7 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     resolvedCategories = extractCategories({
       title: input.title,
       content_md: contentMd,
-      content_html: resolvedHtml
+      content_html: resolvedHtml,
     });
   }
 
@@ -258,22 +282,45 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
     content_hash: sha256(hashSource),
     created_at: existing ? existing.created_at : now,
     updated_at: now,
-    session_id: input.session_id === undefined ? (existing ? existing.session_id : null) : input.session_id,
-    pr_number: input.pr_number !== undefined ? input.pr_number : (existing ? existing.pr_number : undefined),
-    pr_url: input.pr_url !== undefined ? input.pr_url : (existing ? existing.pr_url : undefined),
-    pr_title: input.pr_title !== undefined ? input.pr_title : (existing ? existing.pr_title : undefined),
+    session_id:
+      input.session_id === undefined
+        ? existing
+          ? existing.session_id
+          : null
+        : input.session_id,
+    pr_number:
+      input.pr_number !== undefined
+        ? input.pr_number
+        : existing
+        ? existing.pr_number
+        : undefined,
+    pr_url:
+      input.pr_url !== undefined
+        ? input.pr_url
+        : existing
+        ? existing.pr_url
+        : undefined,
+    pr_title:
+      input.pr_title !== undefined
+        ? input.pr_title
+        : existing
+        ? existing.pr_title
+        : undefined,
     linked_artifacts: resolvedLinks,
     categories: resolvedCategories,
-    schema_version: CURRENT_SCHEMA_VERSION
+    schema_version: CURRENT_SCHEMA_VERSION,
   };
   if (existing && existing.questions) plan.questions = existing.questions;
   // Preserve v2 stage state across plan-content updates — pushPlan is a
   // content-write surface, not a stage-write surface; only setStage may
   // mutate stage / stage_history / dispatch_token.
   if (existing && existing.stage !== undefined) plan.stage = existing.stage;
-  if (existing && existing.stage_history) plan.stage_history = existing.stage_history;
-  if (existing && existing.dispatch_token !== undefined) plan.dispatch_token = existing.dispatch_token;
-  if (existing && existing.dispatch_log) plan.dispatch_log = existing.dispatch_log;
+  if (existing && existing.stage_history)
+    plan.stage_history = existing.stage_history;
+  if (existing && existing.dispatch_token !== undefined)
+    plan.dispatch_token = existing.dispatch_token;
+  if (existing && existing.dispatch_log)
+    plan.dispatch_log = existing.dispatch_log;
 
   // Version history: snapshot the prior record whenever content actually
   // changed, so an inferior overwrite can be recovered from the dashboard.
@@ -285,14 +332,26 @@ export function pushPlan(input: PushPlanInput, options: StorageOptions = {}): Cl
   atomicWriteJson(planPath(root, slug), plan);
 
   var focusPath = path.join(root, ".focus");
-  var focusTmp = focusPath + ".tmp." + process.pid + "." + crypto.randomBytes(4).toString("hex");
-  fs.writeFileSync(focusTmp, JSON.stringify({ slug: plan.slug, ts: plan.updated_at }));
+  var focusTmp =
+    focusPath +
+    ".tmp." +
+    process.pid +
+    "." +
+    crypto.randomBytes(4).toString("hex");
+  fs.writeFileSync(
+    focusTmp,
+    JSON.stringify({ slug: plan.slug, ts: plan.updated_at }),
+  );
   fs.renameSync(focusTmp, focusPath);
 
   return plan;
 }
 
-export function updatePlanStatus(slug: string, to: PlanStatus, options: StorageOptions = {}): ClaudePlan {
+export function updatePlanStatus(
+  slug: string,
+  to: PlanStatus,
+  options: StorageOptions = {},
+): ClaudePlan {
   var root = storageRoot(options);
   var existing = readPlan(planPath(root, slug));
   if (!existing) throw new Error("plan not found: " + slug);
@@ -305,20 +364,23 @@ export function updatePlanStatus(slug: string, to: PlanStatus, options: StorageO
   var next: ClaudePlan = Object.assign({}, existing, {
     status: to,
     updated_at: nowIso(),
-    schema_version: CURRENT_SCHEMA_VERSION
+    schema_version: CURRENT_SCHEMA_VERSION,
   });
   atomicWriteJson(planPath(root, slug), next);
   return next;
 }
 
-export function getPlan(slug: string, options: StorageOptions = {}): PlanWithArtifacts | null {
+export function getPlan(
+  slug: string,
+  options: StorageOptions = {},
+): PlanWithArtifacts | null {
   var root = storageRoot(options);
   var plan = readPlan(planPath(root, slug));
   if (!plan) return null;
   return {
     plan: plan,
     artifacts: listArtifacts(slug, options),
-    prompts: listPrompts(slug, options)
+    prompts: listPrompts(slug, options),
   };
 }
 
@@ -347,7 +409,10 @@ export function listPlans(options: ListOptions = {}): ClaudePlan[] {
   return plans;
 }
 
-export function listArtifacts(planSlug: string, options: StorageOptions = {}): ClaudeArtifact[] {
+export function listArtifacts(
+  planSlug: string,
+  options: StorageOptions = {},
+): ClaudeArtifact[] {
   var root = storageRoot(options);
   var dir = artifactDir(root, planSlug);
   if (!fs.existsSync(dir)) return [];
@@ -364,7 +429,10 @@ export function listArtifacts(planSlug: string, options: StorageOptions = {}): C
   return artifacts;
 }
 
-export function listPrompts(planSlug: string, options: StorageOptions = {}): ClaudePrompt[] {
+export function listPrompts(
+  planSlug: string,
+  options: StorageOptions = {},
+): ClaudePrompt[] {
   var root = storageRoot(options);
   var dir = promptDir(root, planSlug);
   if (!fs.existsSync(dir)) return [];
@@ -382,7 +450,10 @@ export function listPrompts(planSlug: string, options: StorageOptions = {}): Cla
 }
 
 // List a plan's saved versions, newest-first, as lightweight metadata rows.
-export function listVersions(planSlug: string, options: StorageOptions = {}): PlanVersionMeta[] {
+export function listVersions(
+  planSlug: string,
+  options: StorageOptions = {},
+): PlanVersionMeta[] {
   var root = storageRoot(options);
   var nums = versionNumbers(root, planSlug);
   var metas: PlanVersionMeta[] = [];
@@ -393,10 +464,12 @@ export function listVersions(planSlug: string, options: StorageOptions = {}): Pl
       version: v.version,
       saved_at: v.saved_at,
       title: v.plan.title,
-      status: v.plan.status
+      status: v.plan.status,
     });
   }
-  metas.sort(function (a, b) { return b.version - a.version; });
+  metas.sort(function (a, b) {
+    return b.version - a.version;
+  });
   return metas;
 }
 
@@ -404,7 +477,7 @@ export function listVersions(planSlug: string, options: StorageOptions = {}): Pl
 export function getVersion(
   planSlug: string,
   version: number,
-  options: StorageOptions = {}
+  options: StorageOptions = {},
 ): PlanVersion | null {
   var root = storageRoot(options);
   return readJson<PlanVersion>(versionPath(root, planSlug, version));
@@ -416,10 +489,11 @@ export function getVersion(
 export function restoreVersion(
   planSlug: string,
   version: number,
-  options: StorageOptions = {}
+  options: StorageOptions = {},
 ): ClaudePlan {
   var snapshot = getVersion(planSlug, version, options);
-  if (!snapshot) throw new Error("version not found: " + planSlug + " v" + version);
+  if (!snapshot)
+    throw new Error("version not found: " + planSlug + " v" + version);
   var p = snapshot.plan;
   return pushPlan(
     {
@@ -433,9 +507,9 @@ export function restoreVersion(
       pr_url: p.pr_url,
       pr_title: p.pr_title,
       linked_artifacts: p.linked_artifacts,
-      categories: p.categories
+      categories: p.categories,
     },
-    options
+    options,
   );
 }
 
@@ -447,7 +521,10 @@ export interface PushArtifactInput {
   content: string;
 }
 
-export function pushArtifact(input: PushArtifactInput, options: StorageOptions = {}): ClaudeArtifact {
+export function pushArtifact(
+  input: PushArtifactInput,
+  options: StorageOptions = {},
+): ClaudeArtifact {
   var root = storageRoot(options);
   var planExists = fs.existsSync(planPath(root, input.plan_slug));
   if (!planExists) throw new Error("plan not found: " + input.plan_slug);
@@ -455,7 +532,9 @@ export function pushArtifact(input: PushArtifactInput, options: StorageOptions =
   if (input.kind === "prompt-cycle") validatePromptCycleContent(input.content);
 
   var slug = slugify(input.slug || input.title);
-  var existing = readJson<ClaudeArtifact>(artifactPath(root, input.plan_slug, slug));
+  var existing = readJson<ClaudeArtifact>(
+    artifactPath(root, input.plan_slug, slug),
+  );
   var now = nowIso();
   var artifact: ClaudeArtifact = {
     slug: slug,
@@ -464,7 +543,7 @@ export function pushArtifact(input: PushArtifactInput, options: StorageOptions =
     title: input.title,
     content: input.content,
     created_at: existing ? existing.created_at : now,
-    updated_at: now
+    updated_at: now,
   };
   atomicWriteJson(artifactPath(root, input.plan_slug, slug), artifact);
   return artifact;
@@ -480,13 +559,18 @@ export interface PushPromptInput {
   score_after?: number;
 }
 
-export function pushPrompt(input: PushPromptInput, options: StorageOptions = {}): ClaudePrompt {
+export function pushPrompt(
+  input: PushPromptInput,
+  options: StorageOptions = {},
+): ClaudePrompt {
   var root = storageRoot(options);
   var planExists = fs.existsSync(planPath(root, input.plan_slug));
   if (!planExists) throw new Error("plan not found: " + input.plan_slug);
 
   var slug = slugify(input.slug || input.title);
-  var existing = readJson<ClaudePrompt>(promptPath(root, input.plan_slug, slug));
+  var existing = readJson<ClaudePrompt>(
+    promptPath(root, input.plan_slug, slug),
+  );
   var now = nowIso();
   var prompt: ClaudePrompt = {
     slug: slug,
@@ -497,7 +581,7 @@ export function pushPrompt(input: PushPromptInput, options: StorageOptions = {})
     score_before: input.score_before,
     score_after: input.score_after,
     created_at: existing ? existing.created_at : now,
-    updated_at: now
+    updated_at: now,
   };
   atomicWriteJson(promptPath(root, input.plan_slug, slug), prompt);
   return prompt;
@@ -513,7 +597,9 @@ export function parsePromptCycleContent(content: string): PromptCyclePayload {
   }
   var parsed = promptCyclePayloadSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error("prompt-cycle payload failed validation: " + parsed.error.message);
+    throw new Error(
+      "prompt-cycle payload failed validation: " + parsed.error.message,
+    );
   }
   return parsed.data as PromptCyclePayload;
 }
@@ -522,7 +608,10 @@ function validatePromptCycleContent(content: string): void {
   parsePromptCycleContent(content);
 }
 
-export function deletePlan(slug: string, options: StorageOptions = {}): boolean {
+export function deletePlan(
+  slug: string,
+  options: StorageOptions = {},
+): boolean {
   var root = storageRoot(options);
   var file = planPath(root, slug);
   if (!fs.existsSync(file)) return false;
@@ -543,7 +632,10 @@ export interface HandoffBundleResult {
   ready_to_paste_prompt: string | null;
 }
 
-export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}): HandoffBundleResult {
+export function buildHandoffBundle(
+  slug: string,
+  opts: HandoffBundleOptions = {},
+): HandoffBundleResult {
   var record = getPlan(slug, { rootDir: opts.rootDir });
   if (!record) throw new Error("plan not found: " + slug);
 
@@ -566,9 +658,11 @@ export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}
 
   parts.push("## Plan content");
   parts.push("");
-  parts.push(record.plan.content_md && record.plan.content_md.length > 0
-    ? record.plan.content_md
-    : "_(no markdown content — see dashboard for structured layout)_");
+  parts.push(
+    record.plan.content_md && record.plan.content_md.length > 0
+      ? record.plan.content_md
+      : "_(no markdown content — see dashboard for structured layout)_",
+  );
   parts.push("");
 
   var links = record.plan.linked_artifacts || [];
@@ -578,7 +672,8 @@ export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}
     for (var li = 0; li < links.length; li++) {
       var link = links[li];
       var line = "- **" + link.relation + " →** `" + link.plan_slug + "`";
-      if (link.artifact_slug) line += " (artifact: `" + link.artifact_slug + "`)";
+      if (link.artifact_slug)
+        line += " (artifact: `" + link.artifact_slug + "`)";
       if (link.note) line += " — " + link.note;
       parts.push(line);
     }
@@ -617,9 +712,20 @@ export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}
       }
       parts.push("---");
       parts.push("");
-      parts.push("## Linked plan: " + linked.plan.title + " (`" + linked.plan.slug + "`)");
+      parts.push(
+        "## Linked plan: " +
+          linked.plan.title +
+          " (`" +
+          linked.plan.slug +
+          "`)",
+      );
       parts.push("");
-      parts.push("> Relation: **" + followable[fi].relation + "**" + (followable[fi].note ? " — " + followable[fi].note : ""));
+      parts.push(
+        "> Relation: **" +
+          followable[fi].relation +
+          "**" +
+          (followable[fi].note ? " — " + followable[fi].note : ""),
+      );
       parts.push("");
       if (linked.plan.content_md && linked.plan.content_md.length > 0) {
         parts.push(linked.plan.content_md);
@@ -661,7 +767,7 @@ export function buildHandoffBundle(slug: string, opts: HandoffBundleOptions = {}
   return {
     slug: record.plan.slug,
     markdown: parts.join("\n"),
-    ready_to_paste_prompt: hoist
+    ready_to_paste_prompt: hoist,
   };
 }
 
@@ -670,7 +776,10 @@ interface ArtifactSection {
   hoist: string | null;
 }
 
-function renderArtifactsSection(artifacts: ClaudeArtifact[], include?: ArtifactKind[]): ArtifactSection {
+function renderArtifactsSection(
+  artifacts: ClaudeArtifact[],
+  include?: ArtifactKind[],
+): ArtifactSection {
   var lines: string[] = [];
   var hoist: string | null = null;
   for (var i = 0; i < artifacts.length; i++) {
@@ -685,7 +794,13 @@ function renderArtifactsSection(artifacts: ClaudeArtifact[], include?: ArtifactK
     } else if (a.kind === "prompt-cycle") {
       var pc = safeParsePromptCycle(a.content);
       if (pc) {
-        lines.push("**Lint:** " + pc.lint_before.score + " → " + pc.lint_after.score + "%");
+        lines.push(
+          "**Lint:** " +
+            pc.lint_before.score +
+            " → " +
+            pc.lint_after.score +
+            "%",
+        );
         lines.push("");
         if (pc.source_plan_slug) {
           lines.push("**Source plan:** `" + pc.source_plan_slug + "`");
@@ -700,7 +815,11 @@ function renderArtifactsSection(artifacts: ClaudeArtifact[], include?: ArtifactK
         lines.push("</details>");
         lines.push("");
         if (pc.open_questions.length > 0) {
-          lines.push("<details><summary>Open questions (" + pc.open_questions.length + ")</summary>");
+          lines.push(
+            "<details><summary>Open questions (" +
+              pc.open_questions.length +
+              ")</summary>",
+          );
           lines.push("");
           for (var qi = 0; qi < pc.open_questions.length; qi++) {
             var q = pc.open_questions[qi];
@@ -749,7 +868,10 @@ function renderPromptsSection(prompts: ClaudePrompt[]): ArtifactSection {
     var p = prompts[i];
     lines.push("### " + p.title + " _(prompt)_");
     lines.push("");
-    if (typeof p.score_before === "number" && typeof p.score_after === "number") {
+    if (
+      typeof p.score_before === "number" &&
+      typeof p.score_after === "number"
+    ) {
       lines.push("**Lint:** " + p.score_before + " → " + p.score_after + "%");
       lines.push("");
     } else if (typeof p.score_after === "number") {
@@ -825,7 +947,12 @@ export function __setIdGenerator(fn: () => string): () => string {
 function generateQuestionId(taken: PlanQuestion[]): string {
   for (var attempt = 0; attempt < 5; attempt++) {
     var candidate = __idGenerator();
-    if (!taken.some(function (q) { return q.id === candidate; })) return candidate;
+    if (
+      !taken.some(function (q) {
+        return q.id === candidate;
+      })
+    )
+      return candidate;
   }
   throw new Error("failed to generate unique question id after 5 attempts");
 }
@@ -840,14 +967,17 @@ function loadPlan(root: string, slug: string): ClaudePlan {
 // calls on the same plan can both read the same `existing` array; the second
 // atomic rename wins and silently drops the first question. Expected concurrency
 // is one Claude session per plan, so this is documented rather than locked.
-export function pushQuestion(input: PushQuestionInput, options: StorageOptions = {}): PlanQuestion {
+export function pushQuestion(
+  input: PushQuestionInput,
+  options: StorageOptions = {},
+): PlanQuestion {
   var root = storageRoot(options);
   var plan = loadPlan(root, input.plan_slug);
   var existing = plan.questions || [];
   var question: PlanQuestion = {
     id: generateQuestionId(existing),
     question: input.question,
-    asked_at: nowIso()
+    asked_at: nowIso(),
   };
   if (input.header !== undefined) question.header = input.header;
   if (input.options !== undefined) question.options = input.options;
@@ -861,21 +991,32 @@ export function pushQuestion(input: PushQuestionInput, options: StorageOptions =
   return question;
 }
 
-export function recordAnswer(input: RecordAnswerInput, options: StorageOptions = {}): PlanQuestion {
+export function recordAnswer(
+  input: RecordAnswerInput,
+  options: StorageOptions = {},
+): PlanQuestion {
   var root = storageRoot(options);
   var plan = loadPlan(root, input.plan_slug);
   var questions = plan.questions || [];
   var idx = -1;
   for (var i = 0; i < questions.length; i++) {
-    if (questions[i].id === input.question_id) { idx = i; break; }
+    if (questions[i].id === input.question_id) {
+      idx = i;
+      break;
+    }
   }
   if (idx === -1) {
-    throw new Error("question not found: " + input.question_id + " on plan " + input.plan_slug);
+    throw new Error(
+      "question not found: " +
+        input.question_id +
+        " on plan " +
+        input.plan_slug,
+    );
   }
   var prev = questions[idx];
   var updated: PlanQuestion = Object.assign({}, prev, {
     answer: input.answer,
-    answered_at: nowIso()
+    answered_at: nowIso(),
   });
   if (input.answered_by !== undefined) updated.answered_by = input.answered_by;
   questions[idx] = updated;
@@ -886,17 +1027,26 @@ export function recordAnswer(input: RecordAnswerInput, options: StorageOptions =
   return updated;
 }
 
-export function getAnswers(input: GetAnswersInput, options: StorageOptions = {}): GetAnswersResult {
+export function getAnswers(
+  input: GetAnswersInput,
+  options: StorageOptions = {},
+): GetAnswersResult {
   var root = storageRoot(options);
   var plan = loadPlan(root, input.plan_slug);
   var questions = (plan.questions || []).slice();
   if (input.stage !== undefined) {
-    questions = questions.filter(function (q) { return q.stage === input.stage; });
+    questions = questions.filter(function (q) {
+      return q.stage === input.stage;
+    });
   }
   if (input.answered === true) {
-    questions = questions.filter(function (q) { return typeof q.answer === "string"; });
+    questions = questions.filter(function (q) {
+      return typeof q.answer === "string";
+    });
   } else if (input.answered === false) {
-    questions = questions.filter(function (q) { return typeof q.answer !== "string"; });
+    questions = questions.filter(function (q) {
+      return typeof q.answer !== "string";
+    });
   }
   return { plan_slug: plan.slug, questions: questions };
 }
@@ -915,7 +1065,10 @@ export interface PushLintEventInput {
   plan_slug?: string;
 }
 
-export function pushLintEvent(input: PushLintEventInput, options: StorageOptions = {}): PromptLintEvent {
+export function pushLintEvent(
+  input: PushLintEventInput,
+  options: StorageOptions = {},
+): PromptLintEvent {
   var root = storageRoot(options);
   var id = "le_" + crypto.randomBytes(4).toString("hex");
   var now = nowIso();
@@ -925,12 +1078,13 @@ export function pushLintEvent(input: PushLintEventInput, options: StorageOptions
     score: input.score,
     missing: input.missing || [],
     created_at: now,
-    updated_at: now
+    updated_at: now,
   };
   if (input.threshold !== undefined) event.threshold = input.threshold;
   if (input.antipatterns !== undefined) event.antipatterns = input.antipatterns;
   if (input.ceremony !== undefined) event.ceremony = input.ceremony;
-  if (input.prompt_excerpt !== undefined) event.prompt_excerpt = input.prompt_excerpt;
+  if (input.prompt_excerpt !== undefined)
+    event.prompt_excerpt = input.prompt_excerpt;
   if (input.source !== undefined) event.source = input.source;
   if (input.session_id !== undefined) event.session_id = input.session_id;
   if (input.plan_slug !== undefined) event.plan_slug = input.plan_slug;
@@ -944,7 +1098,10 @@ export interface ListLintEventsInput {
   limit?: number;
 }
 
-export function listLintEvents(input: ListLintEventsInput = {}, options: StorageOptions = {}): PromptLintEvent[] {
+export function listLintEvents(
+  input: ListLintEventsInput = {},
+  options: StorageOptions = {},
+): PromptLintEvent[] {
   var root = storageRoot(options);
   var dir = lintEventsDir(root);
   if (!fs.existsSync(dir)) return [];
@@ -954,8 +1111,10 @@ export function listLintEvents(input: ListLintEventsInput = {}, options: Storage
     if (!entries[i].endsWith(".json")) continue;
     var e = readJson<PromptLintEvent>(path.join(dir, entries[i]));
     if (!e) continue;
-    if (input.session_id !== undefined && e.session_id !== input.session_id) continue;
-    if (input.plan_slug !== undefined && e.plan_slug !== input.plan_slug) continue;
+    if (input.session_id !== undefined && e.session_id !== input.session_id)
+      continue;
+    if (input.plan_slug !== undefined && e.plan_slug !== input.plan_slug)
+      continue;
     events.push(e);
   }
   events.sort(function (a, b) {
@@ -971,7 +1130,10 @@ export interface GetLintEventsResult {
   events: PromptLintEvent[];
 }
 
-export function getLintEvents(input: ListLintEventsInput = {}, options: StorageOptions = {}): GetLintEventsResult {
+export function getLintEvents(
+  input: ListLintEventsInput = {},
+  options: StorageOptions = {},
+): GetLintEventsResult {
   return { events: listLintEvents(input, options) };
 }
 
@@ -1006,7 +1168,7 @@ function issueToken(stage: PipelineStage, nowIsoStr: string): DispatchToken {
     token: token,
     issued_for_stage: stage,
     issued_at: nowIsoStr,
-    expires_at: new Date(Date.parse(nowIsoStr) + tokenTtlMs()).toISOString()
+    expires_at: new Date(Date.parse(nowIsoStr) + tokenTtlMs()).toISOString(),
   };
 }
 
@@ -1021,7 +1183,10 @@ function issueToken(stage: PipelineStage, nowIsoStr: string): DispatchToken {
  * mode (Phase D). A subsequent setStage rotates it — the previous
  * outstanding token becomes effectively stale.
  */
-export function setStage(input: SetStageInput, options: StorageOptions = {}): SetStageResult {
+export function setStage(
+  input: SetStageInput,
+  options: StorageOptions = {},
+): SetStageResult {
   var root = storageRoot(options);
   var plan = loadPlan(root, input.plan_slug);
   var source: StageTransitionSource = input.source || "code";
@@ -1036,7 +1201,7 @@ export function setStage(input: SetStageInput, options: StorageOptions = {}): Se
     to: input.to,
     at: now,
     by: input.by || process.env.CLAUDE_CODE_SESSION_ID || "unknown",
-    source: source
+    source: source,
   };
   var token = issueToken(input.to, now);
 
@@ -1045,7 +1210,7 @@ export function setStage(input: SetStageInput, options: StorageOptions = {}): Se
     stage_history: history.concat([transition]),
     dispatch_token: token,
     updated_at: now,
-    schema_version: CURRENT_SCHEMA_VERSION
+    schema_version: CURRENT_SCHEMA_VERSION,
   });
   atomicWriteJson(planPath(root, plan.slug), next);
 
@@ -1053,7 +1218,7 @@ export function setStage(input: SetStageInput, options: StorageOptions = {}): Se
     plan_slug: plan.slug,
     stage: input.to,
     token: token,
-    history_length: (next.stage_history || []).length
+    history_length: (next.stage_history || []).length,
   };
 }
 
@@ -1075,7 +1240,10 @@ export interface PullPlanResult {
  * Returns null when the plan slug does not exist (callers in the
  * registry surface this as PlanNotFoundError).
  */
-export function loadPlanFull(slug: string, options: StorageOptions = {}): PullPlanResult | null {
+export function loadPlanFull(
+  slug: string,
+  options: StorageOptions = {},
+): PullPlanResult | null {
   var root = storageRoot(options);
   var plan = readPlan(planPath(root, slug));
   if (!plan) return null;
@@ -1086,7 +1254,7 @@ export function loadPlanFull(slug: string, options: StorageOptions = {}): PullPl
     questions: (plan.questions || []).slice(),
     stage: plan.stage || null,
     stage_history: (plan.stage_history || []).slice(),
-    dispatch_log: (plan.dispatch_log || []).slice()
+    dispatch_log: (plan.dispatch_log || []).slice(),
   };
 }
 
@@ -1126,7 +1294,7 @@ export interface DispatchStageOptions extends StorageOptions {
  */
 export function dispatchStage(
   input: DispatchStageInput,
-  options: DispatchStageOptions = {}
+  options: DispatchStageOptions = {},
 ): DispatchStageResult {
   var root = storageRoot(options);
   var plan = loadPlan(root, input.plan_slug);
@@ -1150,12 +1318,12 @@ export function dispatchStage(
       command: resolved.command,
       cwd: resolved.cwd,
       outcome: "ok",
-      nowIso: nowDry
+      nowIso: nowDry,
     });
     var nextDry: ClaudePlan = Object.assign({}, plan, {
       dispatch_log: (plan.dispatch_log || []).concat([event]),
       updated_at: nowDry,
-      schema_version: CURRENT_SCHEMA_VERSION
+      schema_version: CURRENT_SCHEMA_VERSION,
     });
     atomicWriteJson(planPath(root, plan.slug), nextDry);
     return {
@@ -1164,7 +1332,7 @@ export function dispatchStage(
       target_stage: input.target_stage,
       command: resolved.command,
       cwd: resolved.cwd,
-      event: event
+      event: event,
     };
   }
 
@@ -1179,8 +1347,11 @@ export function dispatchStage(
     // failure modes (mismatch, consumed, expired, wrong stage) are stale-token.
     var isNoTokenCase =
       check.reason === "token argument is required" ||
-      (typeof check.reason === "string" && check.reason.indexOf("no outstanding") !== -1);
-    var failOutcome: DispatchEvent["outcome"] = isNoTokenCase ? "no-token" : "stale-token";
+      (typeof check.reason === "string" &&
+        check.reason.indexOf("no outstanding") !== -1);
+    var failOutcome: DispatchEvent["outcome"] = isNoTokenCase
+      ? "no-token"
+      : "stale-token";
     var failEvent = makeEvent({
       targetStage: input.target_stage,
       mode: "live",
@@ -1189,22 +1360,23 @@ export function dispatchStage(
       cwd: resolved.cwd,
       outcome: failOutcome,
       error: check.reason,
-      nowIso: nowFail
+      nowIso: nowFail,
     });
     var nextFail: ClaudePlan = Object.assign({}, plan, {
       dispatch_log: (plan.dispatch_log || []).concat([failEvent]),
       updated_at: nowFail,
-      schema_version: CURRENT_SCHEMA_VERSION
+      schema_version: CURRENT_SCHEMA_VERSION,
     });
     atomicWriteJson(planPath(root, plan.slug), nextFail);
-    if (failOutcome === "no-token") throw new NoTokenError(check.reason || "missing");
+    if (failOutcome === "no-token")
+      throw new NoTokenError(check.reason || "missing");
     throw new StaleTokenError(check.reason || "invalid");
   }
 
   // ---- LIVE path: atomic consume BEFORE spawn -------------------------
   var nowOk = nowIso();
   var consumedToken = Object.assign({}, plan.dispatch_token, {
-    consumed_at: nowOk
+    consumed_at: nowOk,
   });
   // Pre-spawn write: token consumed, no spawn pid yet. If spawn throws,
   // the token stays consumed (by design — we'd rather replay than risk
@@ -1212,7 +1384,7 @@ export function dispatchStage(
   var preSpawn: ClaudePlan = Object.assign({}, plan, {
     dispatch_token: consumedToken,
     updated_at: nowOk,
-    schema_version: CURRENT_SCHEMA_VERSION
+    schema_version: CURRENT_SCHEMA_VERSION,
   });
   atomicWriteJson(planPath(root, plan.slug), preSpawn);
 
@@ -1230,11 +1402,11 @@ export function dispatchStage(
       cwd: resolved.cwd,
       outcome: "spawn-error",
       error: msg,
-      nowIso: nowIso()
+      nowIso: nowIso(),
     });
     var postFail: ClaudePlan = Object.assign({}, preSpawn, {
       dispatch_log: (preSpawn.dispatch_log || []).concat([spawnFailEvent]),
-      updated_at: spawnFailEvent.at
+      updated_at: spawnFailEvent.at,
     });
     atomicWriteJson(planPath(root, plan.slug), postFail);
     throw e;
@@ -1248,11 +1420,11 @@ export function dispatchStage(
     cwd: resolved.cwd,
     outcome: "ok",
     pid: spawned.pid,
-    nowIso: nowIso()
+    nowIso: nowIso(),
   });
   var post: ClaudePlan = Object.assign({}, preSpawn, {
     dispatch_log: (preSpawn.dispatch_log || []).concat([liveEvent]),
-    updated_at: liveEvent.at
+    updated_at: liveEvent.at,
   });
   atomicWriteJson(planPath(root, plan.slug), post);
 
@@ -1263,7 +1435,7 @@ export function dispatchStage(
     command: resolved.command,
     cwd: resolved.cwd,
     pid: spawned.pid,
-    event: liveEvent
+    event: liveEvent,
   };
 }
 
@@ -1284,7 +1456,8 @@ function promptDraftsDir(root: string): string {
 var SAFE_DRAFT_ID = /^pd_[0-9a-f]{8}$/;
 
 function assertSafeDraftId(id: string): string {
-  if (!SAFE_DRAFT_ID.test(id)) throw new Error("invalid prompt-draft id: " + id);
+  if (!SAFE_DRAFT_ID.test(id))
+    throw new Error("invalid prompt-draft id: " + id);
   return id;
 }
 
@@ -1314,7 +1487,10 @@ function readActivePointer(root: string): ActiveDraftPointer {
   return { active_id: null, updated_at: nowIso() };
 }
 
-function writeActivePointer(root: string, activeId: string | null): ActiveDraftPointer {
+function writeActivePointer(
+  root: string,
+  activeId: string | null,
+): ActiveDraftPointer {
   var ptr: ActiveDraftPointer = { active_id: activeId, updated_at: nowIso() };
   atomicWriteJson(activePointerPath(root), ptr);
   return ptr;
@@ -1328,7 +1504,7 @@ export interface CreatePromptDraftInput {
 
 export function createPromptDraft(
   input: CreatePromptDraftInput = {},
-  options: StorageOptions = {}
+  options: StorageOptions = {},
 ): PromptDraft {
   var root = storageRoot(options);
   var id = "pd_" + crypto.randomBytes(4).toString("hex");
@@ -1350,7 +1526,7 @@ export function createPromptDraft(
     title: (input.title && input.title.trim()) || "Untitled prompt",
     content: input.content || "",
     created_at: now,
-    updated_at: now
+    updated_at: now,
   };
   if (input.session_id !== undefined) draft.session_id = input.session_id;
   atomicWriteJson(promptDraftPath(root, id), draft);
@@ -1360,7 +1536,10 @@ export function createPromptDraft(
   return draft;
 }
 
-export function getPromptDraft(id: string, options: StorageOptions = {}): PromptDraft | null {
+export function getPromptDraft(
+  id: string,
+  options: StorageOptions = {},
+): PromptDraft | null {
   var root = storageRoot(options);
   if (!SAFE_DRAFT_ID.test(id)) return null;
   return readJson<PromptDraft>(promptDraftPath(root, id));
@@ -1393,9 +1572,14 @@ export interface ListPromptDraftsResult {
   active_id: string | null;
 }
 
-export function listPromptDraftsWithActive(options: StorageOptions = {}): ListPromptDraftsResult {
+export function listPromptDraftsWithActive(
+  options: StorageOptions = {},
+): ListPromptDraftsResult {
   var root = storageRoot(options);
-  return { drafts: listPromptDrafts(options), active_id: readActivePointer(root).active_id };
+  return {
+    drafts: listPromptDrafts(options),
+    active_id: readActivePointer(root).active_id,
+  };
 }
 
 export interface UpdatePromptDraftInput {
@@ -1406,13 +1590,14 @@ export interface UpdatePromptDraftInput {
 
 export function updatePromptDraft(
   input: UpdatePromptDraftInput,
-  options: StorageOptions = {}
+  options: StorageOptions = {},
 ): PromptDraft {
   var root = storageRoot(options);
   var existing = readJson<PromptDraft>(promptDraftPath(root, input.id));
   if (!existing) throw new Error("prompt draft not found: " + input.id);
   var next: PromptDraft = Object.assign({}, existing, { updated_at: nowIso() });
-  if (input.title !== undefined) next.title = input.title.trim() || existing.title;
+  if (input.title !== undefined)
+    next.title = input.title.trim() || existing.title;
   if (input.content !== undefined) next.content = input.content;
   atomicWriteJson(promptDraftPath(root, input.id), next);
   return next;
@@ -1426,13 +1611,17 @@ export interface DeletePromptDraftResult {
 
 export function deletePromptDraft(
   id: string,
-  options: StorageOptions = {}
+  options: StorageOptions = {},
 ): DeletePromptDraftResult {
   var root = storageRoot(options);
   var p = promptDraftPath(root, id);
   var existed = fs.existsSync(p);
   if (existed) {
-    try { fs.unlinkSync(p); } catch (_e) { /* best effort */ }
+    try {
+      fs.unlinkSync(p);
+    } catch (_e) {
+      /* best effort */
+    }
   }
   // If the deleted draft was active, advance the pointer to the next remaining
   // draft (or null) so "active" never dangles at a deleted id.
@@ -1452,7 +1641,7 @@ export interface SetActivePromptDraftResult {
 
 export function setActivePromptDraft(
   id: string,
-  options: StorageOptions = {}
+  options: StorageOptions = {},
 ): SetActivePromptDraftResult {
   var root = storageRoot(options);
   // Guard: only point at a draft that actually exists.
@@ -1463,7 +1652,9 @@ export function setActivePromptDraft(
   return { active_id: ptr.active_id };
 }
 
-export function getActivePromptDraft(options: StorageOptions = {}): PromptDraft | null {
+export function getActivePromptDraft(
+  options: StorageOptions = {},
+): PromptDraft | null {
   var root = storageRoot(options);
   var activeId = readActivePointer(root).active_id;
   if (!activeId) return null;

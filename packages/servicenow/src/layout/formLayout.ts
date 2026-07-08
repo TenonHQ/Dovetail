@@ -17,7 +17,11 @@
  */
 
 import type { ServiceNowClient } from "../client";
-import type { SetFormLayoutParams, LayoutResult, LayoutRecordResult } from "../types";
+import type {
+  SetFormLayoutParams,
+  LayoutResult,
+  LayoutRecordResult,
+} from "../types";
 import {
   assertUpdateSet,
   resolveScope,
@@ -25,7 +29,7 @@ import {
   viewFields,
   normalizeViewValue,
   encodeQueryValue,
-  diffChildren
+  diffChildren,
 } from "./layoutCommon";
 import type { ExistingChild } from "./layoutCommon";
 
@@ -73,7 +77,7 @@ function sectionLabel(caption: string): string {
 
 export async function setFormLayout(
   client: ServiceNowClient,
-  params: SetFormLayoutParams
+  params: SetFormLayoutParams,
 ): Promise<LayoutResult> {
   if (!params.table) {
     throw new Error("table is required.");
@@ -95,7 +99,10 @@ export async function setFormLayout(
       throw new Error("duplicate section caption: " + JSON.stringify(caption));
     }
     captionSeen[caption] = true;
-    desiredSections.push({ caption: caption, fields: dedupe(spec.fields || []) });
+    desiredSections.push({
+      caption: caption,
+      fields: dedupe(spec.fields || []),
+    });
   }
 
   var updateSet = await assertUpdateSet(client, params.updateSetSysId);
@@ -104,7 +111,7 @@ export async function setFormLayout(
     viewName: params.view || "",
     updateSetSysId: params.updateSetSysId,
     scope: scope,
-    dryRun: dryRun
+    dryRun: dryRun,
   });
 
   var records: Array<LayoutRecordResult> = [];
@@ -119,11 +126,14 @@ export async function setFormLayout(
     var formRows = await client.table.query<any>(
       "sys_ui_form",
       "name=" + encodeQueryValue(params.table),
-      200
+      200,
     );
     for (var fi = 0; fi < formRows.length; fi += 1) {
       var fr = formRows[fi];
-      if (normalizeViewValue(fr.view) === view.sysId && plain(fr.sys_user) === "") {
+      if (
+        normalizeViewValue(fr.view) === view.sysId &&
+        plain(fr.sys_user) === ""
+      ) {
         form = fr;
         break;
       }
@@ -132,18 +142,33 @@ export async function setFormLayout(
   var formSysId = form ? plain(form.sys_id) : "";
 
   if (form) {
-    records.push({ table: "sys_ui_form", sysId: formSysId, action: "unchanged", label: params.table });
+    records.push({
+      table: "sys_ui_form",
+      sysId: formSysId,
+      action: "unchanged",
+      label: params.table,
+    });
   } else if (dryRun) {
-    records.push({ table: "sys_ui_form", sysId: "", action: "created", label: params.table });
+    records.push({
+      table: "sys_ui_form",
+      sysId: "",
+      action: "created",
+      label: params.table,
+    });
   } else {
     var createdForm = await client.claude.createRecord({
       table: "sys_ui_form",
       fields: { name: params.table, view: vf.view, view_name: vf.view_name },
       scope: scope,
-      update_set_sys_id: params.updateSetSysId
+      update_set_sys_id: params.updateSetSysId,
     });
     formSysId = createdForm.sys_id;
-    records.push({ table: "sys_ui_form", sysId: formSysId, action: "created", label: params.table });
+    records.push({
+      table: "sys_ui_form",
+      sysId: formSysId,
+      action: "created",
+      label: params.table,
+    });
   }
 
   // ── 2. Resolve the sys_ui_section rows — one per desired section, matched to
@@ -153,12 +178,18 @@ export async function setFormLayout(
     var secRows = await client.table.query<any>(
       "sys_ui_section",
       "name=" + encodeQueryValue(params.table),
-      200
+      200,
     );
     for (var si = 0; si < secRows.length; si += 1) {
       var secRow = secRows[si];
-      if (normalizeViewValue(secRow.view) === view.sysId && plain(secRow.sys_user) === "") {
-        existingSections.push({ sysId: plain(secRow.sys_id), caption: plain(secRow.caption) });
+      if (
+        normalizeViewValue(secRow.view) === view.sysId &&
+        plain(secRow.sys_user) === ""
+      ) {
+        existingSections.push({
+          sysId: plain(secRow.sys_id),
+          caption: plain(secRow.caption),
+        });
       }
     }
   }
@@ -174,20 +205,28 @@ export async function setFormLayout(
       }
     }
     if (matchSec) {
-      resolvedSections.push({ caption: want.caption, sysId: matchSec.sysId, fields: want.fields });
+      resolvedSections.push({
+        caption: want.caption,
+        sysId: matchSec.sysId,
+        fields: want.fields,
+      });
       records.push({
         table: "sys_ui_section",
         sysId: matchSec.sysId,
         action: "unchanged",
-        label: sectionLabel(want.caption)
+        label: sectionLabel(want.caption),
       });
     } else if (dryRun) {
-      resolvedSections.push({ caption: want.caption, sysId: "", fields: want.fields });
+      resolvedSections.push({
+        caption: want.caption,
+        sysId: "",
+        fields: want.fields,
+      });
       records.push({
         table: "sys_ui_section",
         sysId: "",
         action: "created",
-        label: sectionLabel(want.caption)
+        label: sectionLabel(want.caption),
       });
     } else {
       var createdSec = await client.claude.createRecord({
@@ -198,17 +237,21 @@ export async function setFormLayout(
           view_name: vf.view_name,
           caption: want.caption,
           header: "false",
-          title: want.caption ? "true" : "false"
+          title: want.caption ? "true" : "false",
         },
         scope: scope,
-        update_set_sys_id: params.updateSetSysId
+        update_set_sys_id: params.updateSetSysId,
       });
-      resolvedSections.push({ caption: want.caption, sysId: createdSec.sys_id, fields: want.fields });
+      resolvedSections.push({
+        caption: want.caption,
+        sysId: createdSec.sys_id,
+        fields: want.fields,
+      });
       records.push({
         table: "sys_ui_section",
         sysId: createdSec.sys_id,
         action: "created",
-        label: sectionLabel(want.caption)
+        label: sectionLabel(want.caption),
       });
     }
   }
@@ -216,14 +259,16 @@ export async function setFormLayout(
   // Map caption -> resolved sys_id, for the join-row create step.
   var sectionSysIdByCaption: Record<string, string> = {};
   for (var rs = 0; rs < resolvedSections.length; rs += 1) {
-    sectionSysIdByCaption[resolvedSections[rs].caption] = resolvedSections[rs].sysId;
+    sectionSysIdByCaption[resolvedSections[rs].caption] =
+      resolvedSections[rs].sysId;
   }
 
   // ── 3. Reconcile the sys_ui_form_section join rows (which sections sit on the
   // form, and in what order). Keyed by the caption of the section they point to.
   var captionBySectionSysId: Record<string, string> = {};
   for (var xs = 0; xs < existingSections.length; xs += 1) {
-    captionBySectionSysId[existingSections[xs].sysId] = existingSections[xs].caption;
+    captionBySectionSysId[existingSections[xs].sysId] =
+      existingSections[xs].caption;
   }
   var existingJoins: Array<ExistingChild> = [];
   var joinSectionSysIdByKey: Record<string, string> = {};
@@ -231,7 +276,7 @@ export async function setFormLayout(
     var joinRows = await client.table.query<any>(
       "sys_ui_form_section",
       "sys_ui_form=" + encodeQueryValue(formSysId),
-      200
+      200,
     );
     for (var ji = 0; ji < joinRows.length; ji += 1) {
       var joinRow = joinRows[ji];
@@ -239,20 +284,27 @@ export async function setFormLayout(
       // Key the join by the caption of the section it places. A join pointing
       // at an unknown section keys on the raw section sys_id so diffChildren
       // treats it as an extra (pruned / repositioned, never matched).
-      var joinKey = Object.prototype.hasOwnProperty.call(captionBySectionSysId, pointedSecSysId)
+      var joinKey = Object.prototype.hasOwnProperty.call(
+        captionBySectionSysId,
+        pointedSecSysId,
+      )
         ? captionBySectionSysId[pointedSecSysId]
         : pointedSecSysId;
       existingJoins.push({
         sysId: plain(joinRow.sys_id),
         key: joinKey,
-        position: Number(plain(joinRow.position)) || 0
+        position: Number(plain(joinRow.position)) || 0,
       });
       joinSectionSysIdByKey[joinKey] = pointedSecSysId;
     }
   }
 
-  var desiredCaptions = resolvedSections.map(function (r) { return r.caption; });
-  var joinPlan = formSysId ? diffChildren(desiredCaptions, existingJoins, prune) : [];
+  var desiredCaptions = resolvedSections.map(function (r) {
+    return r.caption;
+  });
+  var joinPlan = formSysId
+    ? diffChildren(desiredCaptions, existingJoins, prune)
+    : [];
 
   // ── 4. Reconcile sys_ui_element rows per section. Only sections with a real
   // sys_id can have existing rows; freshly created sections start empty.
@@ -269,7 +321,7 @@ export async function setFormLayout(
       elementPlans.push({
         sectionSysId: "",
         caption: section.caption,
-        plan: diffChildren(section.fields, [], prune)
+        plan: diffChildren(section.fields, [], prune),
       });
       continue;
     }
@@ -278,20 +330,20 @@ export async function setFormLayout(
       var elRows = await client.table.query<any>(
         "sys_ui_element",
         "sys_ui_section=" + encodeQueryValue(section.sysId),
-        500
+        500,
       );
       existingEls = elRows.map(function (e: any): ExistingChild {
         return {
           sysId: plain(e.sys_id),
           key: plain(e.element),
-          position: Number(plain(e.position)) || 0
+          position: Number(plain(e.position)) || 0,
         };
       });
     }
     elementPlans.push({
       sectionSysId: section.sysId,
       caption: section.caption,
-      plan: diffChildren(section.fields, existingEls, prune)
+      plan: diffChildren(section.fields, existingEls, prune),
     });
   }
 
@@ -304,7 +356,7 @@ export async function setFormLayout(
           table: "sys_ui_element",
           sysId: uplan[ue].sysId,
           action: "unchanged",
-          label: uplan[ue].key
+          label: uplan[ue].key,
         });
       }
     }
@@ -316,7 +368,7 @@ export async function setFormLayout(
         table: "sys_ui_form_section",
         sysId: joinPlan[ujp].sysId,
         action: "unchanged",
-        label: sectionLabel(joinPlan[ujp].key)
+        label: sectionLabel(joinPlan[ujp].key),
       });
     }
   }
@@ -326,11 +378,26 @@ export async function setFormLayout(
     for (var dj = 0; dj < joinPlan.length; dj += 1) {
       var djs = joinPlan[dj];
       if (djs.action === "create") {
-        records.push({ table: "sys_ui_form_section", sysId: "", action: "created", label: sectionLabel(djs.key) });
+        records.push({
+          table: "sys_ui_form_section",
+          sysId: "",
+          action: "created",
+          label: sectionLabel(djs.key),
+        });
       } else if (djs.action === "update") {
-        records.push({ table: "sys_ui_form_section", sysId: djs.sysId, action: "updated", label: sectionLabel(djs.key) });
+        records.push({
+          table: "sys_ui_form_section",
+          sysId: djs.sysId,
+          action: "updated",
+          label: sectionLabel(djs.key),
+        });
       } else if (djs.action === "delete") {
-        records.push({ table: "sys_ui_form_section", sysId: djs.sysId, action: "deleted", label: sectionLabel(djs.key) });
+        records.push({
+          table: "sys_ui_form_section",
+          sysId: djs.sysId,
+          action: "deleted",
+          label: sectionLabel(djs.key),
+        });
       }
     }
     for (var de = 0; de < elementPlans.length; de += 1) {
@@ -338,15 +405,36 @@ export async function setFormLayout(
       for (var dee = 0; dee < deplan.length; dee += 1) {
         var dees = deplan[dee];
         if (dees.action === "create") {
-          records.push({ table: "sys_ui_element", sysId: "", action: "created", label: dees.key });
+          records.push({
+            table: "sys_ui_element",
+            sysId: "",
+            action: "created",
+            label: dees.key,
+          });
         } else if (dees.action === "update") {
-          records.push({ table: "sys_ui_element", sysId: dees.sysId, action: "updated", label: dees.key });
+          records.push({
+            table: "sys_ui_element",
+            sysId: dees.sysId,
+            action: "updated",
+            label: dees.key,
+          });
         } else if (dees.action === "delete") {
-          records.push({ table: "sys_ui_element", sysId: dees.sysId, action: "deleted", label: dees.key });
+          records.push({
+            table: "sys_ui_element",
+            sysId: dees.sysId,
+            action: "deleted",
+            label: dees.key,
+          });
         }
       }
     }
-    return { table: params.table, view: view.name, updateSet: updateSet, dryRun: true, records: records };
+    return {
+      table: params.table,
+      view: view.name,
+      updateSet: updateSet,
+      dryRun: true,
+      records: records,
+    };
   }
 
   // ── 6. Apply: creates first, then updates, then deletes (deletes pinned to the
@@ -363,16 +451,16 @@ export async function setFormLayout(
       fields: {
         sys_ui_form: formSysId,
         sys_ui_section: sectionSysIdByCaption[joinPlan[jc].key],
-        position: String(joinPlan[jc].position)
+        position: String(joinPlan[jc].position),
       },
       scope: scope,
-      update_set_sys_id: params.updateSetSysId
+      update_set_sys_id: params.updateSetSysId,
     });
     records.push({
       table: "sys_ui_form_section",
       sysId: createdJoin.sys_id,
       action: "created",
-      label: sectionLabel(joinPlan[jc].key)
+      label: sectionLabel(joinPlan[jc].key),
     });
   }
 
@@ -388,16 +476,16 @@ export async function setFormLayout(
         fields: {
           sys_ui_section: ecEntry.sectionSysId,
           element: ecEntry.plan[ecp].key,
-          position: String(ecEntry.plan[ecp].position)
+          position: String(ecEntry.plan[ecp].position),
         },
         scope: scope,
-        update_set_sys_id: params.updateSetSysId
+        update_set_sys_id: params.updateSetSysId,
       });
       records.push({
         table: "sys_ui_element",
         sysId: createdEl.sys_id,
         action: "created",
-        label: ecEntry.plan[ecp].key
+        label: ecEntry.plan[ecp].key,
       });
     }
   }
@@ -411,13 +499,13 @@ export async function setFormLayout(
       update_set_sys_id: params.updateSetSysId,
       table: "sys_ui_form_section",
       record_sys_id: joinPlan[ju].sysId,
-      fields: { position: String(joinPlan[ju].position) }
+      fields: { position: String(joinPlan[ju].position) },
     });
     records.push({
       table: "sys_ui_form_section",
       sysId: joinPlan[ju].sysId,
       action: "updated",
-      label: sectionLabel(joinPlan[ju].key)
+      label: sectionLabel(joinPlan[ju].key),
     });
   }
 
@@ -432,13 +520,13 @@ export async function setFormLayout(
         update_set_sys_id: params.updateSetSysId,
         table: "sys_ui_element",
         record_sys_id: euEntry.plan[eup].sysId,
-        fields: { position: String(euEntry.plan[eup].position) }
+        fields: { position: String(euEntry.plan[eup].position) },
       });
       records.push({
         table: "sys_ui_element",
         sysId: euEntry.plan[eup].sysId,
         action: "updated",
-        label: euEntry.plan[eup].key
+        label: euEntry.plan[eup].key,
       });
     }
   }
@@ -461,7 +549,7 @@ export async function setFormLayout(
     pendingDeletes.push({
       table: "sys_ui_form_section",
       sysId: joinPlan[jd].sysId,
-      label: sectionLabel(droppedKey)
+      label: sectionLabel(droppedKey),
     });
     var orphanSecSysId = joinSectionSysIdByKey[droppedKey] || "";
     if (orphanSecSysId) {
@@ -469,19 +557,19 @@ export async function setFormLayout(
       var orphanEls = await client.table.query<any>(
         "sys_ui_element",
         "sys_ui_section=" + encodeQueryValue(orphanSecSysId),
-        500
+        500,
       );
       for (var oe = 0; oe < orphanEls.length; oe += 1) {
         pendingDeletes.push({
           table: "sys_ui_element",
           sysId: plain(orphanEls[oe].sys_id),
-          label: plain(orphanEls[oe].element)
+          label: plain(orphanEls[oe].element),
         });
       }
       pendingDeletes.push({
         table: "sys_ui_section",
         sysId: orphanSecSysId,
-        label: sectionLabel(droppedKey)
+        label: sectionLabel(droppedKey),
       });
     }
   }
@@ -493,7 +581,7 @@ export async function setFormLayout(
         pendingDeletes.push({
           table: "sys_ui_element",
           sysId: edPlan[edp].sysId,
-          label: edPlan[edp].key
+          label: edPlan[edp].key,
         });
       }
     }
@@ -506,16 +594,22 @@ export async function setFormLayout(
     for (var pd = 0; pd < pendingDeletes.length; pd += 1) {
       await client.claude.deleteRecord({
         table: pendingDeletes[pd].table,
-        sys_id: pendingDeletes[pd].sysId
+        sys_id: pendingDeletes[pd].sysId,
       });
       records.push({
         table: pendingDeletes[pd].table,
         sysId: pendingDeletes[pd].sysId,
         action: "deleted",
-        label: pendingDeletes[pd].label
+        label: pendingDeletes[pd].label,
       });
     }
   }
 
-  return { table: params.table, view: view.name, updateSet: updateSet, dryRun: false, records: records };
+  return {
+    table: params.table,
+    view: view.name,
+    updateSet: updateSet,
+    dryRun: false,
+    records: records,
+  };
 }

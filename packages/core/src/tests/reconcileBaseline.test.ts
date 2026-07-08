@@ -89,7 +89,11 @@ describe("baselineFromLive + baselineSysIds", () => {
 
   it("baselineSysIds is null for a null baseline and a Set otherwise", () => {
     expect(baselineSysIds(null)).toBeNull();
-    const set = baselineSysIds({ version: 1, instance: "x", records: { a: "t" } });
+    const set = baselineSysIds({
+      version: 1,
+      instance: "x",
+      records: { a: "t" },
+    });
     expect(set).not.toBeNull();
     expect(set!.has("a")).toBe(true);
   });
@@ -97,7 +101,9 @@ describe("baselineFromLive + baselineSysIds", () => {
 
 describe("computeDirty", () => {
   it("returns [] with no baseline", () => {
-    expect(computeDirty({ baseline: null, live: [live("a", "t2")] })).toEqual([]);
+    expect(computeDirty({ baseline: null, live: [live("a", "t2")] })).toEqual(
+      [],
+    );
   });
 
   it("flags a baseline record whose live updatedOn moved", () => {
@@ -106,7 +112,10 @@ describe("computeDirty", () => {
       live: [live("a", "t2"), live("b", "t1")],
     });
     expect(dirty).toHaveLength(1);
-    expect(dirty[0]).toMatchObject({ sys_id: "a", reason: "changed-since-baseline" });
+    expect(dirty[0]).toMatchObject({
+      sys_id: "a",
+      reason: "changed-since-baseline",
+    });
   });
 
   it("does not flag records absent from the baseline (those are deletes/creates, not drift)", () => {

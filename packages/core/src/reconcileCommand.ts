@@ -48,11 +48,19 @@ import {
   baselineFromLive,
   BASELINE_FILENAME,
 } from "./reconcile/baseline";
-import { formatReconcileReport, ReconcileScopeResult } from "./reconcile/report";
+import {
+  formatReconcileReport,
+  ReconcileScopeResult,
+} from "./reconcile/report";
 import { buildApplyPlan, ApplyPlan } from "./reconcile/applyPlan";
 import { runMultiPassOps, OpOutcome } from "./reconcile/multiPass";
 import { ensureGitignored } from "./reconcile/gitignore";
-import { DirtyRecord, ReconcileRecord, RecordChange, RecordDiff } from "./reconcile/types";
+import {
+  DirtyRecord,
+  ReconcileRecord,
+  RecordChange,
+  RecordDiff,
+} from "./reconcile/types";
 
 interface UpdateSetSelection {
   sys_id: string;
@@ -139,7 +147,11 @@ function resolveScopes(args: ReconcileArgs): string[] {
 
 async function currentBranch(): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const { stdout } = await execFileAsync("git", [
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD",
+    ]);
     return stdout.trim();
   } catch (e) {
     return "";
@@ -175,7 +187,9 @@ async function buildSchemaDiffs(options: {
   const fromRef = path.basename(snapshots[0].dir);
   let liveDir: string;
   try {
-    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "dove-reconcile-schema-"));
+    const tmpDir = await fsp.mkdtemp(
+      path.join(os.tmpdir(), "dove-reconcile-schema-"),
+    );
     await pullSchema({
       instance: creds.SN_INSTANCE,
       username: creds.SN_USER,
@@ -188,7 +202,11 @@ async function buildSchemaDiffs(options: {
     return { diffs: {}, skipped: "live schema pull failed" };
   }
 
-  const fromDir = await resolveSnapshotDir({ ref: fromRef, outputDir, instance });
+  const fromDir = await resolveSnapshotDir({
+    ref: fromRef,
+    outputDir,
+    instance,
+  });
   const diffs: Record<string, SchemaDiff> = {};
   for (const scope of scopes) {
     try {
@@ -307,7 +325,10 @@ async function buildCreateFields(
 
   // 1. metaData snapshot — short/non-file fields (active, order, name, ...).
   try {
-    const metaRaw = await fsp.readFile(path.join(recordDir, "metaData.json"), "utf8");
+    const metaRaw = await fsp.readFile(
+      path.join(recordDir, "metaData.json"),
+      "utf8",
+    );
     const meta = JSON.parse(metaRaw) as Record<string, unknown>;
     for (const key of Object.keys(meta)) {
       if (key.charAt(0) === "_" || key === "sys_id" || key === "sys_scope") {
@@ -402,7 +423,12 @@ async function applyCreates(
         // creating a phantom.
         return {
           ok: false,
-          error: "server reassigned sys_id (" + data.sys_id + " != " + change.sys_id + ")",
+          error:
+            "server reassigned sys_id (" +
+            data.sys_id +
+            " != " +
+            change.sys_id +
+            ")",
         };
       }
       return { ok: true };
@@ -443,10 +469,16 @@ async function writeBaselineMode(options: {
   instance: string;
   scopes: string[];
 }): Promise<void> {
-  logger.info("Establishing reconcile baseline for " + options.instance + "...");
+  logger.info(
+    "Establishing reconcile baseline for " + options.instance + "...",
+  );
   const count = await recaptureBaseline(options);
   logger.success(
-    "Baseline established: " + count + " record(s) captured to " + BASELINE_FILENAME + ".",
+    "Baseline established: " +
+      count +
+      " record(s) captured to " +
+      BASELINE_FILENAME +
+      ".",
   );
 }
 
@@ -533,7 +565,14 @@ export async function reconcileCommand(args: TSFIXME): Promise<void> {
     return;
   }
 
-  await applyMode({ typedArgs, scopeData, baseline: baseline !== null, rootDir, instance, scopes });
+  await applyMode({
+    typedArgs,
+    scopeData,
+    baseline: baseline !== null,
+    rootDir,
+    instance,
+    scopes,
+  });
 }
 
 async function applyMode(options: {
@@ -583,13 +622,24 @@ async function applyMode(options: {
 
     // CREATE — scope-correct via the `scope` param; routed into the update set
     // when one is configured.
-    const createOutcomes = await applyCreates(scope, plan.creates, updateSetSysId);
+    const createOutcomes = await applyCreates(
+      scope,
+      plan.creates,
+      updateSetSysId,
+    );
     for (const outcome of createOutcomes) {
       if (outcome.ok) {
         totalCreated++;
       } else {
         failures.push(
-          "[" + scope + "] create " + outcome.change.table + "/" + outcome.change.name + ": " + (outcome.error || "failed"),
+          "[" +
+            scope +
+            "] create " +
+            outcome.change.table +
+            "/" +
+            outcome.change.name +
+            ": " +
+            (outcome.error || "failed"),
         );
       }
     }
@@ -621,7 +671,14 @@ async function applyMode(options: {
         totalDeleted++;
       } else {
         failures.push(
-          "[" + scope + "] delete " + outcome.change.table + "/" + outcome.change.name + ": " + (outcome.error || "failed"),
+          "[" +
+            scope +
+            "] delete " +
+            outcome.change.table +
+            "/" +
+            outcome.change.name +
+            ": " +
+            (outcome.error || "failed"),
         );
       }
     }

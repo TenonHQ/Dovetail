@@ -26,7 +26,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "warn"; },
+  getLogLevel: function () {
+    return "warn";
+  },
 };
 
 var mockFileLogger = {
@@ -41,12 +43,22 @@ var mockClient = {
   getMissingFiles: jest.fn(),
 };
 
-jest.mock("../Logger", function () { return { logger: mockLogger }; });
-jest.mock("../FileLogger", function () { return { fileLogger: mockFileLogger }; });
+jest.mock("../Logger", function () {
+  return { logger: mockLogger };
+});
+jest.mock("../FileLogger", function () {
+  return { fileLogger: mockFileLogger };
+});
 jest.mock("../snClient", function () {
   return {
-    defaultClient: function () { return mockClient; },
-    unwrapSNResponse: function (p: any) { return Promise.resolve(p).then(function (r: any) { return r; }); },
+    defaultClient: function () {
+      return mockClient;
+    },
+    unwrapSNResponse: function (p: any) {
+      return Promise.resolve(p).then(function (r: any) {
+        return r;
+      });
+    },
     processPushResponse: jest.fn(),
     retryOnErr: jest.fn(),
     retryOnHttpErr: jest.fn(),
@@ -77,7 +89,9 @@ var mockConfig: any = {
   updateManifest: jest.fn(),
 };
 
-jest.mock("../config", function () { return mockConfig; });
+jest.mock("../config", function () {
+  return mockConfig;
+});
 
 jest.mock("progress", function () {
   return jest.fn().mockImplementation(function () {
@@ -103,7 +117,11 @@ var ACL_SYS_ID = "bc91c2a5f334621048dff31590812771";
 
 function listAclFolders(): string[] {
   var dir = path.join(tmpRoot, "sys_security_acl");
-  try { return fs.readdirSync(dir).sort(); } catch (e) { return []; }
+  try {
+    return fs.readdirSync(dir).sort();
+  } catch (e) {
+    return [];
+  }
 }
 
 describe("refresh — folder names are filesystem-safe (sys_id fallback)", function () {
@@ -115,7 +133,9 @@ describe("refresh — folder names are filesystem-safe (sys_id fallback)", funct
   });
 
   afterEach(function () {
-    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (e) {}
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch (e) {}
   });
 
   test("a `<table>.*` ACL record is written to its sys_id folder, never `.*`", async function () {
@@ -157,7 +177,10 @@ describe("refresh — folder names are filesystem-safe (sys_id fallback)", funct
     expect(folders).not.toContain("x_cadso_work_campaign.*");
     // The file landed inside the sys_id folder.
     expect(
-      fs.readFileSync(path.join(tmpRoot, "sys_security_acl", ACL_SYS_ID, "script.js"), "utf8"),
+      fs.readFileSync(
+        path.join(tmpRoot, "sys_security_acl", ACL_SYS_ID, "script.js"),
+        "utf8",
+      ),
     ).toBe("// acl");
   });
 

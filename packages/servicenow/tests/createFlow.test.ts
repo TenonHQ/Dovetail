@@ -16,17 +16,35 @@ function mockClient(routes: {
 }): { client: ServiceNowClient; cap: Cap } {
   var cap: Cap = { gets: [], posts: [] };
   var client = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function () { return []; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
+      runQuery: async function () {
+        return [];
+      },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
-      createRecord: async function () { return { sys_id: "x" }; },
-      pushWithUpdateSet: async function () { return { sys_id: "x" }; },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function () { return {}; },
-      deleteRecord: async function () { return {}; },
+      createRecord: async function () {
+        return { sys_id: "x" };
+      },
+      pushWithUpdateSet: async function () {
+        return { sys_id: "x" };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
     now: {
       get: async function <T>(path: string): Promise<T> {
@@ -58,7 +76,11 @@ function templateModel(): any {
         triggerDefinitionId: "def-keep",
         inputs: [
           { name: "table", value: "customer_account", displayValue: "Account" },
-          { name: "condition", value: "active=true", displayValue: "active=true" },
+          {
+            name: "condition",
+            value: "active=true",
+            displayValue: "active=true",
+          },
         ],
       },
     ],
@@ -95,7 +117,17 @@ function routedPost(path: string): any {
     return { result: "", session: { notifications: [] } };
   }
   if (path.indexOf("/snapshot") >= 0) {
-    return { result: { data: { id: NEW, status: "published", isPublished: true, active: true, latestSnapshot: SNAP } } };
+    return {
+      result: {
+        data: {
+          id: NEW,
+          status: "published",
+          isPublished: true,
+          active: true,
+          latestSnapshot: SNAP,
+        },
+      },
+    };
   }
   return {};
 }
@@ -126,10 +158,14 @@ describe("buildPublishModel", function () {
     expect(t.triggerDefinitionId).toBe("def-keep");
     expect(a.actionTypeSysId).toBe("atype-keep");
     // values patched
-    var tableInput = t.inputs.find(function (i: any) { return i.name === "table"; });
+    var tableInput = t.inputs.find(function (i: any) {
+      return i.name === "table";
+    });
     expect(tableInput.value).toBe("customer_contact");
     expect(tableInput.displayValue).toBe("customer_contact");
-    var msgInput = a.inputs.find(function (i: any) { return i.name === "message"; });
+    var msgInput = a.inputs.find(function (i: any) {
+      return i.name === "message";
+    });
     expect(msgInput.value).toBe("hello");
     expect(a.data.values).toBe("short_description=hello");
   });
@@ -137,7 +173,11 @@ describe("buildPublishModel", function () {
   it("does not mutate the source template", function () {
     var tpl = templateModel();
     buildPublishModel(publishedEnvelope(), tpl, NEW, {
-      client: {} as any, name: "X", templateSysId: TEMPLATE, scopeSysId: SCOPE, triggerTable: "customer_contact",
+      client: {} as any,
+      name: "X",
+      templateSysId: TEMPLATE,
+      scopeSysId: SCOPE,
+      triggerTable: "customer_contact",
     });
     expect(tpl.triggerInstances[0].flowSysId).toBe(TEMPLATE);
     expect(tpl.triggerInstances[0].id).toBe("trig-old");
@@ -147,8 +187,12 @@ describe("buildPublishModel", function () {
 describe("createFlow", function () {
   it("creates, versions, and publishes — returning the new sys_id + snapshot", async function () {
     var ctx = mockClient({
-      get: function () { return { result: { data: templateModel() } }; },
-      post: function (path) { return routedPost(path); },
+      get: function () {
+        return { result: { data: templateModel() } };
+      },
+      post: function (path) {
+        return routedPost(path);
+      },
     });
     var r = await createFlow({
       client: ctx.client,
@@ -165,18 +209,38 @@ describe("createFlow", function () {
     expect(r.graph).toEqual({ triggers: 1, actions: 1, logic: 0 });
     // call order: GET template, POST create, POST create_version, POST snapshot
     expect(ctx.cap.gets[0]).toContain("/processflow/flow/" + TEMPLATE);
-    expect(ctx.cap.posts[0].path).toContain("/processflow/flow?param_only_properties=true");
+    expect(ctx.cap.posts[0].path).toContain(
+      "/processflow/flow?param_only_properties=true",
+    );
     expect(ctx.cap.posts[0].body.type).toBe("flow");
     expect(ctx.cap.posts[1].path).toContain("create_version");
-    expect(ctx.cap.posts[1].body).toEqual({ item_sys_id: NEW, type: "Activate/Publish", annotation: "", favorite: false });
-    expect(ctx.cap.posts[2].path).toBe("/api/now/processflow/flow/" + NEW + "/snapshot?sysparm_transaction_scope=" + SCOPE);
+    expect(ctx.cap.posts[1].body).toEqual({
+      item_sys_id: NEW,
+      type: "Activate/Publish",
+      annotation: "",
+      favorite: false,
+    });
+    expect(ctx.cap.posts[2].path).toBe(
+      "/api/now/processflow/flow/" +
+        NEW +
+        "/snapshot?sysparm_transaction_scope=" +
+        SCOPE,
+    );
     expect(ctx.cap.posts[2].body.triggerInstances[0].flowSysId).toBe(NEW);
   });
 
   it("dry-run reads the template and writes nothing", async function () {
-    var ctx = mockClient({ get: function () { return { result: { data: templateModel() } }; } });
+    var ctx = mockClient({
+      get: function () {
+        return { result: { data: templateModel() } };
+      },
+    });
     var r = await createFlow({
-      client: ctx.client, name: "X", templateSysId: TEMPLATE, scopeSysId: SCOPE, dryRun: true,
+      client: ctx.client,
+      name: "X",
+      templateSysId: TEMPLATE,
+      scopeSysId: SCOPE,
+      dryRun: true,
     });
     expect(r.status).toBe("dry-run");
     expect(r.sysId).toBe("");
@@ -186,14 +250,21 @@ describe("createFlow", function () {
 
   it("survives a failing create_version (best-effort) and still publishes", async function () {
     var ctx = mockClient({
-      get: function () { return { result: { data: templateModel() } }; },
+      get: function () {
+        return { result: { data: templateModel() } };
+      },
       post: function (path) {
-        if (path.indexOf("create_version") >= 0) { throw new Error("500 boom"); }
+        if (path.indexOf("create_version") >= 0) {
+          throw new Error("500 boom");
+        }
         return routedPost(path);
       },
     });
     var r = await createFlow({
-      client: ctx.client, name: "X", templateSysId: TEMPLATE, scopeSysId: SCOPE,
+      client: ctx.client,
+      name: "X",
+      templateSysId: TEMPLATE,
+      scopeSysId: SCOPE,
     });
     expect(r.status).toBe("published");
     expect(r.snapshotSysId).toBe(SNAP);
@@ -201,19 +272,49 @@ describe("createFlow", function () {
 
   it("throws when the template has no trigger", async function () {
     var ctx = mockClient({
-      get: function () { return { result: { data: { scope: SCOPE, triggerInstances: [], actionInstances: [] } } }; },
+      get: function () {
+        return {
+          result: {
+            data: { scope: SCOPE, triggerInstances: [], actionInstances: [] },
+          },
+        };
+      },
     });
-    await expect(createFlow({ client: ctx.client, name: "X", templateSysId: TEMPLATE, scopeSysId: SCOPE }))
-      .rejects.toThrow(/no trigger to graft/);
+    await expect(
+      createFlow({
+        client: ctx.client,
+        name: "X",
+        templateSysId: TEMPLATE,
+        scopeSysId: SCOPE,
+      }),
+    ).rejects.toThrow(/no trigger to graft/);
   });
 
   it("requires name, templateSysId, and scopeSysId", async function () {
     var ctx = mockClient({});
-    await expect(createFlow({ client: ctx.client, name: "", templateSysId: TEMPLATE, scopeSysId: SCOPE }))
-      .rejects.toThrow(/name is required/);
-    await expect(createFlow({ client: ctx.client, name: "X", templateSysId: "", scopeSysId: SCOPE }))
-      .rejects.toThrow(/templateSysId is required/);
-    await expect(createFlow({ client: ctx.client, name: "X", templateSysId: TEMPLATE, scopeSysId: "" }))
-      .rejects.toThrow(/scopeSysId is required/);
+    await expect(
+      createFlow({
+        client: ctx.client,
+        name: "",
+        templateSysId: TEMPLATE,
+        scopeSysId: SCOPE,
+      }),
+    ).rejects.toThrow(/name is required/);
+    await expect(
+      createFlow({
+        client: ctx.client,
+        name: "X",
+        templateSysId: "",
+        scopeSysId: SCOPE,
+      }),
+    ).rejects.toThrow(/templateSysId is required/);
+    await expect(
+      createFlow({
+        client: ctx.client,
+        name: "X",
+        templateSysId: TEMPLATE,
+        scopeSysId: "",
+      }),
+    ).rejects.toThrow(/scopeSysId is required/);
   });
 });

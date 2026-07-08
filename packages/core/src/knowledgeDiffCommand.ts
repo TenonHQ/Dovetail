@@ -39,7 +39,9 @@ function resolveManifestPath(explicit: string | undefined): string {
 // release manifest against this repo's documented-state ledger and stages the
 // undocumented release-events for the in-session /dovetail-features-sync skill.
 // No network, no LLM — safe to run at install or in CI.
-export async function knowledgeDiffCommand(args: KnowledgeDiffArgs): Promise<void> {
+export async function knowledgeDiffCommand(
+  args: KnowledgeDiffArgs,
+): Promise<void> {
   setLogLevel(args);
   const cwd = process.cwd();
 
@@ -50,7 +52,9 @@ export async function knowledgeDiffCommand(args: KnowledgeDiffArgs): Promise<voi
   if (fs.existsSync(configPath)) {
     config = readJson<KnowledgeDiffConfig>(configPath);
   } else {
-    logger.warn("knowledge-diff: no config at " + configPath + "; watching all packages.");
+    logger.warn(
+      "knowledge-diff: no config at " + configPath + "; watching all packages.",
+    );
   }
 
   const manifestPath = resolveManifestPath(args.manifest);
@@ -79,7 +83,9 @@ export async function knowledgeDiffCommand(args: KnowledgeDiffArgs): Promise<voi
   const drift = computeDrift(manifest, ledger, config);
 
   if (args.json) {
-    process.stdout.write(JSON.stringify({ count: drift.length, events: drift }, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ count: drift.length, events: drift }, null, 2) + "\n",
+    );
     return;
   }
 

@@ -15,7 +15,11 @@ function readExistingProjectConfig(rootDir: string): any | null {
   for (var i = 0; i < names.length; i++) {
     var p = path.join(rootDir, names[i]);
     if (fs.existsSync(p)) {
-      try { return require(p); } catch (e) { return null; }
+      try {
+        return require(p);
+      } catch (e) {
+        return null;
+      }
     }
   }
   return null;
@@ -64,7 +68,11 @@ export const corePlugin: Sinc.InitPlugin = {
       label: "Selecting ServiceNow applications",
       run: async (context: Sinc.InitContext): Promise<string[] | null> => {
         var baseUrl = instanceBaseUrl(context.env.SN_INSTANCE);
-        var client = snClient(baseUrl, context.env.SN_USER, context.env.SN_PASSWORD);
+        var client = snClient(
+          baseUrl,
+          context.env.SN_USER,
+          context.env.SN_PASSWORD,
+        );
 
         logger.info("Fetching application list...");
         var apps: SN.App[] = await unwrapSNResponse(client.getAppList());
@@ -79,13 +87,13 @@ export const corePlugin: Sinc.InitPlugin = {
         if (context.hasConfig) {
           var existingConfig = readExistingProjectConfig(context.rootDir);
           if (existingConfig && existingConfig.scopes) {
-            Object.keys(existingConfig.scopes).forEach(function(s) {
+            Object.keys(existingConfig.scopes).forEach(function (s) {
               existingScopes.add(s);
             });
           }
         }
 
-        var choices = apps.map(function(app: SN.App) {
+        var choices = apps.map(function (app: SN.App) {
           return {
             name: app.displayName + " (" + app.scope + ")",
             value: app.scope,
@@ -94,16 +102,19 @@ export const corePlugin: Sinc.InitPlugin = {
           };
         });
 
-        var answer = await inquirer.prompt([{
-          type: "checkbox",
-          name: "apps",
-          message: "Which apps would you like to work with? (space to select, enter to confirm)",
-          choices: choices,
-          validate: function(input: string[]) {
-            if (input.length === 0) return "Select at least one application.";
-            return true;
+        var answer = await inquirer.prompt([
+          {
+            type: "checkbox",
+            name: "apps",
+            message:
+              "Which apps would you like to work with? (space to select, enter to confirm)",
+            choices: choices,
+            validate: function (input: string[]) {
+              if (input.length === 0) return "Select at least one application.";
+              return true;
+            },
           },
-        }]);
+        ]);
 
         var selectedScopes: string[] = answer.apps;
         context.answers.selectedScopes = selectedScopes;
@@ -117,7 +128,9 @@ export const corePlugin: Sinc.InitPlugin = {
 
         for (var i = 0; i < selectedScopes.length; i++) {
           var scope = selectedScopes[i];
-          var app = apps.find(function(a: SN.App) { return a.scope === scope; });
+          var app = apps.find(function (a: SN.App) {
+            return a.scope === scope;
+          });
           var displayName = app ? app.displayName : scope;
 
           // Check if existing config already has a sourceDirectory for this scope
@@ -125,20 +138,27 @@ export const corePlugin: Sinc.InitPlugin = {
           if (existingScopes.has(scope)) {
             var existingCfg = readExistingProjectConfig(context.rootDir);
             var cfgScopes = existingCfg && existingCfg.scopes;
-            if (cfgScopes && cfgScopes[scope] && cfgScopes[scope].sourceDirectory) {
+            if (
+              cfgScopes &&
+              cfgScopes[scope] &&
+              cfgScopes[scope].sourceDirectory
+            ) {
               existingDir = cfgScopes[scope].sourceDirectory;
             }
           }
 
           // Suggest a friendly name from displayName, or use existing
-          var suggestedDir = existingDir || ("src/" + displayName.replace(/\s+/g, ""));
+          var suggestedDir =
+            existingDir || "src/" + displayName.replace(/\s+/g, "");
 
-          var dirAnswer = await inquirer.prompt([{
-            type: "input",
-            name: "dir",
-            message: scope + ":",
-            default: suggestedDir,
-          }]);
+          var dirAnswer = await inquirer.prompt([
+            {
+              type: "input",
+              name: "dir",
+              message: scope + ":",
+              default: suggestedDir,
+            },
+          ]);
 
           scopeDirectories[scope] = dirAnswer.dir;
         }
@@ -164,7 +184,8 @@ export const corePlugin: Sinc.InitPlugin = {
     var rootDir = context.rootDir;
     var doveConfigPath = path.join(rootDir, "dove.config.js");
     var sincConfigPath = path.join(rootDir, "sinc.config.js");
-    var scopeDirectories: Record<string, string> = context.answers.scopeDirectories || {};
+    var scopeDirectories: Record<string, string> =
+      context.answers.scopeDirectories || {};
 
     // Write or preserve config. New configs are always written as dove.config.js;
     // existing sinc.config.js files are honored as legacy until the user runs `dove migrate`.
@@ -175,27 +196,43 @@ export const corePlugin: Sinc.InitPlugin = {
 
     if (!existingConfigPath || configAction === "replace") {
       logger.info("Generating dove.config.js...");
-      var scopeEntries = selectedScopes.map(function(scope) {
+      var scopeEntries = selectedScopes.map(function (scope) {
         return {
           scope: scope,
-          sourceDirectory: scopeDirectories[scope] || ("src/" + scope),
+          sourceDirectory: scopeDirectories[scope] || "src/" + scope,
         };
       });
-      fs.writeFileSync(doveConfigPath, ConfigManager.generateConfigFile({ scopes: scopeEntries }), "utf8");
-      logger.success(chalk.green("✓ Generated dove.config.js with " + selectedScopes.length + " scope(s)"));
+      fs.writeFileSync(
+        doveConfigPath,
+        ConfigManager.generateConfigFile({ scopes: scopeEntries }),
+        "utf8",
+      );
+      logger.success(
+        chalk.green(
+          "✓ Generated dove.config.js with " +
+            selectedScopes.length +
+            " scope(s)",
+        ),
+      );
       if (existingConfigPath === sincConfigPath) {
-        logger.warn("Legacy sinc.config.js still present alongside new dove.config.js. Run 'dove migrate' or delete sinc.config.js once you're satisfied.");
+        logger.warn(
+          "Legacy sinc.config.js still present alongside new dove.config.js. Run 'dove migrate' or delete sinc.config.js once you're satisfied.",
+        );
       }
     } else {
       var configFileName = path.basename(existingConfigPath);
-      logger.info(configFileName + " already exists — preserving configuration.");
+      logger.info(
+        configFileName + " already exists — preserving configuration.",
+      );
     }
 
     // Reload configs so ConfigManager picks up the new/existing config
     try {
       await ConfigManager.loadConfigs();
     } catch (e) {
-      logger.warn("Config reload incomplete — this is expected during first-time init.");
+      logger.warn(
+        "Config reload incomplete — this is expected during first-time init.",
+      );
     }
 
     // Check which scopes already have manifests
@@ -204,9 +241,16 @@ export const corePlugin: Sinc.InitPlugin = {
 
     for (var i = 0; i < selectedScopes.length; i++) {
       var scope = selectedScopes[i];
-      var doveManifestPath = path.join(rootDir, "dove.manifest." + scope + ".json");
-      var sincManifestPath = path.join(rootDir, "dove.manifest." + scope + ".json");
-      var hasManifest = fs.existsSync(doveManifestPath) || fs.existsSync(sincManifestPath);
+      var doveManifestPath = path.join(
+        rootDir,
+        "dove.manifest." + scope + ".json",
+      );
+      var sincManifestPath = path.join(
+        rootDir,
+        "dove.manifest." + scope + ".json",
+      );
+      var hasManifest =
+        fs.existsSync(doveManifestPath) || fs.existsSync(sincManifestPath);
 
       if (hasManifest) {
         scopesWithManifests.push(scope);
@@ -217,12 +261,18 @@ export const corePlugin: Sinc.InitPlugin = {
 
     // Batch prompt for scopes that already have manifests
     if (scopesWithManifests.length > 0) {
-      var redownload = await inquirer.prompt([{
-        type: "confirm",
-        name: "confirmed",
-        message: scopesWithManifests.length + " scope(s) already have manifests (" + scopesWithManifests.join(", ") + "). Re-download?",
-        default: false,
-      }]);
+      var redownload = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirmed",
+          message:
+            scopesWithManifests.length +
+            " scope(s) already have manifests (" +
+            scopesWithManifests.join(", ") +
+            "). Re-download?",
+          default: false,
+        },
+      ]);
       if (redownload.confirmed) {
         scopesToDownload = scopesToDownload.concat(scopesWithManifests);
       }
@@ -237,7 +287,7 @@ export const corePlugin: Sinc.InitPlugin = {
     logger.info("Downloading " + scopesToDownload.length + " scope(s)...");
 
     var config = ConfigManager.getConfig();
-    var scopePromises = scopesToDownload.map(function(scopeName) {
+    var scopePromises = scopesToDownload.map(function (scopeName) {
       var scopeConfig = (config.scopes && config.scopes[scopeName]) || {};
       return processScope(scopeName, scopeConfig as any, 0);
     });
@@ -257,21 +307,44 @@ export const corePlugin: Sinc.InitPlugin = {
         // Write per-scope manifest
         if (result.value.manifest) {
           var scopeManifestPath = ConfigManager.getScopeManifestPath(scopeName);
-          fs.writeFileSync(scopeManifestPath, JSON.stringify(result.value.manifest, null, 2), "utf8");
+          fs.writeFileSync(
+            scopeManifestPath,
+            JSON.stringify(result.value.manifest, null, 2),
+            "utf8",
+          );
         }
       } else {
         failCount++;
-        var error = result.status === "rejected" ? result.reason : (result.value && result.value.error);
-        logger.error("Failed to initialize " + scopeName + ": " + (error && error.message ? error.message : "Unknown error"));
+        var error =
+          result.status === "rejected"
+            ? result.reason
+            : result.value && result.value.error;
+        logger.error(
+          "Failed to initialize " +
+            scopeName +
+            ": " +
+            (error && error.message ? error.message : "Unknown error"),
+        );
       }
     }
 
     // Summary
     logger.info("");
     if (failCount === 0) {
-      logger.success(chalk.green("✓ ServiceNow configured — " + successCount + " scope(s) initialized"));
+      logger.success(
+        chalk.green(
+          "✓ ServiceNow configured — " + successCount + " scope(s) initialized",
+        ),
+      );
     } else {
-      logger.warn(successCount + "/" + scopesToDownload.length + " scopes initialized, " + failCount + " failed");
+      logger.warn(
+        successCount +
+          "/" +
+          scopesToDownload.length +
+          " scopes initialized, " +
+          failCount +
+          " failed",
+      );
     }
   },
 };
@@ -280,7 +353,9 @@ export const corePlugin: Sinc.InitPlugin = {
  * @description Validates ServiceNow credentials by testing the connection.
  * Called by the orchestrator after all core login hooks are collected.
  */
-export async function validateCoreLogin(context: Sinc.InitContext): Promise<true | string> {
+export async function validateCoreLogin(
+  context: Sinc.InitContext,
+): Promise<true | string> {
   const instance = context.env.SN_INSTANCE;
   const user = context.env.SN_USER;
   const password = context.env.SN_PASSWORD;
@@ -301,7 +376,11 @@ export async function validateCoreLogin(context: Sinc.InitContext): Promise<true
     const msg = e instanceof Error ? e.message : String(e);
     const status = e && e.response && e.response.status;
 
-    if (msg.includes("Invalid URL") || msg.includes("ENOTFOUND") || msg.includes("getaddrinfo")) {
+    if (
+      msg.includes("Invalid URL") ||
+      msg.includes("ENOTFOUND") ||
+      msg.includes("getaddrinfo")
+    ) {
       return "Instance not found — check the URL (got: " + instanceUrl + ")";
     }
     if (status === 401 || msg.includes("401")) {
@@ -310,8 +389,14 @@ export async function validateCoreLogin(context: Sinc.InitContext): Promise<true
     if (status === 403 || msg.includes("403")) {
       return "Access denied — user may lack required roles.";
     }
-    if (msg.includes("ECONNREFUSED") || msg.includes("ETIMEDOUT") || msg.includes("ECONNRESET")) {
-      return "Could not reach " + instanceUrl + " — check network connectivity.";
+    if (
+      msg.includes("ECONNREFUSED") ||
+      msg.includes("ETIMEDOUT") ||
+      msg.includes("ECONNRESET")
+    ) {
+      return (
+        "Could not reach " + instanceUrl + " — check network connectivity."
+      );
     }
     return "Connection failed: " + msg;
   }

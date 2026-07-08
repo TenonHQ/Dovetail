@@ -23,7 +23,7 @@ export interface CreateServerOptions {
 export function createServer(options: CreateServerOptions = {}): McpServer {
   var server = new McpServer({
     name: options.serverName || "dovetail-claude-plans",
-    version: options.serverVersion || "0.0.1"
+    version: options.serverVersion || "0.0.1",
   });
   registerAllTools(server, options.registryDeps || {});
   return server;

@@ -42,7 +42,7 @@ export function createClient(config: ClickUpClientConfig): AxiosInstance {
   return axios.create({
     baseURL: baseURL,
     headers: {
-      "Authorization": config.token,
+      Authorization: config.token,
       "Content-Type": "application/json",
     },
   });
@@ -57,7 +57,7 @@ function handleApiError(error: unknown, context: string): never {
       if (response.status === 401) {
         throw new Error(
           "ClickUp authentication failed. Check your CLICKUP_API_TOKEN. " +
-            "Run 'dove clickup setup' or verify your .env file."
+            "Run 'dove clickup setup' or verify your .env file.",
         );
       }
       if (response.status === 404) {
@@ -65,11 +65,13 @@ function handleApiError(error: unknown, context: string): never {
       }
       if (response.status === 429) {
         throw new Error(
-          "ClickUp API rate limit exceeded. Wait a moment and try again."
+          "ClickUp API rate limit exceeded. Wait a moment and try again.",
         );
       }
       var message =
-        response.data && typeof response.data === "object" && "err" in response.data
+        response.data &&
+        typeof response.data === "object" &&
+        "err" in response.data
           ? String((response.data as Record<string, unknown>).err)
           : "HTTP " + response.status;
       throw new Error("ClickUp API error (" + context + "): " + message);
@@ -88,10 +90,9 @@ function handleApiError(error: unknown, context: string): never {
  * @param params - Object with optional customTaskIds flag and teamId.
  * @returns Axios config object (possibly empty).
  */
-function buildIdQuery(params: {
-  customTaskIds?: boolean;
-  teamId?: string;
-}): { params?: Record<string, unknown> } {
+function buildIdQuery(params: { customTaskIds?: boolean; teamId?: string }): {
+  params?: Record<string, unknown>;
+} {
   if (params.customTaskIds) {
     return { params: { custom_task_ids: true, team_id: params.teamId } };
   }
@@ -160,7 +161,7 @@ export async function getTask(params: {
   try {
     var response = await params.client.get(
       "/api/v2/task/" + params.taskId,
-      buildIdQuery(params)
+      buildIdQuery(params),
     );
     return response.data;
   } catch (error) {
@@ -184,10 +185,10 @@ export async function listMyTasks(params: {
 
     var queryParams: Record<string, unknown> = {
       "assignees[]": user.id,
-      "include_closed": false,
-      "subtasks": true,
-      "order_by": "updated",
-      "reverse": true,
+      include_closed: false,
+      subtasks: true,
+      order_by: "updated",
+      reverse: true,
     };
 
     // Add status filters if provided
@@ -197,7 +198,7 @@ export async function listMyTasks(params: {
 
     var response = await params.client.get(
       "/api/v2/team/" + params.teamId + "/task",
-      { params: queryParams }
+      { params: queryParams },
     );
 
     var tasks: ClickUpTask[] = response.data.tasks || [];
@@ -245,7 +246,9 @@ export async function createTask(params: {
       name: params.name,
     };
     if (params.markdownContent !== undefined) {
-      body.markdown_content = normalizeChecklistMarkdown(params.markdownContent);
+      body.markdown_content = normalizeChecklistMarkdown(
+        params.markdownContent,
+      );
     } else if (params.description !== undefined) {
       body.description = params.description;
     }
@@ -264,11 +267,14 @@ export async function createTask(params: {
 
     var response = await params.client.post(
       "/api/v2/list/" + params.listId + "/task",
-      body
+      body,
     );
     return response.data;
   } catch (error) {
-    return handleApiError(error, "creating task in list '" + params.listId + "'");
+    return handleApiError(
+      error,
+      "creating task in list '" + params.listId + "'",
+    );
   }
 }
 
@@ -295,7 +301,9 @@ export async function updateTask(params: {
       body.name = params.name;
     }
     if (params.markdownContent !== undefined) {
-      body.markdown_content = normalizeChecklistMarkdown(params.markdownContent);
+      body.markdown_content = normalizeChecklistMarkdown(
+        params.markdownContent,
+      );
     } else if (params.description !== undefined) {
       body.description = params.description;
     }
@@ -312,7 +320,7 @@ export async function updateTask(params: {
     var response = await params.client.put(
       "/api/v2/task/" + params.taskId,
       body,
-      buildIdQuery(params)
+      buildIdQuery(params),
     );
     return response.data;
   } catch (error) {
@@ -372,12 +380,16 @@ export async function setCustomField(params: {
     await params.client.post(
       "/api/v2/task/" + params.taskId + "/field/" + params.fieldId,
       { value: params.value },
-      buildIdQuery(params)
+      buildIdQuery(params),
     );
   } catch (error) {
     return handleApiError(
       error,
-      "setting custom field '" + params.fieldId + "' on task '" + params.taskId + "'"
+      "setting custom field '" +
+        params.fieldId +
+        "' on task '" +
+        params.taskId +
+        "'",
     );
   }
 }
@@ -397,12 +409,12 @@ export async function linkTask(params: {
     await params.client.post(
       "/api/v2/task/" + params.taskId + "/link/" + params.linksTo,
       {},
-      buildIdQuery(params)
+      buildIdQuery(params),
     );
   } catch (error) {
     return handleApiError(
       error,
-      "linking task '" + params.taskId + "' to '" + params.linksTo + "'"
+      "linking task '" + params.taskId + "' to '" + params.linksTo + "'",
     );
   }
 }
@@ -422,13 +434,13 @@ export async function addComment(params: {
   try {
     var response = await params.client.post(
       "/api/v2/task/" + params.taskId + "/comment",
-      { comment_text: params.commentText }
+      { comment_text: params.commentText },
     );
     return response.data;
   } catch (error) {
     return handleApiError(
       error,
-      "adding comment to task '" + params.taskId + "'"
+      "adding comment to task '" + params.taskId + "'",
     );
   }
 }
@@ -462,7 +474,7 @@ export async function getSpaces(params: {
 }): Promise<ClickUpSpace[]> {
   try {
     var response = await params.client.get(
-      "/api/v2/team/" + params.teamId + "/space"
+      "/api/v2/team/" + params.teamId + "/space",
     );
     return response.data.spaces || [];
   } catch (error) {
@@ -481,7 +493,7 @@ export async function getFolders(params: {
 }): Promise<ClickUpFolder[]> {
   try {
     var response = await params.client.get(
-      "/api/v2/space/" + params.spaceId + "/folder"
+      "/api/v2/space/" + params.spaceId + "/folder",
     );
     return response.data.folders || [];
   } catch (error) {
@@ -500,7 +512,7 @@ export async function getLists(params: {
 }): Promise<ClickUpList[]> {
   try {
     var response = await params.client.get(
-      "/api/v2/folder/" + params.folderId + "/list"
+      "/api/v2/folder/" + params.folderId + "/list",
     );
     return response.data.lists || [];
   } catch (error) {
@@ -521,7 +533,7 @@ export async function getSpaceLists(params: {
 }): Promise<ClickUpList[]> {
   try {
     var response = await params.client.get(
-      "/api/v2/space/" + params.spaceId + "/list"
+      "/api/v2/space/" + params.spaceId + "/list",
     );
     return response.data.lists || [];
   } catch (error) {
@@ -545,19 +557,28 @@ export async function findListByName(params: {
     var allLists: ClickUpList[] = [];
     var searchName = params.name.toLowerCase();
 
-    var spaces = await getSpaces({ client: params.client, teamId: params.teamId });
+    var spaces = await getSpaces({
+      client: params.client,
+      teamId: params.teamId,
+    });
 
     for (var s = 0; s < spaces.length; s++) {
       var spaceId = spaces[s].id;
 
       // Folderless lists
-      var spaceLists = await getSpaceLists({ client: params.client, spaceId: spaceId });
+      var spaceLists = await getSpaceLists({
+        client: params.client,
+        spaceId: spaceId,
+      });
       for (var sl = 0; sl < spaceLists.length; sl++) {
         allLists.push(spaceLists[sl]);
       }
 
       // Folder lists
-      var folders = await getFolders({ client: params.client, spaceId: spaceId });
+      var folders = await getFolders({
+        client: params.client,
+        spaceId: spaceId,
+      });
       for (var f = 0; f < folders.length; f++) {
         var folderLists = folders[f].lists || [];
         for (var fl = 0; fl < folderLists.length; fl++) {
@@ -599,14 +620,14 @@ export async function getListTasks(params: {
 }): Promise<ClickUpTask[]> {
   try {
     var queryParams: Record<string, unknown> = {
-      "subtasks": true,
-      "page": params.page !== undefined ? params.page : 0,
-      "include_closed": params.includeClosed === true,
+      subtasks: true,
+      page: params.page !== undefined ? params.page : 0,
+      include_closed: params.includeClosed === true,
     };
 
     var response = await params.client.get(
       "/api/v2/list/" + params.listId + "/task",
-      { params: queryParams }
+      { params: queryParams },
     );
     return response.data.tasks || [];
   } catch (error) {
@@ -664,7 +685,10 @@ export async function listTeamTasks(params: {
     if (params.spaceIds && params.spaceIds.length > 0) {
       spaces = params.spaceIds;
     } else {
-      var teamSpaces = await getSpaces({ client: params.client, teamId: params.teamId });
+      var teamSpaces = await getSpaces({
+        client: params.client,
+        teamId: params.teamId,
+      });
       for (var si = 0; si < teamSpaces.length; si++) {
         spaces.push(teamSpaces[si].id);
       }
@@ -677,13 +701,19 @@ export async function listTeamTasks(params: {
       var spaceId = spaces[s];
 
       // Folderless lists
-      var spaceLists = await getSpaceLists({ client: params.client, spaceId: spaceId });
+      var spaceLists = await getSpaceLists({
+        client: params.client,
+        spaceId: spaceId,
+      });
       for (var sl = 0; sl < spaceLists.length; sl++) {
         listIds.push(spaceLists[sl].id);
       }
 
       // Folder lists
-      var folders = await getFolders({ client: params.client, spaceId: spaceId });
+      var folders = await getFolders({
+        client: params.client,
+        spaceId: spaceId,
+      });
       for (var f = 0; f < folders.length; f++) {
         var folderLists = folders[f].lists || [];
         for (var fl = 0; fl < folderLists.length; fl++) {
@@ -710,9 +740,10 @@ export async function listTeamTasks(params: {
 
           // Apply status filter if provided
           if (params.statuses && params.statuses.length > 0) {
-            var taskStatus = task.status && task.status.status
-              ? task.status.status.toLowerCase()
-              : "";
+            var taskStatus =
+              task.status && task.status.status
+                ? task.status.status.toLowerCase()
+                : "";
             var matched = false;
             for (var st = 0; st < params.statuses.length; st++) {
               if (taskStatus === params.statuses[st].toLowerCase()) {
@@ -734,9 +765,10 @@ export async function listTeamTasks(params: {
     var byStatus: TasksByStatus = {};
     for (var bs = 0; bs < allTasks.length; bs++) {
       var bsTask = allTasks[bs];
-      var statusName = bsTask.status && bsTask.status.status
-        ? bsTask.status.status
-        : "unknown";
+      var statusName =
+        bsTask.status && bsTask.status.status
+          ? bsTask.status.status
+          : "unknown";
       if (!byStatus[statusName]) {
         byStatus[statusName] = [];
       }
@@ -753,9 +785,10 @@ export async function listTeamTasks(params: {
         unassigned.push(baTask);
       } else {
         for (var a = 0; a < baTask.assignees.length; a++) {
-          var assigneeName = baTask.assignees[a].username
-            || baTask.assignees[a].email
-            || String(baTask.assignees[a].id);
+          var assigneeName =
+            baTask.assignees[a].username ||
+            baTask.assignees[a].email ||
+            String(baTask.assignees[a].id);
           if (!byAssignee[assigneeName]) {
             byAssignee[assigneeName] = [];
           }

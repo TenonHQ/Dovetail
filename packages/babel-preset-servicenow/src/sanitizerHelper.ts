@@ -50,7 +50,7 @@ const reservedWords = {
   var: true,
   void: true,
   volatile: true,
-  while: true
+  while: true,
 };
 
 export function isReservedWord(word: string) {

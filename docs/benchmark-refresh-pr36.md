@@ -30,36 +30,36 @@ This report is the first empirical look at the new profile.
 
 ### All scopes (single pass, 8 scopes)
 
-| Metric | Value |
-|---|---|
-| HTTP requests | 22 |
-| Data received | 134.72 MB |
-| p50 latency | 1236 ms |
-| p95 latency | 12563 ms |
-| Max latency | 13027 ms |
-| Files written | 44 |
-| Files unchanged | 7763 |
-| Change ratio | 0.56% |
+| Metric          | Value     |
+| --------------- | --------- |
+| HTTP requests   | 22        |
+| Data received   | 134.72 MB |
+| p50 latency     | 1236 ms   |
+| p95 latency     | 12563 ms  |
+| Max latency     | 13027 ms  |
+| Files written   | 44        |
+| Files unchanged | 7763      |
+| Change ratio    | 0.56%     |
 
 ### Per-scope
 
-| Scope | Wall | Req | Bytes | Written / Unchanged |
-|---|---:|---:|---:|---:|
-| x_cadso_automate | 2561 ms | 3 | 9.20 MB | 24 / 3706 |
-| x_cadso_work | 3411 ms | 3 | 8.94 MB | 14 / 3255 |
-| x_cadso_core | 1209 ms | 2 | 917.5 KB | 0 / 471 |
-| x_cadso_lead | 735 ms | 2 | 399.3 KB | 0 / 101 |
-| x_cadso_journey | 385 ms | 1 | 194.6 KB | 4 / 190 |
-| x_cadso_cloud | 357 ms | 1 | 15.4 KB | 2 / 22 |
-| x_cadso_email_spok | 295 ms | 1 | 30.0 KB | 0 / 14 |
-| x_cadso_text_spoke | 233 ms | 1 | 8.6 KB | 0 / 4 |
+| Scope              |    Wall | Req |    Bytes | Written / Unchanged |
+| ------------------ | ------: | --: | -------: | ------------------: |
+| x_cadso_automate   | 2561 ms |   3 |  9.20 MB |           24 / 3706 |
+| x_cadso_work       | 3411 ms |   3 |  8.94 MB |           14 / 3255 |
+| x_cadso_core       | 1209 ms |   2 | 917.5 KB |             0 / 471 |
+| x_cadso_lead       |  735 ms |   2 | 399.3 KB |             0 / 101 |
+| x_cadso_journey    |  385 ms |   1 | 194.6 KB |             4 / 190 |
+| x_cadso_cloud      |  357 ms |   1 |  15.4 KB |              2 / 22 |
+| x_cadso_email_spok |  295 ms |   1 |  30.0 KB |              0 / 14 |
+| x_cadso_text_spoke |  233 ms |   1 |   8.6 KB |               0 / 4 |
 
 ### Single-scope spot checks (not part of the all-scopes pass)
 
-| Scope | Wall | Req | Bytes | Written / Unchanged |
-|---|---:|---:|---:|---:|
-| x_cadso_core | 1162 ms | 2 | 917.5 KB | 0 / 471 |
-| x_cadso_automate | 3033 ms | 3 | 9.20 MB | 26 / 3704 |
+| Scope            |    Wall | Req |    Bytes | Written / Unchanged |
+| ---------------- | ------: | --: | -------: | ------------------: |
+| x_cadso_core     | 1162 ms |   2 | 917.5 KB |             0 / 471 |
+| x_cadso_automate | 3033 ms |   3 |  9.20 MB |           26 / 3704 |
 
 ## Interpretation
 

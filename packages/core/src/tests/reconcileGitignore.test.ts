@@ -13,7 +13,9 @@ const ENTRY = ".dove-reconcile-baseline.json";
 
 describe("hasGitignoreEntry", () => {
   it("detects a present entry ignoring surrounding whitespace", () => {
-    expect(hasGitignoreEntry("node_modules\n" + ENTRY + "\n", ENTRY)).toBe(true);
+    expect(hasGitignoreEntry("node_modules\n" + ENTRY + "\n", ENTRY)).toBe(
+      true,
+    );
     expect(hasGitignoreEntry("  " + ENTRY + "  \n", ENTRY)).toBe(true);
   });
 
@@ -52,7 +54,9 @@ describe("ensureGitignored — I/O", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "dove-gitignore-"));
     const first = ensureGitignored(root, ENTRY);
     expect(first.changed).toBe(true);
-    expect(fs.readFileSync(path.join(root, ".gitignore"), "utf8")).toContain(ENTRY);
+    expect(fs.readFileSync(path.join(root, ".gitignore"), "utf8")).toContain(
+      ENTRY,
+    );
 
     const second = ensureGitignored(root, ENTRY);
     expect(second.changed).toBe(false);

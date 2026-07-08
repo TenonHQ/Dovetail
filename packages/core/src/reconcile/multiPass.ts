@@ -45,7 +45,10 @@ export async function runMultiPassOps(
       try {
         result = await attempt(change);
       } catch (e) {
-        result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        result = {
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        };
       }
       if (result.ok) {
         succeeded.push({ change, ok: true });

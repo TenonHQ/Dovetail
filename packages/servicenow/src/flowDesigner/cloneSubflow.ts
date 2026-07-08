@@ -73,20 +73,35 @@ const CHILD_TABLES: ReadonlyArray<ChildPullSpec> = [
   { table: "sys_hub_flow_output", fkColumn: "flow", prefix: "output" },
   { table: "sys_hub_flow_variable", fkColumn: "flow", prefix: "variable" },
   { table: "sys_hub_action_instance_v2", fkColumn: "flow", prefix: "action" },
-  { table: "sys_hub_flow_logic_instance_v2", fkColumn: "flow", prefix: "logic" },
+  {
+    table: "sys_hub_flow_logic_instance_v2",
+    fkColumn: "flow",
+    prefix: "logic",
+  },
 ];
 
-async function fetchSourceParent(client: ServiceNowClient, sourceSysId: string): Promise<Record<string, any>> {
+async function fetchSourceParent(
+  client: ServiceNowClient,
+  sourceSysId: string,
+): Promise<Record<string, any>> {
   var rows = await client.buildAgent.runQuery<any>({
     table: "sys_hub_flow",
     query: "sys_id=" + sourceSysId,
     limit: 1,
   });
   if (!rows.length) {
-    throw new Error("cloneSubflow: source sys_hub_flow not found: " + sourceSysId);
+    throw new Error(
+      "cloneSubflow: source sys_hub_flow not found: " + sourceSysId,
+    );
   }
   if (rows[0].type && rows[0].type !== "subflow") {
-    throw new Error("cloneSubflow: source sys_id " + sourceSysId + " is not a subflow (type=" + rows[0].type + ")");
+    throw new Error(
+      "cloneSubflow: source sys_id " +
+        sourceSysId +
+        " is not a subflow (type=" +
+        rows[0].type +
+        ")",
+    );
   }
   return rows[0];
 }
@@ -95,7 +110,8 @@ async function fetchChildren(
   client: ServiceNowClient,
   sourceSysId: string,
 ): Promise<Array<{ spec: ChildPullSpec; rows: Array<Record<string, any>> }>> {
-  var out: Array<{ spec: ChildPullSpec; rows: Array<Record<string, any>> }> = [];
+  var out: Array<{ spec: ChildPullSpec; rows: Array<Record<string, any>> }> =
+    [];
   for (var i = 0; i < CHILD_TABLES.length; i++) {
     var spec = CHILD_TABLES[i];
     var rows = await client.buildAgent.runQuery<any>({
@@ -108,7 +124,9 @@ async function fetchChildren(
   return out;
 }
 
-export async function cloneSubflow(opts: CloneSubflowParams): Promise<CloneSubflowResult> {
+export async function cloneSubflow(
+  opts: CloneSubflowParams,
+): Promise<CloneSubflowResult> {
   assertSysId(opts.sourceSysId, "sourceSysId");
   assertSysId(opts.newScope, "newScope");
   assertSysId(opts.updateSetSysId, "updateSetSysId");
@@ -119,7 +137,8 @@ export async function cloneSubflow(opts: CloneSubflowParams): Promise<CloneSubfl
   // Idempotency guard: bail if (newName, newScope) already exists.
   var existing = await opts.client.buildAgent.runQuery<{ sys_id: string }>({
     table: "sys_hub_flow",
-    query: "name=" + opts.newName + "^sys_scope=" + opts.newScope + "^type=subflow",
+    query:
+      "name=" + opts.newName + "^sys_scope=" + opts.newScope + "^type=subflow",
     limit: 1,
   });
   if (existing.length > 0) {
@@ -147,9 +166,14 @@ export async function cloneSubflow(opts: CloneSubflowParams): Promise<CloneSubfl
     parentFields.internal_name = opts.newName;
   }
   if (opts.modifications) {
-    if (opts.modifications.description != null) parentFields.description = opts.modifications.description;
+    if (opts.modifications.description != null)
+      parentFields.description = opts.modifications.description;
     if (opts.modifications.fieldPatch) {
-      parentFields = Object.assign({}, parentFields, opts.modifications.fieldPatch);
+      parentFields = Object.assign(
+        {},
+        parentFields,
+        opts.modifications.fieldPatch,
+      );
     }
   }
 

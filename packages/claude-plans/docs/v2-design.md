@@ -32,11 +32,11 @@ All new fields are optional with safe defaults. Records written before v2 (no `s
 
 ```ts
 interface ClaudePlanV2 extends ClaudePlan {
-  schema_version?: 1 | 2;            // absent ⇒ 1; v2 writes always set 2
-  stage?: PipelineStage | null;      // null until first set_stage
+  schema_version?: 1 | 2; // absent ⇒ 1; v2 writes always set 2
+  stage?: PipelineStage | null; // null until first set_stage
   stage_history?: StageTransition[]; // append-only; empty when omitted
   dispatch_token?: DispatchToken | null; // current outstanding token, or null
-  dispatch_log?: DispatchEvent[];    // append-only; both dry-run and live events
+  dispatch_log?: DispatchEvent[]; // append-only; both dry-run and live events
 }
 
 type PipelineStage =
@@ -54,29 +54,29 @@ type PipelineStage =
 interface StageTransition {
   from: PipelineStage | null;
   to: PipelineStage;
-  at: string;          // ISO 8601
-  by: string;          // session_id or operator label
+  at: string; // ISO 8601
+  by: string; // session_id or operator label
   source: "code" | "dashboard"; // who initiated; feeds conflict resolution
 }
 
 interface DispatchToken {
-  token: string;                   // tok_<24-hex>
+  token: string; // tok_<24-hex>
   issued_for_stage: PipelineStage; // must match dispatch target
-  issued_at: string;               // ISO 8601
-  expires_at: string;              // issued_at + 5 min
-  consumed_at?: string;            // set when dispatch_stage consumes it
+  issued_at: string; // ISO 8601
+  expires_at: string; // issued_at + 5 min
+  consumed_at?: string; // set when dispatch_stage consumes it
 }
 
 interface DispatchEvent {
   at: string;
   target_stage: PipelineStage;
   mode: "dry-run" | "live";
-  by: string;                      // operator label
-  command?: string;                // resolved spawn command (recorded for both)
-  cwd?: string;                    // resolved working dir
+  by: string; // operator label
+  command?: string; // resolved spawn command (recorded for both)
+  cwd?: string; // resolved working dir
   outcome: "ok" | "missing-agent" | "stale-token" | "no-token" | "spawn-error";
-  pid?: number;                    // live spawns only
-  error?: string;                  // failure message (sanitized)
+  pid?: number; // live spawns only
+  error?: string; // failure message (sanitized)
 }
 ```
 
@@ -219,37 +219,42 @@ Errors (each is its own typed class; see §6):
 
 Ordered by intended forward flow (from brief PR #155 — the 13-agent pipeline collapsed to 10 surface stages). Each stage maps to one or more existing agents; stars mark net-new agents authored in sibling PR #160:
 
-| #   | Stage                  | Agent / asset                                        |
-| --- | ---------------------- | ---------------------------------------------------- |
-| 1   | `research`             | `idea-shaper`, `devils-advocate`                     |
-| 2   | `pre-stage-improve`    | `improve-prompt` skill                               |
-| 3   | `planning`             | `push_plan` (this package)                           |
-| 4   | `post-plan-improve`    | `improve-prompt` skill (optional toggle)             |
+| #   | Stage                  | Agent / asset                                              |
+| --- | ---------------------- | ---------------------------------------------------------- |
+| 1   | `research`             | `idea-shaper`, `devils-advocate`                           |
+| 2   | `pre-stage-improve`    | `improve-prompt` skill                                     |
+| 3   | `planning`             | `push_plan` (this package)                                 |
+| 4   | `post-plan-improve`    | `improve-prompt` skill (optional toggle)                   |
 | 5   | `test-first`           | `test-author` ★ (PR #160 — until then `MissingAgentError`) |
-| 6   | `code`                 | Ralph autonomous loop                                |
-| 7   | `per-step-review`      | `code-review`, `pr` skills                           |
-| 8   | `architectural-review` | `architecture-critic` agent                          |
-| 9   | `test-reality`         | `test-reality-checker` ★ (PR #160)                   |
-| 10  | `documentation`        | `docs` skill, `documentation-generator`              |
+| 6   | `code`                 | Ralph autonomous loop                                      |
+| 7   | `per-step-review`      | `code-review`, `pr` skills                                 |
+| 8   | `architectural-review` | `architecture-critic` agent                                |
+| 9   | `test-reality`         | `test-reality-checker` ★ (PR #160)                         |
+| 10  | `documentation`        | `docs` skill, `documentation-generator`                    |
 
 ### 3.2 Legal transitions
 
 The state machine is deliberately permissive about backward moves (operators legitimately bounce back to `research` or `planning` after a failed review) but rejects skip-forward jumps that bypass mandatory gates.
 
 ```ts
-const LEGAL_TRANSITIONS: Record<PipelineStage | "__START__", PipelineStage[]> = {
-  __START__:              ["research", "planning"],
-  "research":             ["pre-stage-improve", "planning", "research"],          // self = re-research
-  "pre-stage-improve":    ["planning", "research"],
-  "planning":             ["post-plan-improve", "test-first", "research", "planning"],
-  "post-plan-improve":    ["test-first", "planning"],
-  "test-first":           ["code", "planning"],                                   // back to planning if tests reveal a planning miss
-  "code":                 ["per-step-review", "test-first"],                       // back to tests if code drifted
-  "per-step-review":      ["code", "architectural-review"],
-  "architectural-review": ["per-step-review", "test-reality", "documentation"],
-  "test-reality":         ["documentation", "code"],                              // back to code if reality check fails
-  "documentation":        ["documentation"]                                       // terminal; self-loop allowed for re-docs
-};
+const LEGAL_TRANSITIONS: Record<PipelineStage | "__START__", PipelineStage[]> =
+  {
+    __START__: ["research", "planning"],
+    research: ["pre-stage-improve", "planning", "research"], // self = re-research
+    "pre-stage-improve": ["planning", "research"],
+    planning: ["post-plan-improve", "test-first", "research", "planning"],
+    "post-plan-improve": ["test-first", "planning"],
+    "test-first": ["code", "planning"], // back to planning if tests reveal a planning miss
+    code: ["per-step-review", "test-first"], // back to tests if code drifted
+    "per-step-review": ["code", "architectural-review"],
+    "architectural-review": [
+      "per-step-review",
+      "test-reality",
+      "documentation",
+    ],
+    "test-reality": ["documentation", "code"], // back to code if reality check fails
+    documentation: ["documentation"], // terminal; self-loop allowed for re-docs
+  };
 ```
 
 **Rules:**
@@ -271,11 +276,11 @@ When the same plan record is mutated by both the dispatched subprocess (writing 
 
 ### 4.1 Options enumerated
 
-**Option A — `dashboard-wins`.** Any dashboard-sourced write supersedes any code-sourced write on the same plan within the same wall-clock window. *Worked example:* code writes `set_stage(to: code)` at T; dashboard writes `set_stage(to: planning)` at T+1s; resolved state is `planning`. *Strength:* matches the operator-GUI vision — the human in front of the dashboard is the steering wheel. *Weakness:* a dashboard left open by mistake can stomp legitimate forward progress from a long-running session.
+**Option A — `dashboard-wins`.** Any dashboard-sourced write supersedes any code-sourced write on the same plan within the same wall-clock window. _Worked example:_ code writes `set_stage(to: code)` at T; dashboard writes `set_stage(to: planning)` at T+1s; resolved state is `planning`. _Strength:_ matches the operator-GUI vision — the human in front of the dashboard is the steering wheel. _Weakness:_ a dashboard left open by mistake can stomp legitimate forward progress from a long-running session.
 
-**Option B — `code-wins`.** Mirror of A — code-sourced writes supersede dashboard ones. *Strength:* protects long-running autonomous loops. *Weakness:* if a dispatched subprocess is wedged or hallucinating, the operator can't override it from the dashboard — defeats the bidirectional purpose.
+**Option B — `code-wins`.** Mirror of A — code-sourced writes supersede dashboard ones. _Strength:_ protects long-running autonomous loops. _Weakness:_ if a dispatched subprocess is wedged or hallucinating, the operator can't override it from the dashboard — defeats the bidirectional purpose.
 
-**Option C — `last-write-wins-with-timestamps`.** Whichever write has the later `at` timestamp wins, irrespective of source. *Worked example:* same as A, `planning` wins because T+1s > T. *Strength:* no source bias, deterministic, simplest implementation (no extra logic — atomic rename already does this). *Weakness:* clock skew between processes; two writes 50ms apart can land in non-causal order on disk.
+**Option C — `last-write-wins-with-timestamps`.** Whichever write has the later `at` timestamp wins, irrespective of source. _Worked example:_ same as A, `planning` wins because T+1s > T. _Strength:_ no source bias, deterministic, simplest implementation (no extra logic — atomic rename already does this). _Weakness:_ clock skew between processes; two writes 50ms apart can land in non-causal order on disk.
 
 ### 4.2 Choice — Option A (`dashboard-wins`)
 
@@ -284,15 +289,22 @@ When the same plan record is mutated by both the dispatched subprocess (writing 
 **Implementation.** A single helper `resolveConflict(currentOnDisk, incoming)` consumed by `set_stage`, `pull_plan` (read-time normalization), and `dispatch_stage` (re-checks before consuming a token). Pseudocode:
 
 ```ts
-function resolveConflict(current: ClaudePlanV2, incoming: WriteIntent): "accept" | "reject" {
+function resolveConflict(
+  current: ClaudePlanV2,
+  incoming: WriteIntent,
+): "accept" | "reject" {
   if (!current.stage_history?.length) return "accept";
-  const lastTransition = current.stage_history[current.stage_history.length - 1];
+  const lastTransition =
+    current.stage_history[current.stage_history.length - 1];
   // Dashboard-sourced incoming always wins.
   if (incoming.source === "dashboard") return "accept";
   // Code-sourced incoming is rejected if the last transition was dashboard-sourced
   // AND was made within the last 30 seconds (the "operator just touched this" window).
   const cutoff = Date.now() - 30_000;
-  if (lastTransition.source === "dashboard" && Date.parse(lastTransition.at) >= cutoff) {
+  if (
+    lastTransition.source === "dashboard" &&
+    Date.parse(lastTransition.at) >= cutoff
+  ) {
     return "reject"; // returns ConflictRejectedError to the caller
   }
   return "accept";
@@ -315,20 +327,20 @@ The snapshot test (added in Phase B; run by Phases C/D/E in CI) exercises each t
 
 ### 5.1 Tools fixtured
 
-| Tool                    | Fixture file               | Why it matters                                                       |
-| ----------------------- | -------------------------- | -------------------------------------------------------------------- |
-| `push_plan`             | `push_plan.json`           | Most-called write; locks plan record shape.                          |
-| `push_artifact`         | `push_artifact.json`       | Locks artifact record shape, including mermaid normalization.        |
-| `push_diagram`          | `push_diagram.json`        | Mermaid header + sequence-semicolon lint contract.                   |
-| `push_prompt`           | `push_prompt.json`         | Prompt-tab record shape + score badges.                              |
-| `update_plan_status`    | `update_plan_status.json`  | DRAFT→APPROVED transition shape; rejects locked too.                  |
-| `delete_plan`           | `delete_plan.json`         | `{deleted, slug}` response.                                          |
-| `get_plan`              | `get_plan.json`            | `PlanWithArtifacts` shape; the dashboard's primary read.             |
-| `list_recent_plans`     | `list_recent_plans.json`   | `{plans: ClaudePlan[]}` envelope + default-limit ordering.           |
-| `get_handoff_bundle`    | `get_handoff_bundle.json`  | Markdown serializer; downstream session-resume depends on this.      |
-| `push_question`         | `push_question.json`       | v2 will add `schema_version`; this fixture proves response shape is unchanged. |
-| `record_answer`         | `record_answer.json`       | Same.                                                                |
-| `get_answers`           | `get_answers.json`         | Same.                                                                |
+| Tool                 | Fixture file              | Why it matters                                                                 |
+| -------------------- | ------------------------- | ------------------------------------------------------------------------------ |
+| `push_plan`          | `push_plan.json`          | Most-called write; locks plan record shape.                                    |
+| `push_artifact`      | `push_artifact.json`      | Locks artifact record shape, including mermaid normalization.                  |
+| `push_diagram`       | `push_diagram.json`       | Mermaid header + sequence-semicolon lint contract.                             |
+| `push_prompt`        | `push_prompt.json`        | Prompt-tab record shape + score badges.                                        |
+| `update_plan_status` | `update_plan_status.json` | DRAFT→APPROVED transition shape; rejects locked too.                           |
+| `delete_plan`        | `delete_plan.json`        | `{deleted, slug}` response.                                                    |
+| `get_plan`           | `get_plan.json`           | `PlanWithArtifacts` shape; the dashboard's primary read.                       |
+| `list_recent_plans`  | `list_recent_plans.json`  | `{plans: ClaudePlan[]}` envelope + default-limit ordering.                     |
+| `get_handoff_bundle` | `get_handoff_bundle.json` | Markdown serializer; downstream session-resume depends on this.                |
+| `push_question`      | `push_question.json`      | v2 will add `schema_version`; this fixture proves response shape is unchanged. |
+| `record_answer`      | `record_answer.json`      | Same.                                                                          |
+| `get_answers`        | `get_answers.json`        | Same.                                                                          |
 
 ### 5.2 Fixture envelope
 
@@ -336,7 +348,12 @@ The snapshot test (added in Phase B; run by Phases C/D/E in CI) exercises each t
 {
   "tool": "push_plan",
   "request": { "title": "...", "content_md": "..." },
-  "response": { "slug": "...", "title": "...", "status": "DRAFT", "...": "..." },
+  "response": {
+    "slug": "...",
+    "title": "...",
+    "status": "DRAFT",
+    "...": "..."
+  },
   "notes": "Plain text content_md, no PR fields, no linked_artifacts."
 }
 ```
@@ -349,16 +366,16 @@ The snapshot test loads each `.json`, calls the tool through `buildDescriptors()
 
 Phase A names the error classes so consumers (and the dashboard's UI hints in Phase E) can branch on them cleanly. Implementation lands in Phase C/D.
 
-| Class                       | Where raised                  | HTTP-ish status |
-| --------------------------- | ----------------------------- | --------------- |
-| `PlanNotFoundError`         | every tool                    | 404             |
-| `QuestionNotFoundError`     | `record_answer`               | 404             |
-| `IllegalTransitionError`    | `set_stage`, `dispatch_stage` | 409             |
-| `ConflictRejectedError`     | `set_stage`                   | 409             |
-| `MissingAgentError`         | `dispatch_stage` (stages 5/9) | 424             |
-| `NoTokenError`              | `dispatch_stage` (live)       | 400             |
-| `StaleTokenError`           | `dispatch_stage` (live)       | 410             |
-| `SpawnError`                | `dispatch_stage` (live)       | 500             |
+| Class                    | Where raised                  | HTTP-ish status |
+| ------------------------ | ----------------------------- | --------------- |
+| `PlanNotFoundError`      | every tool                    | 404             |
+| `QuestionNotFoundError`  | `record_answer`               | 404             |
+| `IllegalTransitionError` | `set_stage`, `dispatch_stage` | 409             |
+| `ConflictRejectedError`  | `set_stage`                   | 409             |
+| `MissingAgentError`      | `dispatch_stage` (stages 5/9) | 424             |
+| `NoTokenError`           | `dispatch_stage` (live)       | 400             |
+| `StaleTokenError`        | `dispatch_stage` (live)       | 410             |
+| `SpawnError`             | `dispatch_stage` (live)       | 500             |
 
 All extend a base `ClaudePlansError` carrying `code`, `message`, and a structured `details` object. The MCP server surfaces them as `tool_result` errors with the `code` in the body — no stack traces leaked.
 
@@ -371,7 +388,10 @@ The riskiest surface in v2. Detailed below so the implementation in Phase D has 
 ### 7.1 Command resolution
 
 ```ts
-function resolveDispatchCommand(plan: ClaudePlanV2, stage: PipelineStage): {
+function resolveDispatchCommand(
+  plan: ClaudePlanV2,
+  stage: PipelineStage,
+): {
   command: string;
   cwd: string;
 } {
@@ -387,9 +407,12 @@ function resolveDispatchCommand(plan: ClaudePlanV2, stage: PipelineStage): {
   // and target stage as flags; the agent layer reads them.
   const argv = [
     "claude",
-    "--resume-plan", plan.slug,
-    "--target-stage", stage,
-    "--session-source", "dispatch"
+    "--resume-plan",
+    plan.slug,
+    "--target-stage",
+    stage,
+    "--session-source",
+    "dispatch",
   ];
   return { command: argv.join(" "), cwd };
 }
@@ -447,16 +470,16 @@ Lifted from PR #159's supporting doc — explicitly NOT covered by v2:
 
 ## 8. Phase order recap (for the PR description)
 
-| Phase | Deliverable                                                          | Gates                          |
-| ----- | -------------------------------------------------------------------- | ------------------------------ |
-| A     | This doc + `src/tests/fixtures/v1/*.json`                            | STOP for Daniel confirm        |
-| B     | Q&A audit + `schema_version` + `migrateV1OnLoad()` + missing tests   | Phase A merged                 |
-| C     | `set_stage`, `pull_plan` + state-machine helper + token issuance     | Phase B merged                 |
-| D     | `dispatch_stage` with dry-run/confirm/token consume + missing-agent  | Phase C merged                 |
-| E     | Dashboard surfaces (Questions tab, Stage Map, per-stage Dispatch)    | Phases B+C+D all merged        |
+| Phase | Deliverable                                                         | Gates                   |
+| ----- | ------------------------------------------------------------------- | ----------------------- |
+| A     | This doc + `src/tests/fixtures/v1/*.json`                           | STOP for Daniel confirm |
+| B     | Q&A audit + `schema_version` + `migrateV1OnLoad()` + missing tests  | Phase A merged          |
+| C     | `set_stage`, `pull_plan` + state-machine helper + token issuance    | Phase B merged          |
+| D     | `dispatch_stage` with dry-run/confirm/token consume + missing-agent | Phase C merged          |
+| E     | Dashboard surfaces (Questions tab, Stage Map, per-stage Dispatch)   | Phases B+C+D all merged |
 
 Each phase is its own Draft PR (auto-publishes packages on merge — see `Dovetail/CLAUDE.md` §Releasing).
 
 ---
 
-*Last updated: 2026-05-26 — design only; no implementation yet.*
+_Last updated: 2026-05-26 — design only; no implementation yet._

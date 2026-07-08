@@ -1,6 +1,7 @@
 # Delete ServiceNow Records
 
 ## Task
+
 $ARGUMENTS
 
 ## Instructions for Claude
@@ -8,6 +9,7 @@ $ARGUMENTS
 ### Directory Context
 
 Dovetail commands can be run from two locations:
+
 - **From `ServiceNow/` directory:** `npx sinc <command>`
 - **From Craftsman root:** `npm run sinc:<command>` (proxy scripts)
 
@@ -25,12 +27,12 @@ npx dove delete <table> [name] [options]
 
 ### Options
 
-| Flag | Alias | Type | Description |
-|------|-------|------|-------------|
-| `--scope` | `-s` | string | Target scope (e.g., x_cadso_core) |
-| `--sysid` | | string | Delete by sys_id directly (skip manifest lookup) |
-| `--ci` | | boolean | Skip confirmation prompt |
-| `--keep-local` | | boolean | Keep local files after instance delete |
+| Flag           | Alias | Type    | Description                                      |
+| -------------- | ----- | ------- | ------------------------------------------------ |
+| `--scope`      | `-s`  | string  | Target scope (e.g., x_cadso_core)                |
+| `--sysid`      |       | string  | Delete by sys_id directly (skip manifest lookup) |
+| `--ci`         |       | boolean | Skip confirmation prompt                         |
+| `--keep-local` |       | boolean | Keep local files after instance delete           |
 
 ### Examples
 
@@ -75,24 +77,25 @@ npx dove delete sys_script_include MyOldUtil --scope x_cadso_core --ci
 ### How sys_id Resolution Works
 
 When you provide a **record name** (not `--sysid`):
+
 1. The scope manifest (`dove.manifest.<scope>.json`) is loaded
 2. The sys_id is looked up from `manifest.tables[table].records[name].sys_id`
 3. If not found, an error is shown with a suggestion to use `--sysid`
 
 ### Common Table Names
 
-| Table | Deletes |
-|-------|---------|
-| `sys_script_include` | Script Include |
-| `sys_script` | Business Rule |
-| `sys_ui_script` | UI Script |
-| `sys_ui_page` | UI Page |
-| `sys_ux_client_script` | UX Client Script |
-| `sys_processor` | Processor |
-| `sys_ws_operation` | REST API Operation |
-| `sys_rest_message_fn` | REST Message Function |
-| `sys_ui_action` | UI Action |
-| `sysevent_script_action` | Event Script Action |
+| Table                    | Deletes               |
+| ------------------------ | --------------------- |
+| `sys_script_include`     | Script Include        |
+| `sys_script`             | Business Rule         |
+| `sys_ui_script`          | UI Script             |
+| `sys_ui_page`            | UI Page               |
+| `sys_ux_client_script`   | UX Client Script      |
+| `sys_processor`          | Processor             |
+| `sys_ws_operation`       | REST API Operation    |
+| `sys_rest_message_fn`    | REST Message Function |
+| `sys_ui_action`          | UI Action             |
+| `sysevent_script_action` | Event Script Action   |
 
 ### Troubleshooting
 

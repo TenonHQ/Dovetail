@@ -1,10 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import rateLimit from "axios-rate-limit";
-import {
-  SawmillApiConfig,
-  PromoteRequest,
-  PromoteResponse,
-} from "./types";
+import { SawmillApiConfig, PromoteRequest, PromoteResponse } from "./types";
 
 var PROMOTE_PATH = "/api/cadso/dovetail_promote/promote";
 var MAX_RETRIES = 3;
@@ -48,7 +44,7 @@ function createClient(config: SawmillApiConfig): AxiosInstance {
     auth: { username: config.username, password: config.password },
     headers: {
       "Content-Type": "application/json",
-      "Accept": "application/json",
+      Accept: "application/json",
     },
     validateStatus: function (status: number) {
       return status >= 200 && status < 300;
@@ -82,7 +78,9 @@ function shouldRetry5xx(isCommit: boolean): boolean {
 
 export function createSawmillApi(config: SawmillApiConfig): SawmillApi {
   if (!config || !config.instance || !config.username || !config.password) {
-    throw new Error("createSawmillApi requires instance, username, and password");
+    throw new Error(
+      "createSawmillApi requires instance, username, and password",
+    );
   }
   var client = createClient(config);
 
@@ -113,27 +111,41 @@ export function createSawmillApi(config: SawmillApiConfig): SawmillApi {
           throw new SawmillApiError(
             status,
             respBody,
-            "Sawmill auth failed (HTTP " + status + ")"
+            "Sawmill auth failed (HTTP " + status + ")",
           );
         }
 
         if (status === 429) {
           if (attempt >= MAX_RETRIES) {
-            throw new SawmillApiError(status, respBody, "Sawmill rate limited (429) — retries exhausted");
+            throw new SawmillApiError(
+              status,
+              respBody,
+              "Sawmill rate limited (429) — retries exhausted",
+            );
           }
           var retryAfter = parseRetryAfter(
             axErr.response && axErr.response.headers
-              ? (axErr.response.headers as Record<string, unknown>)["retry-after"]
-              : undefined
+              ? (axErr.response.headers as Record<string, unknown>)[
+                  "retry-after"
+                ]
+              : undefined,
           );
           await sleep(retryAfter);
           attempt = attempt + 1;
           continue;
         }
 
-        if (status >= 500 && status < 600 && shouldRetry5xx(body.commit === true)) {
+        if (
+          status >= 500 &&
+          status < 600 &&
+          shouldRetry5xx(body.commit === true)
+        ) {
           if (attempt >= MAX_RETRIES) {
-            throw new SawmillApiError(status, respBody, "Sawmill server error (HTTP " + status + ") — retries exhausted");
+            throw new SawmillApiError(
+              status,
+              respBody,
+              "Sawmill server error (HTTP " + status + ") — retries exhausted",
+            );
           }
           var backoff = Math.pow(2, attempt) * 500;
           await sleep(backoff);
@@ -147,7 +159,7 @@ export function createSawmillApi(config: SawmillApiConfig): SawmillApi {
         throw new SawmillApiError(
           status,
           respBody,
-          "Sawmill request failed (HTTP " + status + ")"
+          "Sawmill request failed (HTTP " + status + ")",
         );
       }
     }

@@ -44,7 +44,10 @@ export interface WriteOpResult {
 }
 
 export class WriteOrderError extends Error {
-  constructor(message: string, public readonly cycleIds?: Array<string>) {
+  constructor(
+    message: string,
+    public readonly cycleIds?: Array<string>,
+  ) {
     super(message);
     this.name = "WriteOrderError";
   }
@@ -76,7 +79,9 @@ export function topoSort(ops: Array<WriteOp>): Array<WriteOp> {
     for (var k = 0; k < deps.length; k++) {
       var dep = deps[k];
       if (!byId[dep]) {
-        throw new WriteOrderError("WriteOp '" + o.id + "' depends on unknown id '" + dep + "'");
+        throw new WriteOrderError(
+          "WriteOp '" + o.id + "' depends on unknown id '" + dep + "'",
+        );
       }
       if (!fwd[dep]) fwd[dep] = [];
       fwd[dep].push(o.id);
@@ -132,7 +137,9 @@ export async function executeWritePlan(
   updateSetSysId: string,
 ): Promise<Array<WriteOpResult>> {
   if (typeof updateSetSysId !== "string" || updateSetSysId.length !== 32) {
-    throw new Error("executeWritePlan: updateSetSysId must be a 32-char sys_id");
+    throw new Error(
+      "executeWritePlan: updateSetSysId must be a 32-char sys_id",
+    );
   }
   var sorted = topoSort(ops);
   var results: Array<WriteOpResult> = [];
@@ -140,8 +147,10 @@ export async function executeWritePlan(
     var op = sorted[i];
     if (typeof op.fields.sys_id !== "string") {
       throw new Error(
-        "executeWritePlan: WriteOp '" + op.id + "' missing fields.sys_id — " +
-        "clone/create must pre-generate sys_ids so dependent ops can reference them",
+        "executeWritePlan: WriteOp '" +
+          op.id +
+          "' missing fields.sys_id — " +
+          "clone/create must pre-generate sys_ids so dependent ops can reference them",
       );
     }
     var fields = op.fields as Record<string, any>;
@@ -163,7 +172,12 @@ export async function executeWritePlan(
     } catch (err: any) {
       var msg = err && err.message ? err.message : String(err);
       throw new Error(
-        "executeWritePlan: write failed at op '" + op.id + "' (" + op.table + "): " + msg,
+        "executeWritePlan: write failed at op '" +
+          op.id +
+          "' (" +
+          op.table +
+          "): " +
+          msg,
       );
     }
   }

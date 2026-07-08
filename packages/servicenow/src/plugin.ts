@@ -9,5 +9,5 @@ export const sincPlugin = {
   displayName: "ServiceNow",
   description: "Dictionary / choice helpers and update-set-aware writes",
   login: [],
-  configure: []
+  configure: [],
 };

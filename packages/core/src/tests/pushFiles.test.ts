@@ -88,7 +88,9 @@ jest.mock("../Logger", function () {
       debug: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
-      getLogLevel: function () { return "debug"; },
+      getLogLevel: function () {
+        return "debug";
+      },
     },
   };
 });
@@ -99,7 +101,11 @@ jest.mock("progress", function () {
   });
 });
 
-function makeRecord(table: string, sysId: string, scope: string): Sinc.BuildableRecord {
+function makeRecord(
+  table: string,
+  sysId: string,
+  scope: string,
+): Sinc.BuildableRecord {
   return {
     table: table,
     sysId: sysId,
@@ -129,8 +135,8 @@ describe("pushFiles", function () {
   it("reads update set config once at batch start, not per record", async function () {
     // Set up config for two scopes
     mockConfigData = {
-      "x_cadso_core": { sys_id: "us-core-123", name: "Core US" },
-      "x_cadso_work": { sys_id: "us-work-456", name: "Work US" },
+      x_cadso_core: { sys_id: "us-core-123", name: "Core US" },
+      x_cadso_work: { sys_id: "us-work-456", name: "Work US" },
     };
 
     var { pushFiles } = require("../appUtils");
@@ -153,7 +159,7 @@ describe("pushFiles", function () {
 
   it("does not re-read config mid-batch even with multiple scopes", async function () {
     mockConfigData = {
-      "x_cadso_core": { sys_id: "us-core-123", name: "Core US" },
+      x_cadso_core: { sys_id: "us-core-123", name: "Core US" },
     };
 
     var { pushFiles } = require("../appUtils");
@@ -171,8 +177,8 @@ describe("pushFiles", function () {
 
   it("routes records to correct update sets from cached config", async function () {
     mockConfigData = {
-      "x_cadso_core": { sys_id: "us-core-123", name: "Core US" },
-      "x_cadso_work": { sys_id: "us-work-456", name: "Work US" },
+      x_cadso_core: { sys_id: "us-core-123", name: "Core US" },
+      x_cadso_work: { sys_id: "us-work-456", name: "Work US" },
     };
 
     var { pushFiles } = require("../appUtils");
@@ -188,7 +194,9 @@ describe("pushFiles", function () {
     expect(mockPushWithUpdateSet).toHaveBeenCalledTimes(2);
 
     var calls = mockPushWithUpdateSet.mock.calls;
-    var updateSetIds = calls.map(function (call: unknown[]) { return call[0]; });
+    var updateSetIds = calls.map(function (call: unknown[]) {
+      return call[0];
+    });
     expect(updateSetIds).toContain("us-core-123");
     expect(updateSetIds).toContain("us-work-456");
   });
@@ -198,9 +206,7 @@ describe("pushFiles", function () {
 
     var { pushFiles } = require("../appUtils");
 
-    var records = [
-      makeRecord("sys_script_include", "rec1", "x_cadso_core"),
-    ];
+    var records = [makeRecord("sys_script_include", "rec1", "x_cadso_core")];
 
     await pushFiles(records);
 
@@ -216,9 +222,7 @@ describe("pushFiles", function () {
 
     var { pushFiles } = require("../appUtils");
 
-    var records = [
-      makeRecord("sys_hub_flow", "flow1", "x_cadso_core"),
-    ];
+    var records = [makeRecord("sys_hub_flow", "flow1", "x_cadso_core")];
 
     var results = await pushFiles(records);
 
@@ -235,9 +239,7 @@ describe("pushFiles", function () {
 
     var { pushFiles } = require("../appUtils");
 
-    var records = [
-      makeRecord("sys_script_include", "rec1", "x_cadso_core"),
-    ];
+    var records = [makeRecord("sys_script_include", "rec1", "x_cadso_core")];
 
     await pushFiles(records);
 

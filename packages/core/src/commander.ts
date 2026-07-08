@@ -78,7 +78,8 @@ export async function initCommands() {
           monitorInterval: {
             type: "number",
             default: 120,
-            describe: "Update set monitoring interval in seconds (default: 120)",
+            describe:
+              "Update set monitoring interval in seconds (default: 120)",
           },
           noMonitoring: {
             type: "boolean",
@@ -102,7 +103,8 @@ export async function initCommands() {
             alias: "f",
             type: "boolean",
             default: false,
-            describe: "Overwrite local files even when content matches the instance",
+            describe:
+              "Overwrite local files even when content matches the instance",
           },
           scope: {
             alias: "s",
@@ -113,17 +115,20 @@ export async function initCommands() {
             alias: "b",
             type: "boolean",
             default: false,
-            describe: "Log per-scope and aggregate HTTP latency, bytes, and file counts",
+            describe:
+              "Log per-scope and aggregate HTTP latency, bytes, and file counts",
           },
         });
         return cmdArgs;
       },
       async (args: TSFIXME) => {
-        await refreshCommand(args as Sinc.SharedCmdArgs & {
-          force?: boolean;
-          scope?: string;
-          benchmark?: boolean;
-        });
+        await refreshCommand(
+          args as Sinc.SharedCmdArgs & {
+            force?: boolean;
+            scope?: string;
+            benchmark?: boolean;
+          },
+        );
       },
     )
     .command(
@@ -182,7 +187,8 @@ export async function initCommands() {
       "Authenticate with ServiceNow and other integrations",
       function (cmdArgs: TSFIXME) {
         cmdArgs.positional("plugin", {
-          describe: "Plugin name to login (e.g., clickup). Omit for ServiceNow only.",
+          describe:
+            "Plugin name to login (e.g., clickup). Omit for ServiceNow only.",
           type: "string",
         });
         cmdArgs.options({
@@ -491,8 +497,7 @@ export async function initCommands() {
           scope: {
             alias: "s",
             type: "string",
-            describe:
-              "Single scope (default: all scopes from dove.config.js)",
+            describe: "Single scope (default: all scopes from dove.config.js)",
           },
           snapshot: {
             type: "string",
@@ -722,7 +727,8 @@ export async function initCommands() {
         apply: {
           type: "boolean",
           default: false,
-          describe: "Actually perform the migration. Without this flag, only the plan is printed.",
+          describe:
+            "Actually perform the migration. Without this flag, only the plan is printed.",
         },
       },
       migrateCommand,
@@ -752,7 +758,8 @@ export async function initCommands() {
           ...sharedOptions,
           manifest: {
             type: "string",
-            describe: "Path to the Dovetail release manifest (defaults to the bundled one)",
+            describe:
+              "Path to the Dovetail release manifest (defaults to the bundled one)",
           },
           config: {
             type: "string",

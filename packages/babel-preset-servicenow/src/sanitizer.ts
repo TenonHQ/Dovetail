@@ -1,7 +1,7 @@
 import { PluginItem } from "@babel/core";
 import * as t from "@babel/types";
 import { isReservedWord } from "./sanitizerHelper";
-export default function() {
+export default function () {
   return {
     visitor: {
       Identifier(path) {
@@ -20,7 +20,7 @@ export default function() {
           const replacement = t.memberExpression(
             path.node.object,
             t.stringLiteral(path.node.property.name),
-            true
+            true,
           );
           path.replaceWith(replacement);
         }
@@ -28,15 +28,15 @@ export default function() {
       //remove use strict
       Program: {
         exit: function exit(path) {
-            const list = path.node.directives;
-            for(let i=list.length-1, it; i>=0 ; i--){
-                it = list[i];
-                if (it.value.value==='use strict'){
-                    list.splice(i,1);
-                }
+          const list = path.node.directives;
+          for (let i = list.length - 1, it; i >= 0; i--) {
+            it = list[i];
+            if (it.value.value === "use strict") {
+              list.splice(i, 1);
             }
-        }
-      }
-    }
+          }
+        },
+      },
+    },
   } as PluginItem;
 }

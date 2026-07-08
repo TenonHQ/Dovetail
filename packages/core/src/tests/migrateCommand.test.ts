@@ -9,7 +9,9 @@ var mockLogger = {
   warn: jest.fn(),
   error: jest.fn(),
   success: jest.fn(),
-  getLogLevel: function () { return "debug"; },
+  getLogLevel: function () {
+    return "debug";
+  },
 };
 
 jest.mock("../Logger", function () {
@@ -49,23 +51,38 @@ describe("migrateCommand", function () {
   });
 
   it("dry-run makes zero filesystem changes", async function () {
-    fs.writeFileSync(path.join(tmp, "sinc.config.js"), "module.exports = {};\n");
+    fs.writeFileSync(
+      path.join(tmp, "sinc.config.js"),
+      "module.exports = {};\n",
+    );
     fs.writeFileSync(
       path.join(tmp, "package.json"),
-      JSON.stringify({ scripts: { build: "sinc push" }, devDependencies: { "@tenonhq/sincronia-core": "^1.0.0" } }, null, 2),
+      JSON.stringify(
+        {
+          scripts: { build: "sinc push" },
+          devDependencies: { "@tenonhq/sincronia-core": "^1.0.0" },
+        },
+        null,
+        2,
+      ),
     );
 
     await migrateCommand({} as any);
 
     expect(fs.existsSync(path.join(tmp, "sinc.config.js"))).toBe(true);
     expect(fs.existsSync(path.join(tmp, "dove.config.js"))).toBe(false);
-    var pkg = JSON.parse(fs.readFileSync(path.join(tmp, "package.json"), "utf8"));
+    var pkg = JSON.parse(
+      fs.readFileSync(path.join(tmp, "package.json"), "utf8"),
+    );
     expect(pkg.scripts.build).toBe("sinc push");
     expect(pkg.devDependencies["@tenonhq/sincronia-core"]).toBe("^1.0.0");
   });
 
   it("--apply renames sinc.* artifacts and rewrites package.json", async function () {
-    fs.writeFileSync(path.join(tmp, "sinc.config.js"), "module.exports = {};\n");
+    fs.writeFileSync(
+      path.join(tmp, "sinc.config.js"),
+      "module.exports = {};\n",
+    );
     fs.writeFileSync(path.join(tmp, "sinc.manifest.json"), "{}\n");
     fs.writeFileSync(path.join(tmp, ".sinc-active-task.json"), "{}\n");
     fs.writeFileSync(path.join(tmp, "sinc.manifest.x_cadso_core.json"), "{}\n");
@@ -90,9 +107,13 @@ describe("migrateCommand", function () {
     expect(fs.existsSync(path.join(tmp, "dove.config.js"))).toBe(true);
     expect(fs.existsSync(path.join(tmp, "dove.manifest.json"))).toBe(true);
     expect(fs.existsSync(path.join(tmp, ".dove-active-task.json"))).toBe(true);
-    expect(fs.existsSync(path.join(tmp, "dove.manifest.x_cadso_core.json"))).toBe(true);
+    expect(
+      fs.existsSync(path.join(tmp, "dove.manifest.x_cadso_core.json")),
+    ).toBe(true);
 
-    var pkg = JSON.parse(fs.readFileSync(path.join(tmp, "package.json"), "utf8"));
+    var pkg = JSON.parse(
+      fs.readFileSync(path.join(tmp, "package.json"), "utf8"),
+    );
     expect(pkg.scripts.build).toBe("dove push");
     expect(pkg.scripts.watch).toBe("npx dove watch");
     expect(pkg.devDependencies["@tenonhq/dovetail-core"]).toBe("^1.0.0");
@@ -119,8 +140,12 @@ describe("migrateCommand", function () {
 
     await migrateCommand({ apply: true } as any);
 
-    var pkg = JSON.parse(fs.readFileSync(path.join(tmp, "package.json"), "utf8"));
-    expect(pkg.scripts.deploy).toBe("npm run build && dove push && dove deploy");
+    var pkg = JSON.parse(
+      fs.readFileSync(path.join(tmp, "package.json"), "utf8"),
+    );
+    expect(pkg.scripts.deploy).toBe(
+      "npm run build && dove push && dove deploy",
+    );
     expect(pkg.scripts.ci).toBe("lint && test ; dove status");
     // \bsinc\b does not match `sincronia` (no word boundary between c and r),
     // and @tenonhq/sincronia-* is rewritten to @tenonhq/dovetail-* by the
@@ -134,18 +159,32 @@ describe("migrateCommand", function () {
 
     await migrateCommand({ apply: true } as any);
 
-    expect(fs.readFileSync(path.join(tmp, "sinc.config.js"), "utf8")).toBe("// legacy\n");
-    expect(fs.readFileSync(path.join(tmp, "dove.config.js"), "utf8")).toBe("// new\n");
+    expect(fs.readFileSync(path.join(tmp, "sinc.config.js"), "utf8")).toBe(
+      "// legacy\n",
+    );
+    expect(fs.readFileSync(path.join(tmp, "dove.config.js"), "utf8")).toBe(
+      "// new\n",
+    );
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining("Skipping rename of sinc.config.js"),
     );
   });
 
   it("reports nothing-to-migrate when project is already on dove.*", async function () {
-    fs.writeFileSync(path.join(tmp, "dove.config.js"), "module.exports = {};\n");
+    fs.writeFileSync(
+      path.join(tmp, "dove.config.js"),
+      "module.exports = {};\n",
+    );
     fs.writeFileSync(
       path.join(tmp, "package.json"),
-      JSON.stringify({ scripts: { build: "dove push" }, devDependencies: { "@tenonhq/dovetail-core": "^1.0.0" } }, null, 2),
+      JSON.stringify(
+        {
+          scripts: { build: "dove push" },
+          devDependencies: { "@tenonhq/dovetail-core": "^1.0.0" },
+        },
+        null,
+        2,
+      ),
     );
 
     await migrateCommand({ apply: true } as any);

@@ -23,7 +23,10 @@ describe("runMultiPassOps", () => {
       calls.push(c.sys_id);
       return { ok: true };
     };
-    const out = await runMultiPassOps([rec("a", "delete"), rec("b", "delete")], exec);
+    const out = await runMultiPassOps(
+      [rec("a", "delete"), rec("b", "delete")],
+      exec,
+    );
     expect(out.every((o) => o.ok)).toBe(true);
     expect(calls.sort()).toEqual(["a", "b"]);
   });
@@ -37,7 +40,10 @@ describe("runMultiPassOps", () => {
       deleted.add(c.sys_id);
       return { ok: true };
     };
-    const out = await runMultiPassOps([rec("parent", "delete"), rec("child", "delete")], exec);
+    const out = await runMultiPassOps(
+      [rec("parent", "delete"), rec("child", "delete")],
+      exec,
+    );
     expect(out.every((o) => o.ok)).toBe(true);
   });
 
@@ -51,15 +57,23 @@ describe("runMultiPassOps", () => {
       return { ok: true };
     };
     // child attempted first, fails, then succeeds on the pass after parent.
-    const out = await runMultiPassOps([rec("child", "create"), rec("parent", "create")], exec);
+    const out = await runMultiPassOps(
+      [rec("child", "create"), rec("parent", "create")],
+      exec,
+    );
     expect(out.every((o) => o.ok)).toBe(true);
     expect(created.has("child")).toBe(true);
   });
 
   it("reports a record that fails for a non-ordering reason", async () => {
     const exec: OpExecutor = async (c) =>
-      c.sys_id === "locked" ? { ok: false, error: "ACL blocked" } : { ok: true };
-    const out = await runMultiPassOps([rec("ok", "delete"), rec("locked", "delete")], exec);
+      c.sys_id === "locked"
+        ? { ok: false, error: "ACL blocked" }
+        : { ok: true };
+    const out = await runMultiPassOps(
+      [rec("ok", "delete"), rec("locked", "delete")],
+      exec,
+    );
     const failed = out.filter((o) => !o.ok);
     expect(failed).toHaveLength(1);
     expect(failed[0].change.sys_id).toBe("locked");

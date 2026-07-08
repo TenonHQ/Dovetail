@@ -100,7 +100,10 @@ export function decodeV2Values<T = V2ValueEntry[]>(blob: string): T {
  * (e.g. functions, BigInt). Anything that survives JSON.stringify will be
  * accepted; structural validity is the caller's responsibility.
  */
-export function encodeV2Values(value: unknown, opts: EncodeV2ValuesOptions = {}): string {
+export function encodeV2Values(
+  value: unknown,
+  opts: EncodeV2ValuesOptions = {},
+): string {
   if (value === undefined) {
     throw new Error("encodeV2Values: value must not be undefined");
   }

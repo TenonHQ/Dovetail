@@ -22,7 +22,9 @@ function createMockWatcher(): MockWatcher {
     close: jest.fn(),
     _emit: function (event: string) {
       var args = Array.prototype.slice.call(arguments, 1);
-      (handlers[event] || []).forEach(function (h) { h.apply(null, args); });
+      (handlers[event] || []).forEach(function (h) {
+        h.apply(null, args);
+      });
     },
   };
   return mock;
@@ -47,7 +49,9 @@ jest.mock("lodash", function () {
     debounce: jest.fn(function (fn: Function) {
       var wrapper = jest.fn();
       (wrapper as any).cancel = jest.fn();
-      (wrapper as any).flush = jest.fn(function () { return fn(); });
+      (wrapper as any).flush = jest.fn(function () {
+        return fn();
+      });
       return wrapper;
     }),
   };
@@ -64,8 +68,12 @@ var mockSNClient = {
 
 jest.mock("../snClient", function () {
   return {
-    defaultClient: jest.fn(function () { return mockSNClient; }),
-    unwrapSNResponse: jest.fn(function (val: any) { return val; }),
+    defaultClient: jest.fn(function () {
+      return mockSNClient;
+    }),
+    unwrapSNResponse: jest.fn(function (val: any) {
+      return val;
+    }),
   };
 });
 
@@ -112,7 +120,9 @@ jest.mock("../config", function () {
     updateManifest: jest.fn(),
     getManifest: jest.fn(),
     getSourcePath: jest.fn().mockReturnValue("/project/src"),
-    getScopeManifestPath: jest.fn(function (scope: string) { return "/project/dove.manifest." + scope + ".json"; }),
+    getScopeManifestPath: jest.fn(function (scope: string) {
+      return "/project/dove.manifest." + scope + ".json";
+    }),
     getManifestPath: jest.fn().mockReturnValue("/project/dove.manifest.json"),
   };
 });
@@ -146,7 +156,11 @@ jest.mock("axios", function () {
 // --- Imports ---
 import * as ConfigManager from "../config";
 import { logger } from "../Logger";
-import { multiScopeWatcher, startMultiScopeWatching, stopMultiScopeWatching } from "../MultiScopeWatcher";
+import {
+  multiScopeWatcher,
+  startMultiScopeWatching,
+  stopMultiScopeWatching,
+} from "../MultiScopeWatcher";
 import fs from "fs";
 
 var MOCK_CONFIG = {
@@ -171,7 +185,9 @@ describe("US-009: Rate limit coordination", function () {
 
     mockSNClient.getScopeId.mockResolvedValue([{ sys_id: "scope_sys_id" }]);
     mockSNClient.getUserSysId.mockResolvedValue([{ sys_id: "user_sys_id" }]);
-    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([{ sys_id: "pref_sys_id" }]);
+    mockSNClient.getCurrentAppUserPrefSysId.mockResolvedValue([
+      { sys_id: "pref_sys_id" },
+    ]);
     mockSNClient.updateCurrentAppUserPref.mockResolvedValue({});
     mockSNClient.getCurrentUpdateSetUserPref.mockResolvedValue([]);
   });
@@ -189,7 +205,9 @@ describe("US-009: Rate limit coordination", function () {
       });
 
       await startMultiScopeWatching({ monitorIntervalMs: 60000 });
-      await new Promise(function (r) { setTimeout(r, 50); });
+      await new Promise(function (r) {
+        setTimeout(r, 50);
+      });
 
       expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60000);
       setIntervalSpy.mockRestore();
@@ -203,7 +221,9 @@ describe("US-009: Rate limit coordination", function () {
       });
 
       await startMultiScopeWatching();
-      await new Promise(function (r) { setTimeout(r, 50); });
+      await new Promise(function (r) {
+        setTimeout(r, 50);
+      });
 
       expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 120000);
       setIntervalSpy.mockRestore();
@@ -217,11 +237,13 @@ describe("US-009: Rate limit coordination", function () {
       });
 
       await startMultiScopeWatching({ monitorIntervalMs: 0 });
-      await new Promise(function (r) { setTimeout(r, 50); });
+      await new Promise(function (r) {
+        setTimeout(r, 50);
+      });
 
       expect(setIntervalSpy).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining("monitoring disabled")
+        expect.stringContaining("monitoring disabled"),
       );
       setIntervalSpy.mockRestore();
     });
@@ -236,21 +258,25 @@ describe("US-009: Rate limit coordination", function () {
 
       // Simulate update set config on disk
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({
-        x_scope_a: { sys_id: "us_a", name: "Task A Update Set" },
-        x_scope_b: { sys_id: "us_b", name: "Task B Update Set" },
-      }));
+      (fs.readFileSync as jest.Mock).mockReturnValue(
+        JSON.stringify({
+          x_scope_a: { sys_id: "us_a", name: "Task A Update Set" },
+          x_scope_b: { sys_id: "us_b", name: "Task B Update Set" },
+        }),
+      );
 
       await startMultiScopeWatching({ monitorIntervalMs: 60000 });
-      await new Promise(function (r) { setTimeout(r, 50); });
+      await new Promise(function (r) {
+        setTimeout(r, 50);
+      });
 
       // Monitoring should NOT call any SN API (getScopeId is only from startWatching scope switching)
       // The checkAllUpdateSets method uses local config file — no getUserSysId, no getCurrentUpdateSetUserPref
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Task A Update Set")
+        expect.stringContaining("Task A Update Set"),
       );
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Task B Update Set")
+        expect.stringContaining("Task B Update Set"),
       );
     });
 
@@ -264,10 +290,12 @@ describe("US-009: Rate limit coordination", function () {
       (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({}));
 
       await startMultiScopeWatching({ monitorIntervalMs: 60000 });
-      await new Promise(function (r) { setTimeout(r, 50); });
+      await new Promise(function (r) {
+        setTimeout(r, 50);
+      });
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("No update set configured")
+        expect.stringContaining("No update set configured"),
       );
     });
 
@@ -278,15 +306,19 @@ describe("US-009: Rate limit coordination", function () {
       });
 
       (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify({
-        x_scope_a: { sys_id: "us_default", name: "Default" },
-      }));
+      (fs.readFileSync as jest.Mock).mockReturnValue(
+        JSON.stringify({
+          x_scope_a: { sys_id: "us_default", name: "Default" },
+        }),
+      );
 
       await startMultiScopeWatching({ monitorIntervalMs: 60000 });
-      await new Promise(function (r) { setTimeout(r, 50); });
+      await new Promise(function (r) {
+        setTimeout(r, 50);
+      });
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("DEFAULT update set")
+        expect.stringContaining("DEFAULT update set"),
       );
     });
   });

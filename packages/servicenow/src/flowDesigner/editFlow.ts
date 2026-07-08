@@ -74,13 +74,23 @@ export interface EditFlowResult {
 }
 
 function unwrapModel(data: any): any {
-  if (data && typeof data === "object" && data.result && typeof data.result === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.result &&
+    typeof data.result === "object"
+  ) {
     if (data.result.data && typeof data.result.data === "object") {
       return data.result.data;
     }
     return data.result;
   }
-  if (data && typeof data === "object" && data.data && typeof data.data === "object") {
+  if (
+    data &&
+    typeof data === "object" &&
+    data.data &&
+    typeof data.data === "object"
+  ) {
     return data.data;
   }
   return data;
@@ -96,7 +106,12 @@ function findStep(model: any, ref: string): any {
     }
     for (var i = 0; i < arr.length; i += 1) {
       var inst = arr[i];
-      if (inst && (inst.uiUniqueIdentifier === ref || inst.name === ref || inst.internalName === ref)) {
+      if (
+        inst &&
+        (inst.uiUniqueIdentifier === ref ||
+          inst.name === ref ||
+          inst.internalName === ref)
+      ) {
         return inst;
       }
     }
@@ -118,7 +133,9 @@ function setInputValue(inst: any, inputName: string, value: any): boolean {
   return false;
 }
 
-export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> {
+export async function editFlow(
+  params: EditFlowParams,
+): Promise<EditFlowResult> {
   var client = params.client;
   var sysId = params.sysId;
   var ops = params.ops || {};
@@ -132,10 +149,13 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
   var read = await readFlow({ client: client, sysId: sysId, raw: true });
   var model = read.raw;
   if (!model || typeof model !== "object") {
-    var resp = await client.now.get<any>("/api/now/processflow/flow/" + encodeURIComponent(sysId));
+    var resp = await client.now.get<any>(
+      "/api/now/processflow/flow/" + encodeURIComponent(sysId),
+    );
     model = unwrapModel(resp);
   }
-  var scopeSysId = params.scopeSysId || (typeof model.scope === "string" ? model.scope : "");
+  var scopeSysId =
+    params.scopeSysId || (typeof model.scope === "string" ? model.scope : "");
 
   var changes: Array<string> = [];
   var warnings: Array<string> = [];
@@ -177,10 +197,22 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
       var ok = setInputValue(step, patch.input, patch.value);
       if (ok) {
         stepInputsChanged = true;
-        verifyTargets.push({ step: patch.step, input: patch.input, value: patch.value });
-        changes.push("step '" + (step.name || patch.step) + "' input '" + patch.input + "' updated");
+        verifyTargets.push({
+          step: patch.step,
+          input: patch.input,
+          value: patch.value,
+        });
+        changes.push(
+          "step '" +
+            (step.name || patch.step) +
+            "' input '" +
+            patch.input +
+            "' updated",
+        );
       } else {
-        warnings.push("input not found: " + patch.input + " on step " + patch.step);
+        warnings.push(
+          "input not found: " + patch.input + " on step " + patch.step,
+        );
       }
     }
   }
@@ -195,16 +227,16 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
   if (Object.keys(recordFields).length > 0) {
     if (!params.updateSetSysId) {
       throw new Error(
-        "editFlow: updateSetSysId is required to apply rename/description edits "
-          + "(they write sys_hub_flow through the update-set-aware API). Pass an "
-          + "in-progress update set sys_id, or limit ops to patchStepInputs."
+        "editFlow: updateSetSysId is required to apply rename/description edits " +
+          "(they write sys_hub_flow through the update-set-aware API). Pass an " +
+          "in-progress update set sys_id, or limit ops to patchStepInputs.",
       );
     }
     await client.claude.pushWithUpdateSet({
       update_set_sys_id: params.updateSetSysId,
       table: "sys_hub_flow",
       record_sys_id: sysId,
-      fields: recordFields
+      fields: recordFields,
     });
   }
 
@@ -212,14 +244,21 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
   //    persists the step values). Metadata-only edits need no recompile.
   var snapshotSysId: string | undefined;
   if (stepInputsChanged) {
-    var pub = await publishFlow({ client: client, sysId: sysId, model: model, scopeSysId: scopeSysId || undefined });
+    var pub = await publishFlow({
+      client: client,
+      sysId: sysId,
+      model: model,
+      scopeSysId: scopeSysId || undefined,
+    });
     snapshotSysId = pub.snapshotSysId;
 
     // 3. Verify the step-input changes actually persisted. The snapshot POST is
     //    only documented to persist step values for action types; for flows it
     //    can no-op. Read the model back and confirm each value took — a miss is
     //    surfaced as a warning rather than a silent false "applied".
-    var afterResp = await client.now.get<any>("/api/now/processflow/flow/" + encodeURIComponent(sysId));
+    var afterResp = await client.now.get<any>(
+      "/api/now/processflow/flow/" + encodeURIComponent(sysId),
+    );
     var afterModel = unwrapModel(afterResp);
     for (var v = 0; v < verifyTargets.length; v += 1) {
       var t = verifyTargets[v];
@@ -235,8 +274,12 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
       }
       if (!persisted) {
         warnings.push(
-          "step input '" + t.input + "' on '" + t.step + "' did not persist via the snapshot POST "
-            + "— verify in the Designer (flow step-input persistence is best-effort)."
+          "step input '" +
+            t.input +
+            "' on '" +
+            t.step +
+            "' did not persist via the snapshot POST " +
+            "— verify in the Designer (flow step-input persistence is best-effort).",
         );
       }
     }
@@ -246,6 +289,6 @@ export async function editFlow(params: EditFlowParams): Promise<EditFlowResult> 
     status: "applied",
     changes: changes,
     warnings: warnings,
-    snapshotSysId: snapshotSysId
+    snapshotSysId: snapshotSysId,
   };
 }

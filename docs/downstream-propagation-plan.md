@@ -8,7 +8,7 @@ The Dovetail publish pipeline (`.github/workflows/publish.yml`) ships
 `@tenonhq/dovetail-*` packages to npm automatically on every merge to `main`
 (see [`Scripts/PUBLISHING.md`](../Scripts/PUBLISHING.md)).
 
-What it does **not** do yet: update the repositories that *consume* those
+What it does **not** do yet: update the repositories that _consume_ those
 packages. When `@tenonhq/dovetail-core` publishes a new version, the
 ServiceNow app repo, `Craftsman`, and other consumers keep their old version
 until someone notices and bumps it by hand.
@@ -37,7 +37,7 @@ issue) there directly.
 - But Dovetail must know every consumer repo and hold write credentials for
   all of them. Tightest coupling, largest blast radius. **Not recommended.**
 
-### B. `repository_dispatch` fan-out — *recommended for a built solution*
+### B. `repository_dispatch` fan-out — _recommended for a built solution_
 
 After publishing, Dovetail sends a `repository_dispatch` event (e.g. type
 `dovetail-published`) carrying the published `name@version` list to each
@@ -45,14 +45,14 @@ consumer repo. Each consumer has a small listener workflow that reacts —
 bumps its own dependencies, opens its own PR, and files its own issue.
 
 - Decoupled — each consumer owns its update logic and opens the PR in-repo
-  with its own `GITHUB_TOKEN`. Dovetail only needs permission to *send the
-  event*.
+  with its own `GITHUB_TOKEN`. Dovetail only needs permission to _send the
+  event_.
 - Instant — fires the moment a package publishes.
 - This is literally what the request describes: "have this action trigger an
   issue in another repo … and create a PR."
 - Cost: each consumer repo needs the listener workflow added once.
 
-### C. Renovate (or Dependabot) in the consumer repos — *recommended baseline*
+### C. Renovate (or Dependabot) in the consumer repos — _recommended baseline_
 
 Run Renovate in each consumer repo. When a new `@tenonhq/dovetail-*` version
 hits npm, Renovate opens a version-bump PR on its own. Renovate also keeps a
@@ -83,26 +83,26 @@ A two-layer rollout:
 
 Cross-repo automation needs one of:
 
-- **GitHub App** *(recommended)* — installed on the `TenonHQ` org, scoped to
+- **GitHub App** _(recommended)_ — installed on the `TenonHQ` org, scoped to
   the specific repos, mints short-lived tokens. No personal-account
   dependency; easy to audit and revoke.
 - **Fine-grained PAT** — quicker to set up; scoped to the target repos with
   Contents + Pull requests + Issues (and, for approach B, `repository_dispatch`)
   write. Tied to a user account and needs rotation.
 
-For approach B, Dovetail needs only permission to *send* `repository_dispatch`
+For approach B, Dovetail needs only permission to _send_ `repository_dispatch`
 to the consumers; each consumer's PR and issue are created with that repo's
 own `GITHUB_TOKEN`, so no broad cross-repo write credential is centralised.
 
 ## Open decisions
 
-| Decision | Notes |
-| --- | --- |
-| Consumer repos | Enumerate every repo with a `@tenonhq/dovetail-*` dependency. Known/likely: the ServiceNow app repo, `Craftsman`, the CTO tooling repo. A definitive list is needed. |
-| Issue **and** PR, or PR only? | Renovate's Dependency Dashboard issue may be enough; or file a dedicated issue per propagation. |
-| Package scope | Propagate every package, or only `core`? |
-| PR grouping | One PR per consumer with all bumps, vs one PR per package. |
-| Auto-merge | Should consumer bump-PRs auto-merge when CI passes, or always need review? |
+| Decision                      | Notes                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consumer repos                | Enumerate every repo with a `@tenonhq/dovetail-*` dependency. Known/likely: the ServiceNow app repo, `Craftsman`, the CTO tooling repo. A definitive list is needed. |
+| Issue **and** PR, or PR only? | Renovate's Dependency Dashboard issue may be enough; or file a dedicated issue per propagation.                                                                      |
+| Package scope                 | Propagate every package, or only `core`?                                                                                                                             |
+| PR grouping                   | One PR per consumer with all bumps, vs one PR per package.                                                                                                           |
+| Auto-merge                    | Should consumer bump-PRs auto-merge when CI passes, or always need review?                                                                                           |
 
 ## Suggested phasing
 
@@ -117,4 +117,4 @@ own `GITHUB_TOKEN`, so no broad cross-repo write credential is centralised.
 ## Related
 
 - [`Scripts/PUBLISHING.md`](../Scripts/PUBLISHING.md) — the publish pipeline
-- Issue: *Migrate npm publishing to Trusted Publishing (OIDC)* (#76)
+- Issue: _Migrate npm publishing to Trusted Publishing (OIDC)_ (#76)

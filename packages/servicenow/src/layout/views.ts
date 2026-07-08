@@ -14,7 +14,7 @@ import { assertUpdateSet, resolveView } from "./layoutCommon";
 
 export async function createView(
   client: ServiceNowClient,
-  params: CreateViewParams
+  params: CreateViewParams,
 ): Promise<CreateViewResult> {
   if (!params.name) {
     throw new Error("name is required.");
@@ -27,16 +27,16 @@ export async function createView(
     updateSetSysId: params.updateSetSysId,
     scope: scope,
     dryRun: dryRun,
-    title: params.title
+    title: params.title,
   });
   return {
     view: {
       sysId: resolved.sysId,
       name: resolved.name,
       title: params.title || params.name,
-      action: resolved.action
+      action: resolved.action,
     },
     updateSet: updateSet,
-    dryRun: dryRun
+    dryRun: dryRun,
   };
 }

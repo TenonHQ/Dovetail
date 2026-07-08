@@ -39,7 +39,10 @@ export const sincPlugin = {
         "  3. Copy the token and paste it below",
       ],
       required: true,
-      validate: async (value: string, context: PluginContext): Promise<true | string> => {
+      validate: async (
+        value: string,
+        context: PluginContext,
+      ): Promise<true | string> => {
         const api = createClickUpApi({ token: value });
         try {
           const teams = await api.getTeams();
@@ -69,7 +72,11 @@ export const sincPlugin = {
         // Auto-select if only one workspace
         if (teams.length === 1) {
           context.env.CLICKUP_TEAM_ID = teams[0].id;
-          console.log(context.chalk.green("✓ ClickUp workspace auto-selected: " + teams[0].name));
+          console.log(
+            context.chalk.green(
+              "✓ ClickUp workspace auto-selected: " + teams[0].name,
+            ),
+          );
           return teams[0].id;
         }
 
@@ -82,12 +89,14 @@ export const sincPlugin = {
           };
         });
 
-        const answer = await context.inquirer.prompt([{
-          type: "list",
-          name: "teamId",
-          message: "Select a ClickUp workspace:",
-          choices,
-        }]);
+        const answer = await context.inquirer.prompt([
+          {
+            type: "list",
+            name: "teamId",
+            message: "Select a ClickUp workspace:",
+            choices,
+          },
+        ]);
 
         context.env.CLICKUP_TEAM_ID = answer.teamId;
         return answer.teamId;

@@ -62,35 +62,49 @@ export interface TriggerPublicationResult {
 const DEFAULT_SNAPSHOT_TIMEOUT_MS = 15000;
 const POLL_DELAYS_MS: ReadonlyArray<number> = [500, 1000, 2000, 4000, 8000];
 
-function buildUiPublishUrl(host: string | undefined, kind: FlowKind, sysId: string): string {
+function buildUiPublishUrl(
+  host: string | undefined,
+  kind: FlowKind,
+  sysId: string,
+): string {
   // Normalize host: strip protocol prefix and trailing slashes without a polynomial regex.
   // CodeQL flags /\/+$/ as ReDoS-vulnerable on uncontrolled input, so we use a bounded loop.
   var normalizedHost = host || "";
   if (normalizedHost.indexOf("://") >= 0) {
-    normalizedHost = normalizedHost.substring(normalizedHost.indexOf("://") + 3);
+    normalizedHost = normalizedHost.substring(
+      normalizedHost.indexOf("://") + 3,
+    );
   }
-  while (normalizedHost.length > 0 && normalizedHost.charAt(normalizedHost.length - 1) === "/") {
+  while (
+    normalizedHost.length > 0 &&
+    normalizedHost.charAt(normalizedHost.length - 1) === "/"
+  ) {
     normalizedHost = normalizedHost.substring(0, normalizedHost.length - 1);
   }
   var base = normalizedHost ? "https://" + normalizedHost : "";
   if (!base) {
-    var fallbackHost = process.env.SN_INSTANCE
-      || process.env.SN_DEV_INSTANCE
-      || process.env.SN_PROD_INSTANCE
-      || "";
+    var fallbackHost =
+      process.env.SN_INSTANCE ||
+      process.env.SN_DEV_INSTANCE ||
+      process.env.SN_PROD_INSTANCE ||
+      "";
     if (fallbackHost && fallbackHost.indexOf(".") < 0) {
       fallbackHost = fallbackHost.toLowerCase() + ".service-now.com";
     }
     base = fallbackHost ? "https://" + fallbackHost : "";
   }
   if (kind === "subflow") {
-    return base + "/$flow-designer.do?sysparm_nostack=true#/flow-editor/" + sysId;
+    return (
+      base + "/$flow-designer.do?sysparm_nostack=true#/flow-editor/" + sysId
+    );
   }
   return base + "/sys_hub_action_type_definition.do?sys_id=" + sysId;
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function pollForSnapshot(
@@ -113,9 +127,17 @@ async function pollForSnapshot(
   return { found: false };
 }
 
-export async function triggerPublication(opts: TriggerPublicationParams): Promise<TriggerPublicationResult> {
-  var parentTable = opts.kind === "actionType" ? "sys_hub_action_type_definition" : "sys_hub_flow";
-  var timeoutMs = opts.snapshotTimeoutMs != null ? opts.snapshotTimeoutMs : DEFAULT_SNAPSHOT_TIMEOUT_MS;
+export async function triggerPublication(
+  opts: TriggerPublicationParams,
+): Promise<TriggerPublicationResult> {
+  var parentTable =
+    opts.kind === "actionType"
+      ? "sys_hub_action_type_definition"
+      : "sys_hub_flow";
+  var timeoutMs =
+    opts.snapshotTimeoutMs != null
+      ? opts.snapshotTimeoutMs
+      : DEFAULT_SNAPSHOT_TIMEOUT_MS;
   var uiUrl = buildUiPublishUrl(opts.instanceHost, opts.kind, opts.sysId);
 
   // Step 1: best-effort status flip. We don't actually know if this triggers

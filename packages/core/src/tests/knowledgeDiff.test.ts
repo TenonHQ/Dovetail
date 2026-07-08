@@ -1,4 +1,10 @@
-import { computeDrift, semverGt, eventFilename, ReleaseManifest, DocLedger } from "../knowledgeDiff";
+import {
+  computeDrift,
+  semverGt,
+  eventFilename,
+  ReleaseManifest,
+  DocLedger,
+} from "../knowledgeDiff";
 
 describe("semverGt", function () {
   it("compares x.y.z numerically (not lexically)", function () {
@@ -54,9 +60,11 @@ describe("computeDrift", function () {
   };
 
   it("returns events newer than the ledger; undocumented packages count as drift", function () {
-    const ids = computeDrift(manifest, ledger, { watch_packages: [] }).map(function (e) {
-      return e.event_id;
-    });
+    const ids = computeDrift(manifest, ledger, { watch_packages: [] }).map(
+      function (e) {
+        return e.event_id;
+      },
+    );
     expect(ids).toContain("dovetail-clickup@0.0.13"); // 0.0.13 > 0.0.12
     expect(ids).toContain("dovetail-gmail@0.0.11"); // not in ledger yet
     expect(ids).not.toContain("dovetail-core@0.0.93"); // equal to documented

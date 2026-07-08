@@ -145,12 +145,12 @@ Then open the newest `dovetail-debug-*.log` and search for the failing scopes. E
 
 Match what the log shows against these patterns:
 
-| Error pattern in `response.data` | Likely cause | Where to fix |
-|---|---|---|
+| Error pattern in `response.data`                          | Likely cause                                   | Where to fix                                                            |
+| --------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
 | Stack trace / `TypeError: Cannot read property X of null` | Server-side script error in sinc REST resource | ServiceNow instance → System Web Services → Scripted REST APIs → `sinc` |
-| `User Not Authorized` / `read access denied on table X` | Missing ACL or scope access | Grant role or correct `dove.config.js` reference |
-| `Invalid table` / `No such scope` | Table or scope doesn't exist on this instance | `dove.config.js` — remove/fix the reference |
-| `Invalid JSON` / unexpected payload keys | Payload shape mismatch | `snClient.ts:343-370` or server-side parsing |
+| `User Not Authorized` / `read access denied on table X`   | Missing ACL or scope access                    | Grant role or correct `dove.config.js` reference                        |
+| `Invalid table` / `No such scope`                         | Table or scope doesn't exist on this instance  | `dove.config.js` — remove/fix the reference                             |
+| `Invalid JSON` / unexpected payload keys                  | Payload shape mismatch                         | `snClient.ts:343-370` or server-side parsing                            |
 
 ### Step 5 — Cross-reference `dove.config.js`
 
@@ -183,14 +183,14 @@ Expect all scopes to complete 100%. If any still fail, the enhanced log now tell
 
 ## Files of interest
 
-| File | Purpose |
-|---|---|
-| `Sincronia/packages/core/src/snClient.ts:503-532` | `unwrapSNResponse` — the error handler to fix |
-| `Sincronia/packages/core/src/snClient.ts:343-370` | `getManifest` — endpoint + payload shape |
-| `Sincronia/packages/core/src/FileLogger.ts` | File logger (`debug()` already available) |
-| `Sincronia/packages/core/src/commands.ts:22-36` | `refreshCommand` entry point |
-| `ServiceNow/dove.config.js` | Per-scope config — review for failing scopes |
-| ServiceNow instance: `/api/sinc/sincronia/getManifest` | Server-side scripted REST resource |
+| File                                                   | Purpose                                       |
+| ------------------------------------------------------ | --------------------------------------------- |
+| `Sincronia/packages/core/src/snClient.ts:503-532`      | `unwrapSNResponse` — the error handler to fix |
+| `Sincronia/packages/core/src/snClient.ts:343-370`      | `getManifest` — endpoint + payload shape      |
+| `Sincronia/packages/core/src/FileLogger.ts`            | File logger (`debug()` already available)     |
+| `Sincronia/packages/core/src/commands.ts:22-36`        | `refreshCommand` entry point                  |
+| `ServiceNow/dove.config.js`                            | Per-scope config — review for failing scopes  |
+| ServiceNow instance: `/api/sinc/sincronia/getManifest` | Server-side scripted REST resource            |
 
 ## Out of scope
 
@@ -201,4 +201,4 @@ Expect all scopes to complete 100%. If any still fail, the enhanced log now tell
 
 ---
 
-*Last updated: 2026-04-14 — fix landed on `fix/sincronia-refresh-500-diagnostics`. Root cause was `bulkDownload` payload-size cap (10 MB), not `getManifest`. Chunking applied in `processMissingFiles` (`appUtils.ts`).*
+_Last updated: 2026-04-14 — fix landed on `fix/sincronia-refresh-500-diagnostics`. Root cause was `bulkDownload` payload-size cap (10 MB), not `getManifest`. Chunking applied in `processMissingFiles` (`appUtils.ts`)._

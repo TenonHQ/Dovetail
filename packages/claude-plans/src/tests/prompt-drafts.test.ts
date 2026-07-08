@@ -10,7 +10,7 @@ import {
   updatePromptDraft,
   deletePromptDraft,
   setActivePromptDraft,
-  getActivePromptDraft
+  getActivePromptDraft,
 } from "../storage";
 import { TOOL_NAMES } from "../registry";
 
@@ -32,7 +32,10 @@ describe("prompt drafts storage", () => {
   });
 
   test("create assigns a pd_<8hex> id and persists", () => {
-    const d = createPromptDraft({ title: "My prompt", content: "<done>x</done>" }, opts);
+    const d = createPromptDraft(
+      { title: "My prompt", content: "<done>x</done>" },
+      opts,
+    );
     expect(d.id).toMatch(/^pd_[0-9a-f]{8}$/);
     expect(d.title).toBe("My prompt");
     expect(d.content).toBe("<done>x</done>");
@@ -61,7 +64,9 @@ describe("prompt drafts storage", () => {
     const ids = listPromptDrafts(opts).map((d) => d.id);
     expect(ids).toEqual([a.id, b.id]);
     // pointer file exists but is not a draft
-    expect(fs.existsSync(path.join(root, "_prompt-drafts", "_active.json"))).toBe(true);
+    expect(
+      fs.existsSync(path.join(root, "_prompt-drafts", "_active.json")),
+    ).toBe(true);
   });
 
   test("listWithActive returns drafts and the active id", () => {
@@ -84,13 +89,15 @@ describe("prompt drafts storage", () => {
   });
 
   test("update on a missing id throws", () => {
-    expect(() => updatePromptDraft({ id: "pd_deadbeef", content: "x" }, opts)).toThrow(
-      /not found/
-    );
+    expect(() =>
+      updatePromptDraft({ id: "pd_deadbeef", content: "x" }, opts),
+    ).toThrow(/not found/);
   });
 
   test("setActive on a missing id throws", () => {
-    expect(() => setActivePromptDraft("pd_deadbeef", opts)).toThrow(/not found/);
+    expect(() => setActivePromptDraft("pd_deadbeef", opts)).toThrow(
+      /not found/,
+    );
   });
 
   test("deleting the active draft advances active to the next remaining draft", () => {
@@ -124,7 +131,7 @@ describe("prompt drafts storage", () => {
       "get_active_prompt_draft",
       "get_prompt_draft",
       "create_prompt_draft",
-      "update_prompt_draft"
+      "update_prompt_draft",
     ]) {
       expect(TOOL_NAMES).toContain(name);
     }

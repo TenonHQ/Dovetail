@@ -2,12 +2,14 @@ import { renderStructured, StructuredPlan } from "../renderer";
 
 describe("renderStructured", () => {
   it("returns empty string for missing sections", () => {
-    expect(renderStructured({ sections: [] })).toBe('<div class="cp-structured">\n</div>');
+    expect(renderStructured({ sections: [] })).toBe(
+      '<div class="cp-structured">\n</div>',
+    );
   });
 
   it("wraps output in cp-structured", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "text", content: "hello" }]
+      sections: [{ type: "text", content: "hello" }],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-structured");
@@ -16,7 +18,7 @@ describe("renderStructured", () => {
 
   it("renders header with title and subtitle", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "header", title: "My Plan", subtitle: "A subtitle" }]
+      sections: [{ type: "header", title: "My Plan", subtitle: "A subtitle" }],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-header");
@@ -27,7 +29,7 @@ describe("renderStructured", () => {
 
   it("renders header without subtitle", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "header", title: "Only Title" }]
+      sections: [{ type: "header", title: "Only Title" }],
     };
     var html = renderStructured(plan);
     expect(html).not.toContain("cp-c-header-sub");
@@ -41,10 +43,10 @@ describe("renderStructured", () => {
           title: "Details",
           rows: [
             { label: "Branch", value: "main" },
-            { label: "Status", value: "APPROVED", badge: "success" }
-          ]
-        }
-      ]
+            { label: "Status", value: "APPROVED", badge: "success" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-meta");
@@ -55,7 +57,14 @@ describe("renderStructured", () => {
 
   it("renders callout with variant and icon", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "callout", variant: "warning", title: "Heads up", message: "Be careful" }]
+      sections: [
+        {
+          type: "callout",
+          variant: "warning",
+          title: "Heads up",
+          message: "Be careful",
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-callout-warning");
@@ -72,10 +81,10 @@ describe("renderStructured", () => {
           title: "Tasks",
           items: [
             { label: "Done task", done: true, note: "v1.2" },
-            { label: "Pending task", done: false }
-          ]
-        }
-      ]
+            { label: "Pending task", done: false },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-checklist");
@@ -94,10 +103,10 @@ describe("renderStructured", () => {
           steps: [
             { label: "DEV", status: "done" },
             { label: "TEST", status: "active" },
-            { label: "PROD", status: "pending" }
-          ]
-        }
-      ]
+            { label: "PROD", status: "pending" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-step-done");
@@ -113,10 +122,10 @@ describe("renderStructured", () => {
           type: "steps",
           steps: [
             { label: "DEV", status: "done" },
-            { label: "TEST", status: "active" }
-          ]
-        }
-      ]
+            { label: "TEST", status: "active" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-step-line-filled");
@@ -129,10 +138,10 @@ describe("renderStructured", () => {
           type: "steps",
           steps: [
             { label: "DEV", status: "done" },
-            { label: "PROD", status: "pending" }
-          ]
-        }
-      ]
+            { label: "PROD", status: "pending" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).not.toContain("cp-c-step-line-filled");
@@ -145,10 +154,10 @@ describe("renderStructured", () => {
           type: "steps",
           steps: [
             { label: "DEV", status: "done" },
-            { label: "TEST", status: "error" }
-          ]
-        }
-      ]
+            { label: "TEST", status: "error" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-step-line-filled");
@@ -160,11 +169,16 @@ describe("renderStructured", () => {
         {
           type: "metrics",
           items: [
-            { label: "Tests", value: "142", sub: "all pass", variant: "success" },
-            { label: "Coverage", value: "94%" }
-          ]
-        }
-      ]
+            {
+              label: "Tests",
+              value: "142",
+              sub: "all pass",
+              variant: "success",
+            },
+            { label: "Coverage", value: "94%" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-metrics");
@@ -176,7 +190,7 @@ describe("renderStructured", () => {
 
   it("renders section divider", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "section", title: "Phase 2" }]
+      sections: [{ type: "section", title: "Phase 2" }],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-section-divider");
@@ -190,9 +204,12 @@ describe("renderStructured", () => {
           type: "table",
           title: "Files",
           headers: ["File", "Status"],
-          rows: [["foo.ts", "modified"], ["bar.ts", "new"]]
-        }
-      ]
+          rows: [
+            ["foo.ts", "modified"],
+            ["bar.ts", "new"],
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-table");
@@ -203,7 +220,7 @@ describe("renderStructured", () => {
 
   it("renders text with newlines as br", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "text", content: "line one\nline two" }]
+      sections: [{ type: "text", content: "line one\nline two" }],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-text");
@@ -212,7 +229,14 @@ describe("renderStructured", () => {
 
   it("renders code block with lang and title", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "code", title: "Deploy script", lang: "bash", content: "npm run deploy" }]
+      sections: [
+        {
+          type: "code",
+          title: "Deploy script",
+          lang: "bash",
+          content: "npm run deploy",
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-code-wrap");
@@ -223,7 +247,7 @@ describe("renderStructured", () => {
 
   it("escapes HTML in user-supplied strings", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "text", content: '<script>alert("xss")</script>' }]
+      sections: [{ type: "text", content: '<script>alert("xss")</script>' }],
     };
     var html = renderStructured(plan);
     expect(html).not.toContain("<script>");
@@ -232,7 +256,7 @@ describe("renderStructured", () => {
 
   it("silently skips unknown section types", () => {
     var plan = {
-      sections: [{ type: "unknown-thing", title: "ignored" } as any]
+      sections: [{ type: "unknown-thing", title: "ignored" } as any],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-structured");
@@ -246,8 +270,8 @@ describe("renderStructured", () => {
         { type: "meta", rows: [{ label: "Env", value: "prod" }] },
         { type: "callout", message: "Take care" },
         { type: "checklist", items: [{ label: "Done", done: true }] },
-        { type: "metrics", items: [{ label: "Score", value: "A+" }] }
-      ]
+        { type: "metrics", items: [{ label: "Score", value: "A+" }] },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-header");
@@ -266,10 +290,10 @@ describe("renderStructured", () => {
           items: [
             { label: "backend", color: "blue" },
             { label: "uncolored" },
-            { label: "bad", color: "chartreuse" as any }
-          ]
-        }
-      ]
+            { label: "bad", color: "chartreuse" as any },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-tag-list");
@@ -288,10 +312,10 @@ describe("renderStructured", () => {
           events: [
             { label: "Kickoff", time: "Mon", status: "done" },
             { label: "Build", note: "in progress", status: "active" },
-            { label: "Ship" }
-          ]
-        }
-      ]
+            { label: "Ship" },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-timeline");
@@ -310,10 +334,10 @@ describe("renderStructured", () => {
           items: [
             { label: "Half", value: 5, max: 10 },
             { label: "Over", value: 200, max: 100, variant: "success" },
-            { label: "Default max", value: 25 }
-          ]
-        }
-      ]
+            { label: "Default max", value: 25 },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-progress-track");
@@ -330,10 +354,10 @@ describe("renderStructured", () => {
           type: "people",
           items: [
             { name: "Daniel Cudney", sublabel: "CTO", color: "emerald" },
-            { name: "Trevor", color: "weird" as any }
-          ]
-        }
-      ]
+            { name: "Trevor", color: "weird" as any },
+          ],
+        },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-person");
@@ -347,8 +371,8 @@ describe("renderStructured", () => {
     var plan: StructuredPlan = {
       sections: [
         { type: "quote", text: "Measure twice.", cite: "The Joinery" },
-        { type: "quote", text: "No cite here" }
-      ]
+        { type: "quote", text: "No cite here" },
+      ],
     };
     var html = renderStructured(plan);
     expect(html).toContain("cp-c-quote");
@@ -359,7 +383,7 @@ describe("renderStructured", () => {
 
   it("escapes HTML in new section types", () => {
     var plan: StructuredPlan = {
-      sections: [{ type: "quote", text: "<img src=x onerror=alert(1)>" }]
+      sections: [{ type: "quote", text: "<img src=x onerror=alert(1)>" }],
     };
     var html = renderStructured(plan);
     expect(html).not.toContain("<img");

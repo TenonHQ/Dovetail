@@ -38,7 +38,7 @@ mod2.test.asdf();
 Exports always get removed as of now, but if there is need an override can be added.
 
 ```javascript
-export default function() {}
+export default function () {}
 const test = "asdf";
 export { test };
 ```

@@ -91,7 +91,9 @@ export function formatTaskDetail(params: FormatTaskDetailParams): string {
   }
 
   var statusLabel =
-    task.status && task.status.status ? capitalize(task.status.status) : "Unknown";
+    task.status && task.status.status
+      ? capitalize(task.status.status)
+      : "Unknown";
   lines.push("- **Status:** " + statusLabel);
 
   if (task.priority && task.priority.priority) {
@@ -191,11 +193,20 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
   lines.push("# ClickUp Task Sync");
   lines.push("");
   lines.push("> Last synced: " + formatDate(syncTime));
-  lines.push("> Tasks: " + totalTasks + " active across " + listCount + " lists");
+  lines.push(
+    "> Tasks: " + totalTasks + " active across " + listCount + " lists",
+  );
   lines.push("");
 
   // Pipeline stage sections
-  var stageOrder = ["Blocked", "In Progress", "In Review", "QA", "UAT", "Ready for Release"];
+  var stageOrder = [
+    "Blocked",
+    "In Progress",
+    "In Review",
+    "QA",
+    "UAT",
+    "Ready for Release",
+  ];
 
   for (var so = 0; so < stageOrder.length; so++) {
     var stageName = stageOrder[so];
@@ -225,11 +236,19 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
       for (var bt = 0; bt < sorted.length; bt++) {
         var bTask = sorted[bt];
         lines.push(
-          "| " + escapeCell(bTask.name) +
-          " | " + getAssigneeNames(bTask).join(", ") +
-          " | " + (bTask.list && bTask.list.name ? bTask.list.name : "-") +
-          " | " + daysStalled(bTask.date_updated, syncTime) +
-          " | [" + (bTask.custom_id || bTask.id) + "](" + bTask.url + ") |"
+          "| " +
+            escapeCell(bTask.name) +
+            " | " +
+            getAssigneeNames(bTask).join(", ") +
+            " | " +
+            (bTask.list && bTask.list.name ? bTask.list.name : "-") +
+            " | " +
+            daysStalled(bTask.date_updated, syncTime) +
+            " | [" +
+            (bTask.custom_id || bTask.id) +
+            "](" +
+            bTask.url +
+            ") |",
         );
       }
     } else {
@@ -238,11 +257,19 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
       for (var st = 0; st < sorted.length; st++) {
         var sTask = sorted[st];
         lines.push(
-          "| " + escapeCell(sTask.name) +
-          " | " + getAssigneeNames(sTask).join(", ") +
-          " | " + (sTask.list && sTask.list.name ? sTask.list.name : "-") +
-          " | " + relativeTime(sTask.date_updated, syncTime) +
-          " | [" + (sTask.custom_id || sTask.id) + "](" + sTask.url + ") |"
+          "| " +
+            escapeCell(sTask.name) +
+            " | " +
+            getAssigneeNames(sTask).join(", ") +
+            " | " +
+            (sTask.list && sTask.list.name ? sTask.list.name : "-") +
+            " | " +
+            relativeTime(sTask.date_updated, syncTime) +
+            " | [" +
+            (sTask.custom_id || sTask.id) +
+            "](" +
+            sTask.url +
+            ") |",
         );
       }
     }
@@ -259,15 +286,24 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
 
     for (var u = 0; u < unassigned.length; u++) {
       var uTask = unassigned[u];
-      var priorityLabel = uTask.priority && uTask.priority.priority
-        ? capitalize(uTask.priority.priority)
-        : "-";
+      var priorityLabel =
+        uTask.priority && uTask.priority.priority
+          ? capitalize(uTask.priority.priority)
+          : "-";
       lines.push(
-        "| " + escapeCell(uTask.name) +
-        " | " + priorityLabel +
-        " | " + (uTask.list && uTask.list.name ? uTask.list.name : "-") +
-        " | " + relativeTime(uTask.date_created, syncTime) +
-        " | [" + (uTask.custom_id || uTask.id) + "](" + uTask.url + ") |"
+        "| " +
+          escapeCell(uTask.name) +
+          " | " +
+          priorityLabel +
+          " | " +
+          (uTask.list && uTask.list.name ? uTask.list.name : "-") +
+          " | " +
+          relativeTime(uTask.date_created, syncTime) +
+          " | [" +
+          (uTask.custom_id || uTask.id) +
+          "](" +
+          uTask.url +
+          ") |",
       );
     }
 
@@ -305,7 +341,9 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
   if (devNames.length > 0) {
     lines.push("## Summary by Developer");
     lines.push("");
-    lines.push("| Developer | Blocked | In Progress | In Review | QA | UAT | Total |");
+    lines.push(
+      "| Developer | Blocked | In Progress | In Review | QA | UAT | Total |",
+    );
     lines.push("|---|---|---|---|---|---|---|");
 
     for (var dvn = 0; dvn < devNames.length; dvn++) {
@@ -316,15 +354,29 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
       var inReview = counts["In Review"] || 0;
       var qa = counts["QA"] || 0;
       var uat = counts["UAT"] || 0;
-      var total = blocked + inProgress + inReview + qa + uat + (counts["Ready for Release"] || 0);
+      var total =
+        blocked +
+        inProgress +
+        inReview +
+        qa +
+        uat +
+        (counts["Ready for Release"] || 0);
       lines.push(
-        "| " + dev +
-        " | " + blocked +
-        " | " + inProgress +
-        " | " + inReview +
-        " | " + qa +
-        " | " + uat +
-        " | " + total + " |"
+        "| " +
+          dev +
+          " | " +
+          blocked +
+          " | " +
+          inProgress +
+          " | " +
+          inReview +
+          " | " +
+          qa +
+          " | " +
+          uat +
+          " | " +
+          total +
+          " |",
       );
     }
 
@@ -339,8 +391,11 @@ export function formatTeamSync(params: FormatTeamSyncParams): string {
     for (var uk = 0; uk < unmappedKeys.length; uk++) {
       var uStatus = unmappedKeys[uk];
       lines.push(
-        "- \"" + uStatus + "\" (" + unmappedStatuses[uStatus] +
-        " tasks) — add to STATUS_MAP in clickup-sync.ts"
+        '- "' +
+          uStatus +
+          '" (' +
+          unmappedStatuses[uStatus] +
+          " tasks) — add to STATUS_MAP in clickup-sync.ts",
       );
     }
     lines.push("");
@@ -389,8 +444,18 @@ function relativeTime(ts: string, now: Date): string {
 
 function formatDate(date: Date): string {
   var months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
   ];
   var hours = date.getHours();
   var ampm = hours >= 12 ? "PM" : "AM";
@@ -401,10 +466,17 @@ function formatDate(date: Date): string {
   var minutes = date.getMinutes();
   var minStr = minutes < 10 ? "0" + minutes : String(minutes);
   return (
-    date.getFullYear() + "-" +
-    String(date.getMonth() + 1).padStart(2, "0") + "-" +
-    String(date.getDate()).padStart(2, "0") + " " +
-    displayHours + ":" + minStr + " " + ampm
+    date.getFullYear() +
+    "-" +
+    String(date.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(date.getDate()).padStart(2, "0") +
+    " " +
+    displayHours +
+    ":" +
+    minStr +
+    " " +
+    ampm
   );
 }
 

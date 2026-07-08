@@ -6,26 +6,45 @@ interface Cap {
   posts: Array<{ path: string; body: any }>;
 }
 
-function mockClient(opts: {
-  getModel?: any;
-  postResponse?: any;
-}): { client: ServiceNowClient; cap: Cap } {
+function mockClient(opts: { getModel?: any; postResponse?: any }): {
+  client: ServiceNowClient;
+  cap: Cap;
+} {
   var cap: Cap = { gets: [], posts: [] };
-  var model = opts.getModel !== undefined
-    ? opts.getModel
-    : { name: "x", internal_name: "x", state: "draft", steps: null };
+  var model =
+    opts.getModel !== undefined
+      ? opts.getModel
+      : { name: "x", internal_name: "x", state: "draft", steps: null };
   var client = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function () {
+        return [];
+      },
+    },
     buildAgent: {
-      runQuery: async function () { return []; },
-      getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
+      runQuery: async function () {
+        return [];
+      },
+      getTableSchema: async function () {
+        return { fields: [], primary_key: "sys_id" };
+      },
     },
     claude: {
-      createRecord: async function () { return { sys_id: "x" }; },
-      pushWithUpdateSet: async function () { return { sys_id: "x" }; },
-      currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
-      changeUpdateSet: async function () { return {}; },
-      deleteRecord: async function () { return {}; },
+      createRecord: async function () {
+        return { sys_id: "x" };
+      },
+      pushWithUpdateSet: async function () {
+        return { sys_id: "x" };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "u", name: "u" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
     },
     now: {
       get: async function <T>(path: string): Promise<T> {
@@ -34,9 +53,11 @@ function mockClient(opts: {
       },
       post: async function <T>(path: string, body: any): Promise<T> {
         cap.posts.push({ path: path, body: body });
-        return (opts.postResponse !== undefined
-          ? opts.postResponse
-          : { latest_snapshot: "snap-xyz" }) as T;
+        return (
+          opts.postResponse !== undefined
+            ? opts.postResponse
+            : { latest_snapshot: "snap-xyz" }
+        ) as T;
       },
     },
   } as ServiceNowClient;
@@ -50,7 +71,12 @@ describe("publishActionType", function () {
   it("GETs the model, grafts caller steps (remapping action), POSTs to /snapshot, returns published", async function () {
     var ctx = mockClient({});
     var steps = [
-      { DB_TYPE: "SCRIPT", cid: "step-1", action: "OLD_ACTION_SYSID", order: 1 },
+      {
+        DB_TYPE: "SCRIPT",
+        cid: "step-1",
+        action: "OLD_ACTION_SYSID",
+        order: 1,
+      },
     ];
     var r = await publishActionType({
       client: ctx.client,
@@ -65,13 +91,19 @@ describe("publishActionType", function () {
 
     // GET hit the model endpoint with the scope query param.
     expect(ctx.cap.gets[0]).toBe(
-      "/api/now/processflow/action/action_types/" + SYS + "?sysparm_transaction_scope=" + SCOPE
+      "/api/now/processflow/action/action_types/" +
+        SYS +
+        "?sysparm_transaction_scope=" +
+        SCOPE,
     );
 
     // POST hit the /snapshot endpoint.
     expect(ctx.cap.posts.length).toBe(1);
     expect(ctx.cap.posts[0].path).toBe(
-      "/api/now/processflow/action/action_types/" + SYS + "/snapshot?sysparm_transaction_scope=" + SCOPE
+      "/api/now/processflow/action/action_types/" +
+        SYS +
+        "/snapshot?sysparm_transaction_scope=" +
+        SCOPE,
     );
 
     // The grafted body carries the steps with action remapped to the target sysId.
@@ -86,7 +118,9 @@ describe("publishActionType", function () {
   });
 
   it("extracts snapshotSysId when the snapshot ref comes back as an object", async function () {
-    var ctx = mockClient({ postResponse: { snapshot: { sys_id: "snap-obj" } } });
+    var ctx = mockClient({
+      postResponse: { snapshot: { sys_id: "snap-obj" } },
+    });
     var r = await publishActionType({
       client: ctx.client,
       sysId: SYS,
@@ -115,7 +149,7 @@ describe("publishActionType", function () {
   it("throws a clear error when steps are null and none supplied (steps-fixture caveat)", async function () {
     var ctx = mockClient({ getModel: { name: "x", steps: null } });
     await expect(
-      publishActionType({ client: ctx.client, sysId: SYS, scopeSysId: SCOPE })
+      publishActionType({ client: ctx.client, sysId: SYS, scopeSysId: SCOPE }),
     ).rejects.toThrow(/must supply a steps fixture/);
     expect(ctx.cap.posts.length).toBe(0);
   });
@@ -123,10 +157,10 @@ describe("publishActionType", function () {
   it("requires sysId and scopeSysId", async function () {
     var ctx = mockClient({});
     await expect(
-      publishActionType({ client: ctx.client, sysId: "", scopeSysId: SCOPE })
+      publishActionType({ client: ctx.client, sysId: "", scopeSysId: SCOPE }),
     ).rejects.toThrow(/sysId is required/);
     await expect(
-      publishActionType({ client: ctx.client, sysId: SYS, scopeSysId: "" })
+      publishActionType({ client: ctx.client, sysId: SYS, scopeSysId: "" }),
     ).rejects.toThrow(/scopeSysId is required/);
   });
 });

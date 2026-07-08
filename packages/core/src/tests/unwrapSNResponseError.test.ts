@@ -17,7 +17,9 @@ var mockLogger = {
   debug: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
-  getLogLevel: function () { return "debug"; },
+  getLogLevel: function () {
+    return "debug";
+  },
 };
 
 var mockFileLogger = {
@@ -45,7 +47,9 @@ function makeAxiosError(overrides: {
   statusText?: string;
   headers?: Record<string, string>;
 }): any {
-  var error: any = new Error("Request failed with status code " + overrides.status);
+  var error: any = new Error(
+    "Request failed with status code " + overrides.status,
+  );
   error.isAxiosError = true;
   error.config = {
     method: overrides.method || "post",
@@ -146,7 +150,9 @@ describe("unwrapSNResponse — error handling", function () {
     var debugPayload = mockFileLogger.debug.mock.calls[0][1];
     // Non-manifest URL — scope should be undefined
     expect(debugPayload.scope).toBeUndefined();
-    expect(debugPayload.responseData).toBe("<html><body>Gateway error</body></html>");
+    expect(debugPayload.responseData).toBe(
+      "<html><body>Gateway error</body></html>",
+    );
   });
 
   test("Non-Axios error: preserves legacy log shape and re-throws", async function () {
@@ -158,7 +164,9 @@ describe("unwrapSNResponse — error handling", function () {
 
     expect(mockLogger.error).toHaveBeenCalledTimes(1);
     var userLine = mockLogger.error.mock.calls[0][0];
-    expect(userLine).toBe("Error from tenontest.service-now.com: socket hang up");
+    expect(userLine).toBe(
+      "Error from tenontest.service-now.com: socket hang up",
+    );
 
     expect(mockFileLogger.debug).toHaveBeenCalledTimes(1);
     var debugLabel = mockFileLogger.debug.mock.calls[0][0];

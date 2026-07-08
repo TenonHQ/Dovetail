@@ -16,7 +16,7 @@ import type {
   ChoiceType,
   ChoiceValue,
   DictionaryRecord,
-  UpdateSetRecord
+  UpdateSetRecord,
 } from "./types";
 
 function encodeQueryValue(v: string): string {
@@ -37,13 +37,13 @@ function encodeQueryValue(v: string): string {
  */
 async function resolveScopeName(
   client: ServiceNowClient,
-  scopeSysId: string
+  scopeSysId: string,
 ): Promise<string> {
   if (!scopeSysId) return "";
   var rows = await client.table.query<{ scope: string; name: string }>(
     "sys_scope",
     "sys_id=" + encodeQueryValue(scopeSysId),
-    1
+    1,
   );
   if (rows.length === 0) {
     throw new Error("sys_scope record not found for sys_id " + scopeSysId);
@@ -56,53 +56,60 @@ async function resolveScopeName(
 async function fetchDictionary(
   client: ServiceNowClient,
   table: string,
-  column: string
+  column: string,
 ): Promise<DictionaryRecord> {
   var rows = await client.table.query<DictionaryRecord>(
     "sys_dictionary",
     "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
-    1
+    1,
   );
   if (rows.length === 0) {
     throw new Error(
-      "sys_dictionary record not found for " + table + "." + column +
-      " — verify the field exists and your user has read access."
+      "sys_dictionary record not found for " +
+        table +
+        "." +
+        column +
+        " — verify the field exists and your user has read access.",
     );
   }
   var row = rows[0];
   // sys_scope comes back as a reference object or string depending on display_value.
   // We set sysparm_display_value=false in client.query so we get the sys_id string.
-  var scope = typeof (row as any).sys_scope === "object" && row.sys_scope != null
-    ? (row.sys_scope as any).value
-    : row.sys_scope;
+  var scope =
+    typeof (row as any).sys_scope === "object" && row.sys_scope != null
+      ? (row.sys_scope as any).value
+      : row.sys_scope;
   return {
     sys_id: row.sys_id,
     name: row.name,
     element: row.element,
     choice: String(row.choice || "0"),
-    sys_scope: scope || ""
+    sys_scope: scope || "",
   };
 }
 
 async function fetchUpdateSet(
   client: ServiceNowClient,
-  sysId: string
+  sysId: string,
 ): Promise<UpdateSetRecord> {
   var rows = await client.table.query<UpdateSetRecord>(
     "sys_update_set",
     "sys_id=" + encodeQueryValue(sysId),
-    1
+    1,
   );
   if (rows.length === 0) {
     throw new Error(
-      "Update set " + sysId + " not found — verify the sys_id and your access."
+      "Update set " + sysId + " not found — verify the sys_id and your access.",
     );
   }
   var row = rows[0];
   if (row.state && row.state !== "in progress" && row.state !== "in_progress") {
     throw new Error(
-      "Update set " + row.name + " is in state '" + row.state +
-      "' — only 'in progress' update sets can capture new changes."
+      "Update set " +
+        row.name +
+        " is in state '" +
+        row.state +
+        "' — only 'in progress' update sets can capture new changes.",
     );
   }
   return row;
@@ -120,13 +127,12 @@ interface ExistingChoice {
 async function fetchExistingChoices(
   client: ServiceNowClient,
   table: string,
-  column: string
+  column: string,
 ): Promise<Array<ExistingChoice>> {
   return client.table.query<ExistingChoice>(
     "sys_choice",
-    "name=" + encodeQueryValue(table) +
-      "^element=" + encodeQueryValue(column),
-    1000
+    "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
+    1000,
   );
 }
 
@@ -134,7 +140,7 @@ function buildChoiceFields(
   table: string,
   column: string,
   choice: ChoiceValue,
-  scope: string
+  scope: string,
 ): Record<string, any> {
   var fields: Record<string, any> = {
     name: table,
@@ -142,7 +148,7 @@ function buildChoiceFields(
     value: choice.value,
     label: choice.label,
     language: choice.language || "en",
-    inactive: "false"
+    inactive: "false",
   };
   if (choice.sequence != null) {
     fields.sequence = String(choice.sequence);
@@ -156,9 +162,10 @@ function buildChoiceFields(
 function isUnchanged(existing: ExistingChoice, choice: ChoiceValue): boolean {
   var sameLabel = existing.label === choice.label;
   var sameLang = (existing.language || "en") === (choice.language || "en");
-  var sameSeq = choice.sequence == null
-    ? true
-    : String(existing.sequence || "") === String(choice.sequence);
+  var sameSeq =
+    choice.sequence == null
+      ? true
+      : String(existing.sequence || "") === String(choice.sequence);
   return sameLabel && sameLang && sameSeq && existing.inactive === "false";
 }
 
@@ -169,10 +176,12 @@ function isUnchanged(existing: ExistingChoice, choice: ChoiceValue): boolean {
  */
 export async function addChoicesToField(
   client: ServiceNowClient,
-  params: AddChoicesParams
+  params: AddChoicesParams,
 ): Promise<AddChoicesResult> {
   if (!params.updateSetSysId) {
-    throw new Error("updateSetSysId is required — every write must be captured in a named update set.");
+    throw new Error(
+      "updateSetSysId is required — every write must be captured in a named update set.",
+    );
   }
   if (!params.choices || params.choices.length === 0) {
     throw new Error("choices must be a non-empty array.");
@@ -181,9 +190,12 @@ export async function addChoicesToField(
   var dict = await fetchDictionary(client, params.table, params.column);
   var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
   var scopeName = await resolveScopeName(client, dict.sys_scope);
-  var targetChoiceType: ChoiceType = params.choiceType === null
-    ? (Number(dict.choice) as ChoiceType)
-    : (params.choiceType != null ? params.choiceType : 3);
+  var targetChoiceType: ChoiceType =
+    params.choiceType === null
+      ? (Number(dict.choice) as ChoiceType)
+      : params.choiceType != null
+      ? params.choiceType
+      : 3;
 
   var choiceWas = Number(dict.choice) as ChoiceType;
   var choiceNow = choiceWas;
@@ -192,12 +204,16 @@ export async function addChoicesToField(
       update_set_sys_id: params.updateSetSysId,
       table: "sys_dictionary",
       record_sys_id: dict.sys_id,
-      fields: { choice: String(targetChoiceType) }
+      fields: { choice: String(targetChoiceType) },
     });
     choiceNow = targetChoiceType;
   }
 
-  var existing = await fetchExistingChoices(client, params.table, params.column);
+  var existing = await fetchExistingChoices(
+    client,
+    params.table,
+    params.column,
+  );
   var existingByValue: Record<string, ExistingChoice> = {};
   existing.forEach(function (row) {
     var key = (row.language || "en") + "::" + row.value;
@@ -210,14 +226,19 @@ export async function addChoicesToField(
     var key = (choice.language || "en") + "::" + choice.value;
     var match = existingByValue[key];
     if (match && isUnchanged(match, choice)) {
-      results.push({ value: choice.value, label: choice.label, sysId: match.sys_id, action: "unchanged" });
+      results.push({
+        value: choice.value,
+        label: choice.label,
+        sysId: match.sys_id,
+        action: "unchanged",
+      });
       continue;
     }
     if (match) {
       var updFields: Record<string, any> = {
         label: choice.label,
         language: choice.language || "en",
-        inactive: "false"
+        inactive: "false",
       };
       if (choice.sequence != null) {
         updFields.sequence = String(choice.sequence);
@@ -226,22 +247,32 @@ export async function addChoicesToField(
         update_set_sys_id: params.updateSetSysId,
         table: "sys_choice",
         record_sys_id: match.sys_id,
-        fields: updFields
+        fields: updFields,
       });
-      results.push({ value: choice.value, label: choice.label, sysId: match.sys_id, action: "updated" });
+      results.push({
+        value: choice.value,
+        label: choice.label,
+        sysId: match.sys_id,
+        action: "updated",
+      });
       continue;
     }
     var created = await client.claude.createRecord({
       table: "sys_choice",
-      fields: buildChoiceFields(params.table, params.column, choice, dict.sys_scope),
+      fields: buildChoiceFields(
+        params.table,
+        params.column,
+        choice,
+        dict.sys_scope,
+      ),
       scope: scopeName,
-      update_set_sys_id: params.updateSetSysId
+      update_set_sys_id: params.updateSetSysId,
     });
     results.push({
       value: choice.value,
       label: choice.label,
       sysId: created.sys_id,
-      action: "created"
+      action: "created",
     });
   }
 
@@ -250,9 +281,9 @@ export async function addChoicesToField(
       sysId: dict.sys_id,
       scope: dict.sys_scope,
       choiceWas: choiceWas,
-      choiceNow: choiceNow
+      choiceNow: choiceNow,
     },
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
-    choices: results
+    choices: results,
   };
 }

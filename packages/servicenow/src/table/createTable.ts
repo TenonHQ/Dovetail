@@ -34,9 +34,15 @@ import {
   defaultAccessFlags,
   AccessFlags,
   OverlaySpec,
-  listEditKey
+  listEditKey,
 } from "./buildTableSave";
-import { resolveFormAuth, openFormSession, setCurrentApplication, getNewRecordForm, postForm } from "./formSession";
+import {
+  resolveFormAuth,
+  openFormSession,
+  setCurrentApplication,
+  getNewRecordForm,
+  postForm,
+} from "./formSession";
 
 /** Default parent for a custom scoped table — what Studio picks for "extends nothing". */
 export var DEFAULT_SUPER_CLASS = "sys_metadata";
@@ -143,7 +149,11 @@ function newSysId(): string {
  * one MORE row than `total` (verified 2026-06-13: 6 cols → graph total 24, 25 rows
  * captured). The extra row is the existing menu being touched, not a new record.
  */
-export function projectTableGraph(columnCount: number, createAcls: boolean, hasRole: boolean): TableGraph {
+export function projectTableGraph(
+  columnCount: number,
+  createAcls: boolean,
+  hasRole: boolean,
+): TableGraph {
   var dictionary = columnCount + 1; // +1 collection row
   var labels = columnCount + 1; // table label + per-column labels
   var acls = createAcls ? 4 : 0;
@@ -156,7 +166,7 @@ export function projectTableGraph(columnCount: number, createAcls: boolean, hasR
     sys_security_acl: acls,
     sys_security_acl_role: aclRoles,
     sys_app_module: modules,
-    total: 1 + dictionary + labels + acls + aclRoles + modules
+    total: 1 + dictionary + labels + acls + aclRoles + modules,
   };
 }
 
@@ -164,13 +174,20 @@ var IDENT = /^[a-z][a-z0-9_]*$/;
 var SYS_ID = /^[0-9a-f]{32}$/i;
 
 function validate(params: CreateTableParams): void {
-  if (!params || typeof params !== "object") throw new Error("createTable: params object required.");
+  if (!params || typeof params !== "object")
+    throw new Error("createTable: params object required.");
   if (!params.client) throw new Error("createTable: client is required.");
   if (!params.name || !IDENT.test(params.name)) {
-    throw new Error("createTable: name '" + params.name + "' is not a valid table identifier (lower_snake_case).");
+    throw new Error(
+      "createTable: name '" +
+        params.name +
+        "' is not a valid table identifier (lower_snake_case).",
+    );
   }
-  if (!params.label || params.label.trim().length === 0) throw new Error("createTable: label is required.");
-  if (!params.scope || params.scope.trim().length === 0) throw new Error("createTable: scope is required.");
+  if (!params.label || params.label.trim().length === 0)
+    throw new Error("createTable: label is required.");
+  if (!params.scope || params.scope.trim().length === 0)
+    throw new Error("createTable: scope is required.");
 }
 
 /** Resolve a name-or-sysid against a table; returns { sysId, label } or throws. */
@@ -179,21 +196,43 @@ async function resolveRef(
   table: string,
   field: string,
   value: string,
-  labelField: string
+  labelField: string,
 ): Promise<{ sysId: string; label: string }> {
   if (SYS_ID.test(value)) {
-    var byId = await client.table.query<Record<string, string>>(table, "sys_id=" + value, 1);
-    if (byId.length > 0) return { sysId: value, label: String(byId[0][labelField] || "") };
+    var byId = await client.table.query<Record<string, string>>(
+      table,
+      "sys_id=" + value,
+      1,
+    );
+    if (byId.length > 0)
+      return { sysId: value, label: String(byId[0][labelField] || "") };
     return { sysId: value, label: "" };
   }
-  var rows = await client.table.query<Record<string, string>>(table, field + "=" + value, 1);
+  var rows = await client.table.query<Record<string, string>>(
+    table,
+    field + "=" + value,
+    1,
+  );
   if (rows.length === 0) {
-    throw new Error("createTable: could not resolve " + table + " where " + field + "=" + value + ".");
+    throw new Error(
+      "createTable: could not resolve " +
+        table +
+        " where " +
+        field +
+        "=" +
+        value +
+        ".",
+    );
   }
-  return { sysId: String(rows[0].sys_id), label: String(rows[0][labelField] || "") };
+  return {
+    sysId: String(rows[0].sys_id),
+    label: String(rows[0][labelField] || ""),
+  };
 }
 
-export async function createTable(params: CreateTableParams): Promise<CreateTableResult> {
+export async function createTable(
+  params: CreateTableParams,
+): Promise<CreateTableResult> {
   validate(params);
   var client = params.client;
   var columns: Array<NormalizedColumn> = normalizeColumns(params.columns);
@@ -205,7 +244,9 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   });
 
   // The column XML is pure — build it now (used by dry-run AND the live POST).
-  var columnSysIds = columns.map(function () { return newSysId(); });
+  var columnSysIds = columns.map(function () {
+    return newSysId();
+  });
   var columnXml = buildColumnXml(columns, columnSysIds);
 
   if (params.dryRun) {
@@ -221,20 +262,45 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
       httpStatus: 0,
       location: "",
       columnXml: columnXml,
-      note: "dry-run: no session opened, no writes. Resolved " + columns.length
-        + " columns; projected graph " + graph.total + " records + the physical table."
+      note:
+        "dry-run: no session opened, no writes. Resolved " +
+        columns.length +
+        " columns; projected graph " +
+        graph.total +
+        " records + the physical table.",
     };
   }
 
   // ---- LIVE PATH (NOT YET VALIDATED) ----------------------------------------
   // 2: resolve sys_ids via REST.
-  var extendsName = params.extendsTable && params.extendsTable.trim() ? params.extendsTable.trim() : DEFAULT_SUPER_CLASS;
-  var superClass = await resolveRef(client, "sys_db_object", "name", extendsName, "label");
-  var scopeRef = await resolveRef(client, "sys_scope", "scope", params.scope, "name");
+  var extendsName =
+    params.extendsTable && params.extendsTable.trim()
+      ? params.extendsTable.trim()
+      : DEFAULT_SUPER_CLASS;
+  var superClass = await resolveRef(
+    client,
+    "sys_db_object",
+    "name",
+    extendsName,
+    "label",
+  );
+  var scopeRef = await resolveRef(
+    client,
+    "sys_scope",
+    "scope",
+    params.scope,
+    "name",
+  );
   var roleSysId = "";
   var roleLabel = "";
   if (hasRole) {
-    var role = await resolveRef(client, "sys_user_role", "name", String(params.userRole), "name");
+    var role = await resolveRef(
+      client,
+      "sys_user_role",
+      "name",
+      String(params.userRole),
+      "name",
+    );
     roleSysId = role.sysId;
     roleLabel = role.label || String(params.userRole);
   }
@@ -242,13 +308,26 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   // not just the optional nav module. scope may be a name or a sys_scope sys_id.
   var appSysId = "";
   var showInMenu = params.showInMenu === false ? false : true;
-  var appQuery = SYS_ID.test(params.scope) ? "sys_id=" + params.scope : "scope=" + params.scope;
-  var apps = await client.table.query<Record<string, string>>("sys_app", appQuery, 1);
+  var appQuery = SYS_ID.test(params.scope)
+    ? "sys_id=" + params.scope
+    : "scope=" + params.scope;
+  var apps = await client.table.query<Record<string, string>>(
+    "sys_app",
+    appQuery,
+    1,
+  );
   if (apps.length > 0) appSysId = String(apps[0].sys_id);
-  var saveAction = params.saveActionSysId && params.saveActionSysId.trim() ? params.saveActionSysId.trim() : DEFAULT_SAVE_ACTION;
+  var saveAction =
+    params.saveActionSysId && params.saveActionSysId.trim()
+      ? params.saveActionSysId.trim()
+      : DEFAULT_SAVE_ACTION;
 
   // 1: open the form session.
-  var auth = resolveFormAuth({ instance: params.instance, user: params.user, password: params.password });
+  var auth = resolveFormAuth({
+    instance: params.instance,
+    user: params.user,
+    password: params.password,
+  });
   var session = await openFormSession(auth);
 
   // 1b: put the form session IN the target app so the new table is scoped correctly.
@@ -260,7 +339,11 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
 
   if (params.updateSetSysId) {
     // Pin the REST session's update set; the form session inherits the user pref.
-    try { await client.claude.changeUpdateSet({ sysId: params.updateSetSysId }); } catch (e) { /* best-effort */ }
+    try {
+      await client.claude.changeUpdateSet({ sysId: params.updateSetSysId });
+    } catch (e) {
+      /* best-effort */
+    }
   }
 
   // 3: harvest the new-record form.
@@ -269,7 +352,10 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   // The new-record (sys_id=-1) form doesn't render related lists, so harvest.listEditKey
   // is normally empty — fall back to the constant "Table Columns" relId so the columns
   // always ride the POST. Relying on the harvest alone silently produced column-less tables.
-  var relId = params.columnsRelId && params.columnsRelId.trim() ? params.columnsRelId.trim() : DEFAULT_COLUMNS_REL_ID;
+  var relId =
+    params.columnsRelId && params.columnsRelId.trim()
+      ? params.columnsRelId.trim()
+      : DEFAULT_COLUMNS_REL_ID;
   var colKey = harvest.listEditKey ? harvest.listEditKey : listEditKey(relId);
   var overlay: OverlaySpec = {
     name: params.name,
@@ -292,7 +378,7 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     selectedApplicationSysId: showInMenu ? appSysId : "",
     menuName: params.label,
     listEditKey: colKey,
-    columnXml: columnXml
+    columnXml: columnXml,
   };
   var fields = applyTableSaveOverlay(harvest.fields, overlay);
 
@@ -302,24 +388,43 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   // The form assigns its own sys_id for a new record — the 302 Location is the truth,
   // not the sys_uniqueValue we sent. Prefer the parsed id; fall back to what we sent.
   var assignedSysId = parseSysIdFromLocation(resp.location);
-  var finalSysId = ok ? (assignedSysId || tableSysId) : "";
+  var finalSysId = ok ? assignedSysId || tableSysId : "";
 
   var note: string;
   if (ok) {
-    note = "Created via form save. Verify the " + graph.total
-      + " records landed in scope " + scopeRef.sysId + " and the pinned update set.";
+    note =
+      "Created via form save. Verify the " +
+      graph.total +
+      " records landed in scope " +
+      scopeRef.sysId +
+      " and the pinned update set.";
   } else {
-    note = "save POST returned " + resp.status + " (expected 302). " + resp.body.slice(0, 200);
+    note =
+      "save POST returned " +
+      resp.status +
+      " (expected 302). " +
+      resp.body.slice(0, 200);
   }
   if (params.debug) {
-    note += " [debug: appSwitch=" + appSwitch.status + (appSwitch.ok ? "/ok" : "/FAIL:" + appSwitch.body)
-      + " appSysId=" + (appSysId || "(none)")
-      + " harvestedListEditKey=" + (harvest.listEditKey ? "yes" : "no")
-      + " colKey=" + colKey
-      + " fieldCount=" + Object.keys(fields).length
-      + " location=" + resp.location
-      + " sentSysId=" + tableSysId
-      + " assignedSysId=" + (assignedSysId || "(unparsed)") + "]";
+    note +=
+      " [debug: appSwitch=" +
+      appSwitch.status +
+      (appSwitch.ok ? "/ok" : "/FAIL:" + appSwitch.body) +
+      " appSysId=" +
+      (appSysId || "(none)") +
+      " harvestedListEditKey=" +
+      (harvest.listEditKey ? "yes" : "no") +
+      " colKey=" +
+      colKey +
+      " fieldCount=" +
+      Object.keys(fields).length +
+      " location=" +
+      resp.location +
+      " sentSysId=" +
+      tableSysId +
+      " assignedSysId=" +
+      (assignedSysId || "(unparsed)") +
+      "]";
   }
 
   return {
@@ -334,6 +439,6 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     httpStatus: resp.status,
     location: resp.location,
     columnXml: columnXml,
-    note: note
+    note: note,
   };
 }
