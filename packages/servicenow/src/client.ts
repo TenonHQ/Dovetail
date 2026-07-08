@@ -132,7 +132,7 @@ export interface ServiceNowClient {
     /** POST /api/cadso/dovetail_core/createRecord (legacy: /api/cadso/dovetail/createRecord). */
     createRecord: (params: {
       table: string;
-      fields: Record<string, any>;
+      fields: Record<string, unknown>;
       scope?: string;
       update_set_sys_id?: string;
       sys_id?: string;
@@ -142,7 +142,7 @@ export interface ServiceNowClient {
       update_set_sys_id: string;
       table: string;
       record_sys_id: string;
-      fields: Record<string, any>;
+      fields: Record<string, unknown>;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
     /** GET /api/cadso/dovetail_core/currentUpdateSet?scope=... (legacy: /api/cadso/dovetail/currentUpdateSet). */
     currentUpdateSet: (scope?: string) => Promise<{ sys_id: string; name: string }>;
