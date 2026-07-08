@@ -29,8 +29,17 @@ export interface PromotionInstance {
 export interface PromotionRung {
   /** Stable ClickUp status id — the webhook payload match key. */
   clickupStatusId: string;
-  /** Instance key the update set is promoted FROM. */
-  sourceInstance: string;
+  /**
+   * Instance key the update set is promoted FROM. Set exactly one of
+   * `sourceInstance` (a static key in `instances`) or `sourceFrom` (dynamic).
+   */
+  sourceInstance?: string;
+  /**
+   * Dynamic source. `"devInstance"` resolves the source at runtime from the
+   * developer's ClickUp `Dev Instance` field, validated against the target's
+   * registered update sources. Mutually exclusive with `sourceInstance`.
+   */
+  sourceFrom?: "devInstance";
   /** Instance key the update set is promoted TO. */
   targetInstance: string;
   transport: Transport;
@@ -44,6 +53,10 @@ export interface PromotionLadder {
   taskIdPattern: string;
   /** Scripted-REST promote path on the target; passed through to the transport. */
   promotePath?: string;
+  /** ClickUp custom-field id holding the dev-instance subdomain (for `sourceFrom: "devInstance"` rungs). */
+  devInstanceFieldId?: string;
+  /** Regex a resolved dev-instance subdomain must match before use (untrusted-input guard). */
+  devInstanceHostPattern?: string;
   /** Instance registry, keyed by instance name. */
   instances: Record<string, PromotionInstance>;
   /** Promotion edges, keyed by ClickUp status NAME. */

@@ -112,4 +112,43 @@ describe("validatePromotionLadder", function () {
   it("rejects a non-object", function () {
     expect(validatePromotionLadder({ config: null })[0].path).toBe("promotion");
   });
+
+  it("accepts a dynamic-source rung with the dev-instance config", function () {
+    var ladder = validLadder();
+    ladder.devInstanceFieldId = "field-id";
+    ladder.devInstanceHostPattern = "^tenonwork[a-z0-9-]+$";
+    delete ladder.statusMap["push to yard"].sourceInstance;
+    ladder.statusMap["push to yard"].sourceFrom = "devInstance";
+    expect(validatePromotionLadder({ config: ladder })).toEqual([]);
+  });
+
+  it("flags a dynamic-source rung missing the field id + host pattern", function () {
+    var ladder = validLadder();
+    delete ladder.statusMap["push to yard"].sourceInstance;
+    ladder.statusMap["push to yard"].sourceFrom = "devInstance";
+    var issues = validatePromotionLadder({ config: ladder });
+    expect(
+      issues.some(function (i) {
+        return i.path === "devInstanceFieldId";
+      }),
+    ).toBe(true);
+    expect(
+      issues.some(function (i) {
+        return i.path === "devInstanceHostPattern";
+      }),
+    ).toBe(true);
+  });
+
+  it("flags a rung that sets both sourceInstance and sourceFrom", function () {
+    var ladder = validLadder();
+    ladder.devInstanceFieldId = "field-id";
+    ladder.devInstanceHostPattern = "^tenonwork[a-z0-9-]+$";
+    ladder.statusMap["push to yard"].sourceFrom = "devInstance";
+    var issues = validatePromotionLadder({ config: ladder });
+    expect(
+      issues.some(function (i) {
+        return /exactly one of sourceInstance or sourceFrom/.test(i.message);
+      }),
+    ).toBe(true);
+  });
 });

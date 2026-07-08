@@ -9,6 +9,8 @@
   "properties": {
     "taskIdPattern": { "type": "string", "minLength": 1 },
     "promotePath": { "type": "string" },
+    "devInstanceFieldId": { "type": "string" },
+    "devInstanceHostPattern": { "type": "string" },
     "skipPreviewErrors": { "type": "array", "items": { "type": "string" } },
     "instances": {
       "type": "object",
@@ -31,7 +33,6 @@
         "type": "object",
         "required": [
           "clickupStatusId",
-          "sourceInstance",
           "targetInstance",
           "transport",
           "enabled"
@@ -40,6 +41,7 @@
         "properties": {
           "clickupStatusId": { "type": "string", "minLength": 1 },
           "sourceInstance": { "type": "string", "minLength": 1 },
+          "sourceFrom": { "type": "string", "enum": ["devInstance"] },
           "targetInstance": { "type": "string", "minLength": 1 },
           "transport": {
             "type": "string",

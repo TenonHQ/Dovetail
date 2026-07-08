@@ -27,6 +27,12 @@ export interface PromoteForStatusParams {
   sourceReader: SnReader;
   /** Reads sys_update_set on the TARGET instance (idempotency check). */
   targetReader: SnReader;
+  /**
+   * Resolved source instance override. REQUIRED for a `sourceFrom: "devInstance"`
+   * rung (the caller resolves + validates the dev instance first); ignored for
+   * static-source rungs.
+   */
+  sourceInstance?: string;
   /** Transport pointed at the TARGET instance. */
   promoter: Promoter;
   /** Optional ClickUp comment sink. */
@@ -148,12 +154,28 @@ export async function promoteForStatus(
     };
   }
 
-  var sourceInstance: PromotionInstanceRef =
-    config.instances[rung.sourceInstance];
-  var sourceRef =
-    sourceInstance && sourceInstance.url
-      ? sourceInstance.url
-      : rung.sourceInstance;
+  var sourceRef: string;
+  if (params.sourceInstance) {
+    sourceRef = params.sourceInstance;
+  } else if (rung.sourceFrom === "devInstance") {
+    return {
+      kind: "skipped",
+      reason:
+        "dynamic source for '" +
+        params.status +
+        "' was not resolved by the caller",
+    };
+  } else if (rung.sourceInstance) {
+    var staticSource: PromotionInstanceRef =
+      config.instances[rung.sourceInstance];
+    sourceRef =
+      staticSource && staticSource.url ? staticSource.url : rung.sourceInstance;
+  } else {
+    return {
+      kind: "skipped",
+      reason: "no source instance configured for '" + params.status + "'",
+    };
+  }
   var allow = config.skipPreviewErrors || [];
   var outcomes: PromoteOutcome[] = [];
 
