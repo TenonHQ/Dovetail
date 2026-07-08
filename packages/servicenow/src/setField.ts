@@ -45,7 +45,7 @@ var REFUSED_TABLES = ["sys_db_object", "sys_dictionary"];
 
 /** Coerce a Table-API field value to a comparable string. Reference/display
  *  fields (sysparm_display_value=false) come back as { link, value } objects. */
-function fieldToString(value: any): string {
+export function fieldToString(value: any): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "object") {
     return value.value !== undefined && value.value !== null ? String(value.value) : "";
@@ -53,7 +53,7 @@ function fieldToString(value: any): string {
   return String(value);
 }
 
-function pickFields(row: Record<string, any>, names: Array<string>): Record<string, string> {
+export function pickFields(row: Record<string, any>, names: Array<string>): Record<string, string> {
   var out: Record<string, string> = {};
   for (var i = 0; i < names.length; i += 1) {
     out[names[i]] = fieldToString(row ? row[names[i]] : undefined);

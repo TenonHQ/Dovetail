@@ -48,6 +48,8 @@ import { createTable, addColumn } from "./table";
 import type { ColumnSpec, CreateTableParams, AddColumnParams } from "./table";
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
+import { createRecord } from "./createRecord";
+import type { CreateRecordParams } from "./createRecord";
 import { hostAssets, formatHostAssetsResult } from "./hostAssets";
 import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
@@ -678,6 +680,9 @@ function printHelp(): void {
     "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
     "                     (--table <t> --sys-id <id>|--query <q> --fields \"k=v,k2=v2\"\n" +
     "                      --update-set <sys_id> [--dry-run] [--json])\n" +
+    "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
+    "                     (--table <t> --fields \"k=v,k2=v2\" --scope <s> --update-set <sys_id>\n" +
+    "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
     "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
     "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
     "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
@@ -886,6 +891,51 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
 }
 
 /**
+ * dove-sn create-record:
+ *   --table x_cadso_core_metric_point_type
+ *   --fields "name=avg_message_parts,label=Avg. Message Parts,order=35"
+ *   --scope x_cadso_core                         (the app that owns the new record)
+ *   --update-set <sys_id>                        (required — the insert is captured here)
+ *   [--if-absent "name=avg_message_parts"]       (skip the insert when this query already matches)
+ *   [--dry-run] [--json]
+ * Exit codes: 0 created/skipped-in-sync/dry-run, 1 bad args, 2 write landed but read-back unverified
+ * (or skipped with drift).
+ */
+async function runCreateRecord(flags: Record<string, string>): Promise<number> {
+  var table = flags.table;
+  var fields = parseFieldsInline(flags.fields || "");
+  if (!table || Object.keys(fields).length === 0 || !flags.scope || !flags["update-set"]) {
+    process.stderr.write(
+      "create-record: --table, --fields \"k=v\", --scope and --update-set are required\n"
+    );
+    return 1;
+  }
+  var params: CreateRecordParams = {
+    client: createClient({}),
+    table: table,
+    fields: fields,
+    scope: flags.scope,
+    updateSetSysId: flags["update-set"]
+  };
+  if (flags["if-absent"]) params.ifAbsentQuery = flags["if-absent"];
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await createRecord(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] " + result.table + "/" + (result.sysId || "(new)") + " "
+        + JSON.stringify(result.fields) + (result.verified ? " — verified" : "")
+        + "\n" + result.note + "\n"
+    );
+  }
+  if (result.status === "failed") return 2;
+  if (result.status === "skipped" && !result.verified) return 2;
+  return 0;
+}
+
+/**
  * dove-sn host-assets:
  *   --dir <dist>            Required. Path to the pre-built dist/ directory.
  *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
@@ -960,6 +1010,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);
+  }
+  if (parsed.command === "create-record") {
+    return await runCreateRecord(parsed.flags);
   }
   if (parsed.command === "host-assets") {
     return await runHostAssets(parsed.flags);
