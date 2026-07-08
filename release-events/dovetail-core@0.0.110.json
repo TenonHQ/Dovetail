@@ -1,0 +1,16 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.110",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.110",
+  "prev_version": "0.0.109",
+  "published_at": "2026-07-08T18:19:16.768Z",
+  "git": {
+    "sha": "84fc7a200e0840aaa4b2c93d6764dce959bb6536",
+    "tag": "dovetail-core@0.0.110"
+  },
+  "semver_bump": "patch",
+  "commits": [],
+  "exports_delta": null,
+  "narrative": null
+}

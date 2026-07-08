@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.44",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.44",
+  "prev_version": "0.0.43",
+  "published_at": "2026-06-23T19:16:43.126Z",
+  "git": {
+    "sha": "c7d7a3b73479d12a4119e4ebdd3cc1f540660ac4",
+    "tag": "dovetail-dashboard@0.0.44"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "c7d7a3b73",
+      "subject": "fix(dashboard): target dovetail_core Scripted REST API, not legacy dovetail (#192)",
+      "pr": 192
+    },
+    {
+      "sha": "4bc78bc61",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

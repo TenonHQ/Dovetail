@@ -34,7 +34,10 @@ import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable } from "../table";
+import { createTable, addColumn } from "../table";
+import { hostAssets } from "../hostAssets";
+import { setField } from "../setField";
+import { createRecord } from "../createRecord";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -49,6 +52,10 @@ import {
   testFlowSchema,
   editFlowSchema,
   createTableSchema,
+  addColumnSchema,
+  setFieldSchema,
+  createRecordSchema,
+  hostAssetsSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -65,6 +72,10 @@ export var TOOL_NAMES = [
   "flow_test",
   "flow_edit",
   "create_table",
+  "add_column",
+  "set_field",
+  "create_record",
+  "host_assets"
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -332,8 +343,109 @@ export function buildDescriptors(
           saveActionSysId: p.saveActionSysId,
           dryRun: p.dryRun,
         });
-      },
+      }
     },
+    {
+      name: "add_column",
+      annotations: WRITE_CREATE,
+      description:
+        "Add ONE column to an EXISTING ServiceNow table, headless and faithfully. Creating a column is a "
+        + "sys_dictionary insert; a REST/createRecord insert reliably 500s for a scoped-app column. This "
+        + "replays the Studio table-form save (POST /sys_db_object.do) against the existing table record, "
+        + "embedding the new column as list-edit XML, then READS THE COLUMN BACK from sys_dictionary to prove "
+        + "it landed (a 302 that did not create the field is reported failed, not created). table is the table "
+        + "name or its sys_db_object sys_id; column is { label, type, name?, max_length?, reference? } with "
+        + "friendly types mapped to internal types (string -> string_full_utf8); element is derived from label "
+        + "unless column.name is given. dryRun:true returns the plan + column XML with no session and no writes. "
+        + "NOTE: the live write path is pending a validated-live spike — prefer dryRun until confirmed, and "
+        + "always verify the sys_update_xml landed in the intended update set.",
+      shape: addColumnSchema.shape,
+      handler: async function (args: any) {
+        var p = addColumnSchema.parse(args);
+        return addColumn({
+          client: client(),
+          table: p.table,
+          column: p.column,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          saveActionSysId: p.saveActionSysId,
+          columnsRelId: p.columnsRelId,
+          dryRun: p.dryRun,
+          debug: p.debug
+        });
+      }
+    },
+    {
+      name: "set_field",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Set scalar field value(s) on an EXISTING ServiceNow data record, captured into a specified "
+        + "update set, then READ BACK to verify each value landed. Wraps the update-set-aware "
+        + "pushWithUpdateSet core op (no sys_user_preference mutation). Target the record by sysId, or "
+        + "by a query that resolves to EXACTLY one row. REFUSES schema tables (sys_db_object / "
+        + "sys_dictionary) — use add_column / create_table for those. fields is a flat name->string map "
+        + "(sent as strings; ServiceNow coerces); updateSetSysId is required so the change is tracked; "
+        + "dryRun:true reads the current values and returns the plan without writing. To INSERT a new "
+        + "record use create_record.",
+      shape: setFieldSchema.shape,
+      handler: async function (args: any) {
+        var p = setFieldSchema.parse(args);
+        return setField({
+          client: client(),
+          table: p.table,
+          sysId: p.sysId,
+          query: p.query,
+          fields: p.fields,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun
+        });
+      }
+    },
+    {
+      name: "create_record",
+      annotations: WRITE_CREATE,
+      description:
+        "Create ONE new ServiceNow data record, owned by an explicit app scope and captured into a "
+        + "specified update set, then READ BACK to verify. Wraps the scope- and update-set-aware "
+        + "createRecord core op (switches app scope + update set server-side, inserts, restores both — "
+        + "so the record lands in the right scope without sys_user_preference mutation). REFUSES schema "
+        + "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those. fields is a "
+        + "flat name->string map; scope and updateSetSysId are required; ifAbsentQuery makes re-runs "
+        + "idempotent (skips the insert when it already matches a row); dryRun:true returns the plan "
+        + "without writing. To UPDATE an existing record use set_field.",
+      shape: createRecordSchema.shape,
+      handler: async function (args: any) {
+        var p = createRecordSchema.parse(args);
+        return createRecord({
+          client: client(),
+          table: p.table,
+          fields: p.fields,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          ifAbsentQuery: p.ifAbsentQuery,
+          dryRun: p.dryRun
+        });
+      }
+    },
+    {
+      name: "host_assets",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Deploy a pre-built front-end dist/ bundle to ServiceNow. For each chunk (index.html + "
+        + "assets/*.{js,css}) upserts a carrier sys_ui_script named app_shell_asset:<vite-relative-path> "
+        + "(the rotating hash is part of the name on purpose — the Scripted REST serving resource resolves "
+        + "an asset by this exact name), stores the chunk bytes as a sys_attachment (the script field caps "
+        + "at 65 KB), and wires an x_cadso_app_shell_m2m_app_script row (application, script, chunk_role, "
+        + "order). PRUNES carriers + m2m rows for chunks no longer in the build (hashes rotate per build). "
+        + "Idempotent — identical bytes (by SHA-256) are left in place. Fails fast on any chunk at/over the "
+        + "~5 MB serve cap (glide.scriptable.excel.max_file_size) unless allowOversize. app is the application "
+        + "record sys_id; dir is a local dist path on the server running this tool; script + m2m writes are "
+        + "captured in the update set; dryRun previews without writing.",
+      shape: hostAssetsSchema.shape,
+      handler: async function (args: any) {
+        return hostAssets(client(), hostAssetsSchema.parse(args));
+      }
+    }
   ];
 }
 

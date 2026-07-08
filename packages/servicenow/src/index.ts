@@ -15,9 +15,12 @@ export type {
   TableQueryOptions,
   TableSchema,
   TableSchemaField,
+  AttachmentMeta
 } from "./client";
 
 export { addChoicesToField } from "./choices";
+
+export { hostAssets, classifyChunks, formatHostAssetsResult } from "./hostAssets";
 
 export { formatAddChoicesResult } from "./formatter";
 
@@ -113,6 +116,12 @@ export type {
   SetFormLayoutParams,
   SetListLayoutParams,
   SetRelatedListsParams,
+  ChunkRole,
+  ChunkInfo,
+  ChunkResult,
+  PrunedResult,
+  HostAssetsParams,
+  HostAssetsResult
 } from "./types";
 
 export {
@@ -126,13 +135,23 @@ export {
   TYPE_MAP,
   DEFAULT_SUPER_CLASS,
   DEFAULT_SAVE_ACTION,
+  addColumn,
+  deriveElement,
+  applyAddColumnOverlay
 } from "./table";
 export type {
   CreateTableParams,
   CreateTableResult,
+  AddColumnParams,
+  AddColumnResult,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,
   AccessFlags,
   OverlaySpec,
 } from "./table";
+
+export { setField } from "./setField";
+export { createRecord } from "./createRecord";
+export type { RecordWriteResult, SetFieldParams, SetFieldResult } from "./setField";
+export type { CreateRecordParams, CreateRecordResult } from "./createRecord";

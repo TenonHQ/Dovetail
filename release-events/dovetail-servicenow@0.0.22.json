@@ -1,0 +1,35 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.22",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.22",
+  "prev_version": "0.0.21",
+  "published_at": "2026-06-19T08:59:45.509Z",
+  "git": {
+    "sha": "073dad48a5d534f489a0906db083e97462ec76fe",
+    "tag": "dovetail-servicenow@0.0.22"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "073dad48a",
+      "subject": "feat: headless add-column for existing scoped tables (dovetail-servicenow) (#191)",
+      "pr": 191
+    },
+    {
+      "sha": "4bc78bc61",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "c82439b30",
+      "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
+      "pr": 183
+    },
+    {
+      "sha": "9035f969b",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

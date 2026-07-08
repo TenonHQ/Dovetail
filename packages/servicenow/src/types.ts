@@ -187,3 +187,96 @@ export interface SetRelatedListsParams {
   /** Plan the writes without performing them. Defaults to false. */
   dryRun?: boolean;
 }
+
+/* ─── Front-end asset hosting (host-assets) ─────────────────────────────── */
+
+/** Role of a built chunk, inferred from its base name. Drives m2m chunk_role + load order. */
+export type ChunkRole =
+  | "index"
+  | "entry"
+  | "vendor"
+  | "router"
+  | "state"
+  | "lazy"
+  | "style";
+
+/**
+ * A classified build chunk — pure metadata, derived before any bytes are read.
+ * The carrier sys_ui_script is named `app_shell_asset:<viteRelPath>` (hash included),
+ * because the Scripted REST serving resource resolves an asset by that exact name.
+ */
+export interface ChunkInfo {
+  /** Dist-relative path with forward slashes, e.g. "assets/index-a1b2c3d4.js" or "index.html". */
+  viteRelPath: string;
+  /** Carrier sys_ui_script name: "app_shell_asset:" + viteRelPath. Stable per build, rotates with the hash. */
+  name: string;
+  /** Filename only, e.g. "index-a1b2c3d4.js". */
+  fileName: string;
+  /** Hash-stripped base used only for role inference, e.g. "index". */
+  base: string;
+  /** Lowercased extension without the dot, e.g. "js". */
+  ext: string;
+  role: ChunkRole;
+  /** Gap-free load order across all chunks (ascending). */
+  order: number;
+  /** MIME type written to the attachment. */
+  contentType: string;
+}
+
+export interface HostAssetsParams {
+  /** Path to the pre-built dist/ directory. */
+  dir: string;
+  /** Application record sys_id (32 hex) — written verbatim to the m2m `application` field. */
+  app: string;
+  /** Scope namespace the carrier records live in, e.g. "x_cadso_app_shell". */
+  scope: string;
+  /** Update set sys_id that captures every metadata write. Resolved from the scope's current update set when omitted. */
+  updateSetSysId?: string;
+  /**
+   * Max bytes per chunk. The serving layer streams each chunk via
+   * GlideSysAttachment.getContentStream(), capped by glide.scriptable.excel.max_file_size
+   * (~5 MB) — a larger chunk truncates on serve. Defaults to 5 * 1024 * 1024.
+   */
+  maxBytes?: number;
+  /** Warn instead of failing when a chunk meets/exceeds maxBytes. Defaults to false (fail). */
+  allowOversize?: boolean;
+  /** Plan the deploy (read + classify) without writing/uploading/pruning. Defaults to false. */
+  dryRun?: boolean;
+}
+
+export interface ChunkResult {
+  /** Carrier sys_ui_script name ("app_shell_asset:<viteRelPath>"). */
+  name: string;
+  viteRelPath: string;
+  base: string;
+  role: ChunkRole;
+  order: number;
+  contentType: string;
+  bytes: number;
+  scriptSysId: string;
+  scriptAction: "created" | "updated" | "unchanged";
+  attachmentSysId: string;
+  attachmentAction: "uploaded" | "replaced" | "unchanged";
+  m2mSysId: string;
+  m2mAction: "created" | "updated" | "unchanged";
+  /** True once the script record + an attachment were read back from the instance. */
+  verified: boolean;
+}
+
+export interface PrunedResult {
+  /** Carrier sys_ui_script name that was removed (or planned for removal). */
+  name: string;
+  scriptSysId: string;
+  m2mSysId: string;
+  /** False when the carrier script was kept because another app's m2m still references it. */
+  scriptDeleted: boolean;
+}
+
+export interface HostAssetsResult {
+  scope: string;
+  app: string;
+  updateSet: { sysId: string; name: string };
+  dryRun: boolean;
+  chunks: Array<ChunkResult>;
+  pruned: Array<PrunedResult>;
+}

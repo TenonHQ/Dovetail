@@ -132,6 +132,16 @@ export var editFlowSchema = z.object({
   updateSetSysId: z.string().optional(),
 });
 
+export var hostAssetsSchema = z.object({
+  dir: z.string().min(1),
+  app: z.string().min(1),
+  scope: z.string().min(1),
+  updateSetSysId: z.string().min(1).optional(),
+  maxBytes: z.number().int().positive().optional(),
+  allowOversize: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});
+
 export var columnSpecSchema = z.object({
   label: z.string().min(1),
   type: z.string().min(1),
@@ -156,4 +166,37 @@ export var createTableSchema = z.object({
   columnsRelId: z.string().optional(),
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional(),
+});
+
+export var addColumnSchema = z.object({
+  table: z.string().min(1),
+  column: columnSpecSchema,
+  scope: z.string().optional(),
+  updateSetSysId: z.string().optional(),
+  saveActionSysId: z.string().optional(),
+  columnsRelId: z.string().optional(),
+  dryRun: z.boolean().optional(),
+  debug: z.boolean().optional()
+});
+
+// Data-record write verbs. Kept as plain z.object (no .refine wrapper) so
+// registry.ts can read `.shape`; the deeper rules — one of sysId/query, at
+// least one field, the schema-table refusal — are enforced by the core
+// setField / createRecord functions, which throw clear errors.
+export var setFieldSchema = z.object({
+  table: z.string().min(1),
+  sysId: z.string().optional(),
+  query: z.string().optional(),
+  fields: z.record(z.string()),
+  updateSetSysId: z.string().min(1),
+  dryRun: z.boolean().optional()
+});
+
+export var createRecordSchema = z.object({
+  table: z.string().min(1),
+  fields: z.record(z.string()),
+  scope: z.string().min(1),
+  updateSetSysId: z.string().min(1),
+  ifAbsentQuery: z.string().optional(),
+  dryRun: z.boolean().optional()
 });

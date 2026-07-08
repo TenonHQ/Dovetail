@@ -42,9 +42,15 @@ function resolveDovePath(doveName, sincName) {
   return dovePath;
 }
 
-const UPDATE_SET_CONFIG = resolveDovePath(".dove-update-sets.json", ".sinc-update-sets.json");
+const UPDATE_SET_CONFIG = resolveDovePath(
+  ".dove-update-sets.json",
+  ".sinc-update-sets.json"
+);
 const DOVE_CONFIG_PATH = resolveDovePath("dove.config.js", "sinc.config.js");
-const ACTIVE_TASK_FILE = resolveDovePath(".dove-active-task.json", ".sinc-active-task.json");
+const ACTIVE_TASK_FILE = resolveDovePath(
+  ".dove-active-task.json",
+  ".sinc-active-task.json"
+);
 
 const CLICKUP_TOKEN = process.env.CLICKUP_API_TOKEN || "";
 const CLICKUP_TEAM_ID = process.env.CLICKUP_TEAM_ID || "";
@@ -88,49 +94,80 @@ app.use(express.static(path.join(__dirname, "public")));
 // Session-persistent ServiceNow client — cookie jar ensures scope changes
 // (changeScope) persist across subsequent requests in the same session.
 var snCookieJar = new CookieJar();
-var snClient = wrapper(axios.create({
-  baseURL: BASE_URL,
-  auth: { username: SN_USER, password: SN_PASSWORD },
-  headers: {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-  },
-  jar: snCookieJar,
-  withCredentials: true,
-}));
+var snClient = wrapper(
+  axios.create({
+    baseURL: BASE_URL,
+    auth: { username: SN_USER, password: SN_PASSWORD },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    jar: snCookieJar,
+    withCredentials: true,
+  })
+);
 
-// Dovetail Scripted REST API rebrand: the API path moved from /api/cadso/claude/*
-// to /api/cadso/dovetail/*. snApi rewrites legacy /api/cadso/claude/* URLs to the
-// new path on first call; if that 404s (instance hasn't been re-imported yet) we
-// latch back to the legacy path for the rest of the session and warn once.
-var _dovetailApiUseLegacyClaudePath = false;
+// Dovetail's core Scripted REST API now lives in the Dovetail scoped application
+// at /api/cadso/dovetail_core/*. Older instances still expose the previous
+// global-scope path /api/cadso/dovetail/*. Dashboard call sites still pass the
+// original /api/cadso/claude/* paths; snApi maps them to dovetail_core first and,
+// on a missing-endpoint error (404, or the 400 "Requested URI does not represent
+// any resource" SN returns for an absent Scripted REST resource), latches to the
+// legacy /api/cadso/dovetail/* path for the rest of the session and warns once.
+// Mirrors packages/core/src/snClient.ts so the dashboard and the dove CLI agree.
+var _dovetailApiUseLegacyPath = false;
+var _SN_MISSING_ENDPOINT_BODY = "Requested URI does not represent any resource";
+
+// True when an error means the Dovetail Scripted REST endpoint is absent on this
+// instance: a 404, or the 400 body SN returns for an unknown scripted-REST URI.
+function isMissingDovetailEndpoint(e) {
+  var status = e && e.response && e.response.status;
+  if (status === 404) return true;
+  if (status === 400) {
+    var data = e && e.response && e.response.data;
+    var body = "";
+    try {
+      body = typeof data === "string" ? data : JSON.stringify(data || "");
+    } catch (_e) {
+      body = "";
+    }
+    return body.indexOf(_SN_MISSING_ENDPOINT_BODY) !== -1;
+  }
+  return false;
+}
+
+// Map a dashboard call-site path (api/cadso/{claude,dovetail,dovetail_core}/<op>)
+// to the active Dovetail scoped-API path. Returns null for non-scoped endpoints
+// (e.g. api/now/table/*), which pass through unchanged.
+function dovetailScopedPath(endpoint) {
+  var match = endpoint.match(
+    /^\/?api\/cadso\/(?:dovetail_core|dovetail|claude)\/(.*)$/
+  );
+  if (!match) return null;
+  var service = _dovetailApiUseLegacyPath ? "dovetail" : "dovetail_core";
+  return "api/cadso/" + service + "/" + match[1];
+}
 
 async function snApi(method, endpoint, data) {
   await waitForRateLimit();
-  // Rewrite legacy /api/cadso/claude/* call sites to the new dovetail path,
-  // unless we've already discovered this instance only speaks the legacy path.
-  var rewritten = endpoint;
-  var isDovetailScopedApi = endpoint.indexOf("api/cadso/claude/") === 0
-    || endpoint.indexOf("/api/cadso/claude/") === 0
-    || endpoint.indexOf("api/cadso/dovetail/") === 0
-    || endpoint.indexOf("/api/cadso/dovetail/") === 0;
-  if (isDovetailScopedApi) {
-    rewritten = _dovetailApiUseLegacyClaudePath
-      ? endpoint.replace("api/cadso/dovetail/", "api/cadso/claude/")
-      : endpoint.replace("api/cadso/claude/", "api/cadso/dovetail/");
-  }
+  var scopedPath = dovetailScopedPath(endpoint);
+  var url = scopedPath || endpoint;
   try {
-    return await snClient({ method: method, url: rewritten, data: data });
+    return await snClient({ method: method, url: url, data: data });
   } catch (e) {
-    var status = e && e.response && e.response.status;
-    if (isDovetailScopedApi && !_dovetailApiUseLegacyClaudePath && status === 404) {
+    if (
+      scopedPath &&
+      !_dovetailApiUseLegacyPath &&
+      isMissingDovetailEndpoint(e)
+    ) {
       // eslint-disable-next-line no-console
       console.warn(
-        "[deprecation] " + rewritten +
-          " returned 404. Falling back to legacy /api/cadso/claude/* path. Re-import the Dovetail Scripted REST API XML on your ServiceNow instance to silence this warning.",
+        "[deprecation] " +
+          url +
+          " not found. Falling back to legacy /api/cadso/dovetail/* path. Install the Dovetail application's Scripted REST APIs to silence this warning."
       );
-      _dovetailApiUseLegacyClaudePath = true;
-      var legacyUrl = rewritten.replace("api/cadso/dovetail/", "api/cadso/claude/");
+      _dovetailApiUseLegacyPath = true;
+      var legacyUrl = dovetailScopedPath(endpoint);
       return await snClient({ method: method, url: legacyUrl, data: data });
     }
     throw e;
@@ -150,11 +187,50 @@ function clickupApi(method, endpoint, data) {
   });
 }
 
-// Generate update set name from ClickUp task
-function generateUpdateSetName(taskId, taskName) {
-  var sanitized = taskName.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim();
-  var base = "CU-" + taskId + " — " + sanitized;
-  return base.substring(0, 80);
+// Scope -> "App" label used in generated update-set names. Mirrors the
+// override table in .claude/skills/sn-move-update-set so both tools agree.
+var SCOPE_LABEL_OVERRIDES = {
+  x_cadso_journey: "Journey",
+  x_cadso_core: "Core",
+  x_cadso_automate: "Automate",
+  x_cadso_text_spoke: "Text",
+  x_cadso_email_spok: "Email",
+};
+
+function scopeLabel(scope) {
+  if (SCOPE_LABEL_OVERRIDES[scope]) return SCOPE_LABEL_OVERRIDES[scope];
+  var stripped = scope.replace(/^x_cadso_/, "");
+  return stripped
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map(function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(" ");
+}
+
+function sanitizeTaskName(taskName) {
+  return taskName.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim();
+}
+
+// Task-level base name (no App segment yet — that's added per-scope by
+// buildScopedUpdateSetName, since one task can span multiple scopes/apps).
+function generateUpdateSetName(devInitials, taskId, shortDesc) {
+  var parts = [];
+  if (devInitials) parts.push(devInitials);
+  parts.push(taskId);
+  parts.push(shortDesc);
+  return parts.join(" | ").substring(0, 80);
+}
+
+// Full per-scope update-set name: {DEVINITIALS} | {DEV-ID} | {App} | {Short Desc}
+function buildScopedUpdateSetName(activeTask, appLabel) {
+  var parts = [];
+  if (activeTask.devInitials) parts.push(activeTask.devInitials);
+  parts.push(activeTask.customId || activeTask.taskId);
+  parts.push(appLabel);
+  parts.push(activeTask.shortDesc || activeTask.taskName);
+  return parts.join(" | ").substring(0, 80);
 }
 
 // Generate update set description from task
@@ -222,7 +298,9 @@ app.get("/api/scopes", async (req, res) => {
     const scopeQuery = scopeKeys.map((s) => `scope=${s}`).join("^OR");
     const resp = await snApi(
       "get",
-      `api/now/table/sys_scope?sysparm_query=${encodeURIComponent(scopeQuery)}&sysparm_fields=sys_id,scope,name&sysparm_limit=50`
+      `api/now/table/sys_scope?sysparm_query=${encodeURIComponent(
+        scopeQuery
+      )}&sysparm_fields=sys_id,scope,name&sysparm_limit=50`
     );
 
     const scopeRecords = resp.data.result || [];
@@ -251,7 +329,10 @@ app.get("/api/scopes", async (req, res) => {
 });
 
 // GET /api/recent-edits — read local recent edits file, enrich with live SN data
-var RECENT_EDITS_FILE = resolveDovePath(".dove-recent-edits.json", ".sinc-recent-edits.json");
+var RECENT_EDITS_FILE = resolveDovePath(
+  ".dove-recent-edits.json",
+  ".sinc-recent-edits.json"
+);
 
 app.get("/api/recent-edits", recentEditsLimiter, async function (req, res) {
   try {
@@ -270,11 +351,17 @@ app.get("/api/recent-edits", recentEditsLimiter, async function (req, res) {
       var edit = edits[i];
       var updateSetName = "unknown";
       try {
-        var query = "name=" + edit.tableName + "_" + edit.sys_id + "^ORDERBYDESCsys_created_on";
+        var query =
+          "name=" +
+          edit.tableName +
+          "_" +
+          edit.sys_id +
+          "^ORDERBYDESCsys_created_on";
         var snResp = await snApi(
           "get",
-          "api/now/table/sys_update_xml?sysparm_query=" + encodeURIComponent(query) +
-          "&sysparm_fields=update_set,update_set.name&sysparm_limit=1"
+          "api/now/table/sys_update_xml?sysparm_query=" +
+            encodeURIComponent(query) +
+            "&sysparm_fields=update_set,update_set.name&sysparm_limit=1"
         );
         var results = snResp.data.result || [];
         if (results.length > 0) {
@@ -329,7 +416,9 @@ app.get("/api/update-sets/:scope", async (req, res) => {
     const query = `application.scope=${scope}^state=in progress^ORDERBYDESCsys_created_on`;
     const resp = await snApi(
       "get",
-      `api/now/table/sys_update_set?sysparm_query=${encodeURIComponent(query)}&sysparm_fields=sys_id,name,state,application,sys_created_on,description&sysparm_limit=50`
+      `api/now/table/sys_update_set?sysparm_query=${encodeURIComponent(
+        query
+      )}&sysparm_fields=sys_id,name,state,application,sys_created_on,description&sysparm_limit=50`
     );
     res.json({ update_sets: resp.data.result || [] });
   } catch (e) {
@@ -350,7 +439,10 @@ app.post("/api/update-set", async (req, res) => {
 
     // Switch to the target scope before creating — ServiceNow uses session scope
     if (scope) {
-      await snApi("get", "api/cadso/claude/changeScope?scope=" + encodeURIComponent(scope));
+      await snApi(
+        "get",
+        "api/cadso/claude/changeScope?scope=" + encodeURIComponent(scope)
+      );
     }
 
     const data = {
@@ -371,11 +463,9 @@ app.post("/api/update-set", async (req, res) => {
 app.patch("/api/update-set/:sysId/close", async (req, res) => {
   try {
     const { sysId } = req.params;
-    const resp = await snApi(
-      "patch",
-      `api/now/table/sys_update_set/${sysId}`,
-      { state: "complete" }
-    );
+    const resp = await snApi("patch", `api/now/table/sys_update_set/${sysId}`, {
+      state: "complete",
+    });
     res.json({ update_set: resp.data.result });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -441,7 +531,9 @@ app.get("/api/clickup/status", function (req, res) {
 app.get("/api/clickup/me", async function (req, res) {
   try {
     if (!CLICKUP_TOKEN) {
-      return res.status(400).json({ error: "CLICKUP_API_TOKEN not configured" });
+      return res
+        .status(400)
+        .json({ error: "CLICKUP_API_TOKEN not configured" });
     }
     var resp = await clickupApi("get", "user");
     var user = resp.data.user || {};
@@ -464,7 +556,9 @@ app.get("/api/clickup/me", async function (req, res) {
 app.get("/api/clickup/tasks", async function (req, res) {
   try {
     if (!CLICKUP_TOKEN) {
-      return res.status(400).json({ error: "CLICKUP_API_TOKEN not configured" });
+      return res
+        .status(400)
+        .json({ error: "CLICKUP_API_TOKEN not configured" });
     }
 
     var teamId = CLICKUP_TEAM_ID;
@@ -492,7 +586,8 @@ app.get("/api/clickup/tasks", async function (req, res) {
     var byStatus = {};
     var allStatuses = [];
     tasks.forEach(function (t) {
-      var statusName = t.status && t.status.status ? t.status.status : "unknown";
+      var statusName =
+        t.status && t.status.status ? t.status.status : "unknown";
       if (!byStatus[statusName]) {
         byStatus[statusName] = [];
         allStatuses.push(statusName);
@@ -517,7 +612,11 @@ app.get("/api/clickup/tasks", async function (req, res) {
       });
     });
 
-    res.json({ tasks: tasks.length, byStatus: byStatus, statuses: allStatuses });
+    res.json({
+      tasks: tasks.length,
+      byStatus: byStatus,
+      statuses: allStatuses,
+    });
   } catch (e) {
     var msg = e.message;
     if (e.response && e.response.data) {
@@ -531,7 +630,9 @@ app.get("/api/clickup/tasks", async function (req, res) {
 app.get("/api/clickup/task/:taskId", async function (req, res) {
   try {
     if (!CLICKUP_TOKEN) {
-      return res.status(400).json({ error: "CLICKUP_API_TOKEN not configured" });
+      return res
+        .status(400)
+        .json({ error: "CLICKUP_API_TOKEN not configured" });
     }
     var resp = await clickupApi("get", "task/" + req.params.taskId);
     var t = resp.data;
@@ -557,14 +658,26 @@ app.get("/api/clickup/task/:taskId", async function (req, res) {
 });
 
 // POST /api/clickup/select-task — select a task as active
-app.post("/api/clickup/select-task", function (req, res) {
+app.post("/api/clickup/select-task", async function (req, res) {
   try {
     var body = req.body;
     if (!body.taskId || !body.taskName) {
-      return res.status(400).json({ error: "taskId and taskName are required" });
+      return res
+        .status(400)
+        .json({ error: "taskId and taskName are required" });
     }
 
-    var updateSetName = generateUpdateSetName(body.taskId, body.taskName);
+    var devInitials = "";
+    try {
+      var meResp = await clickupApi("get", "user");
+      devInitials = (meResp.data.user && meResp.data.user.initials) || "";
+    } catch (meErr) {
+      // Non-fatal — naming falls back to no-initials prefix
+    }
+
+    var customId = body.customId || body.taskId;
+    var shortDesc = sanitizeTaskName(body.taskName);
+    var updateSetName = generateUpdateSetName(devInitials, customId, shortDesc);
     var description = generateUpdateSetDescription(
       body.taskName,
       body.taskDescription || ""
@@ -572,6 +685,9 @@ app.post("/api/clickup/select-task", function (req, res) {
 
     var activeTask = {
       taskId: body.taskId,
+      customId: customId,
+      devInitials: devInitials,
+      shortDesc: shortDesc,
       taskName: body.taskName,
       taskDescription: body.taskDescription || "",
       updateSetName: updateSetName,
@@ -590,17 +706,24 @@ app.post("/api/clickup/select-task", function (req, res) {
 // Core logic: find or create update set for a scope given an active task
 // Returns { update_set, created }
 async function findOrCreateUpdateSet(scope, scopeSysId, activeTask) {
-  var baseName = activeTask.updateSetName;
-  var taskId = activeTask.taskId;
+  var appLabel = scopeLabel(scope);
+  var baseName = buildScopedUpdateSetName(activeTask, appLabel);
+  var lookupId = activeTask.customId || activeTask.taskId;
 
-  if (!taskId || typeof taskId !== "string" || taskId.trim() === "") {
-    throw new Error("Cannot search for update sets: activeTask has an empty or missing taskId");
+  if (!lookupId || typeof lookupId !== "string" || lookupId.trim() === "") {
+    throw new Error(
+      "Cannot search for update sets: activeTask has an empty or missing task id"
+    );
   }
 
-  // Query ServiceNow for existing update sets matching this task in this scope
+  // Query ServiceNow for existing update sets matching this task in this scope.
+  // Lookup is on the task id substring only (not the full name) so a re-run
+  // still finds a set created before a naming-format change.
   var query =
-    "application.scope=" + scope +
-    "^nameLIKECU-" + taskId +
+    "application.scope=" +
+    scope +
+    "^nameLIKE" +
+    lookupId +
     "^state=in progress" +
     "^ORDERBYDESCsys_created_on";
   var searchResp = await snApi(
@@ -624,7 +747,10 @@ async function findOrCreateUpdateSet(scope, scopeSysId, activeTask) {
   if (!updateSet) {
     // Switch to the target scope before creating — ServiceNow uses session scope,
     // not the application field, when creating update sets via Table API
-    await snApi("get", "api/cadso/claude/changeScope?scope=" + encodeURIComponent(scope));
+    await snApi(
+      "get",
+      "api/cadso/claude/changeScope?scope=" + encodeURIComponent(scope)
+    );
 
     var createData = {
       name: baseName,
@@ -634,7 +760,11 @@ async function findOrCreateUpdateSet(scope, scopeSysId, activeTask) {
     if (activeTask.description) {
       createData.description = activeTask.description;
     }
-    var createResp = await snApi("post", "api/now/table/sys_update_set", createData);
+    var createResp = await snApi(
+      "post",
+      "api/now/table/sys_update_set",
+      createData
+    );
     updateSet = createResp.data.result;
     created = true;
   }
@@ -643,13 +773,15 @@ async function findOrCreateUpdateSet(scope, scopeSysId, activeTask) {
   try {
     await snApi(
       "get",
-      "api/cadso/claude/changeUpdateSet?sysId=" + encodeURIComponent(updateSet.sys_id)
+      "api/cadso/claude/changeUpdateSet?sysId=" +
+        encodeURIComponent(updateSet.sys_id)
     );
 
     // Verify the switch was successful
     var verifyResp = await snApi(
       "get",
-      "api/cadso/claude/currentUpdateSet" + (scope ? "?scope=" + encodeURIComponent(scope) : "")
+      "api/cadso/claude/currentUpdateSet" +
+        (scope ? "?scope=" + encodeURIComponent(scope) : "")
     );
     var verifyData = verifyResp.data;
     if (verifyData && verifyData.result) {
@@ -661,11 +793,13 @@ async function findOrCreateUpdateSet(scope, scopeSysId, activeTask) {
       console.warn("Update set verification failed, retrying switch...");
       await snApi(
         "get",
-        "api/cadso/claude/changeUpdateSet?sysId=" + encodeURIComponent(updateSet.sys_id)
+        "api/cadso/claude/changeUpdateSet?sysId=" +
+          encodeURIComponent(updateSet.sys_id)
       );
       var retryResp = await snApi(
         "get",
-        "api/cadso/claude/currentUpdateSet" + (scope ? "?scope=" + encodeURIComponent(scope) : "")
+        "api/cadso/claude/currentUpdateSet" +
+          (scope ? "?scope=" + encodeURIComponent(scope) : "")
       );
       var retryData = retryResp.data;
       if (retryData && retryData.result) {
@@ -673,14 +807,22 @@ async function findOrCreateUpdateSet(scope, scopeSysId, activeTask) {
       }
       var retrySysId = retryData && retryData.sysId ? retryData.sysId : null;
       if (retrySysId !== updateSet.sys_id) {
-        var actualName = retryData && retryData.name ? retryData.name : "unknown";
+        var actualName =
+          retryData && retryData.name ? retryData.name : "unknown";
         console.error(
-          "Update set " + updateSet.name + " was created but could not be activated. Current update set is " + actualName + "."
+          "Update set " +
+            updateSet.name +
+            " was created but could not be activated. Current update set is " +
+            actualName +
+            "."
         );
       }
     }
   } catch (changeErr) {
-    console.error("Warning: Could not auto-switch update set on instance:", changeErr.message);
+    console.error(
+      "Warning: Could not auto-switch update set on instance:",
+      changeErr.message
+    );
   }
 
   return { update_set: updateSet, created: created };
@@ -710,7 +852,9 @@ app.post("/api/clickup/activate-scope", async function (req, res) {
   try {
     var body = req.body;
     if (!body.scope || !body.scope_sys_id) {
-      return res.status(400).json({ error: "scope and scope_sys_id are required" });
+      return res
+        .status(400)
+        .json({ error: "scope and scope_sys_id are required" });
     }
 
     var activeTask = readActiveTask();
@@ -718,7 +862,11 @@ app.post("/api/clickup/activate-scope", async function (req, res) {
       return res.status(400).json({ error: "No active task selected" });
     }
 
-    var result = await findOrCreateUpdateSet(body.scope, body.scope_sys_id, activeTask);
+    var result = await findOrCreateUpdateSet(
+      body.scope,
+      body.scope_sys_id,
+      activeTask
+    );
     persistScopeActivation(body.scope, result.update_set, activeTask);
 
     res.json({
@@ -731,6 +879,61 @@ app.post("/api/clickup/activate-scope", async function (req, res) {
   }
 });
 
+// Shared core: find-or-create an update set in every scope from dove.config.js
+// for the given active task. Used by both /activate-all-scopes and /start-task.
+// Returns { results, activeTask }.
+async function activateAllConfiguredScopes(activeTask) {
+  // Read scopes from dove.config.js
+  delete require.cache[require.resolve(DOVE_CONFIG_PATH)];
+  var config = require(DOVE_CONFIG_PATH);
+  var scopeKeys = Object.keys(config.scopes || {});
+
+  // Resolve scope sys_ids
+  var scopeQuery = scopeKeys
+    .map(function (s) {
+      return "scope=" + s;
+    })
+    .join("^OR");
+  var scopeResp = await snApi(
+    "get",
+    "api/now/table/sys_scope?sysparm_query=" +
+      encodeURIComponent(scopeQuery) +
+      "&sysparm_fields=sys_id,scope,name&sysparm_limit=50"
+  );
+  var scopeRecords = scopeResp.data.result || [];
+  var scopeMap = {};
+  scopeRecords.forEach(function (r) {
+    scopeMap[r.scope] = r.sys_id;
+  });
+
+  // Activate each scope sequentially (respects rate limits)
+  var results = [];
+  for (var i = 0; i < scopeKeys.length; i++) {
+    var scope = scopeKeys[i];
+    var scopeSysId = scopeMap[scope];
+    if (!scopeSysId) {
+      results.push({ scope: scope, error: "scope not found on instance" });
+      continue;
+    }
+
+    try {
+      var result = await findOrCreateUpdateSet(scope, scopeSysId, activeTask);
+      persistScopeActivation(scope, result.update_set, activeTask);
+      // Re-read active task so subsequent iterations see updated scopes
+      activeTask = readActiveTask();
+      results.push({
+        scope: scope,
+        update_set: result.update_set,
+        created: result.created,
+      });
+    } catch (scopeErr) {
+      results.push({ scope: scope, error: scopeErr.message });
+    }
+  }
+
+  return { results: results, activeTask: readActiveTask() };
+}
+
 // POST /api/clickup/activate-all-scopes — find or create update sets for all configured scopes
 app.post("/api/clickup/activate-all-scopes", async function (req, res) {
   try {
@@ -739,51 +942,162 @@ app.post("/api/clickup/activate-all-scopes", async function (req, res) {
       return res.status(400).json({ error: "No active task selected" });
     }
 
-    // Read scopes from dove.config.js
-    delete require.cache[require.resolve(DOVE_CONFIG_PATH)];
-    var config = require(DOVE_CONFIG_PATH);
-    var scopeKeys = Object.keys(config.scopes || {});
+    var outcome = await activateAllConfiguredScopes(activeTask);
+    res.json({ results: outcome.results, activeTask: outcome.activeTask });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-    // Resolve scope sys_ids
-    var scopeQuery = scopeKeys.map(function (s) { return "scope=" + s; }).join("^OR");
-    var scopeResp = await snApi(
-      "get",
-      "api/now/table/sys_scope?sysparm_query=" +
-        encodeURIComponent(scopeQuery) +
-        "&sysparm_fields=sys_id,scope,name&sysparm_limit=50"
-    );
-    var scopeRecords = scopeResp.data.result || [];
-    var scopeMap = {};
-    scopeRecords.forEach(function (r) {
-      scopeMap[r.scope] = r.sys_id;
-    });
+// Slugify text for use in a branch name segment: lowercase, non-alphanumerics
+// collapsed to single hyphens, trimmed, capped so the full branch name stays
+// reasonable.
+function slugify(text) {
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 50);
+}
 
-    // Activate each scope sequentially (respects rate limits)
-    var results = [];
-    for (var i = 0; i < scopeKeys.length; i++) {
-      var scope = scopeKeys[i];
-      var scopeSysId = scopeMap[scope];
-      if (!scopeSysId) {
-        results.push({ scope: scope, error: "scope not found on instance" });
-        continue;
+function execFilePromise(cmd, args, opts) {
+  return new Promise(function (resolve, reject) {
+    execFile(cmd, args, opts || {}, function (err, stdout, stderr) {
+      if (err) {
+        var detail = (stderr || err.message || "").toString().trim();
+        return reject(new Error(detail || err.message));
       }
+      resolve(stdout.toString().trim());
+    });
+  });
+}
 
-      try {
-        var result = await findOrCreateUpdateSet(scope, scopeSysId, activeTask);
-        persistScopeActivation(scope, result.update_set, activeTask);
-        // Re-read active task so subsequent iterations see updated scopes
-        activeTask = readActiveTask();
-        results.push({
-          scope: scope,
-          update_set: result.update_set,
-          created: result.created,
-        });
-      } catch (scopeErr) {
-        results.push({ scope: scope, error: scopeErr.message });
+// True when a local branch with this name exists in cwd — checked explicitly
+// (rather than inferred from a failed `checkout -b`) so a real checkout
+// failure (e.g. uncommitted changes blocking the switch) surfaces its own
+// git error instead of being masked as "branch doesn't exist".
+function localBranchExists(branchName, cwd) {
+  return new Promise(function (resolve) {
+    execFile(
+      "git",
+      ["show-ref", "--verify", "--quiet", "refs/heads/" + branchName],
+      { cwd: cwd },
+      function (err) {
+        resolve(!err);
+      }
+    );
+  });
+}
+
+// Cut (or switch to, if it already exists) the working branch for a task in
+// the given target folder: dev/{git-username}/{DEV-ID}/{short-desc}
+async function createTaskBranch(activeTask, targetFolder) {
+  var username = "";
+  try {
+    username = await execFilePromise("git", ["config", "user.name"], {
+      cwd: targetFolder,
+    });
+  } catch (userErr) {
+    // Fall through to the "dev" fallback below
+  }
+  var usernameSlug = slugify(username) || "dev";
+  var taskIdSlug = slugify(activeTask.customId || activeTask.taskId);
+  var descSlug = slugify(activeTask.shortDesc || activeTask.taskName);
+  var branchName = "dev/" + usernameSlug + "/" + taskIdSlug + "/" + descSlug;
+
+  var exists = await localBranchExists(branchName, targetFolder);
+  if (exists) {
+    await execFilePromise("git", ["checkout", branchName], {
+      cwd: targetFolder,
+    });
+    return { branch: branchName, cwd: targetFolder, created: false };
+  }
+
+  await execFilePromise("git", ["checkout", "-b", branchName], {
+    cwd: targetFolder,
+  });
+  return { branch: branchName, cwd: targetFolder, created: true };
+}
+
+// Compute (without creating anything) the scope-aware update-set name for
+// every scope in dove.config.js. No ServiceNow API calls — used by Start Task
+// to prefill the quick-create inputs rather than creating update sets outright.
+function computeScopeNames(activeTask) {
+  delete require.cache[require.resolve(DOVE_CONFIG_PATH)];
+  var config = require(DOVE_CONFIG_PATH);
+  var scopeKeys = Object.keys(config.scopes || {});
+  return scopeKeys.map(function (scope) {
+    return {
+      scope: scope,
+      name: buildScopedUpdateSetName(activeTask, scopeLabel(scope)),
+    };
+  });
+}
+
+// POST /api/clickup/start-task — mark the active task in-progress in ClickUp,
+// compute (but do not create) the per-scope update-set names, and cut the
+// working branch in an explicitly-chosen target folder. One deliberate
+// action, not tied to mere task selection. Body: { targetFolder? } — an
+// absolute path, or a path relative to PROJECT_ROOT (wherever this dashboard
+// process was launched from) to a git checkout; branch creation is skipped
+// if omitted.
+app.post("/api/clickup/start-task", async function (req, res) {
+  try {
+    var activeTask = readActiveTask();
+    if (!activeTask) {
+      return res.status(400).json({ error: "No active task selected" });
+    }
+
+    try {
+      await clickupApi("put", "task/" + activeTask.taskId, {
+        status: "in progress",
+      });
+    } catch (statusErr) {
+      var msg = statusErr.message;
+      if (statusErr.response && statusErr.response.data) {
+        msg =
+          statusErr.response.data.err || statusErr.response.data.error || msg;
+      }
+      return res
+        .status(502)
+        .json({ error: "Failed to set ClickUp status: " + msg });
+    }
+
+    var scopeNames = computeScopeNames(activeTask);
+
+    var branchResult = { skipped: true };
+    var rawTargetFolder = req.body && req.body.targetFolder;
+    if (rawTargetFolder) {
+      // path.resolve leaves an already-absolute path untouched and resolves
+      // a relative one (e.g. "../Mortise") against PROJECT_ROOT.
+      var targetFolder = path.resolve(PROJECT_ROOT, rawTargetFolder);
+      var invalid =
+        !fs.existsSync(targetFolder) ||
+        !fs.statSync(targetFolder).isDirectory();
+      if (invalid) {
+        branchResult = {
+          error:
+            "Target folder does not exist: " +
+            targetFolder +
+            " (from input: " +
+            rawTargetFolder +
+            ")",
+        };
+      } else {
+        try {
+          branchResult = await createTaskBranch(activeTask, targetFolder);
+        } catch (branchErr) {
+          branchResult = { error: branchErr.message };
+        }
       }
     }
 
-    res.json({ results: results, activeTask: readActiveTask() });
+    res.json({
+      status: "in progress",
+      scopeNames: scopeNames,
+      branch: branchResult,
+      activeTask: activeTask,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -943,21 +1257,45 @@ function classifyPath(filePath) {
   if (parts.length === 1 && parts[0] === ".focus") {
     return { kind: "focus" };
   }
-  if (parts.length === 2 && parts[0] === "_lint-events" && parts[1].endsWith(".json")) {
+  if (
+    parts.length === 2 &&
+    parts[0] === "_lint-events" &&
+    parts[1].endsWith(".json")
+  ) {
     return { kind: "lint", id: parts[1].slice(0, -5) };
   }
-  if (parts.length === 2 && parts[0] === "_prompt-drafts" && parts[1].endsWith(".json")) {
+  if (
+    parts.length === 2 &&
+    parts[0] === "_prompt-drafts" &&
+    parts[1].endsWith(".json")
+  ) {
     if (parts[1] === "_active.json") return { kind: "draft-active" };
     return { kind: "draft", id: parts[1].slice(0, -5) };
   }
   if (parts.length === 1 && parts[0].endsWith(".json")) {
     return { kind: "plan", slug: parts[0].slice(0, -5) };
   }
-  if (parts.length === 3 && parts[1] === "artifacts" && parts[2].endsWith(".json")) {
-    return { kind: "artifact", slug: parts[0], artifactSlug: parts[2].slice(0, -5) };
+  if (
+    parts.length === 3 &&
+    parts[1] === "artifacts" &&
+    parts[2].endsWith(".json")
+  ) {
+    return {
+      kind: "artifact",
+      slug: parts[0],
+      artifactSlug: parts[2].slice(0, -5),
+    };
   }
-  if (parts.length === 3 && parts[1] === "prompts" && parts[2].endsWith(".json")) {
-    return { kind: "prompt", slug: parts[0], promptSlug: parts[2].slice(0, -5) };
+  if (
+    parts.length === 3 &&
+    parts[1] === "prompts" &&
+    parts[2].endsWith(".json")
+  ) {
+    return {
+      kind: "prompt",
+      slug: parts[0],
+      promptSlug: parts[2].slice(0, -5),
+    };
   }
   return null;
 }
@@ -1000,19 +1338,20 @@ function handleWatcherChange(event, filePath) {
     if (event === "unlink") {
       broadcastClaudePlanEvent("artifact:delete", {
         plan_slug: info.slug,
-        slug: info.artifactSlug
+        slug: info.artifactSlug,
       });
       return;
     }
     const artifact = safeReadJson(filePath);
-    if (artifact) broadcastClaudePlanEvent("artifact:upsert", { artifact: artifact });
+    if (artifact)
+      broadcastClaudePlanEvent("artifact:upsert", { artifact: artifact });
     return;
   }
   if (info.kind === "prompt") {
     if (event === "unlink") {
       broadcastClaudePlanEvent("prompt:delete", {
         plan_slug: info.slug,
-        slug: info.promptSlug
+        slug: info.promptSlug,
       });
       return;
     }
@@ -1033,7 +1372,9 @@ function handleWatcherChange(event, filePath) {
     // The active-tab pointer changed (a draft was made active, or the active
     // one was deleted and focus advanced). Tell editors which tab is active.
     const ptr = safeReadJson(filePath);
-    broadcastClaudePlanEvent("draft:active", { active_id: ptr ? ptr.active_id : null });
+    broadcastClaudePlanEvent("draft:active", {
+      active_id: ptr ? ptr.active_id : null,
+    });
     return;
   }
   if (info.kind === "draft") {
@@ -1062,11 +1403,17 @@ function startClaudePlanWatcher() {
   claudePlanWatcher = chokidar.watch(CLAUDE_PLANS_DIR, {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
-    depth: 3
+    depth: 3,
   });
-  claudePlanWatcher.on("add", function (p) { handleWatcherChange("add", p); });
-  claudePlanWatcher.on("change", function (p) { handleWatcherChange("change", p); });
-  claudePlanWatcher.on("unlink", function (p) { handleWatcherChange("unlink", p); });
+  claudePlanWatcher.on("add", function (p) {
+    handleWatcherChange("add", p);
+  });
+  claudePlanWatcher.on("change", function (p) {
+    handleWatcherChange("change", p);
+  });
+  claudePlanWatcher.on("unlink", function (p) {
+    handleWatcherChange("unlink", p);
+  });
 }
 
 app.get("/claude-plans", function (req, res) {
@@ -1082,7 +1429,10 @@ app.get("/prompt-editor", claudePlansLimiter, function (req, res) {
 // Legacy path-segment deep links (/claude-plans/:slug) redirect to the
 // query-param form so relative assets resolve against /claude-plans.
 app.get("/claude-plans/:slug", function (req, res) {
-  res.redirect(301, "/claude-plans?plan=" + encodeURIComponent(req.params.slug));
+  res.redirect(
+    301,
+    "/claude-plans?plan=" + encodeURIComponent(req.params.slug)
+  );
 });
 
 app.get("/prompt-lints", function (req, res) {
@@ -1092,13 +1442,18 @@ app.get("/prompt-lints", function (req, res) {
 app.get("/api/prompt-lints", function (req, res) {
   try {
     const filters = {};
-    if (typeof req.query.session_id === "string") filters.session_id = req.query.session_id;
-    if (typeof req.query.plan_slug === "string") filters.plan_slug = req.query.plan_slug;
+    if (typeof req.query.session_id === "string")
+      filters.session_id = req.query.session_id;
+    if (typeof req.query.plan_slug === "string")
+      filters.plan_slug = req.query.plan_slug;
     if (typeof req.query.limit === "string") {
       const n = parseInt(req.query.limit, 10);
       if (!isNaN(n) && n > 0) filters.limit = Math.min(n, 1000); // mirror getLintEventsSchema cap
     }
-    res.json({ events: listClaudeLintEvents(filters), storage: CLAUDE_PLANS_DIR });
+    res.json({
+      events: listClaudeLintEvents(filters),
+      storage: CLAUDE_PLANS_DIR,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1150,7 +1505,7 @@ function resolvePrStatus(prUrl) {
     prStatusCache.set(prUrl, {
       state: result.state,
       merged: result.merged,
-      fetchedAt: Date.now()
+      fetchedAt: Date.now(),
     });
     return result;
   });
@@ -1168,8 +1523,12 @@ function mapWithConcurrency(items, limit, worker) {
       if (index >= items.length) return;
       const i = index++;
       Promise.resolve(worker(items[i]))
-        .then(function (r) { results[i] = r; })
-        .catch(function () { results[i] = null; })
+        .then(function (r) {
+          results[i] = r;
+        })
+        .catch(function () {
+          results[i] = null;
+        })
         .then(function () {
           completed++;
           if (completed === items.length) resolve(results);
@@ -1211,7 +1570,7 @@ app.get("/api/claude-plans/stream", function (req, res) {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
-    "X-Accel-Buffering": "no"
+    "X-Accel-Buffering": "no",
   });
   res.flushHeaders();
   res.write("event: hello\ndata: {}\n\n");
@@ -1236,13 +1595,14 @@ app.get("/api/claude-plans/stream", function (req, res) {
 app.get("/api/claude-plans/:slug", function (req, res) {
   try {
     const slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    if (!isValidSlug(slug))
+      return res.status(400).json({ error: "invalid slug" });
     const plan = safeReadJson(planFilePath(slug));
     if (!plan) return res.status(404).json({ error: "plan not found" });
     res.json({
       plan: plan,
       artifacts: listClaudeArtifacts(slug),
-      prompts: listClaudePrompts(slug)
+      prompts: listClaudePrompts(slug),
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1261,7 +1621,9 @@ function sendTypedError(res, err) {
   // a `code` (e.g. ILLEGAL_TRANSITION, MISSING_AGENT). Anything else is
   // a 500 with the message.
   if (err && err.name === "ZodError") {
-    return res.status(400).json({ error: "validation_failed", details: err.issues });
+    return res
+      .status(400)
+      .json({ error: "validation_failed", details: err.issues });
   }
   if (err && typeof err.code === "string") {
     var status = 409;
@@ -1272,83 +1634,104 @@ function sendTypedError(res, err) {
     return res.status(status).json({
       error: err.code,
       name: err.name,
-      message: err.message
+      message: err.message,
     });
   }
   if (err && /not found/i.test(err.message || "")) {
     return res.status(404).json({ error: "not_found", message: err.message });
   }
-  return res.status(500).json({ error: "internal", message: (err && err.message) || String(err) });
+  return res
+    .status(500)
+    .json({ error: "internal", message: (err && err.message) || String(err) });
 }
 
 // POST /api/claude-plans/:slug/answers — record an answer to a question.
 // Body: { question_id, answer, answered_by? }
-app.post("/api/claude-plans/:slug/answers", claudePlansLimiter, express.json(), function (req, res) {
-  try {
-    var slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
-    var body = req.body || {};
-    var result = claudePlansLib.recordAnswer({
-      plan_slug: slug,
-      question_id: body.question_id,
-      answer: body.answer,
-      answered_by: body.answered_by || "dashboard"
-    });
-    res.json(result);
-  } catch (e) {
-    sendTypedError(res, e);
+app.post(
+  "/api/claude-plans/:slug/answers",
+  claudePlansLimiter,
+  express.json(),
+  function (req, res) {
+    try {
+      var slug = req.params.slug;
+      if (!isValidSlug(slug))
+        return res.status(400).json({ error: "invalid slug" });
+      var body = req.body || {};
+      var result = claudePlansLib.recordAnswer({
+        plan_slug: slug,
+        question_id: body.question_id,
+        answer: body.answer,
+        answered_by: body.answered_by || "dashboard",
+      });
+      res.json(result);
+    } catch (e) {
+      sendTypedError(res, e);
+    }
   }
-});
+);
 
 // POST /api/claude-plans/:slug/stage — move the plan to a new stage.
 // Body: { to: PipelineStage, by? }
 // Source is forced to 'dashboard' so the conflict-resolution rule
 // (docs/v2-design.md §4) treats dashboard moves as authoritative.
-app.post("/api/claude-plans/:slug/stage", claudePlansLimiter, express.json(), function (req, res) {
-  try {
-    var slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
-    var body = req.body || {};
-    var result = claudePlansLib.setStage({
-      plan_slug: slug,
-      to: body.to,
-      by: body.by || "dashboard",
-      source: "dashboard"
-    });
-    res.json(result);
-  } catch (e) {
-    sendTypedError(res, e);
+app.post(
+  "/api/claude-plans/:slug/stage",
+  claudePlansLimiter,
+  express.json(),
+  function (req, res) {
+    try {
+      var slug = req.params.slug;
+      if (!isValidSlug(slug))
+        return res.status(400).json({ error: "invalid slug" });
+      var body = req.body || {};
+      var result = claudePlansLib.setStage({
+        plan_slug: slug,
+        to: body.to,
+        by: body.by || "dashboard",
+        source: "dashboard",
+      });
+      res.json(result);
+    } catch (e) {
+      sendTypedError(res, e);
+    }
   }
-});
+);
 
 // POST /api/claude-plans/:slug/dispatch — dry-run or live dispatch.
 // Body: { target_stage, confirm?, token?, by? }
 // The dashboard's flow is: POST without confirm (dry-run) → show
 // resolved command in the UI → POST with confirm:true + token from
 // set_stage response → live spawn.
-app.post("/api/claude-plans/:slug/dispatch", claudePlansLimiter, express.json(), function (req, res) {
-  try {
-    var slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
-    var body = req.body || {};
-    var result = claudePlansLib.dispatchStage({
-      plan_slug: slug,
-      target_stage: body.target_stage,
-      confirm: body.confirm === true,
-      token: body.token,
-      by: body.by || "dashboard"
-    });
-    res.json(result);
-  } catch (e) {
-    sendTypedError(res, e);
+app.post(
+  "/api/claude-plans/:slug/dispatch",
+  claudePlansLimiter,
+  express.json(),
+  function (req, res) {
+    try {
+      var slug = req.params.slug;
+      if (!isValidSlug(slug))
+        return res.status(400).json({ error: "invalid slug" });
+      var body = req.body || {};
+      var result = claudePlansLib.dispatchStage({
+        plan_slug: slug,
+        target_stage: body.target_stage,
+        confirm: body.confirm === true,
+        token: body.token,
+        by: body.by || "dashboard",
+      });
+      res.json(result);
+    } catch (e) {
+      sendTypedError(res, e);
+    }
   }
-});
+);
 
 // GET /api/claude-plans/:slug/versions — list saved version snapshots (newest-first).
 app.get("/api/claude-plans/:slug/versions", function (req, res) {
   try {
     var slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    if (!isValidSlug(slug))
+      return res.status(400).json({ error: "invalid slug" });
     res.json({ slug: slug, versions: claudePlansLib.listVersions(slug) });
   } catch (e) {
     sendTypedError(res, e);
@@ -1359,7 +1742,8 @@ app.get("/api/claude-plans/:slug/versions", function (req, res) {
 app.get("/api/claude-plans/:slug/versions/:n", function (req, res) {
   try {
     var slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    if (!isValidSlug(slug))
+      return res.status(400).json({ error: "invalid slug" });
     var n = parseInt(req.params.n, 10);
     if (!(n > 0)) return res.status(400).json({ error: "invalid version" });
     var version = claudePlansLib.getVersion(slug, n);
@@ -1380,7 +1764,8 @@ app.post(
   function (req, res) {
     try {
       var slug = req.params.slug;
-      if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+      if (!isValidSlug(slug))
+        return res.status(400).json({ error: "invalid slug" });
       var n = parseInt(req.params.n, 10);
       if (!(n > 0)) return res.status(400).json({ error: "invalid version" });
       var plan = claudePlansLib.restoreVersion(slug, n);
@@ -1394,14 +1779,20 @@ app.post(
 app.delete("/api/claude-plans/:slug", claudePlansLimiter, function (req, res) {
   try {
     var slug = req.params.slug;
-    if (!isValidSlug(slug)) return res.status(400).json({ error: "invalid slug" });
+    if (!isValidSlug(slug))
+      return res.status(400).json({ error: "invalid slug" });
     var baseDir = path.resolve(CLAUDE_PLANS_DIR);
     var planFile = path.resolve(baseDir, slug + ".json");
-    if (!planFile.startsWith(baseDir + path.sep)) return res.status(400).json({ error: "invalid slug" });
-    if (!fs.existsSync(planFile)) return res.status(404).json({ error: "plan not found" });
+    if (!planFile.startsWith(baseDir + path.sep))
+      return res.status(400).json({ error: "invalid slug" });
+    if (!fs.existsSync(planFile))
+      return res.status(404).json({ error: "plan not found" });
     fs.unlinkSync(planFile);
     var artifactsDir = path.resolve(baseDir, slug);
-    if (artifactsDir.startsWith(baseDir + path.sep) && fs.existsSync(artifactsDir)) {
+    if (
+      artifactsDir.startsWith(baseDir + path.sep) &&
+      fs.existsSync(artifactsDir)
+    ) {
       fs.rmSync(artifactsDir, { recursive: true, force: true });
     }
     res.json({ deleted: true });
@@ -1427,37 +1818,49 @@ app.get("/api/prompt-drafts", claudePlansLimiter, function (req, res) {
 });
 
 // POST /api/prompt-drafts — create a new draft (tab). Body: { title?, content? }
-app.post("/api/prompt-drafts", claudePlansLimiter, express.json(), function (req, res) {
-  try {
-    var body = req.body || {};
-    var draft = claudePlansLib.createPromptDraft({
-      title: body.title,
-      content: body.content,
-      session_id: body.session_id
-    });
-    res.json(draft);
-  } catch (e) {
-    sendTypedError(res, e);
+app.post(
+  "/api/prompt-drafts",
+  claudePlansLimiter,
+  express.json(),
+  function (req, res) {
+    try {
+      var body = req.body || {};
+      var draft = claudePlansLib.createPromptDraft({
+        title: body.title,
+        content: body.content,
+        session_id: body.session_id,
+      });
+      res.json(draft);
+    } catch (e) {
+      sendTypedError(res, e);
+    }
   }
-});
+);
 
 // POST /api/prompt-drafts/active — set the active tab. Body: { id }
 // Declared before "/:id" so Express doesn't treat "active" as an id.
-app.post("/api/prompt-drafts/active", claudePlansLimiter, express.json(), function (req, res) {
-  try {
-    var body = req.body || {};
-    if (!isValidDraftId(body.id)) return res.status(400).json({ error: "invalid draft id" });
-    res.json(claudePlansLib.setActivePromptDraft(body.id));
-  } catch (e) {
-    sendTypedError(res, e);
+app.post(
+  "/api/prompt-drafts/active",
+  claudePlansLimiter,
+  express.json(),
+  function (req, res) {
+    try {
+      var body = req.body || {};
+      if (!isValidDraftId(body.id))
+        return res.status(400).json({ error: "invalid draft id" });
+      res.json(claudePlansLib.setActivePromptDraft(body.id));
+    } catch (e) {
+      sendTypedError(res, e);
+    }
   }
-});
+);
 
 // GET /api/prompt-drafts/:id — read one draft.
 app.get("/api/prompt-drafts/:id", claudePlansLimiter, function (req, res) {
   try {
     var id = req.params.id;
-    if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
+    if (!isValidDraftId(id))
+      return res.status(400).json({ error: "invalid draft id" });
     var draft = claudePlansLib.getPromptDraft(id);
     if (!draft) return res.status(404).json({ error: "draft not found" });
     res.json(draft);
@@ -1467,25 +1870,38 @@ app.get("/api/prompt-drafts/:id", claudePlansLimiter, function (req, res) {
 });
 
 // PUT /api/prompt-drafts/:id — autosave title/content. Body: { title?, content? }
-app.put("/api/prompt-drafts/:id", claudePlansLimiter, express.json(), function (req, res) {
-  try {
-    var id = req.params.id;
-    if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
-    var body = req.body || {};
-    if (body.title === undefined && body.content === undefined) {
-      return res.status(400).json({ error: "nothing to update" });
+app.put(
+  "/api/prompt-drafts/:id",
+  claudePlansLimiter,
+  express.json(),
+  function (req, res) {
+    try {
+      var id = req.params.id;
+      if (!isValidDraftId(id))
+        return res.status(400).json({ error: "invalid draft id" });
+      var body = req.body || {};
+      if (body.title === undefined && body.content === undefined) {
+        return res.status(400).json({ error: "nothing to update" });
+      }
+      res.json(
+        claudePlansLib.updatePromptDraft({
+          id: id,
+          title: body.title,
+          content: body.content,
+        })
+      );
+    } catch (e) {
+      sendTypedError(res, e);
     }
-    res.json(claudePlansLib.updatePromptDraft({ id: id, title: body.title, content: body.content }));
-  } catch (e) {
-    sendTypedError(res, e);
   }
-});
+);
 
 // DELETE /api/prompt-drafts/:id — close a tab. Returns the new active id.
 app.delete("/api/prompt-drafts/:id", claudePlansLimiter, function (req, res) {
   try {
     var id = req.params.id;
-    if (!isValidDraftId(id)) return res.status(400).json({ error: "invalid draft id" });
+    if (!isValidDraftId(id))
+      return res.status(400).json({ error: "invalid draft id" });
     res.json(claudePlansLib.deletePromptDraft(id));
   } catch (e) {
     sendTypedError(res, e);
@@ -1518,7 +1934,8 @@ const todoReadLimiter = RateLimit({
 const todoSseClients = new Set();
 
 function broadcastTodos(list) {
-  const frame = "event: todos:update\ndata: " + JSON.stringify({ list: list }) + "\n\n";
+  const frame =
+    "event: todos:update\ndata: " + JSON.stringify({ list: list }) + "\n\n";
   for (const res of todoSseClients) {
     try {
       res.write(frame);
@@ -1550,7 +1967,9 @@ function startTodoWatcher() {
   });
   todoWatcher.on("add", emitTodoState);
   todoWatcher.on("change", emitTodoState);
-  todoWatcher.on("unlink", function () { broadcastTodos({ schema_version: 1, items: [] }); });
+  todoWatcher.on("unlink", function () {
+    broadcastTodos({ schema_version: 1, items: [] });
+  });
 }
 
 app.get("/todos", todoReadLimiter, function (req, res) {
@@ -1559,7 +1978,10 @@ app.get("/todos", todoReadLimiter, function (req, res) {
 
 app.get("/api/todos", todoReadLimiter, function (req, res) {
   try {
-    res.json({ list: todoLib.loadList({ rootDir: TODO_DIR }), storage: TODO_DIR });
+    res.json({
+      list: todoLib.loadList({ rootDir: TODO_DIR }),
+      storage: TODO_DIR,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1636,9 +2058,15 @@ app.patch("/api/todos/:id", todoLimiter, function (req, res) {
     const body = req.body || {};
     let result;
     if (typeof body.text === "string") {
-      result = todoLib.updateTodo({ id: id, text: body.text }, { rootDir: TODO_DIR });
+      result = todoLib.updateTodo(
+        { id: id, text: body.text },
+        { rootDir: TODO_DIR }
+      );
     } else {
-      result = todoLib.toggleTodo({ id: id, done: body.done }, { rootDir: TODO_DIR });
+      result = todoLib.toggleTodo(
+        { id: id, done: body.done },
+        { rootDir: TODO_DIR }
+      );
     }
     broadcastTodos(result.list);
     res.json(result);
@@ -1650,7 +2078,10 @@ app.patch("/api/todos/:id", todoLimiter, function (req, res) {
 // DELETE /api/todos/:id — remove one item.
 app.delete("/api/todos/:id", todoLimiter, function (req, res) {
   try {
-    const result = todoLib.removeTodo({ id: req.params.id }, { rootDir: TODO_DIR });
+    const result = todoLib.removeTodo(
+      { id: req.params.id },
+      { rootDir: TODO_DIR }
+    );
     broadcastTodos(result.list);
     res.json(result);
   } catch (e) {

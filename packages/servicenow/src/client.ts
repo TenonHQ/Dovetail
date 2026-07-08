@@ -101,6 +101,16 @@ export interface TableSchema {
   primary_key: string;
 }
 
+/** A sys_attachment row, as returned by the native Attachment API. */
+export interface AttachmentMeta {
+  sys_id: string;
+  file_name: string;
+  content_type: string;
+  /** SHA-256 hex of the file content, computed by ServiceNow. Absent on older instances. */
+  hash?: string;
+  size_bytes?: string;
+}
+
 export interface ServiceNowClient {
   table: {
     /** GET /api/now/table/<t>?sysparm_query=...&sysparm_limit=N — returns result array. */
@@ -140,7 +150,7 @@ export interface ServiceNowClient {
     /** POST /api/cadso/dovetail_core/createRecord (legacy: /api/cadso/dovetail/createRecord). */
     createRecord: (params: {
       table: string;
-      fields: Record<string, any>;
+      fields: Record<string, unknown>;
       scope?: string;
       update_set_sys_id?: string;
       sys_id?: string;
@@ -150,7 +160,7 @@ export interface ServiceNowClient {
       update_set_sys_id: string;
       table: string;
       record_sys_id: string;
-      fields: Record<string, any>;
+      fields: Record<string, unknown>;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
     /** GET /api/cadso/dovetail_core/currentUpdateSet?scope=... (legacy: /api/cadso/dovetail/currentUpdateSet). */
     currentUpdateSet: (
@@ -176,6 +186,27 @@ export interface ServiceNowClient {
     get: <T = any>(path: string) => Promise<T>;
     /** POST an arbitrary native ServiceNow REST path with a JSON body. See `get`. */
     post: <T = any>(path: string, body: any) => Promise<T>;
+  };
+  attachment: {
+    /**
+     * GET /api/now/attachment?sysparm_query=table_name=<t>^table_sys_id=<id> —
+     * list the sys_attachment rows on a record. Read-only.
+     */
+    listFor: (params: { table: string; sysId: string }) => Promise<Array<AttachmentMeta>>;
+    /**
+     * POST /api/now/attachment/file — upload raw bytes as a sys_attachment on a record.
+     * The Buffer is sent verbatim with `contentType` as the request Content-Type (binary,
+     * not JSON). Reuses the shared auth/retry/throttle transport — not a bespoke HTTP path.
+     */
+    upload: (params: {
+      table: string;
+      sysId: string;
+      fileName: string;
+      contentType: string;
+      data: Buffer;
+    }) => Promise<AttachmentMeta>;
+    /** DELETE /api/now/attachment/<sysId> — remove a single attachment. */
+    remove: (params: { sysId: string }) => Promise<void>;
   };
 }
 
@@ -525,7 +556,47 @@ export function createClient(
           { method: "POST", url: path, data: body },
           "now.post(" + path + ")",
         );
-      },
+      }
     },
+    attachment: {
+      listFor: async function (params) {
+        var data = await request<{ result: Array<AttachmentMeta> }>(
+          {
+            method: "GET",
+            url: "/api/now/attachment",
+            params: {
+              sysparm_query: "table_name=" + params.table + "^table_sys_id=" + params.sysId,
+              sysparm_fields: "sys_id,file_name,content_type,hash,size_bytes"
+            }
+          },
+          "attachment.listFor(" + params.table + ")"
+        );
+        return (data && data.result) || [];
+      },
+      upload: async function (params) {
+        var data = await request<{ result: AttachmentMeta }>(
+          {
+            method: "POST",
+            url: "/api/now/attachment/file",
+            params: {
+              table_name: params.table,
+              table_sys_id: params.sysId,
+              file_name: params.fileName
+            },
+            data: params.data,
+            // Binary upload: override the client's default application/json.
+            headers: { "content-type": params.contentType }
+          },
+          "attachment.upload(" + params.fileName + ")"
+        );
+        return (data && data.result) || (data as unknown as AttachmentMeta);
+      },
+      remove: async function (params) {
+        await request<unknown>(
+          { method: "DELETE", url: "/api/now/attachment/" + params.sysId },
+          "attachment.remove(" + params.sysId + ")"
+        );
+      }
+    }
   };
 }

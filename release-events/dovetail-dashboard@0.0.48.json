@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.48",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.48",
+  "prev_version": "0.0.47",
+  "published_at": "2026-07-08T21:55:56.082Z",
+  "git": {
+    "sha": "7ef92071de6726ccfd751ae617a661f95fe685fc",
+    "tag": "dovetail-dashboard@0.0.48"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "7ef92071d",
+      "subject": "feat(ci): Slack alerts for publish success/failure + cut dashboard release (#209)",
+      "pr": 209
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

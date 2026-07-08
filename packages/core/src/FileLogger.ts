@@ -8,15 +8,67 @@ import chalk from "chalk";
 // debug log unbounded; capping at 200 writes per file keeps each one small.
 const ROTATION_WRITE_LIMIT = 200;
 
+// Truthy spellings accepted for the DOVETAIL_DEBUG env var.
+const TRUTHY = /^(1|true|yes|on)$/i;
+
+/**
+ * @description Decide whether the file logger should write `dovetail-debug-*.log`
+ * files to disk. File logging is OFF by default and only turns on when the user
+ * explicitly opts in — either the `--debug` CLI flag (`--debug` or
+ * `--debug=<truthy>`) or the `DOVETAIL_DEBUG` env var set to a truthy value.
+ * Pure and side-effect free so it can be unit-tested with injected inputs.
+ * @param {string[]} argv - CLI args after the node + script entries (process.argv.slice(2)).
+ * @param {NodeJS.ProcessEnv} env - Environment map (defaults to an empty object).
+ * @returns {boolean} true when file logging should be enabled.
+ */
+export function shouldEnableFileLogging(
+  argv: string[] = [],
+  env: NodeJS.ProcessEnv = {},
+): boolean {
+  const raw = typeof env.DOVETAIL_DEBUG === "string" ? env.DOVETAIL_DEBUG.trim() : "";
+  if (TRUTHY.test(raw)) return true;
+
+  const args = Array.isArray(argv) ? argv : [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--debug") return true;
+    const eq = typeof arg === "string" ? arg.match(/^--debug=(.*)$/) : null;
+    if (eq) return TRUTHY.test(eq[1].trim());
+  }
+  return false;
+}
+
 class FileLogger {
   private logFilePath: string;
   private logStream: fs.WriteStream | null = null;
   private initialized: boolean = false;
   private writeCount: number = 0;
+  // File logging is opt-in — nothing touches disk unless this is true. Seeded
+  // from `--debug` / DOVETAIL_DEBUG so a stray log file is never created just by
+  // running a command; can also be flipped on at runtime via enable().
+  private enabled: boolean;
 
   constructor() {
     // Initialize on first use
     this.logFilePath = "";
+    this.enabled = shouldEnableFileLogging(
+      Array.isArray(process.argv) ? process.argv.slice(2) : [],
+      process.env,
+    );
+  }
+
+  /**
+   * Turn file logging on for this process (programmatic opt-in). Idempotent.
+   */
+  enable() {
+    this.enabled = true;
+  }
+
+  /**
+   * Whether file logging is currently active.
+   */
+  isEnabled(): boolean {
+    return this.enabled;
   }
 
   /**
@@ -85,6 +137,11 @@ class FileLogger {
    * Write a message to the log file
    */
   private writeToFile(message: string) {
+    // Opt-in gate: without --debug / DOVETAIL_DEBUG we never create or write a
+    // log file. Console output (info/warn/error/success) still happens because
+    // those methods log to the console before calling writeToFile.
+    if (!this.enabled) return;
+
     if (!this.initialized) {
       this.initialize();
     } else {
@@ -220,6 +277,9 @@ export { fileLogger };
 
 // Also export a function to replace console.log globally
 export function enableFileLogging() {
+  // Opt in to file logging even if neither --debug nor DOVETAIL_DEBUG was set.
+  fileLogger.enable();
+
   // Store original console.log
   const originalConsoleLog = console.log;
 

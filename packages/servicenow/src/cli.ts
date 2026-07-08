@@ -44,12 +44,14 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable } from "./table";
-import type { ColumnSpec, CreateTableParams } from "./table";
-import {
-  formatReadFlowResult,
-  formatReadActionTypeResult,
-} from "./flowDesigner-formatter";
+import { createTable, addColumn } from "./table";
+import type { ColumnSpec, CreateTableParams, AddColumnParams } from "./table";
+import { setField } from "./setField";
+import type { SetFieldParams } from "./setField";
+import { createRecord } from "./createRecord";
+import type { CreateRecordParams } from "./createRecord";
+import { hostAssets, formatHostAssetsResult } from "./hostAssets";
+import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
   ChoiceValue,
@@ -57,6 +59,7 @@ import type {
   SetListLayoutParams,
   SetFormLayoutParams,
   SetRelatedListsParams,
+  HostAssetsParams
 } from "./types";
 
 interface ParsedArgs {
@@ -799,45 +802,58 @@ async function runMcp(flags: Record<string, string>): Promise<number> {
 function printHelp(): void {
   process.stdout.write(
     "dove-sn — ServiceNow platform helpers\n\n" +
-      "Commands:\n" +
-      "  add-choices        Upsert sys_choice rows for a table.column\n" +
-      "  create-view        Create a custom view (sys_ui_view)\n" +
-      "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
-      "  set-list-layout    Set the columns of a list layout\n" +
-      "                     (--from-json <path>  OR  --table <t> --columns a,b,c --update-set <sys_id>\n" +
-      "                      [--view <v>] [--parent <t>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
-      "  set-form-layout    Set the sections + fields of a form layout\n" +
-      "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--json])\n" +
-      "  set-related-lists  Set which related lists appear on a form\n" +
-      "                     (--from-json <path>  OR  --table <t> --related-lists a,b --update-set <sys_id>\n" +
-      "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
-      "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
-      "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
-      "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
-      "                     (--sys-id <sys_id> [--json] [--raw])\n" +
-      "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
-      "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
-      "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
-      "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
-      "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
-      "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
-      "  create-flow        Create a NEW flow (type=flow) from scratch + publish (grafts a template)\n" +
-      "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
-      "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
-      "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
-      "  create-table       Create a NEW table (sys_db_object) WITH columns, via the Studio form save\n" +
-      "                     (--name <x_scope_t> --label <l> --scope <s>\n" +
-      '                      --columns "Label:type:max, ..."  OR  --from-json <spec.json>\n' +
-      "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
-      "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
-      "  test-flow          Validate (default) or run a flow/subflow\n" +
-      "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
-      "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
-      "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-      "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
-      "\nGlobal flags:\n" +
-      "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
-      "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n",
+    "Commands:\n" +
+    "  add-choices        Upsert sys_choice rows for a table.column\n" +
+    "  create-view        Create a custom view (sys_ui_view)\n" +
+    "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
+    "  set-list-layout    Set the columns of a list layout\n" +
+    "                     (--from-json <path>  OR  --table <t> --columns a,b,c --update-set <sys_id>\n" +
+    "                      [--view <v>] [--parent <t>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
+    "  set-form-layout    Set the sections + fields of a form layout\n" +
+    "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--json])\n" +
+    "  set-related-lists  Set which related lists appear on a form\n" +
+    "                     (--from-json <path>  OR  --table <t> --related-lists a,b --update-set <sys_id>\n" +
+    "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
+    "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
+    "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
+    "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
+    "                     (--sys-id <sys_id> [--json] [--raw])\n" +
+    "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
+    "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
+    "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
+    "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
+    "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
+    "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
+    "  create-flow        Create a NEW flow (type=flow) from scratch + publish (grafts a template)\n" +
+    "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
+    "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
+    "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
+    "  create-table       Create a NEW table (sys_db_object) WITH columns, via the Studio form save\n" +
+    "                     (--name <x_scope_t> --label <l> --scope <s>\n" +
+    "                      --columns \"Label:type:max, ...\"  OR  --from-json <spec.json>\n" +
+    "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
+    "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
+    "  add-column         Add ONE column to an EXISTING table via the Studio form save, then verify\n" +
+    "                     (--table <name|sys_id> --label <l> --type <t>\n" +
+    "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
+    "                      [--scope <s>] [--update-set <sys_id>] [--dry-run] [--json])\n" +
+    "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
+    "                     (--table <t> --sys-id <id>|--query <q> --fields \"k=v,k2=v2\"\n" +
+    "                      --update-set <sys_id> [--dry-run] [--json])\n" +
+    "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
+    "                     (--table <t> --fields \"k=v,k2=v2\" --scope <s> --update-set <sys_id>\n" +
+    "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
+    "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
+    "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
+    "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
+    "  test-flow          Validate (default) or run a flow/subflow\n" +
+    "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
+    "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
+    "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
+    "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
+    "\nGlobal flags:\n" +
+    "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
+    "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n"
   );
 }
 
@@ -942,6 +958,203 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn add-column:
+ *   --table x_cadso_journey --label URL --type url
+ *   [--name url] [--max-length 1024] [--reference <table>]
+ *   [--scope x_cadso_journey] [--update-set <sys_id>] [--save-action <sys_id>]
+ *   [--columns-rel-id <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ */
+async function runAddColumn(flags: Record<string, string>): Promise<number> {
+  var spec: Partial<AddColumnParams> = {};
+  if (flags["from-json"]) {
+    spec = JSON.parse(fs.readFileSync(path.resolve(flags["from-json"]), "utf8")) as Partial<AddColumnParams>;
+  }
+  var table = flags.table || spec.table;
+  var column: ColumnSpec | undefined = spec.column;
+  if (flags.label || flags.type) {
+    column = { label: flags.label || "", type: flags.type || "string" };
+    if (flags.name) column.name = flags.name;
+    if (flags["max-length"]) column.max_length = flags["max-length"];
+    if (flags.reference) column.reference = flags.reference;
+  }
+  if (!table || !column || !column.label) {
+    process.stderr.write("add-column: --table and --label (with --type) are required (or --from-json)\n");
+    return 1;
+  }
+  var params: AddColumnParams = {
+    client: createClient({}),
+    table: table,
+    column: column
+  };
+  var scope = flags.scope || spec.scope;
+  if (scope) params.scope = scope;
+  var us = flags["update-set"] || spec.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  var sa = flags["save-action"] || spec.saveActionSysId;
+  if (sa) params.saveActionSysId = sa;
+  var relId = flags["columns-rel-id"] || spec.columnsRelId;
+  if (relId) params.columnsRelId = relId;
+  if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
+  if (flags.debug === "true" || spec.debug === true) params.debug = true;
+
+  var result = await addColumn(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] " + result.table + "." + result.element + " (" + result.internalType + ")"
+        + (result.verified ? " — verified" : "")
+        + "\n" + result.note + "\n"
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/** Parse inline `--fields "k=v, k2=v2"` into a field map. */
+function parseFieldsInline(input: string): Record<string, string> {
+  var out: Record<string, string> = {};
+  if (!input) return out;
+  var parts = input.split(",");
+  for (var i = 0; i < parts.length; i += 1) {
+    var piece = parts[i].trim();
+    if (!piece) continue;
+    var eq = piece.indexOf("=");
+    if (eq === -1) continue;
+    var key = piece.slice(0, eq).trim();
+    if (key) out[key] = piece.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+/**
+ * dove-sn set-field:
+ *   --table x_cadso_core_metric_point_type
+ *   --sys-id <id>  |  --query "name=send_size"   (query must resolve to exactly 1 row)
+ *   --fields "order=20"                          (comma-separated key=value pairs)
+ *   --update-set <sys_id>                        (required — the change is captured here)
+ *   [--dry-run] [--json]
+ * Exit codes: 0 applied/dry-run, 1 bad args, 2 write landed but read-back unverified.
+ */
+async function runSetField(flags: Record<string, string>): Promise<number> {
+  var table = flags.table;
+  var fields = parseFieldsInline(flags.fields || "");
+  var hasTarget = Boolean(flags["sys-id"] || flags.query);
+  if (!table || Object.keys(fields).length === 0 || !hasTarget || !flags["update-set"]) {
+    process.stderr.write(
+      "set-field: --table, --fields \"k=v\", one of --sys-id/--query, and --update-set are required\n"
+    );
+    return 1;
+  }
+  var params: SetFieldParams = {
+    client: createClient({}),
+    table: table,
+    fields: fields,
+    updateSetSysId: flags["update-set"]
+  };
+  if (flags["sys-id"]) params.sysId = flags["sys-id"];
+  if (flags.query) params.query = flags.query;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await setField(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] " + result.table + "/" + result.sysId + " "
+        + JSON.stringify(result.fields) + (result.verified ? " — verified" : "")
+        + "\n" + result.note + "\n"
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
+ * dove-sn create-record:
+ *   --table x_cadso_core_metric_point_type
+ *   --fields "name=avg_message_parts,label=Avg. Message Parts,order=35"
+ *   --scope x_cadso_core                         (the app that owns the new record)
+ *   --update-set <sys_id>                        (required — the insert is captured here)
+ *   [--if-absent "name=avg_message_parts"]       (skip the insert when this query already matches)
+ *   [--dry-run] [--json]
+ * Exit codes: 0 created/skipped-in-sync/dry-run, 1 bad args, 2 write landed but read-back unverified
+ * (or skipped with drift).
+ */
+async function runCreateRecord(flags: Record<string, string>): Promise<number> {
+  var table = flags.table;
+  var fields = parseFieldsInline(flags.fields || "");
+  if (!table || Object.keys(fields).length === 0 || !flags.scope || !flags["update-set"]) {
+    process.stderr.write(
+      "create-record: --table, --fields \"k=v\", --scope and --update-set are required\n"
+    );
+    return 1;
+  }
+  var params: CreateRecordParams = {
+    client: createClient({}),
+    table: table,
+    fields: fields,
+    scope: flags.scope,
+    updateSetSysId: flags["update-set"]
+  };
+  if (flags["if-absent"]) params.ifAbsentQuery = flags["if-absent"];
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await createRecord(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" + result.status + "] " + result.table + "/" + (result.sysId || "(new)") + " "
+        + JSON.stringify(result.fields) + (result.verified ? " — verified" : "")
+        + "\n" + result.note + "\n"
+    );
+  }
+  if (result.status === "failed") return 2;
+  if (result.status === "skipped" && !result.verified) return 2;
+  return 0;
+}
+
+/**
+ * dove-sn host-assets:
+ *   --dir <dist>            Required. Path to the pre-built dist/ directory.
+ *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
+ *   --scope <namespace>     Required. Carrier scope, e.g. x_cadso_app_shell.
+ *   --update-set <sys_id>   Optional. Defaults to the scope's current update set.
+ *   --max-bytes <n>         Optional. Per-chunk serve cap (default ~5 MB).
+ *   --allow-oversize        Optional. Warn instead of failing on an oversize chunk.
+ *   --dry-run               Optional. Plan only; no writes/uploads/prunes.
+ *   --json                  Optional. Emit the structured HostAssetsResult.
+ *
+ * Exit codes: 0 done/dry-run, 1 bad args, 2 a write landed but read-back is unverified.
+ */
+async function runHostAssets(flags: Record<string, string>): Promise<number> {
+  var dir = flags.dir;
+  var app = flags.app;
+  var scope = flags.scope;
+  if (!dir || !app || !scope) {
+    process.stderr.write("host-assets: --dir, --app and --scope are required\n");
+    return 1;
+  }
+  var params: HostAssetsParams = { dir: path.resolve(dir), app: app, scope: scope };
+  var us = flags["update-set"] || flags.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  if (flags["max-bytes"]) params.maxBytes = Number(flags["max-bytes"]);
+  if (flags["allow-oversize"] === "true") params.allowOversize = true;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var client = createClient({});
+  var result = await hostAssets(client, params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatHostAssetsResult(result) + "\n");
+  }
+  var unverified = !result.dryRun && result.chunks.some(function (c) { return !c.verified; });
+  return unverified ? 2 : 0;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -972,6 +1185,18 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-table") {
     return await runCreateTable(parsed.flags);
+  }
+  if (parsed.command === "add-column") {
+    return await runAddColumn(parsed.flags);
+  }
+  if (parsed.command === "set-field") {
+    return await runSetField(parsed.flags);
+  }
+  if (parsed.command === "create-record") {
+    return await runCreateRecord(parsed.flags);
+  }
+  if (parsed.command === "host-assets") {
+    return await runHostAssets(parsed.flags);
   }
   if (parsed.command === "test-flow") {
     return await runTestFlow(parsed.flags);

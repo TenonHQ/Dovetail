@@ -256,6 +256,72 @@ adds diagnostics (app-switch status, resolved column key, assigned sys_id) to th
 result note. Ground truth (the HAR dissection) lives in the CTO repo's create-table
 docs.
 
+### Set a field on a record
+
+Set scalar field value(s) on an **existing** data record, capture the change into
+an update set, then read it back and verify.
+
+```bash
+# Target by sys_id
+npx dove-sn set-field \
+  --table x_cadso_core_metric_point_type --sys-id <sys_id> \
+  --fields "order=20" --update-set <sys_id> --dry-run --json
+
+# Or target by a query that resolves to EXACTLY one row
+npx dove-sn set-field \
+  --table x_cadso_core_metric_point_type --query "name=send_size" \
+  --fields "order=20,label=Send Size" --update-set <sys_id>
+```
+
+`set-field` wraps the update-set-aware `pushWithUpdateSet` core op (update-set +
+scope switching handled server-side, so no `sys_user_preference` is touched), then
+re-queries the record and verifies each value landed. It **refuses** schema tables
+(`sys_db_object` / `sys_dictionary`) — use `add-column` / `create-table` for those.
+`--fields` is a comma-separated `key=value` map (values are sent as strings;
+ServiceNow coerces); `--update-set` is required so the change is captured;
+`--dry-run` reads the current values and prints the plan without writing. Exit
+codes: `0` applied / dry-run, `1` bad args, `2` write landed but read-back did not
+verify.
+
+### Create a record
+
+Insert **one** new data record, owned by an explicit scope and captured into an
+update set, then read it back and verify.
+
+```bash
+npx dove-sn create-record \
+  --table x_cadso_core_metric_point_type \
+  --fields "name=avg_message_parts,label=Avg. Message Parts,order=35" \
+  --scope x_cadso_core --update-set <sys_id> \
+  --if-absent "name=avg_message_parts" --dry-run --json
+```
+
+`create-record` wraps the scope- and update-set-aware `createRecord` core op, which
+switches the executing user's app scope + update set server-side, inserts, and
+restores both — so the record is owned by the right app and the insert is captured
+in the right update set. Like `set-field` it **refuses** schema tables and verifies
+via read-back. `--scope` and `--update-set` are required; `--if-absent
+"<encoded-query>"` makes re-runs idempotent (the insert is skipped when the query
+already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1` bad
+args, `2` write landed unverified (or skipped with drift). To **update** an existing
+record instead, use `set-field`.
+
+Both verbs are exported for programmatic use:
+
+```ts
+import { createClient, setField, createRecord } from "@tenonhq/dovetail-servicenow";
+
+var client = createClient({});
+var r = await setField({
+  client: client,
+  table: "x_cadso_core_metric_point_type",
+  sysId: "<sys_id>",
+  fields: { order: "20" },
+  updateSetSysId: "<sys_id>"
+});
+console.log(r.status, r.verified); // "applied" true
+```
+
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
@@ -330,8 +396,11 @@ console.log(formatLayoutResult("form layout", result));
 
 `dove-sn mcp` runs a self-contained MCP stdio server exposing the tools to
 Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
-`set_related_lists`, `add_choices_to_field`, plus the Flow Designer tools
-`flow_view` (read a flow/subflow's step graph), `action_view` (read an action
+`set_related_lists`, `add_choices_to_field`, the schema verbs `create_table` /
+`add_column`, the record-write verbs `set_field` (update scalar fields on an
+existing record) and `create_record` (insert one record) — both update-set-captured
+and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
+tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
 (copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
 publish, grafting a template), `flow_test` (validate or run a flow), and

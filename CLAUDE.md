@@ -19,7 +19,7 @@ Full command reference: see `Essential Commands` further down, or `npx dove --he
 
 ## Releasing — Critical Rules
 
-> **All PRs in this repo MUST be opened as DRAFT, unless the user explicitly asks otherwise.** Merge-to-`main` auto-publishes changed `packages/**` to npm immediately, and a bad version cannot be unpublished cleanly. Open every PR as Draft, convert to _Ready for review_ only after sign-off, then merge. The rule applies uniformly (even docs-only) so reviewers never have to guess whether a PR is safe. The only override is an explicit user instruction for a specific PR (e.g. "open it as ready", "automerge it") — never decide on your own that a change is "safe enough" to skip Draft.
+> **PRs in this repo open as _Ready for review_ with auto-merge enabled — approving one IS authorizing the release.** Merge-to-`main` auto-publishes changed `packages/**` to npm immediately, and a bad version cannot be unpublished cleanly, so the **required 1-approval review is the sign-off gate**: the moment it lands the PR squash-merges and publishes. Open the PR Ready (auto-merge can't be armed on a Draft) and arm it with `gh pr merge <n> --auto --squash`; **approve only a PR you intend to publish.** GitHub blocks self-approval, so a solo-authored PR holds until a _teammate_ approves — to publish your own solo work now, admin-squash-merge (`gh pr merge <n> --squash --admin`, e.g. via `/ship-pr`). A docs-only PR (nothing under `packages/**`) won't trigger `publish.yml`, so it merges on approval without publishing.
 
 How publishing works:
 
@@ -161,7 +161,7 @@ Don't hand-edit. Use `npx dove refresh` to rebuild from ServiceNow.
 | Sync conflict              | `npx dove status` (or the dashboard), then `npx dove refresh`                                                               |
 | Wrong scope on writes      | Use Dovetail REST endpoints, not raw Table API                                                                              |
 
-Debug logs: `dovetail-debug-*.log`.
+Debug logs: opt-in only. Re-run the command with `--debug` (or set `DOVETAIL_DEBUG=1`) to write a `dovetail-debug-*.log` file in the cwd; without it, no log file is created.
 
 ## Notes
 

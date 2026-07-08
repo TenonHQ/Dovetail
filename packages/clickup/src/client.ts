@@ -158,6 +158,16 @@ export async function getTask(params: {
   customTaskIds?: boolean;
   teamId?: string;
 }): Promise<ClickUpTask> {
+  // Fail fast on the cross-field requirement: a custom-id lookup needs a
+  // team_id. Without this we'd send team_id=undefined and let ClickUp 401,
+  // then re-label that 401 below — cheaper and clearer to reject it here.
+  if (params.customTaskIds && !params.teamId) {
+    throw new Error(
+      "teamId is required for a custom task id lookup (taskId '" +
+        params.taskId +
+        "'): custom_task_ids requires a team_id."
+    );
+  }
   try {
     var response = await params.client.get(
       "/api/v2/task/" + params.taskId,
@@ -165,6 +175,23 @@ export async function getTask(params: {
     );
     return response.data;
   } catch (error) {
+    // A 401 on a custom-id lookup (where a team_id was supplied) most often
+    // means a bad id/team rather than a bad token — but a genuinely invalid or
+    // expired token can 401 here too, so steer toward id/team without asserting
+    // the token is fine.
+    if (
+      params.customTaskIds &&
+      axios.isAxiosError(error) &&
+      error.response &&
+      error.response.status === 401
+    ) {
+      throw new Error(
+        "ClickUp returned 401 for custom task id '" +
+          params.taskId +
+          "'. Custom-id lookups require a valid team_id — first verify the " +
+          "custom id and team_id; if those are correct, check the API token."
+      );
+    }
     return handleApiError(error, "task '" + params.taskId + "'");
   }
 }

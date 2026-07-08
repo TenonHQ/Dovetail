@@ -1,0 +1,34 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-mcp@0.0.18",
+  "package": "@tenonhq/dovetail-mcp",
+  "version": "0.0.18",
+  "prev_version": "0.0.17",
+  "published_at": "2026-06-19T08:59:45.509Z",
+  "git": {
+    "sha": "073dad48a5d534f489a0906db083e97462ec76fe",
+    "tag": "dovetail-mcp@0.0.18"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "4bc78bc61",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "c82439b30",
+      "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
+      "pr": 183
+    },
+    {
+      "sha": "092e176fc",
+      "subject": "chore(release): publish 3 packages [skip ci]"
+    },
+    {
+      "sha": "82924d15c",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

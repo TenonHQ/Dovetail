@@ -37,7 +37,7 @@ Ask the user which symptom they are experiencing (if not already clear):
 1. **Check dev mode is running:** `npx dove dev` or `npx dove watchAllScopes`
 2. **Check the file is in the manifest:** Look in `dove.manifest.json` or `dove.manifest.<scope>.json` for the table/record/field entry. If missing, run `npx dove refresh`.
 3. **Check file extension matches a rule:** The file extension must match a `match` regex in `dove.config.js` rules. If no rule matches, the file content is pushed as-is (no build).
-4. **Check debug logs:** Look for `dovetail-debug-*.log` files in the project root.
+4. **Check debug logs:** Re-run the command with `--debug` (or `DOVETAIL_DEBUG=1`) to write a `dovetail-debug-*.log` file in the project root, then inspect it. Debug logs are opt-in — without the flag no log file is produced.
 5. **Try manual push:** `npx dove push` to push all files and see errors.
 
 ### Diagnostic B: Authentication/Connection Failure
@@ -118,5 +118,5 @@ Dovetail checks that your local manifest scope matches the active scope on the S
 
 - Always `npx dove refresh` before starting work to catch new records.
 - Use `npx dove status` to verify connectivity.
-- Check `dovetail-debug-*.log` for detailed error information.
+- Re-run with `--debug` (or `DOVETAIL_DEBUG=1`) to emit a `dovetail-debug-*.log` with detailed error information (opt-in; off by default).
 - Node.js v20 LTS is required -- check with `node -v`.

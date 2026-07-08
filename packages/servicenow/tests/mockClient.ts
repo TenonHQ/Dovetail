@@ -14,12 +14,17 @@ export type QueryFn = (
   limit?: number,
 ) => Promise<Array<any>>;
 
+export type AttachmentsFn = (params: { table: string; sysId: string }) => Promise<Array<any>>;
+
 export interface MockCalls {
   tableQuery: Array<{ table: string; query: string }>;
   createRecord: Array<any>;
   pushWithUpdateSet: Array<any>;
   deleteRecord: Array<any>;
   changeUpdateSet: Array<any>;
+  attachmentUpload: Array<any>;
+  attachmentRemove: Array<any>;
+  attachmentListFor: Array<any>;
 }
 
 export interface MockClientCtx {
@@ -27,21 +32,21 @@ export interface MockClientCtx {
   calls: MockCalls;
 }
 
-export function makeMockClient(
-  overrides: { query?: QueryFn } = {},
-): MockClientCtx {
+export function makeMockClient(overrides: { query?: QueryFn; attachments?: AttachmentsFn } = {}): MockClientCtx {
   var calls: MockCalls = {
     tableQuery: [],
     createRecord: [],
     pushWithUpdateSet: [],
     deleteRecord: [],
     changeUpdateSet: [],
+    attachmentUpload: [],
+    attachmentRemove: [],
+    attachmentListFor: []
   };
-  var queryImpl: QueryFn =
-    overrides.query ||
-    async function () {
-      return [];
-    };
+  // Live attachment store so read-back (listFor after upload) reflects uploads,
+  // while overrides.attachments seeds pre-existing attachments per record.
+  var attStore: Record<string, Array<any>> = {};
+  var queryImpl: QueryFn = overrides.query || (async function () { return []; });
   var queryFn = async function <T = any>(
     table: string,
     query: string,
@@ -88,13 +93,29 @@ export function makeMockClient(
       },
     },
     now: {
-      get: async function () {
-        return {} as any;
-      },
-      post: async function () {
-        return {} as any;
-      },
+      get: async function () { return {} as any; },
+      post: async function () { return {} as any; }
     },
+    attachment: {
+      listFor: async function (params) {
+        calls.attachmentListFor.push(params);
+        var seeded = overrides.attachments ? await overrides.attachments(params) : [];
+        var live = attStore[params.sysId] || [];
+        return seeded.concat(live);
+      },
+      upload: async function (params) {
+        calls.attachmentUpload.push(params);
+        var rec = { sys_id: "att_" + calls.attachmentUpload.length, file_name: params.fileName, content_type: params.contentType };
+        attStore[params.sysId] = (attStore[params.sysId] || []).concat([rec]);
+        return rec;
+      },
+      remove: async function (params) {
+        calls.attachmentRemove.push(params);
+        Object.keys(attStore).forEach(function (k) {
+          attStore[k] = attStore[k].filter(function (a) { return a.sys_id !== params.sysId; });
+        });
+      }
+    }
   };
   return { client: client, calls: calls };
 }

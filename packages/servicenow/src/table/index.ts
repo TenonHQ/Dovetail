@@ -36,6 +36,7 @@ export {
   resolveFormAuth,
   openFormSession,
   setCurrentApplication,
+  getRecordForm,
   getNewRecordForm,
   parseFormInputs,
   postForm,
@@ -47,3 +48,6 @@ export type {
   HarvestedForm,
   PostResult,
 } from "./formSession";
+
+export { addColumn, deriveElement, applyAddColumnOverlay } from "./addColumn";
+export type { AddColumnParams, AddColumnResult } from "./addColumn";

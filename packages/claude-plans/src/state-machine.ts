@@ -139,3 +139,81 @@ function conflictGraceMs(): number {
   }
   return 30_000;
 }
+
+// ---------------------------------------------------------------------------
+// Named pipelines (additive — story B5 / grain).
+//
+// The default pipeline above is UNTOUCHED: LEGAL_TRANSITIONS and
+// legalNextStages keep their exact behavior, so every existing consumer is
+// byte-identical (proved in named-pipeline.test.ts). grain registers its own
+// taxonomy — the 8 stages, the discrete 8.1-8.7 execution substeps, and the
+// three gates — as a SEPARATE named pipeline the dashboard renders, keyed by
+// pipelineId (default = "default"). Fork routes (park / reject / downscope) are
+// reachable from any stage and render as branches, not forward transitions.
+// ---------------------------------------------------------------------------
+
+/** A named pipeline's transition table (string stages, like LEGAL_TRANSITIONS). */
+export type PipelineTransitions = Record<string, string[]>;
+
+/** grain's stage taxonomy, in flow order (for the per-run pipeline panel). */
+export var GRAIN_STAGES: string[] = [
+  "01-meta-prompt", "02-super", "03-grill-me", "04-improve-prompt",
+  "05-dry-fit", "06-prd", "07-slice", "gate-1-review",
+  "08-execution", "8.1-test-agent", "8.2-code-agent", "8.3-supervised-ralph",
+  "8.4-story-qa", "8.5-code-review", "gate-3-merge", "8.6-e2e-verify",
+  "8.7-doc-changelog", "gate-2-blocked"
+];
+
+/**
+ * grain's legal transitions: the front-half chain, Gate 1, then the discrete
+ * per-story stage-8 loop (8.1 -> 8.7) with Gate 3 (merge) and the Gate-2
+ * blocked branch off story-qa. 8.7 loops back to 8.1 for the next story.
+ */
+export var GRAIN_TRANSITIONS: PipelineTransitions = {
+  __START__: ["01-meta-prompt"],
+  "01-meta-prompt": ["02-super"],
+  "02-super": ["03-grill-me"],
+  "03-grill-me": ["04-improve-prompt"],
+  "04-improve-prompt": ["05-dry-fit"],
+  "05-dry-fit": ["06-prd"],
+  "06-prd": ["07-slice"],
+  "07-slice": ["gate-1-review"],
+  "gate-1-review": ["08-execution"],
+  "08-execution": ["8.1-test-agent"],
+  "8.1-test-agent": ["8.2-code-agent"],
+  "8.2-code-agent": ["8.3-supervised-ralph"],
+  "8.3-supervised-ralph": ["8.4-story-qa"],
+  "8.4-story-qa": ["8.5-code-review", "gate-2-blocked"],
+  "8.5-code-review": ["gate-3-merge"],
+  "gate-3-merge": ["8.6-e2e-verify"],
+  "8.6-e2e-verify": ["8.7-doc-changelog"],
+  "8.7-doc-changelog": ["8.1-test-agent"],
+  "gate-2-blocked": []
+};
+
+/** Pipeline registry: pipelineId -> transitions. "default" is the canonical 10-stage machine. */
+export var PIPELINES: Record<string, PipelineTransitions> = {
+  default: LEGAL_TRANSITIONS,
+  grain: GRAIN_TRANSITIONS
+};
+
+/** Resolve a pipeline's transition table by id (defaults to "default"). Throws on unknown. */
+export function pipelineDefinition(pipelineId: string = "default"): PipelineTransitions {
+  var defn = PIPELINES[pipelineId];
+  if (!defn) {
+    throw new Error(
+      'unknown pipeline "' + pipelineId + '"; known: ' + Object.keys(PIPELINES).join(", ")
+    );
+  }
+  return defn;
+}
+
+/**
+ * Legal next stages within a NAMED pipeline. For pipelineId "default" this is
+ * identical to legalNextStages() over LEGAL_TRANSITIONS. Pure — feeds the
+ * dashboard's per-run pipeline panel.
+ */
+export function legalNextStagesIn(pipelineId: string, from: string | null): string[] {
+  var defn = pipelineDefinition(pipelineId);
+  return defn[from || "__START__"] || [];
+}

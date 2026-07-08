@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-core",
-  "version": "0.0.108",
+  "version": "0.0.111",
   "description": "Next-gen file syncer",
   "license": "GPL-3.0",
   "main": "./dist/index.js",
@@ -38,7 +38,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@tenonhq/dovetail-clickup": "~0.0.12",
+    "@tenonhq/dovetail-clickup": "~0.0.13",
     "@tenonhq/dovetail-schema": "~0.0.12",
     "axios": "^1.5.1",
     "axios-cookiejar-support": "^4.0.7",
