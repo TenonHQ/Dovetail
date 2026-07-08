@@ -27,16 +27,26 @@ export interface SetFieldParams {
   dryRun?: boolean;
 }
 
-export interface SetFieldResult {
-  status: "dry-run" | "applied" | "failed";
+/**
+ * Fields common to every record-write verb's result: the target, the update set
+ * the change was captured into, the requested field map, the read-back values,
+ * whether the read-back matched, and a human note. `set-field` and
+ * `create-record` each extend this with their own `status` union (and
+ * set-field's `before` snapshot / create-record's owning `scope`).
+ */
+export interface RecordWriteResult {
   table: string;
   sysId: string;
   updateSetSysId: string;
   fields: Record<string, string>;
-  before: Record<string, string>;
   after: Record<string, string>;
   verified: boolean;
   note: string;
+}
+
+export interface SetFieldResult extends RecordWriteResult {
+  status: "dry-run" | "applied" | "failed";
+  before: Record<string, string>;
 }
 
 // Platform/schema tables that must not be written as data — routed to the
@@ -45,15 +55,18 @@ var REFUSED_TABLES = ["sys_db_object", "sys_dictionary"];
 
 /** Coerce a Table-API field value to a comparable string. Reference/display
  *  fields (sysparm_display_value=false) come back as { link, value } objects. */
-export function fieldToString(value: any): string {
+export function fieldToString(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "object") {
-    return value.value !== undefined && value.value !== null ? String(value.value) : "";
+    if ("value" in value && value.value !== undefined && value.value !== null) {
+      return String(value.value);
+    }
+    return "";
   }
   return String(value);
 }
 
-export function pickFields(row: Record<string, any>, names: Array<string>): Record<string, string> {
+export function pickFields(row: Record<string, unknown>, names: Array<string>): Record<string, string> {
   var out: Record<string, string> = {};
   for (var i = 0; i < names.length; i += 1) {
     out[names[i]] = fieldToString(row ? row[names[i]] : undefined);

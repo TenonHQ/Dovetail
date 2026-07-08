@@ -36,6 +36,8 @@ import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
 import { createTable, addColumn } from "../table";
 import { hostAssets } from "../hostAssets";
+import { setField } from "../setField";
+import { createRecord } from "../createRecord";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -51,6 +53,8 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
+  setFieldSchema,
+  createRecordSchema,
   hostAssetsSchema
 } from "./schemas";
 
@@ -69,6 +73,8 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
+  "set_field",
+  "create_record",
   "host_assets"
 ] as const;
 
@@ -350,6 +356,58 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
           columnsRelId: p.columnsRelId,
           dryRun: p.dryRun,
           debug: p.debug
+        });
+      }
+    },
+    {
+      name: "set_field",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Set scalar field value(s) on an EXISTING ServiceNow data record, captured into a specified "
+        + "update set, then READ BACK to verify each value landed. Wraps the update-set-aware "
+        + "pushWithUpdateSet core op (no sys_user_preference mutation). Target the record by sysId, or "
+        + "by a query that resolves to EXACTLY one row. REFUSES schema tables (sys_db_object / "
+        + "sys_dictionary) — use add_column / create_table for those. fields is a flat name->string map "
+        + "(sent as strings; ServiceNow coerces); updateSetSysId is required so the change is tracked; "
+        + "dryRun:true reads the current values and returns the plan without writing. To INSERT a new "
+        + "record use create_record.",
+      shape: setFieldSchema.shape,
+      handler: async function (args: any) {
+        var p = setFieldSchema.parse(args);
+        return setField({
+          client: client(),
+          table: p.table,
+          sysId: p.sysId,
+          query: p.query,
+          fields: p.fields,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun
+        });
+      }
+    },
+    {
+      name: "create_record",
+      annotations: WRITE_CREATE,
+      description:
+        "Create ONE new ServiceNow data record, owned by an explicit app scope and captured into a "
+        + "specified update set, then READ BACK to verify. Wraps the scope- and update-set-aware "
+        + "createRecord core op (switches app scope + update set server-side, inserts, restores both — "
+        + "so the record lands in the right scope without sys_user_preference mutation). REFUSES schema "
+        + "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those. fields is a "
+        + "flat name->string map; scope and updateSetSysId are required; ifAbsentQuery makes re-runs "
+        + "idempotent (skips the insert when it already matches a row); dryRun:true returns the plan "
+        + "without writing. To UPDATE an existing record use set_field.",
+      shape: createRecordSchema.shape,
+      handler: async function (args: any) {
+        var p = createRecordSchema.parse(args);
+        return createRecord({
+          client: client(),
+          table: p.table,
+          fields: p.fields,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          ifAbsentQuery: p.ifAbsentQuery,
+          dryRun: p.dryRun
         });
       }
     },

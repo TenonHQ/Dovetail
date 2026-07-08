@@ -15,6 +15,7 @@
 import { createClient } from "./client";
 import type { ServiceNowClient } from "./client";
 import { fieldToString, pickFields } from "./setField";
+import type { RecordWriteResult } from "./setField";
 
 export interface CreateRecordParams {
   client?: ServiceNowClient;
@@ -30,16 +31,9 @@ export interface CreateRecordParams {
   dryRun?: boolean;
 }
 
-export interface CreateRecordResult {
+export interface CreateRecordResult extends RecordWriteResult {
   status: "dry-run" | "created" | "skipped" | "failed";
-  table: string;
-  sysId: string;
   scope: string;
-  updateSetSysId: string;
-  fields: Record<string, string>;
-  after: Record<string, string>;
-  verified: boolean;
-  note: string;
 }
 
 // Same guard as set-field: schema tables are never written as data — routed to
