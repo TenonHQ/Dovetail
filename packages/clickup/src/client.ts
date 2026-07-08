@@ -164,6 +164,22 @@ export async function getTask(params: {
     );
     return response.data;
   } catch (error) {
+    // A 401 on a custom-id lookup almost always means a bad id/team, not a bad
+    // token (custom_task_ids requires a valid team_id). Don't send the caller
+    // chasing a phantom auth problem.
+    if (
+      params.customTaskIds &&
+      axios.isAxiosError(error) &&
+      error.response &&
+      error.response.status === 401
+    ) {
+      throw new Error(
+        "ClickUp returned 401 for custom task id '" +
+          params.taskId +
+          "'. Custom-id lookups require a valid team_id — verify the custom id " +
+          "and team. (A 401 here usually means a bad id/team, not a bad token.)"
+      );
+    }
     return handleApiError(error, "task '" + params.taskId + "'");
   }
 }
