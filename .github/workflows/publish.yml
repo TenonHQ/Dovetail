@@ -128,7 +128,9 @@ jobs:
       # fine but the post-publish bump-push to main being rejected by branch
       # protection (GH006/GH013) — which leaves npm ahead of main. Reads the
       # SLACK_WEBHOOK_URL repo secret; if it is unset the notifier logs a warning
-      # and exits 0, so it never fails the release. Skipped on dry runs.
+      # and exits 0, so it never fails the release. Runs on every push publish;
+      # a manual workflow_dispatch dry run posts a 🧪 test message instead (so
+      # the webhook wiring can be verified without publishing anything).
       - name: Notify Slack (#deployment)
         if: ${{ always() }}
         env:
