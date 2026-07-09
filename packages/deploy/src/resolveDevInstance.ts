@@ -25,12 +25,24 @@ export type ResolveDevInstanceResult =
       value?: string;
     };
 
-/** Reduce a URL or host to its bare ServiceNow subdomain: `https://foo.service-now.com/x` → `foo`. */
+/**
+ * Reduce a URL or host to its bare ServiceNow subdomain: `https://foo.service-now.com/x` → `foo`.
+ * Plain string ops (no regex) so an untrusted value can't drive a slow match.
+ */
 export function toSubdomain(raw: string): string {
   var s = raw.trim().toLowerCase();
-  s = s.replace(/^https?:\/\//, "");
-  s = s.replace(/\/.*$/, "");
-  s = s.replace(/\..*$/, "");
+  var scheme = s.indexOf("://");
+  if (scheme !== -1) {
+    s = s.slice(scheme + 3);
+  }
+  var slash = s.indexOf("/");
+  if (slash !== -1) {
+    s = s.slice(0, slash);
+  }
+  var dot = s.indexOf(".");
+  if (dot !== -1) {
+    s = s.slice(0, dot);
+  }
   return s;
 }
 

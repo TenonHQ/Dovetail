@@ -155,17 +155,20 @@ export async function promoteForStatus(
   }
 
   var sourceRef: string;
-  if (params.sourceInstance) {
+  if (rung.sourceFrom === "devInstance") {
+    // Dynamic source — the caller resolves + validates it and passes it in.
+    if (!params.sourceInstance) {
+      return {
+        kind: "skipped",
+        reason:
+          "dynamic source for '" +
+          params.status +
+          "' was not resolved by the caller",
+      };
+    }
     sourceRef = params.sourceInstance;
-  } else if (rung.sourceFrom === "devInstance") {
-    return {
-      kind: "skipped",
-      reason:
-        "dynamic source for '" +
-        params.status +
-        "' was not resolved by the caller",
-    };
   } else if (rung.sourceInstance) {
+    // Static source — `params.sourceInstance` is ignored here (per the docstring).
     var staticSource: PromotionInstanceRef =
       config.instances[rung.sourceInstance];
     sourceRef =
