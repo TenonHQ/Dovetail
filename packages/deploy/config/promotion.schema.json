@@ -48,7 +48,17 @@
             "enum": ["sawmill", "company-repo", "manual"]
           },
           "enabled": { "type": "boolean" }
-        }
+        },
+        "oneOf": [
+          {
+            "required": ["sourceInstance"],
+            "not": { "required": ["sourceFrom"] }
+          },
+          {
+            "required": ["sourceFrom"],
+            "not": { "required": ["sourceInstance"] }
+          }
+        ]
       }
     }
   }
