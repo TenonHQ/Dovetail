@@ -34,7 +34,13 @@ function fakeClient(): ServiceNowClient {
       upload: async function () { return { sys_id: "att", file_name: "", content_type: "" }; },
       remove: async function () { return undefined; }
     },
-    now: { get: async function () { return undefined; }, post: async function () { return undefined; } }
+    now: {
+      get: async function () { return undefined; },
+      post: async function () { return undefined; },
+      put: async function () { return undefined; },
+      delete: async function () { return undefined; },
+      invoke: async function () { return { status: 200, body: {} }; }
+    }
   } as ServiceNowClient;
 }
 
