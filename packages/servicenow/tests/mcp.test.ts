@@ -5,7 +5,7 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 17 expected tools", function () {
+  it("registers exactly the 18 expected tools", function () {
     var names = buildDescriptors().map(function (d) { return d.name; });
     expect(names.slice().sort()).toEqual(
       [
@@ -22,13 +22,14 @@ describe("MCP registry", function () {
         "flow_test",
         "flow_view",
         "host_assets",
+        "invoke_rest",
         "set_field",
         "set_form_layout",
         "set_list_layout",
         "set_related_lists"
       ]
     );
-    expect(TOOL_NAMES).toHaveLength(17);
+    expect(TOOL_NAMES).toHaveLength(18);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -121,6 +122,46 @@ describe("MCP registry", function () {
     expect(ctx.calls.createRecord[0].scope).toBe("x_cadso_core");
   });
 
+  it("invoke_rest handler is a dry-run by default — nothing is sent", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    var result = await invokeTool.handler({
+      method: "DELETE",
+      path: "/api/x_cadso_core/testkit/resource/abc"
+    });
+    expect(result.status).toBe("dry-run");
+    expect(ctx.calls.nowInvoke).toHaveLength(0);
+  });
+
+  it("invoke_rest handler sends via the injected client when confirm:true", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    var result = await invokeTool.handler({
+      method: "PUT",
+      path: "/api/x_cadso_core/testkit/resource/abc",
+      body: { name: "updated" },
+      confirm: true
+    });
+    expect(result.status).toBe("sent");
+    expect(result.httpStatus).toBe(200);
+    expect(result.ok).toBe(true);
+    expect(ctx.calls.nowInvoke).toHaveLength(1);
+    expect(ctx.calls.nowInvoke[0]).toEqual({
+      method: "PUT",
+      path: "/api/x_cadso_core/testkit/resource/abc",
+      body: { name: "updated" }
+    });
+  });
+
+  it("invoke_rest rejects a non-/api/ path via the zod schema", async function () {
+    var descriptors = buildDescriptors();
+    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    await expect(invokeTool.handler({ method: "GET", path: "https://evil.example/api/now" }))
+      .rejects.toThrow();
+  });
+
   it("rejects invalid args via the zod schema", async function () {
     var descriptors = buildDescriptors();
     var setList = descriptors.filter(function (d) { return d.name === "set_list_layout"; })[0];
@@ -136,7 +177,7 @@ describe("MCP registry", function () {
     }) as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (17)");
+    expect(out).toContain("Registered tools (18)");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");
@@ -145,6 +186,7 @@ describe("MCP registry", function () {
     expect(out).toContain("flow_copy");
     expect(out).toContain("set_field");
     expect(out).toContain("create_record");
+    expect(out).toContain("invoke_rest");
   });
 });
 
@@ -197,9 +239,12 @@ describe("MCP registry — annotations", function () {
       expect(map[name].annotations.idempotentHint).toBe(false);
     });
 
-    // destructive AND non-idempotent (execute mode can fire a flow / send)
-    expect(map["flow_test"].annotations.readOnlyHint).toBe(false);
-    expect(map["flow_test"].annotations.destructiveHint).toBe(true);
-    expect(map["flow_test"].annotations.idempotentHint).toBe(false);
+    // destructive AND non-idempotent (execute mode can fire a flow / send;
+    // invoke_rest can drive arbitrary PUT/DELETE operations)
+    ["flow_test", "invoke_rest"].forEach(function (name) {
+      expect(map[name].annotations.readOnlyHint).toBe(false);
+      expect(map[name].annotations.destructiveHint).toBe(true);
+      expect(map[name].annotations.idempotentHint).toBe(false);
+    });
   });
 });

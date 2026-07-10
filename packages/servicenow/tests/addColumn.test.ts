@@ -28,7 +28,13 @@ function noNetworkClient(): ServiceNowClient {
       upload: async function () { return { sys_id: "att", file_name: "", content_type: "" }; },
       remove: async function () { return undefined; }
     },
-    now: { get: async function () { return boom(); }, post: async function () { return boom(); } }
+    now: {
+      get: async function () { return boom(); },
+      post: async function () { return boom(); },
+      put: async function () { return boom(); },
+      delete: async function () { return boom(); },
+      invoke: async function () { return boom(); }
+    }
   } as ServiceNowClient;
 }
 

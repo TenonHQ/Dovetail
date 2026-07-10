@@ -195,3 +195,14 @@ export var createRecordSchema = z.object({
   ifAbsentQuery: z.string().optional(),
   dryRun: z.boolean().optional()
 });
+
+// invoke_rest: transport primitive for arbitrary authenticated REST operations
+// (Scripted REST included). The dry-run-unless-confirm gate lives in invokeRest
+// itself; the regex here rejects absolute URLs and non-/api/ paths early.
+export var invokeRestSchema = z.object({
+  method: z.enum(["GET", "POST", "PUT", "DELETE"]),
+  path: z.string().min(1).regex(/^\/api\//, "path must be instance-relative and start with /api/"),
+  body: z.unknown().optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});

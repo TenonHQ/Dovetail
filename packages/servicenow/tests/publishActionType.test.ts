@@ -33,6 +33,9 @@ function mockClient(opts: {
       remove: async function () { return undefined; }
     },
     now: {
+      put: async function () { return {} as any; },
+      delete: async function () { return {} as any; },
+      invoke: async function () { return { status: 200, body: {} }; },
       get: async function <T>(path: string): Promise<T> {
         cap.gets.push(path);
         return model as T;

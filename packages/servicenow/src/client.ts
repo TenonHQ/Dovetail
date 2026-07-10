@@ -105,6 +105,23 @@ export interface AttachmentMeta {
   size_bytes?: string;
 }
 
+export type NowInvokeMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+export interface NowInvokeParams {
+  method: NowInvokeMethod;
+  /** Instance-relative path, e.g. /api/x_cadso_core/<service>/<resource>. */
+  path: string;
+  /** JSON request body for POST/PUT/DELETE. Ignored for GET. */
+  body?: unknown;
+}
+
+export interface NowInvokeResponse {
+  /** HTTP status code of the final response (after any 429/5xx retries). */
+  status: number;
+  /** Response body, verbatim. */
+  body: unknown;
+}
+
 export interface ServiceNowClient {
   table: {
     /** GET /api/now/table/<t>?sysparm_query=...&sysparm_limit=N — returns result array. */
@@ -161,6 +178,21 @@ export interface ServiceNowClient {
     get: <T = any>(path: string) => Promise<T>;
     /** POST an arbitrary native ServiceNow REST path with a JSON body. See `get`. */
     post: <T = any>(path: string, body: any) => Promise<T>;
+    /** PUT an arbitrary native ServiceNow REST path with a JSON body. See `get`. */
+    put: <T = any>(path: string, body: any) => Promise<T>;
+    /** DELETE an arbitrary native ServiceNow REST path (optional JSON body). See `get`. */
+    delete: <T = any>(path: string, body?: any) => Promise<T>;
+    /**
+     * Invoke an arbitrary native ServiceNow REST path with an explicit method and
+     * get the HTTP response back verbatim as { status, body }. Unlike get/post/
+     * put/delete, non-2xx responses are RETURNED, not thrown, so callers (the
+     * dove-sn invoke-rest verb / invoke_rest MCP tool) can pass a Scripted REST
+     * operation's own error contract through faithfully. Same auth/retry/throttle
+     * transport: 429/5xx are retried per the client config and the LAST response
+     * is returned when retries are exhausted; only a network failure (no HTTP
+     * response at all) throws.
+     */
+    invoke: (params: NowInvokeParams) => Promise<NowInvokeResponse>;
   };
   attachment: {
     /**
@@ -224,7 +256,19 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
   // cost on every subsequent call.
   var useDovetailLegacyPath = false;
 
-  async function request<T = any>(cfg: AxiosRequestConfig, ctx: string): Promise<T> {
+  /**
+   * Shared transport loop: throttle, send, retry 429/5xx, and surface auth/404
+   * failures as clear errors. With `passThrough`, any HTTP response that would
+   * normally throw (or that exhausted its retries) is RETURNED as
+   * { status, data } instead — only a network failure (no HTTP response at all)
+   * still throws. now.invoke uses passThrough to hand a Scripted REST
+   * operation's own error contract back verbatim.
+   */
+  async function requestRaw(
+    cfg: AxiosRequestConfig,
+    ctx: string,
+    passThrough?: boolean,
+  ): Promise<{ status: number; data: any }> {
     var attempt429 = 0;
     var attempt5xx = 0;
     // eslint-disable-next-line no-constant-condition
@@ -247,14 +291,9 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
         continue;
       }
 
-      if (res.status === 401 || res.status === 403) {
-        throw new Error("SN auth error " + res.status + " on " + ctx + " — check SN_USER/SN_PASSWORD and ACLs.");
-      }
-      if (res.status === 404) {
-        throw new Error("SN 404 on " + ctx + " — endpoint or record not found.");
-      }
       if (res.status === 429) {
         if (attempt429 >= max429) {
+          if (passThrough) return { status: res.status, data: res.data };
           throw new Error("SN 429 rate limit — retries exhausted on " + ctx);
         }
         attempt429 += 1;
@@ -263,18 +302,33 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
       }
       if (res.status >= 500) {
         if (attempt5xx >= max5xx) {
+          if (passThrough) return { status: res.status, data: res.data };
           throw new Error("SN " + res.status + " on " + ctx + " — retries exhausted.");
         }
         attempt5xx += 1;
         await sleep(Math.pow(2, attempt5xx) * 1000);
         continue;
       }
+      if (passThrough) {
+        return { status: res.status, data: res.data };
+      }
+      if (res.status === 401 || res.status === 403) {
+        throw new Error("SN auth error " + res.status + " on " + ctx + " — check SN_USER/SN_PASSWORD and ACLs.");
+      }
+      if (res.status === 404) {
+        throw new Error("SN 404 on " + ctx + " — endpoint or record not found.");
+      }
       if (res.status < 200 || res.status >= 300) {
         var body = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
         throw new Error("SN " + res.status + " on " + ctx + ": " + body.substring(0, 400));
       }
-      return res.data as T;
+      return { status: res.status, data: res.data };
     }
+  }
+
+  async function request<T = any>(cfg: AxiosRequestConfig, ctx: string): Promise<T> {
+    var raw = await requestRaw(cfg, ctx);
+    return raw.data as T;
   }
 
   // Dovetail core Scripted REST API request: try /api/cadso/dovetail_core/<op>,
@@ -490,6 +544,26 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
           { method: "POST", url: path, data: body },
           "now.post(" + path + ")",
         );
+      },
+      put: function (path, body) {
+        return request<any>(
+          { method: "PUT", url: path, data: body },
+          "now.put(" + path + ")",
+        );
+      },
+      delete: function (path, body) {
+        return request<any>(
+          { method: "DELETE", url: path, data: body },
+          "now.delete(" + path + ")",
+        );
+      },
+      invoke: async function (params) {
+        var raw = await requestRaw(
+          { method: params.method, url: params.path, data: params.body },
+          "now.invoke(" + params.method + " " + params.path + ")",
+          true,
+        );
+        return { status: raw.status, body: raw.data };
       }
     },
     attachment: {
