@@ -964,7 +964,15 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
   }
   var body: unknown;
   if (flags["body-json"]) {
-    body = JSON.parse(fs.readFileSync(flags["body-json"], "utf8"));
+    try {
+      body = JSON.parse(fs.readFileSync(flags["body-json"], "utf8"));
+    } catch (err: any) {
+      process.stderr.write(
+        "invoke-rest: --body-json must point to a readable JSON file: "
+          + (err && err.message ? err.message : String(err)) + "\n"
+      );
+      return 1;
+    }
   } else if (flags.body !== undefined) {
     try {
       body = JSON.parse(flags.body);
@@ -989,7 +997,7 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     process.stdout.write(
       "[dry-run] " + result.method + " " + result.path + "\n"
         + (result.requestBody !== undefined
-          ? "body: " + JSON.stringify(result.requestBody, null, 2) + "\n"
+          ? "Request body withheld from human output — use --json to view.\n"
           : "")
         + result.note + "\n"
     );
