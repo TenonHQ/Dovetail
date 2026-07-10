@@ -137,23 +137,8 @@ export async function promoteForStatus(
     };
   }
 
-  // 3. Resolve the update set(s) on the source.
-  var resolved = await resolveUpdateSets({
-    reader: params.sourceReader,
-    taskId: params.taskId,
-    config: config,
-  });
-  if (resolved.kind === "not-found") {
-    return { kind: "no-update-sets" };
-  }
-  if (resolved.kind === "ambiguous") {
-    return {
-      kind: "ambiguous",
-      scope: resolved.scope,
-      candidates: resolved.candidates,
-    };
-  }
-
+  // 3. Resolve the source instance FIRST — so a dynamic-source rung whose caller
+  //    didn't pass the resolved dev instance skips before any source query runs.
   var sourceRef: string;
   if (rung.sourceFrom === "devInstance") {
     // Dynamic source — the caller resolves + validates it and passes it in.
@@ -179,10 +164,27 @@ export async function promoteForStatus(
       reason: "no source instance configured for '" + params.status + "'",
     };
   }
+
+  // 4. Resolve the update set(s) on the source.
+  var resolved = await resolveUpdateSets({
+    reader: params.sourceReader,
+    taskId: params.taskId,
+    config: config,
+  });
+  if (resolved.kind === "not-found") {
+    return { kind: "no-update-sets" };
+  }
+  if (resolved.kind === "ambiguous") {
+    return {
+      kind: "ambiguous",
+      scope: resolved.scope,
+      candidates: resolved.candidates,
+    };
+  }
   var allow = config.skipPreviewErrors || [];
   var outcomes: PromoteOutcome[] = [];
 
-  // 4. Promote each set: idempotency → preview → gate → commit.
+  // 5. Promote each set: idempotency → preview → gate → commit.
   var i;
   for (i = 0; i < resolved.updateSets.length; i = i + 1) {
     var set = resolved.updateSets[i];
@@ -244,7 +246,7 @@ export async function promoteForStatus(
     outcomes.push({ updateSet: set, status: "promoted", result: committed });
   }
 
-  // 5. Confirm on the ClickUp task.
+  // 6. Confirm on the ClickUp task.
   if (params.commenter) {
     await params.commenter.postComment({
       taskId: params.taskId,

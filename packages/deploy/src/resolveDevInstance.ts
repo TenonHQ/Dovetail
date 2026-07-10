@@ -64,7 +64,13 @@ export async function resolveDevInstance(
   try {
     pattern = new RegExp(params.hostPattern);
   } catch (err) {
-    return { ok: false, reason: "invalid-format", value: candidate };
+    // A bad hostPattern is a CONFIG error (validatePromotionLadder validates it
+    // upstream), not a bad dev-instance value — fail loud rather than reporting it
+    // as an input-format problem.
+    throw new Error(
+      "Invalid devInstanceHostPattern config: " +
+        (err instanceof Error ? err.message : String(err)),
+    );
   }
   if (!candidate || !pattern.test(candidate)) {
     return { ok: false, reason: "invalid-format", value: candidate };
