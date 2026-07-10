@@ -25,27 +25,38 @@ export interface PromotionInstance {
   todo?: string;
 }
 
-/** One promotion edge, triggered by a ClickUp status. */
-export interface PromotionRung {
+/** Fields common to every promotion edge. */
+interface PromotionRungBase {
   /** Stable ClickUp status id — the webhook payload match key. */
   clickupStatusId: string;
-  /**
-   * Instance key the update set is promoted FROM. Set exactly one of
-   * `sourceInstance` (a static key in `instances`) or `sourceFrom` (dynamic).
-   */
-  sourceInstance?: string;
-  /**
-   * Dynamic source. `"devInstance"` resolves the source at runtime from the
-   * developer's ClickUp `Dev Instance` field, validated against the target's
-   * registered update sources. Mutually exclusive with `sourceInstance`.
-   */
-  sourceFrom?: "devInstance";
   /** Instance key the update set is promoted TO. */
   targetInstance: string;
   transport: Transport;
   /** Whether this edge is live. A disabled edge is skipped, never an error. */
   enabled: boolean;
 }
+
+/** A static-source edge: promotes FROM a fixed instance key in `instances`. */
+export interface StaticSourceRung extends PromotionRungBase {
+  sourceInstance: string;
+  sourceFrom?: never;
+}
+
+/**
+ * A dynamic-source edge: `"devInstance"` resolves the source at runtime from the
+ * developer's ClickUp `Dev Instance` field, validated against the target's
+ * registered update sources.
+ */
+export interface DynamicSourceRung extends PromotionRungBase {
+  sourceFrom: "devInstance";
+  sourceInstance?: never;
+}
+
+/**
+ * One promotion edge, triggered by a ClickUp status. Set exactly one source —
+ * `sourceInstance` (static) XOR `sourceFrom` (dynamic) — enforced at compile time.
+ */
+export type PromotionRung = StaticSourceRung | DynamicSourceRung;
 
 /** The canonical promotion ladder — the `promotion` block of automation-config.json. */
 export interface PromotionLadder {

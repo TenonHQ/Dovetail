@@ -141,6 +141,16 @@ export function validatePromotionLadder(
       });
     }
 
+    // enabled must be a real boolean — a stringy "true" compares falsey against
+    // `=== true`, which would silently disable the rung and bypass the readiness
+    // + dynamic-source checks below.
+    if (typeof rung.enabled !== "boolean") {
+      issues.push({
+        path: base + ".enabled",
+        message: "enabled must be a boolean",
+      });
+    }
+
     // The target is always a static instance key; the source is EITHER a static
     // key OR the dynamic `sourceFrom: "devInstance"` marker — exactly one.
     var refs: Array<{ key: string; ref: unknown }> = [

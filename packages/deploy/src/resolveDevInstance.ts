@@ -51,6 +51,15 @@ function readString(row: Record<string, unknown>, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * Resolve the dev instance for a `sourceFrom: "devInstance"` rung → `{ ok: true,
+ * instance }`, or `{ ok: false, reason }` for a missing / bad-format / unregistered
+ * value.
+ *
+ * @throws if `params.hostPattern` is not a valid regular expression — a CONFIG
+ *   error (validatePromotionLadder validates it upstream), surfaced as an exception
+ *   rather than an `{ ok: false }` input result.
+ */
 export async function resolveDevInstance(
   params: ResolveDevInstanceParams,
 ): Promise<ResolveDevInstanceResult> {
