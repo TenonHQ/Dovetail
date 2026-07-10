@@ -9,8 +9,8 @@
   "properties": {
     "taskIdPattern": { "type": "string", "minLength": 1 },
     "promotePath": { "type": "string" },
-    "devInstanceFieldId": { "type": "string" },
-    "devInstanceHostPattern": { "type": "string" },
+    "devInstanceFieldId": { "type": "string", "minLength": 1 },
+    "devInstanceHostPattern": { "type": "string", "minLength": 1 },
     "skipPreviewErrors": { "type": "array", "items": { "type": "string" } },
     "instances": {
       "type": "object",

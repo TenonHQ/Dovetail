@@ -161,7 +161,10 @@ export function validatePromotionLadder(
           path: base + ".sourceFrom",
           message: "sourceFrom must be 'devInstance'",
         });
-      } else {
+      } else if (rung.enabled === true) {
+        // Only an ENABLED dynamic-source rung makes the dev-instance config
+        // (devInstanceFieldId / devInstanceHostPattern) required — consistent with
+        // the readiness checks below, which are also gated on rung.enabled.
         usesDevInstance = true;
       }
     } else if (hasSourceInstance) {
