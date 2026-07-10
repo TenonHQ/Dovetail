@@ -1,7 +1,29 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-07-10T16:27:58.473Z",
+  "generated_at": "2026-07-10T18:41:37.097Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-deploy@0.0.2",
+      "package": "@tenonhq/dovetail-deploy",
+      "version": "0.0.2",
+      "prev_version": "0.0.1",
+      "published_at": "2026-07-10T18:41:37.089Z",
+      "git": {
+        "sha": "58c416a421d7b9eaff3483468601cc1eda753b20",
+        "tag": "dovetail-deploy@0.0.2"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "58c416a42",
+          "subject": "feat(deploy): dynamic per-developer promotion source (#211)",
+          "pr": 211
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.26",
@@ -1228,36 +1250,6 @@
       "git": {
         "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
         "tag": "dovetail-prettier-plugin@0.0.11"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "71bdf9bba",
-          "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
-          "pr": 148
-        },
-        {
-          "sha": "9332fdf7a",
-          "subject": "chore(release): publish 20 packages [skip ci]"
-        },
-        {
-          "sha": "9046da774",
-          "subject": "chore(release): publish 19 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-sass-plugin@0.0.11",
-      "package": "@tenonhq/dovetail-sass-plugin",
-      "version": "0.0.11",
-      "prev_version": "0.0.10",
-      "published_at": "2026-06-05T06:43:18.252Z",
-      "git": {
-        "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
-        "tag": "dovetail-sass-plugin@0.0.11"
       },
       "semver_bump": "patch",
       "commits": [
