@@ -673,7 +673,7 @@ function printHelp(): void {
     "                      --columns \"Label:type:max, ...\"  OR  --from-json <spec.json>\n" +
     "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
     "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
-    "  add-column         Add ONE column to an EXISTING table via the Studio form save, then verify\n" +
+    "  add-column         Add ONE column to an EXISTING table via a scope-aware sys_dictionary insert, then verify\n" +
     "                     (--table <name|sys_id> --label <l> --type <t>\n" +
     "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
     "                      [--scope <s>] [--update-set <sys_id>] [--dry-run] [--json])\n" +
@@ -781,8 +781,10 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
  * dove-sn add-column:
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
- *   [--scope x_cadso_journey] [--update-set <sys_id>] [--save-action <sys_id>]
- *   [--columns-rel-id <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ *   [--mandatory] [--default <value>]
+ *   [--scope x_cadso_journey] [--update-set <sys_id>]
+ *   [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ * --update-set is required unless --dry-run.
  */
 async function runAddColumn(flags: Record<string, string>): Promise<number> {
   var spec: Partial<AddColumnParams> = {};
@@ -796,6 +798,8 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
     if (flags.name) column.name = flags.name;
     if (flags["max-length"]) column.max_length = flags["max-length"];
     if (flags.reference) column.reference = flags.reference;
+    if (flags.mandatory === "true") column.mandatory = true;
+    if (flags["default"] !== undefined) column.default = flags["default"];
   }
   if (!table || !column || !column.label) {
     process.stderr.write("add-column: --table and --label (with --type) are required (or --from-json)\n");
@@ -810,10 +814,6 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   if (scope) params.scope = scope;
   var us = flags["update-set"] || spec.updateSetSysId;
   if (us) params.updateSetSysId = us;
-  var sa = flags["save-action"] || spec.saveActionSysId;
-  if (sa) params.saveActionSysId = sa;
-  var relId = flags["columns-rel-id"] || spec.columnsRelId;
-  if (relId) params.columnsRelId = relId;
   if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
   if (flags.debug === "true" || spec.debug === true) params.debug = true;
 

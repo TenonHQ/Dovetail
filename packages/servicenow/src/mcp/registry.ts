@@ -333,16 +333,15 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       name: "add_column",
       annotations: WRITE_CREATE,
       description:
-        "Add ONE column to an EXISTING ServiceNow table, headless and faithfully. Creating a column is a "
-        + "sys_dictionary insert; a REST/createRecord insert reliably 500s for a scoped-app column. This "
-        + "replays the Studio table-form save (POST /sys_db_object.do) against the existing table record, "
-        + "embedding the new column as list-edit XML, then READS THE COLUMN BACK from sys_dictionary to prove "
-        + "it landed (a 302 that did not create the field is reported failed, not created). table is the table "
-        + "name or its sys_db_object sys_id; column is { label, type, name?, max_length?, reference? } with "
-        + "friendly types mapped to internal types (string -> string_full_utf8); element is derived from label "
-        + "unless column.name is given. dryRun:true returns the plan + column XML with no session and no writes. "
-        + "NOTE: the live write path is pending a validated-live spike — prefer dryRun until confirmed, and "
-        + "always verify the sys_update_xml landed in the intended update set.",
+        "Add ONE column to an EXISTING ServiceNow table, headless. Creating a column is a sys_dictionary "
+        + "insert; this uses the scope-aware createRecord op (switches app scope + update set server-side, "
+        + "inserts, restores) so the column lands in the right scope and update set, then READS THE COLUMN "
+        + "BACK from sys_dictionary to prove it materialised (a returned sys_id with no column is reported "
+        + "failed, not created). table is the table name or its sys_db_object sys_id; column is "
+        + "{ label, type, name?, max_length?, reference?, mandatory?, default? } with friendly types mapped to "
+        + "internal types (string -> string_full_utf8) and reference = the target table NAME; element is "
+        + "derived from label unless column.name is given. updateSetSysId is required on the live path. "
+        + "dryRun:true returns the plan with no writes.",
       shape: addColumnSchema.shape,
       handler: async function (args: any) {
         var p = addColumnSchema.parse(args);
@@ -352,8 +351,6 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
           column: p.column,
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
-          saveActionSysId: p.saveActionSysId,
-          columnsRelId: p.columnsRelId,
           dryRun: p.dryRun,
           debug: p.debug
         });
