@@ -155,6 +155,19 @@ describe("MCP registry", function () {
     });
   });
 
+  it("invoke_rest accepts a lowercase method via the schema preprocess", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    var result = await invokeTool.handler({
+      method: "delete",
+      path: "/api/x_cadso_core/testkit/resource/abc",
+      confirm: true
+    });
+    expect(result.status).toBe("sent");
+    expect(ctx.calls.nowInvoke[0].method).toBe("DELETE");
+  });
+
   it("invoke_rest rejects a non-/api/ path via the zod schema", async function () {
     var descriptors = buildDescriptors();
     var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
