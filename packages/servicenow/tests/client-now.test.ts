@@ -69,6 +69,21 @@ describe("servicenow client — now.put / now.delete / now.invoke", function () 
     expect(call.data).toEqual({ name: "n" });
   });
 
+  it("now.invoke never attaches a request body on GET", async function () {
+    mockHttp.request.mockResolvedValueOnce({ status: 200, data: {} });
+    var client = createClient();
+
+    await client.now.invoke({
+      method: "GET",
+      path: "/api/now/table/x",
+      body: { ignored: true }
+    });
+
+    var call = mockHttp.request.mock.calls[0][0];
+    expect(call.method).toBe("GET");
+    expect(call.data).toBeUndefined();
+  });
+
   it("now.invoke passes a 404 through verbatim instead of throwing", async function () {
     mockHttp.request.mockResolvedValueOnce({ status: 404, data: { error: { message: "nope" } } });
     var client = createClient();

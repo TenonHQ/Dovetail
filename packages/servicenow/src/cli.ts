@@ -953,8 +953,10 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
  * Invoke an arbitrary authenticated REST operation (Scripted REST included).
  * Dry-run by default; --confirm sends and returns { httpStatus, ok, body } with
  * the response passed through verbatim (non-2xx included — the transport still
- * retries 429/5xx first). Bodies are NEVER logged: human output prints method,
- * path and status only; the response body is only in the --json result.
+ * retries 429/5xx first). Bodies are NEVER printed in human output — request or
+ * response, dry-run or sent: method, path and status only. The structured
+ * --json result is the one channel that carries them (a dry-run's requestBody
+ * echo satisfies the #212 "echo the plan" gate there).
  * Exit codes: 0 dry-run or 2xx, 1 bad args, 2 sent but non-2xx.
  */
 async function runInvokeRest(flags: Record<string, string>): Promise<number> {

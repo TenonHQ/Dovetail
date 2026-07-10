@@ -558,8 +558,13 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
         );
       },
       invoke: async function (params) {
+        var cfg: AxiosRequestConfig = { method: params.method, url: params.path };
+        // Per NowInvokeParams: body is ignored for GET — never attach a GET payload.
+        if (params.method !== "GET" && params.body !== undefined) {
+          cfg.data = params.body;
+        }
         var raw = await requestRaw(
-          { method: params.method, url: params.path, data: params.body },
+          cfg,
           "now.invoke(" + params.method + " " + params.path + ")",
           true,
         );

@@ -343,9 +343,10 @@ npx dove-sn invoke-rest --method PUT \
 **verbatim** as `{ httpStatus, ok, body }`: non-2xx responses are returned, not
 thrown, so the operation's own error contract survives (the transport still
 retries 429/5xx first). The path must be instance-relative and start with
-`/api/`. **Bodies are never logged** — human output prints method, path and
-status only; the response body is only in the `--json` result. Exit codes: `0`
-dry-run or 2xx, `1` bad args, `2` sent but non-2xx.
+`/api/`. **Bodies are never printed in human output** — request or response,
+dry-run or sent: method, path and status only. The structured `--json` result
+is the one channel that carries them (a dry-run's `requestBody` echo lives
+there). Exit codes: `0` dry-run or 2xx, `1` bad args, `2` sent but non-2xx.
 
 Programmatic: `invokeRest({ method, path, body, confirm })` is exported, and the
 client gained `now.put` / `now.delete` / `now.invoke` (the latter returns
