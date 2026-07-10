@@ -28,5 +28,11 @@ export type {
   PromoteOutcome,
 } from "./promoteForStatus";
 
+export { resolveDevInstance, toSubdomain } from "./resolveDevInstance";
+export type {
+  ResolveDevInstanceParams,
+  ResolveDevInstanceResult,
+} from "./resolveDevInstance";
+
 export { formatFailureReport } from "./rollback";
 export type { FailureReportParams } from "./rollback";

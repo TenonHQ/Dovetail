@@ -218,4 +218,68 @@ describe("promoteForStatus", function () {
     expect(posted.length).toBe(1);
     expect(posted[0].text).toMatch(/push to yard/);
   });
+
+  it("promotes a dynamic-source rung using the caller-provided source instance", async function () {
+    var l = ladder();
+    l.devInstanceFieldId = "field-id";
+    l.devInstanceHostPattern = "^tenonwork[a-z0-9-]+$";
+    l.statusMap["push to yard"] = {
+      clickupStatusId: "s1",
+      sourceFrom: "devInstance",
+      targetInstance: "yard",
+      transport: "sawmill",
+      enabled: true,
+    };
+    var sources: string[] = [];
+    var promoter: Promoter = {
+      promote: function (p) {
+        sources.push(p.sourceInstance);
+        return Promise.resolve(okResult);
+      },
+    };
+    var out = await promoteForStatus({
+      status: "push to yard",
+      taskId: "DEV-847",
+      config: l,
+      sourceReader: sourceReaderWith(["DEV-847 — Core"]),
+      targetReader: emptyReader,
+      sourceInstance: "tenonworkpost",
+      promoter: promoter,
+    });
+    expect(out.kind).toBe("promoted");
+    // the resolved dev instance is wired into the promoter, not read off the rung
+    expect(
+      sources.every(function (s) {
+        return s === "tenonworkpost";
+      }),
+    ).toBe(true);
+  });
+
+  it("skips a dynamic-source rung whose source wasn't resolved — before any query", async function () {
+    var l = ladder();
+    l.devInstanceFieldId = "field-id";
+    l.devInstanceHostPattern = "^tenonwork[a-z0-9-]+$";
+    l.statusMap["push to yard"] = {
+      clickupStatusId: "s1",
+      sourceFrom: "devInstance",
+      targetInstance: "yard",
+      transport: "sawmill",
+      enabled: true,
+    };
+    var throwing: SnReader = {
+      query: function () {
+        throw new Error("must not query when the dynamic source is missing");
+      },
+    };
+    var out = await promoteForStatus({
+      status: "push to yard",
+      taskId: "DEV-847",
+      config: l,
+      sourceReader: throwing,
+      targetReader: throwing,
+      // sourceInstance intentionally omitted
+      promoter: recordingPromoter().promoter,
+    });
+    expect(out.kind).toBe("skipped");
+  });
 });
