@@ -42,6 +42,9 @@ function makeClient(scripted: Array<{ match: (table: string, query: string) => b
     now: {
       get: async function () { return {} as any; },
       post: async function () { return {} as any; },
+      put: async function () { return {} as any; },
+      delete: async function () { return {} as any; },
+      invoke: async function () { return { status: 200, body: {} }; },
     },
   };
   return { client: client, cap: cap };

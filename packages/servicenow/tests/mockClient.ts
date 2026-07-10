@@ -21,6 +21,7 @@ export interface MockCalls {
   attachmentUpload: Array<any>;
   attachmentRemove: Array<any>;
   attachmentListFor: Array<any>;
+  nowInvoke: Array<any>;
 }
 
 export interface MockClientCtx {
@@ -37,7 +38,8 @@ export function makeMockClient(overrides: { query?: QueryFn; attachments?: Attac
     changeUpdateSet: [],
     attachmentUpload: [],
     attachmentRemove: [],
-    attachmentListFor: []
+    attachmentListFor: [],
+    nowInvoke: []
   };
   // Live attachment store so read-back (listFor after upload) reflects uploads,
   // while overrides.attachments seeds pre-existing attachments per record.
@@ -85,7 +87,13 @@ export function makeMockClient(overrides: { query?: QueryFn; attachments?: Attac
     },
     now: {
       get: async function () { return {} as any; },
-      post: async function () { return {} as any; }
+      post: async function () { return {} as any; },
+      put: async function () { return {} as any; },
+      delete: async function () { return {} as any; },
+      invoke: async function (params) {
+        calls.nowInvoke.push(params);
+        return { status: 200, body: { echoed: true } };
+      }
     },
     attachment: {
       listFor: async function (params) {

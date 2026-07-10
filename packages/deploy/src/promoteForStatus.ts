@@ -27,6 +27,12 @@ export interface PromoteForStatusParams {
   sourceReader: SnReader;
   /** Reads sys_update_set on the TARGET instance (idempotency check). */
   targetReader: SnReader;
+  /**
+   * Resolved source instance override. REQUIRED for a `sourceFrom: "devInstance"`
+   * rung (the caller resolves + validates the dev instance first); ignored for
+   * static-source rungs.
+   */
+  sourceInstance?: string;
   /** Transport pointed at the TARGET instance. */
   promoter: Promoter;
   /** Optional ClickUp comment sink. */
@@ -131,7 +137,35 @@ export async function promoteForStatus(
     };
   }
 
-  // 3. Resolve the update set(s) on the source.
+  // 3. Resolve the source instance FIRST — so a dynamic-source rung whose caller
+  //    didn't pass the resolved dev instance skips before any source query runs.
+  var sourceRef: string;
+  if (rung.sourceFrom === "devInstance") {
+    // Dynamic source — the caller resolves + validates it and passes it in.
+    if (!params.sourceInstance) {
+      return {
+        kind: "skipped",
+        reason:
+          "dynamic source for '" +
+          params.status +
+          "' was not resolved by the caller",
+      };
+    }
+    sourceRef = params.sourceInstance;
+  } else if (rung.sourceInstance) {
+    // Static source — `params.sourceInstance` is ignored here (per the docstring).
+    var staticSource: PromotionInstanceRef =
+      config.instances[rung.sourceInstance];
+    sourceRef =
+      staticSource && staticSource.url ? staticSource.url : rung.sourceInstance;
+  } else {
+    return {
+      kind: "skipped",
+      reason: "no source instance configured for '" + params.status + "'",
+    };
+  }
+
+  // 4. Resolve the update set(s) on the source.
   var resolved = await resolveUpdateSets({
     reader: params.sourceReader,
     taskId: params.taskId,
@@ -147,17 +181,10 @@ export async function promoteForStatus(
       candidates: resolved.candidates,
     };
   }
-
-  var sourceInstance: PromotionInstanceRef =
-    config.instances[rung.sourceInstance];
-  var sourceRef =
-    sourceInstance && sourceInstance.url
-      ? sourceInstance.url
-      : rung.sourceInstance;
   var allow = config.skipPreviewErrors || [];
   var outcomes: PromoteOutcome[] = [];
 
-  // 4. Promote each set: idempotency → preview → gate → commit.
+  // 5. Promote each set: idempotency → preview → gate → commit.
   var i;
   for (i = 0; i < resolved.updateSets.length; i = i + 1) {
     var set = resolved.updateSets[i];
@@ -219,7 +246,7 @@ export async function promoteForStatus(
     outcomes.push({ updateSet: set, status: "promoted", result: committed });
   }
 
-  // 5. Confirm on the ClickUp task.
+  // 6. Confirm on the ClickUp task.
   if (params.commenter) {
     await params.commenter.postComment({
       taskId: params.taskId,

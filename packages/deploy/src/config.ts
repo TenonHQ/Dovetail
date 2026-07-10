@@ -103,6 +103,7 @@ export function validatePromotionLadder(
   var instanceMap = instances;
   var statusRungs = statusMap;
   var seenStatusIds: Record<string, string> = {};
+  var usesDevInstance = false;
 
   Object.keys(statusRungs).forEach(function (statusName) {
     var base = "statusMap['" + statusName + "']";
@@ -140,11 +141,52 @@ export function validatePromotionLadder(
       });
     }
 
-    // instance references exist
+    // enabled must be a real boolean — a stringy "true" compares falsey against
+    // `=== true`, which would silently disable the rung and bypass the readiness
+    // + dynamic-source checks below.
+    if (typeof rung.enabled !== "boolean") {
+      issues.push({
+        path: base + ".enabled",
+        message: "enabled must be a boolean",
+      });
+    }
+
+    // The target is always a static instance key; the source is EITHER a static
+    // key OR the dynamic `sourceFrom: "devInstance"` marker — exactly one.
     var refs: Array<{ key: string; ref: unknown }> = [
-      { key: "sourceInstance", ref: rung.sourceInstance },
       { key: "targetInstance", ref: rung.targetInstance },
     ];
+    var hasSourceFrom =
+      rung.sourceFrom !== undefined && rung.sourceFrom !== null;
+    var hasSourceInstance =
+      rung.sourceInstance !== undefined && rung.sourceInstance !== null;
+    if (hasSourceFrom && hasSourceInstance) {
+      issues.push({
+        path: base,
+        message: "set exactly one of sourceInstance or sourceFrom, not both",
+      });
+    } else if (hasSourceFrom) {
+      if (rung.sourceFrom !== "devInstance") {
+        issues.push({
+          path: base + ".sourceFrom",
+          message: "sourceFrom must be 'devInstance'",
+        });
+      } else if (rung.enabled === true) {
+        // Only an ENABLED dynamic-source rung makes the dev-instance config
+        // (devInstanceFieldId / devInstanceHostPattern) required — consistent with
+        // the readiness checks below, which are also gated on rung.enabled.
+        usesDevInstance = true;
+      }
+    } else if (hasSourceInstance) {
+      refs.push({ key: "sourceInstance", ref: rung.sourceInstance });
+    } else {
+      issues.push({
+        path: base,
+        message: "rung must set either sourceInstance or sourceFrom",
+      });
+    }
+
+    // static instance references exist
     refs.forEach(function (r) {
       if (!isNonEmptyString(r.ref) || !instanceMap[r.ref]) {
         issues.push({
@@ -173,6 +215,33 @@ export function validatePromotionLadder(
       });
     }
   });
+
+  // A dynamic-source rung needs the ClickUp field id + a host-pattern guard.
+  if (usesDevInstance) {
+    if (!isNonEmptyString(config.devInstanceFieldId)) {
+      issues.push({
+        path: "devInstanceFieldId",
+        message:
+          "devInstanceFieldId is required when a rung uses sourceFrom: devInstance",
+      });
+    }
+    if (!isNonEmptyString(config.devInstanceHostPattern)) {
+      issues.push({
+        path: "devInstanceHostPattern",
+        message:
+          "devInstanceHostPattern is required when a rung uses sourceFrom: devInstance",
+      });
+    } else {
+      try {
+        new RegExp(config.devInstanceHostPattern);
+      } catch (err) {
+        issues.push({
+          path: "devInstanceHostPattern",
+          message: "devInstanceHostPattern is not a valid regular expression",
+        });
+      }
+    }
+  }
 
   return issues;
 }

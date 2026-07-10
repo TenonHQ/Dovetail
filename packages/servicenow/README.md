@@ -319,6 +319,39 @@ var r = await setField({
 console.log(r.status, r.verified); // "applied" true
 ```
 
+### Invoke an arbitrary REST operation
+
+Invoke any authenticated ServiceNow REST operation — an application's own
+Scripted REST endpoints (`sys_ws_operation` at `/api/<scope>/<service>/<resource>`)
+included — with GET, POST, PUT or DELETE. This is the transport primitive for
+operations the fixed verbs can't express, and the only surface with PUT/DELETE
+coverage (a verification harness that cleans up after itself needs the DELETE).
+
+```bash
+# Dry-run — the DEFAULT: echoes method + path + body, sends NOTHING
+npx dove-sn invoke-rest --method DELETE \
+  --path /api/x_cadso_core/testkit/resource/<sys_id>
+
+# Send for real
+npx dove-sn invoke-rest --method PUT \
+  --path /api/x_cadso_core/testkit/resource/<sys_id> \
+  --body '{"name":"updated"}' --confirm --json
+```
+
+`invoke-rest` is **dry-run by default** — nothing is sent without `--confirm`
+(`--dry-run` forces a dry-run even with it). On send the response passes through
+**verbatim** as `{ httpStatus, ok, body }`: non-2xx responses are returned, not
+thrown, so the operation's own error contract survives (the transport still
+retries 429/5xx first). The path must be instance-relative and start with
+`/api/`. **Bodies are never printed in human output** — request or response,
+dry-run or sent: method, path and status only. The structured `--json` result
+is the one channel that carries them (a dry-run's `requestBody` echo lives
+there). Exit codes: `0` dry-run or 2xx, `1` bad args, `2` sent but non-2xx.
+
+Programmatic: `invokeRest({ method, path, body, confirm })` is exported, and the
+client gained `now.put` / `now.delete` / `now.invoke` (the latter returns
+`{ status, body }` verbatim) alongside the existing `now.get` / `now.post`.
+
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
@@ -397,8 +430,10 @@ tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an act
 type's model), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
 (copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
 publish, grafting a template), `flow_test` (validate or run a flow), and
-`flow_edit` (patch a flow). It reads ServiceNow credentials from the same env
-vars as the CLI.
+`flow_edit` (patch a flow), plus `invoke_rest` (invoke an arbitrary authenticated
+REST operation — Scripted REST included — with GET/POST/PUT/DELETE; dry-run by
+default, response passed through verbatim, bodies never logged). It reads
+ServiceNow credentials from the same env vars as the CLI.
 
 ```bash
 npx dove-sn mcp --smoke   # list the registered tools and exit

@@ -46,6 +46,9 @@ function makeClient(scripted: Array<{ match: (call: RunQueryCall) => boolean; ro
     now: {
       get: async function () { return {} as any; },
       post: async function () { return {} as any; },
+      put: async function () { return {} as any; },
+      delete: async function () { return {} as any; },
+      invoke: async function () { return { status: 200, body: {} }; },
     },
   };
   return { client: client, calls: calls };

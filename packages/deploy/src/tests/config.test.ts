@@ -112,4 +112,133 @@ describe("validatePromotionLadder", function () {
   it("rejects a non-object", function () {
     expect(validatePromotionLadder({ config: null })[0].path).toBe("promotion");
   });
+
+  it("accepts a dynamic-source rung with the dev-instance config", function () {
+    var ladder = validLadder();
+    ladder.devInstanceFieldId = "field-id";
+    ladder.devInstanceHostPattern = "^tenonwork[a-z0-9-]+$";
+    ladder.statusMap["push to yard"] = {
+      clickupStatusId: "s1",
+      sourceFrom: "devInstance",
+      targetInstance: "yard",
+      transport: "sawmill",
+      enabled: true,
+    };
+    expect(validatePromotionLadder({ config: ladder })).toEqual([]);
+  });
+
+  it("flags a dynamic-source rung missing the field id + host pattern", function () {
+    var ladder = validLadder();
+    ladder.statusMap["push to yard"] = {
+      clickupStatusId: "s1",
+      sourceFrom: "devInstance",
+      targetInstance: "yard",
+      transport: "sawmill",
+      enabled: true,
+    };
+    var issues = validatePromotionLadder({ config: ladder });
+    expect(
+      issues.some(function (i) {
+        return i.path === "devInstanceFieldId";
+      }),
+    ).toBe(true);
+    expect(
+      issues.some(function (i) {
+        return i.path === "devInstanceHostPattern";
+      }),
+    ).toBe(true);
+  });
+
+  it("flags a rung that sets both sourceInstance and sourceFrom", function () {
+    // Both-set is un-constructable under the XOR type — validate as untrusted JSON.
+    var bad = {
+      taskIdPattern: "(DEV-[a-z0-9]+)",
+      devInstanceFieldId: "field-id",
+      devInstanceHostPattern: "^tenonwork[a-z0-9-]+$",
+      instances: {
+        yard: { url: "tenonworkyard", environment: "e", enabled: true },
+      },
+      statusMap: {
+        "push to yard": {
+          clickupStatusId: "s1",
+          sourceInstance: "yard",
+          sourceFrom: "devInstance",
+          targetInstance: "yard",
+          transport: "sawmill",
+          enabled: true,
+        },
+      },
+    };
+    var issues = validatePromotionLadder({ config: bad });
+    expect(
+      issues.some(function (i) {
+        return /exactly one of sourceInstance or sourceFrom/.test(i.message);
+      }),
+    ).toBe(true);
+  });
+
+  it("flags an invalid sourceFrom value", function () {
+    var bad = {
+      taskIdPattern: "(DEV-[a-z0-9]+)",
+      instances: { studio: { url: "x", environment: "e", enabled: true } },
+      statusMap: {
+        "push to yard": {
+          clickupStatusId: "s1",
+          sourceFrom: "somethingElse",
+          targetInstance: "studio",
+          transport: "sawmill",
+          enabled: false,
+        },
+      },
+    };
+    var issues = validatePromotionLadder({ config: bad });
+    expect(
+      issues.some(function (i) {
+        return /sourceFrom must be 'devInstance'/.test(i.message);
+      }),
+    ).toBe(true);
+  });
+
+  it("flags a rung that sets neither sourceInstance nor sourceFrom", function () {
+    var bad = {
+      taskIdPattern: "(DEV-[a-z0-9]+)",
+      instances: { studio: { url: "x", environment: "e", enabled: true } },
+      statusMap: {
+        "push to yard": {
+          clickupStatusId: "s1",
+          targetInstance: "studio",
+          transport: "sawmill",
+          enabled: false,
+        },
+      },
+    };
+    var issues = validatePromotionLadder({ config: bad });
+    expect(
+      issues.some(function (i) {
+        return /either sourceInstance or sourceFrom/.test(i.message);
+      }),
+    ).toBe(true);
+  });
+
+  it("flags a non-boolean enabled (a stringy 'true' would silently disable the rung)", function () {
+    var bad = {
+      taskIdPattern: "(DEV-[a-z0-9]+)",
+      instances: { studio: { url: "x", environment: "e", enabled: true } },
+      statusMap: {
+        "push to yard": {
+          clickupStatusId: "s1",
+          sourceInstance: "studio",
+          targetInstance: "studio",
+          transport: "sawmill",
+          enabled: "true",
+        },
+      },
+    };
+    var issues = validatePromotionLadder({ config: bad });
+    expect(
+      issues.some(function (i) {
+        return i.path === "statusMap['push to yard'].enabled";
+      }),
+    ).toBe(true);
+  });
 });
