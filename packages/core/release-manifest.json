@@ -1,7 +1,29 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-07-08T18:19:16.787Z",
+  "generated_at": "2026-07-08T21:55:56.090Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-dashboard@0.0.48",
+      "package": "@tenonhq/dovetail-dashboard",
+      "version": "0.0.48",
+      "prev_version": "0.0.47",
+      "published_at": "2026-07-08T21:55:56.082Z",
+      "git": {
+        "sha": "7ef92071de6726ccfd751ae617a661f95fe685fc",
+        "tag": "dovetail-dashboard@0.0.48"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "7ef92071d",
+          "subject": "feat(ci): Slack alerts for publish success/failure + cut dashboard release (#209)",
+          "pr": 209
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-clickup@0.0.13",
@@ -1268,32 +1290,6 @@
         {
           "sha": "9046da774",
           "subject": "chore(release): publish 19 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.15",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.15",
-      "prev_version": "0.0.14",
-      "published_at": "2026-06-04T22:16:51.160Z",
-      "git": {
-        "sha": "d46b5bd2dce0fb3b13f0d1d5933f88d1d421b550",
-        "tag": "dovetail-servicenow@0.0.15"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "d46b5bd2d",
-          "subject": "feat(servicenow): dove-sn edit-action — headless action-type script/output edit (#147)",
-          "pr": 147
-        },
-        {
-          "sha": "af1417796",
-          "subject": "chore(release): publish 3 packages [skip ci]"
         }
       ],
       "exports_delta": null,
