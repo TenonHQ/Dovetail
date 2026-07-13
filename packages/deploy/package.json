@@ -1,0 +1,39 @@
+{
+  "name": "@tenonhq/dovetail-deploy",
+  "version": "0.0.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "ClickUp-status-driven ServiceNow update-set promotion orchestrator for Dovetail — resolves the update sets for a task, preview-gates, and commits them across instances via a transport port (sawmill). Pure orchestration; transport stays in @tenonhq/dovetail-sawmill.",
+  "main": "./dist/index.js",
+  "scripts": {
+    "test": "jest",
+    "prepack": "tsc",
+    "version:bump": "node ./../../Scripts/bump-version.js ./package.json",
+    "postpublish": "npm run version:bump"
+  },
+  "author": "Tenon",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "@types/jest": "^29.5.5",
+    "@types/node": ">=20.8.4",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.2.2"
+  },
+  "files": [
+    "dist",
+    "config"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TenonHQ/Dovetail.git",
+    "directory": "packages/deploy"
+  },
+  "bugs": {
+    "url": "https://github.com/TenonHQ/Dovetail/issues"
+  }
+}

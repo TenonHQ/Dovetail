@@ -60,6 +60,41 @@ describe("clickup tools", function () {
     expect(mockGetTask.mock.calls[0][0].taskId).toBe("T1");
   });
 
+  it("clickup_get_task auto-detects a custom id and resolves the team", async function () {
+    mockGetTask.mockResolvedValue({ id: "T1" });
+    await clickupGetTask(
+      { taskId: "DEV-506" } as any,
+      makeDeps({ defaultTeamId: "team9" })
+    );
+    var call = mockGetTask.mock.calls[0][0];
+    expect(call.taskId).toBe("DEV-506");
+    expect(call.customTaskIds).toBe(true);
+    expect(call.teamId).toBe("team9");
+  });
+
+  it("clickup_get_task treats a hyphen-free internal id as a standard lookup", async function () {
+    mockGetTask.mockResolvedValue({ id: "x" });
+    await clickupGetTask({ taskId: "86e1xmmpp" } as any, makeDeps());
+    var call = mockGetTask.mock.calls[0][0];
+    expect(call.customTaskIds).toBe(false);
+    expect(call.teamId).toBeUndefined();
+  });
+
+  it("clickup_get_task lets explicit customTaskIds:false override the heuristic", async function () {
+    mockGetTask.mockResolvedValue({ id: "x" });
+    await clickupGetTask(
+      { taskId: "DEV-506", customTaskIds: false } as any,
+      makeDeps({ defaultTeamId: "team9" })
+    );
+    expect(mockGetTask.mock.calls[0][0].customTaskIds).toBe(false);
+  });
+
+  it("clickup_get_task errors actionably when a custom id has no resolvable team", async function () {
+    await expect(
+      clickupGetTask({ taskId: "DEV-506" } as any, makeDeps())
+    ).rejects.toThrow(/teamId is required/);
+  });
+
   it("clickup_search_tasks filters team tasks by substring on name and description", async function () {
     mockListTeamTasks.mockResolvedValue({
       tasks: [

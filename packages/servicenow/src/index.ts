@@ -12,7 +12,10 @@ export type {
   TableQueryOptions,
   TableSchema,
   TableSchemaField,
-  AttachmentMeta
+  AttachmentMeta,
+  NowInvokeMethod,
+  NowInvokeParams,
+  NowInvokeResponse
 } from "./client";
 
 export { addChoicesToField } from "./choices";
@@ -147,3 +150,11 @@ export type {
   AccessFlags,
   OverlaySpec
 } from "./table";
+
+export { setField } from "./setField";
+export { createRecord } from "./createRecord";
+export type { RecordWriteResult, SetFieldParams, SetFieldResult } from "./setField";
+export type { CreateRecordParams, CreateRecordResult } from "./createRecord";
+
+export { invokeRest, INVOKE_REST_METHODS } from "./invokeRest";
+export type { InvokeRestParams, InvokeRestResult } from "./invokeRest";

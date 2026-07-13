@@ -173,3 +173,39 @@ export var addColumnSchema = z.object({
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional()
 });
+
+// Data-record write verbs. Kept as plain z.object (no .refine wrapper) so
+// registry.ts can read `.shape`; the deeper rules — one of sysId/query, at
+// least one field, the schema-table refusal — are enforced by the core
+// setField / createRecord functions, which throw clear errors.
+export var setFieldSchema = z.object({
+  table: z.string().min(1),
+  sysId: z.string().optional(),
+  query: z.string().optional(),
+  fields: z.record(z.string()),
+  updateSetSysId: z.string().min(1),
+  dryRun: z.boolean().optional()
+});
+
+export var createRecordSchema = z.object({
+  table: z.string().min(1),
+  fields: z.record(z.string()),
+  scope: z.string().min(1),
+  updateSetSysId: z.string().min(1),
+  ifAbsentQuery: z.string().optional(),
+  dryRun: z.boolean().optional()
+});
+
+// invoke_rest: transport primitive for arbitrary authenticated REST operations
+// (Scripted REST included). The dry-run-unless-confirm gate lives in invokeRest
+// itself; the regex here rejects absolute URLs and non-/api/ paths early.
+export var invokeRestSchema = z.object({
+  method: z.preprocess(
+    function (v) { return typeof v === "string" ? v.toUpperCase() : v; },
+    z.enum(["GET", "POST", "PUT", "DELETE"]),
+  ),
+  path: z.string().min(1).regex(/^\/api\//, "path must be instance-relative and start with /api/"),
+  body: z.unknown().optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional()
+});

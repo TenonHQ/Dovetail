@@ -1,0 +1,21 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-mcp@0.0.23",
+  "package": "@tenonhq/dovetail-mcp",
+  "version": "0.0.23",
+  "prev_version": "0.0.22",
+  "published_at": "2026-07-10T16:27:58.460Z",
+  "git": {
+    "sha": "9b3b58b8fb9aa53b32473c8c7711446f5a52a576",
+    "tag": "dovetail-mcp@0.0.23"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "534f517e4",
+      "subject": "chore(release): publish 3 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

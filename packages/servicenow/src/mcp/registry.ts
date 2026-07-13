@@ -36,6 +36,10 @@ import { editFlow } from "../flowDesigner/editFlow";
 import { testFlow } from "../flowDesigner/testFlow";
 import { createTable, addColumn } from "../table";
 import { hostAssets } from "../hostAssets";
+import { setField } from "../setField";
+import { createRecord } from "../createRecord";
+import { invokeRest } from "../invokeRest";
+import type { InvokeRestParams } from "../invokeRest";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -51,7 +55,10 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
-  hostAssetsSchema
+  setFieldSchema,
+  createRecordSchema,
+  hostAssetsSchema,
+  invokeRestSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -69,7 +76,10 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
-  "host_assets"
+  "set_field",
+  "create_record",
+  "host_assets",
+  "invoke_rest"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -354,6 +364,58 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       }
     },
     {
+      name: "set_field",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Set scalar field value(s) on an EXISTING ServiceNow data record, captured into a specified "
+        + "update set, then READ BACK to verify each value landed. Wraps the update-set-aware "
+        + "pushWithUpdateSet core op (no sys_user_preference mutation). Target the record by sysId, or "
+        + "by a query that resolves to EXACTLY one row. REFUSES schema tables (sys_db_object / "
+        + "sys_dictionary) — use add_column / create_table for those. fields is a flat name->string map "
+        + "(sent as strings; ServiceNow coerces); updateSetSysId is required so the change is tracked; "
+        + "dryRun:true reads the current values and returns the plan without writing. To INSERT a new "
+        + "record use create_record.",
+      shape: setFieldSchema.shape,
+      handler: async function (args: any) {
+        var p = setFieldSchema.parse(args);
+        return setField({
+          client: client(),
+          table: p.table,
+          sysId: p.sysId,
+          query: p.query,
+          fields: p.fields,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun
+        });
+      }
+    },
+    {
+      name: "create_record",
+      annotations: WRITE_CREATE,
+      description:
+        "Create ONE new ServiceNow data record, owned by an explicit app scope and captured into a "
+        + "specified update set, then READ BACK to verify. Wraps the scope- and update-set-aware "
+        + "createRecord core op (switches app scope + update set server-side, inserts, restores both — "
+        + "so the record lands in the right scope without sys_user_preference mutation). REFUSES schema "
+        + "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those. fields is a "
+        + "flat name->string map; scope and updateSetSysId are required; ifAbsentQuery makes re-runs "
+        + "idempotent (skips the insert when it already matches a row); dryRun:true returns the plan "
+        + "without writing. To UPDATE an existing record use set_field.",
+      shape: createRecordSchema.shape,
+      handler: async function (args: any) {
+        var p = createRecordSchema.parse(args);
+        return createRecord({
+          client: client(),
+          table: p.table,
+          fields: p.fields,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          ifAbsentQuery: p.ifAbsentQuery,
+          dryRun: p.dryRun
+        });
+      }
+    },
+    {
       name: "host_assets",
       annotations: WRITE_OVERWRITE,
       description:
@@ -370,6 +432,39 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       shape: hostAssetsSchema.shape,
       handler: async function (args: any) {
         return hostAssets(client(), hostAssetsSchema.parse(args));
+      }
+    },
+    {
+      name: "invoke_rest",
+      annotations: WRITE_EXECUTE,
+      description:
+        "Invoke an arbitrary authenticated ServiceNow REST operation — including an application's "
+        + "own Scripted REST endpoints (/api/<scope>/<service>/<resource>) — with GET, POST, PUT or "
+        + "DELETE. A transport primitive: it can drive update and DELETE operations, so it is "
+        + "destructive-capable and non-idempotent. DRY-RUN BY DEFAULT — without confirm:true nothing "
+        + "is sent and the resolved method + path + body are echoed back; dryRun:true forces a "
+        + "dry-run even with confirm. On send, returns { httpStatus, ok, body } with the response "
+        + "passed through verbatim — non-2xx responses are returned, not thrown, so the operation's "
+        + "own error contract is preserved (429/5xx are retried by the transport first). path must "
+        + "be instance-relative and start with /api/. Request/response bodies are never logged — "
+        + "they exist only in this result. For sys_* / x_* record CRUD use set_field / "
+        + "create_record instead; this tool is for operations those fixed verbs cannot express.",
+      shape: invokeRestSchema.shape,
+      handler: async function (args: any) {
+        var p = invokeRestSchema.parse(args);
+        var params: InvokeRestParams = {
+          method: p.method,
+          path: p.path,
+          body: p.body,
+          confirm: p.confirm,
+          dryRun: p.dryRun
+        };
+        // Client resolution is lazy: a dry-run needs no credentials, so only
+        // attach one when injected (tests) — invokeRest creates its own on send.
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return invokeRest(params);
       }
     }
   ];

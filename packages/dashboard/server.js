@@ -972,6 +972,23 @@ function execFilePromise(cmd, args, opts) {
   });
 }
 
+// True when a local branch with this name exists in cwd — checked explicitly
+// (rather than inferred from a failed `checkout -b`) so a real checkout
+// failure (e.g. uncommitted changes blocking the switch) surfaces its own
+// git error instead of being masked as "branch doesn't exist".
+function localBranchExists(branchName, cwd) {
+  return new Promise(function (resolve) {
+    execFile(
+      "git",
+      ["show-ref", "--verify", "--quiet", "refs/heads/" + branchName],
+      { cwd: cwd },
+      function (err) {
+        resolve(!err);
+      }
+    );
+  });
+}
+
 // Cut (or switch to, if it already exists) the working branch for a task in
 // the given target folder: dev/{git-username}/{DEV-ID}/{short-desc}
 async function createTaskBranch(activeTask, targetFolder) {
@@ -988,18 +1005,18 @@ async function createTaskBranch(activeTask, targetFolder) {
   var descSlug = slugify(activeTask.shortDesc || activeTask.taskName);
   var branchName = "dev/" + usernameSlug + "/" + taskIdSlug + "/" + descSlug;
 
-  try {
-    await execFilePromise("git", ["checkout", "-b", branchName], {
-      cwd: targetFolder,
-    });
-    return { branch: branchName, cwd: targetFolder, created: true };
-  } catch (createErr) {
-    // Branch may already exist from a prior Start Task click on this ticket.
+  var exists = await localBranchExists(branchName, targetFolder);
+  if (exists) {
     await execFilePromise("git", ["checkout", branchName], {
       cwd: targetFolder,
     });
     return { branch: branchName, cwd: targetFolder, created: false };
   }
+
+  await execFilePromise("git", ["checkout", "-b", branchName], {
+    cwd: targetFolder,
+  });
+  return { branch: branchName, cwd: targetFolder, created: true };
 }
 
 // Compute (without creating anything) the scope-aware update-set name for
