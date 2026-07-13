@@ -8,16 +8,14 @@ owner: claude
 last_updated: 2026-07-10
 authority: canonical
 related:
-  [
-    CLAUDE.md,
-    docs/dovetail-servicenow-migration.md,
-    servicenow/dovetail/README.md,
-  ]
+  - CLAUDE.md
+  - docs/dovetail-servicenow-migration.md
+  - servicenow/dovetail/README.md
 ---
 
 # Dovetail Server-Side REST API — Endpoint Catalog
 
-> **Purpose:** answer "how do I create/choice/flow/update-set via Dovetail's REST layer" from this doc alone, without reading TypeScript. Every entry below is grounded in this repo's actual client source (`packages/core/src/snClient.ts`, `packages/sawmill/src/client.ts`) and, where it exists, the server-side handler script -- nothing here is guessed.
+> **Purpose:** answer "how do I create a record, manage scope, work with an update set, or run a sync/promote operation via Dovetail's REST layer" from this doc alone, without reading TypeScript. Every entry below is grounded in this repo's actual client source (`packages/core/src/snClient.ts`, `packages/sawmill/src/client.ts`) and, where it exists, the server-side handler script -- nothing here is guessed.
 >
 > **This is the first doc in this repo to carry Craftsman's living-doc frontmatter** (title/description/status/type/tags/owner/last_updated). Dovetail's other docs use a plain H1 + blockquote style (see `docs/INDEX.md`) -- that convention continues below the frontmatter; only the metadata block is new.
 
@@ -30,12 +28,12 @@ Every operation below is tagged with how directly its behavior is verified, beca
 
 ## The four live Scripted REST API definitions
 
-| Def name                   | Base path                     | Role                                                                                         | Client uses it                                                          |
-| -------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| **Dovetail Core**          | `/api/cadso/dovetail_core`    | Write/action ops -- primary target                                                           | ✅ primary                                                              |
-| **Dovetail** (legacy path) | `/api/cadso/dovetail`         | Same ops as Dovetail Core                                                                    | ✅ 404-fallback only, with a one-time deprecation warning (see Gotchas) |
-| **Dovetail Sync**          | `/api/cadso/dovetail_sync`    | Read/bulk ops: `getAppList`, `getManifest`, `bulkDownload`, `getCurrentScope`, `pushATFfile` | ✅                                                                      |
-| **Dovetail Promote**       | `/api/cadso/dovetail_promote` | Cross-instance update-set promotion (sawmill package)                                        | ✅                                                                      |
+| Def name                   | Base path                     | Role                                                                                         | Client uses it                                            |
+| -------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Dovetail Core**          | `/api/cadso/dovetail_core`    | Write/action ops -- primary target                                                           | ✅ primary                                                |
+| **Dovetail** (legacy path) | `/api/cadso/dovetail`         | Same ops as Dovetail Core                                                                    | ✅ 404-fallback only, with a one-time deprecation warning |
+| **Dovetail Sync**          | `/api/cadso/dovetail_sync`    | Read/bulk ops: `getAppList`, `getManifest`, `bulkDownload`, `getCurrentScope`, `pushATFfile` | ✅                                                        |
+| **Dovetail Promote**       | `/api/cadso/dovetail_promote` | Cross-instance update-set promotion (sawmill package)                                        | ✅                                                        |
 
 `sys_id`s differ per instance -- look definitions up by name, never hardcode (per `servicenow/dovetail/README.md`).
 
@@ -85,7 +83,7 @@ Create a record.
 - **Body:** `{ table, fields }` + optional `sys_id`, `scope`, `update_set_sys_id`. Supports cross-instance moves via an explicit `sys_id`.
 - **Client:** `packages/core/src/snClient.ts:631-664`
 - **Client-side guard (real pain point, now fixed):** a bare `createRecord` call against `table: "sys_db_object"` is **refused client-side** with an explicit error (`packages/core/src/snClient.ts:646-660`) -- a raw insert there only creates an orphaned metadata row with no physical table and no ACLs. The error message redirects to the `dove-sn create-table` capability instead. This guard exists _because_ someone hit this exact footgun before it was added.
-- **Scope note:** the request body never includes `sys_scope` -- Dovetail's own field-building logic (`packages/core/src/reconcileCommand.ts:295-315`, `buildCreateFields()`) explicitly strips `sys_scope` before constructing the create payload, with the comment "sys*scope comes from `scope`" -- i.e. scope is conveyed via the separate `scope` parameter, never the body. Whether the \_server* would also ignore an explicitly-sent `sys_scope` field is not verifiable from this repo (no server script checked in for this op) -- documented as unverified rather than asserted.
+- **Scope note:** the request body never includes `sys_scope` -- Dovetail's own field-building logic (`packages/core/src/reconcileCommand.ts:295-315`, `buildCreateFields()`) explicitly strips `sys_scope` before constructing the create payload, with the comment "sys_scope comes from `scope`" -- i.e. scope is conveyed via the separate `scope` parameter, never the body. Whether the server would also ignore an explicitly-sent `sys_scope` field is not verifiable from this repo (no server script checked in for this op) -- documented as unverified rather than asserted.
 - **Example:** `POST /api/cadso/dovetail_core/createRecord` with body `{"table": "sys_choice", "fields": {"name": "x_cadso_core_thing", "value": "foo", "label": "Foo"}, "scope": "x_cadso_core", "update_set_sys_id": "..."}`
 
 ### `POST /deleteRecord` 🟡 client-contract-only
@@ -110,7 +108,7 @@ Create a new update set, scoped correctly in one server call.
 
 ## Dovetail Sync (`/api/cadso/dovetail_sync`)
 
-All four of these are read/bulk operations used by `dove refresh`/`dove pull`/ATF pushes. **No server-side handler script for the current live def is checked into this repo** -- the files under `servicenow/sys_ws_operation/` (no `dovetail/` in the path) are the **dead Sincronia-era** versions of these same operation names (see Deprecated section below), not the current implementation. Treat all four as 🟡 client-contract-only; do not infer current server behavior from the old scripts.
+All five of these are read/bulk operations used by `dove refresh`/`dove pull`/ATF pushes. **No server-side handler script for the current live def is checked into this repo** -- the files under `servicenow/sys_ws_operation/` (no `dovetail/` in the path) are the **dead Sincronia-era** versions of these same operation names (see Deprecated section below), not the current implementation. Treat all five as 🟡 client-contract-only; do not infer current server behavior from the old scripts.
 
 ### `GET /getAppList` 🟡 client-contract-only
 
@@ -125,7 +123,7 @@ Read the current user's active scope. No params. `packages/core/src/snClient.ts:
 Full manifest of records (optionally with file contents) for a scope.
 
 - **Path param:** `{scope}`
-- **Body:** `{ includes, excludes, tableOptions, withFiles, getContents }` (note: the wire field is `getContents`, not `withFiles` -- the client renames it before sending, per `packages/core/src/snClient.ts:547-573`)
+- **Body:** `{ includes, excludes, tableOptions, withFiles, getContents }` -- the client sends both fields; `getContents` mirrors `withFiles`'s value (`getContents: withFiles`), it does not replace it, per `packages/core/src/snClient.ts:547-573`
 
 ### `POST /bulkDownload` 🟡 client-contract-only
 
@@ -166,6 +164,6 @@ Cross-instance update-set promotion, used by the separate `dovetail-sawmill` pac
 
 ## Top manual-pain gaps
 
-The one gap with real, sourced evidence in this repo: **roughly half of the live operations (`createRecord`, `deleteRecord`, `changeScope`, `changeUpdateSet`, `currentUpdateSet`, `createUpdateSet`, and all four Sync ops) have no server-side handler script checked into version control** -- `servicenow/dovetail/README.md` has an open TODO naming this exact gap. Anyone needing to verify or modify server-side behavior for these today has to export live XML from an instance rather than read source in this repo. This catalog documents their client contracts precisely; closing the underlying gap (capturing the server scripts, per the README's TODO) is separate follow-up work, not something this catalog can substitute for.
+The one gap with real, sourced evidence in this repo: **roughly half of the live operations (`createRecord`, `deleteRecord`, `changeScope`, `changeUpdateSet`, `currentUpdateSet`, `createUpdateSet`, and all five Sync ops) have no server-side handler script checked into version control** -- `servicenow/dovetail/README.md` has an open TODO naming this exact gap. Anyone needing to verify or modify server-side behavior for these today has to export live XML from an instance rather than read source in this repo. This catalog documents their client contracts precisely; closing the underlying gap (capturing the server scripts, per the README's TODO) is separate follow-up work, not something this catalog can substitute for.
 
 I have no access to support history, Slack, or PR comments, so I'm not asserting other "top pain points" beyond what's directly evidenced in source (this gap, the `sys_db_object` create-guard, and `createUpdateSet`'s silent mis-scoping fallback -- all three documented above at their respective operations).
