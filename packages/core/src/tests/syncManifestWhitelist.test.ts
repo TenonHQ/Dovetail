@@ -35,6 +35,10 @@ var mockFileLogger = {
 
 var mockClient = {
   getManifest: jest.fn(),
+  // refreshAllFiles asks for file content per table. Returning {} means "no
+  // files to write", which keeps these tests off the plugin/write path while
+  // still recording WHICH tables were asked for.
+  getMissingFiles: jest.fn().mockResolvedValue({}),
 };
 
 var mockFUtils = {
@@ -175,5 +179,130 @@ describe("syncManifest — scope + table whitelist gates", function () {
     expect(refreshedScopes).not.toContain("x_cadso_click");
     expect(refreshedScopes).not.toContain("x_nuvo_sinc");
     expect(refreshedScopes).not.toContain("x_cadso_ti_agile");
+  });
+});
+
+/**
+ * `dove refresh --table` narrows the FILE refresh only.
+ *
+ * The load-bearing invariant is that the PERSISTED manifest stays complete:
+ * narrowing dove.manifest.<scope>.json to the requested table would drop every
+ * other table from it and break push/watch. These tests exist so that a future
+ * "optimization" that narrows newManifest fails loudly instead of silently
+ * corrupting the manifest.
+ */
+describe("syncManifest — --table filter", function () {
+  function recordWithFile(name: string, sysId: string) {
+    return { records: { [name]: { name: name, sys_id: sysId, files: [{ name: "script", type: "js" }] } } };
+  }
+
+  beforeEach(function () {
+    jest.clearAllMocks();
+    mockClient.getMissingFiles.mockResolvedValue({});
+    mockConfig.isMultiScopeManifest.mockReturnValue(true);
+    mockConfig.resolveConfigForScope.mockImplementation(function (_scope: string) {
+      return {
+        tables: ["sys_script_include", "sys_script", "sys_ux_macroponent"],
+        fieldOverrides: {},
+        apiIncludes: {},
+        apiExcludes: {},
+      };
+    });
+    mockConfig.getConfig.mockReturnValue({ scopes: { x_cadso_core: {} } });
+    mockConfig.getManifest.mockResolvedValue({
+      x_cadso_core: { scope: "x_cadso_core", tables: {} },
+    });
+    mockClient.getManifest.mockResolvedValue({
+      scope: "x_cadso_core",
+      tables: {
+        sys_script_include: recordWithFile("FooInclude", "a1"),
+        sys_script: recordWithFile("BarBR", "a2"),
+        sys_ux_macroponent: recordWithFile("BazComp", "a3"),
+      },
+    });
+  });
+
+  test("does NOT narrow the persisted manifest — all whitelisted tables still written", async function () {
+    await AppUtils.syncManifest("x_cadso_core", { tables: ["sys_script"] });
+
+    expect(mockFUtils.writeScopeManifest).toHaveBeenCalledTimes(1);
+    var writtenTables = Object.keys(mockFUtils.writeScopeManifest.mock.calls[0][1].tables);
+    // The manifest keeps every whitelisted table, not just the requested one.
+    expect(writtenTables.sort()).toEqual([
+      "sys_script",
+      "sys_script_include",
+      "sys_ux_macroponent",
+    ]);
+  });
+
+  test("narrows the file refresh to the requested tables only", async function () {
+    await AppUtils.syncManifest("x_cadso_core", { tables: ["sys_script"] });
+
+    expect(mockClient.getMissingFiles).toHaveBeenCalledTimes(1);
+    var askedFor = Object.keys(mockClient.getMissingFiles.mock.calls[0][0]);
+    expect(askedFor).toEqual(["sys_script"]);
+  });
+
+  test("refreshes every table when no --table filter is given", async function () {
+    await AppUtils.syncManifest("x_cadso_core", {});
+
+    var askedFor = Object.keys(mockClient.getMissingFiles.mock.calls[0][0]);
+    expect(askedFor.sort()).toEqual([
+      "sys_script",
+      "sys_script_include",
+      "sys_ux_macroponent",
+    ]);
+  });
+
+  test("a scope holding none of the requested tables still writes its manifest, but refreshes no files", async function () {
+    await AppUtils.syncManifest("x_cadso_core", { tables: ["sys_ui_action"] });
+
+    // Manifest untouched-in-full …
+    expect(mockFUtils.writeScopeManifest).toHaveBeenCalledTimes(1);
+    expect(Object.keys(mockFUtils.writeScopeManifest.mock.calls[0][1].tables)).toHaveLength(3);
+    // … and not a single file downloaded.
+    expect(mockClient.getMissingFiles).not.toHaveBeenCalled();
+  });
+});
+
+describe("narrowManifestToTables", function () {
+  var manifest: any;
+
+  beforeEach(function () {
+    manifest = {
+      scope: "x_cadso_core",
+      tables: {
+        sys_script: { records: {} },
+        sys_script_include: { records: {} },
+      },
+    };
+  });
+
+  test("returns the SAME manifest when no tables are requested", function () {
+    expect(AppUtils.narrowManifestToTables(manifest, undefined)).toBe(manifest);
+    expect(AppUtils.narrowManifestToTables(manifest, [])).toBe(manifest);
+  });
+
+  test("returns a NEW manifest and never mutates the input", function () {
+    var narrowed = AppUtils.narrowManifestToTables(manifest, ["sys_script"]);
+
+    expect(narrowed).not.toBe(manifest);
+    expect(Object.keys(narrowed.tables)).toEqual(["sys_script"]);
+    // The corruption guard: the caller still writes `manifest` to disk in full.
+    expect(Object.keys(manifest.tables).sort()).toEqual([
+      "sys_script",
+      "sys_script_include",
+    ]);
+  });
+
+  test("yields an empty table map when nothing matches", function () {
+    var narrowed = AppUtils.narrowManifestToTables(manifest, ["sys_ui_action"]);
+    expect(Object.keys(narrowed.tables)).toEqual([]);
+    expect(narrowed.scope).toBe("x_cadso_core");
+  });
+
+  test("ignores requested tables the scope does not hold", function () {
+    var narrowed = AppUtils.narrowManifestToTables(manifest, ["sys_script", "sys_ui_action"]);
+    expect(Object.keys(narrowed.tables)).toEqual(["sys_script"]);
   });
 });

@@ -154,6 +154,20 @@ describe("unknownTablesForScopes", function () {
       "nope_not_a_table",
     ]);
   });
+
+  // Regression: a project with no declared `scopes` (single-scope / legacy
+  // config) still refreshes — syncManifest falls back to the manifest's scopes.
+  // Validating against an empty scope list would make the allow-list empty and
+  // reject EVERY table, i.e. be stricter than the refresh it guards.
+  it("falls back to the global _tables when the config declares no scopes", function () {
+    (mockConfig.getConfig as jest.Mock).mockReturnValue({}); // no `scopes` key
+    (mockConfig.resolveConfigForScope as jest.Mock).mockImplementation(function () {
+      return { tables: ["sys_script", "sys_script_include"] };
+    });
+
+    expect(unknownTablesForScopes(["sys_script"])).toEqual([]);
+    expect(unknownTablesForScopes(["nope_not_a_table"])).toEqual(["nope_not_a_table"]);
+  });
 });
 
 describe("refreshCommand --table", function () {

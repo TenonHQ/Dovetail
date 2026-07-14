@@ -324,6 +324,35 @@ export interface SyncManifestOptions {
   _benchmarkCollector?: import("./benchmark").BenchmarkCollector;
 }
 
+/**
+ * Narrow a manifest's table map to `tables`, for the FILE refresh only.
+ *
+ * Returns a NEW manifest and NEVER mutates its input — the caller must keep
+ * writing the original, full manifest to disk. Narrowing the persisted manifest
+ * would drop every other table from dove.manifest.<scope>.json and break
+ * push/watch. That non-mutation is the whole safety property of `--table`, so
+ * it lives in one testable function rather than inline in syncManifest.
+ *
+ * An empty table map means the scope holds none of the requested tables;
+ * refreshAllFiles no-ops on an empty map, so the scope is skipped untouched.
+ */
+export const narrowManifestToTables = (
+  manifest: SN.AppManifest,
+  tables?: string[],
+): SN.AppManifest => {
+  if (!tables || tables.length === 0) return manifest;
+
+  var wantedTables: SN.TableMap = {} as SN.TableMap;
+  var presentTableNames = Object.keys(manifest.tables || {});
+  for (var w = 0; w < presentTableNames.length; w++) {
+    var wName = presentTableNames[w];
+    if (tables.indexOf(wName) !== -1) {
+      wantedTables[wName] = manifest.tables[wName];
+    }
+  }
+  return Object.assign({}, manifest, { tables: wantedTables });
+};
+
 export const syncManifest = async (
   scope?: string,
   options: SyncManifestOptions = {},
@@ -406,31 +435,23 @@ export const syncManifest = async (
       await fUtils.writeScopeManifest(scope, newManifest);
 
       // --table gate: refresh file content for only the requested tables. Any
-      // table not in this scope's `_tables` whitelist has already been dropped
-      // above, so intersecting here is enough. An empty intersection means this
-      // scope holds none of the requested tables — refreshAllFiles no-ops on an
-      // empty table map, so the scope is skipped without touching its files.
-      var refreshManifest = newManifest;
+      // table outside this scope's `_tables` whitelist was already dropped above,
+      // so intersecting the manifest is enough. `newManifest` is left intact —
+      // see narrowManifestToTables.
+      var refreshManifest = narrowManifestToTables(newManifest, options.tables);
       if (options.tables && options.tables.length > 0) {
-        var wantedTables: any = {};
-        var wantedCount = 0;
-        var presentTableNames = Object.keys(newManifest.tables || {});
-        for (var w = 0; w < presentTableNames.length; w++) {
-          var wName = presentTableNames[w];
-          if (options.tables.indexOf(wName) !== -1) {
-            wantedTables[wName] = newManifest.tables[wName];
-            wantedCount++;
-          }
-        }
-        refreshManifest = Object.assign({}, newManifest, { tables: wantedTables });
-        if (wantedCount === 0) {
-          logger.info(
-            "Scope " + scope + " has none of the requested tables — skipping file refresh.",
+        var wantedNames = Object.keys(refreshManifest.tables);
+        if (wantedNames.length === 0) {
+          // Expected on every non-matching scope of an all-scopes filtered
+          // refresh, so this is debug — at info it would emit one noise line per
+          // scope that simply doesn't hold the table you asked for.
+          fileLogger.debug(
+            "syncManifest: scope " + scope + " holds none of the requested tables — skipping file refresh",
           );
         } else {
           logger.info(
-            "Refreshing " + wantedCount + " of " + refreshTableCount + " tables in " + scope +
-            " (--table filter): " + Object.keys(wantedTables).join(", "),
+            "Refreshing " + wantedNames.length + " of " + refreshTableCount + " tables in " +
+            scope + " (--table): " + wantedNames.join(", "),
           );
         }
       }

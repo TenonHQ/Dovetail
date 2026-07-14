@@ -45,7 +45,15 @@ export function normalizeTableFilter(raw?: string | string[]): string[] {
  */
 export function unknownTablesForScopes(tables: string[], scope?: string): string[] {
   const config = ConfigManager.getConfig();
-  const scopeNames = scope ? [scope] : Object.keys(config.scopes || {});
+  const declaredScopes = scope ? [scope] : Object.keys(config.scopes || {});
+
+  // A project with no declared `scopes` (single-scope / legacy config) still
+  // refreshes — syncManifest falls back to the manifest's scopes. resolveConfigForScope
+  // on an unrecognized name yields the GLOBAL `_tables` whitelist, which is the
+  // right allow-list there. Without this fallback the validation below would be
+  // stricter than the refresh it guards and reject every table outright.
+  const scopeNames = declaredScopes.length > 0 ? declaredScopes : [""];
+
   const allowed: string[] = [];
   for (const scopeName of scopeNames) {
     const resolved = ConfigManager.resolveConfigForScope(scopeName);
