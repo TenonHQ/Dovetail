@@ -263,27 +263,33 @@ export async function findTruncationRisk(
   column: string,
   newLength: number,
 ): Promise<TruncationRisk> {
+  // Read one MORE than we intend to measure. Its presence is what proves there are rows
+  // we did not see — asking for exactly the limit and getting exactly the limit back is
+  // ambiguous (a table with precisely that many rows would be reported unscannable).
   var rows = await client.table.query<Record<string, unknown>>(
     table,
     column + "ISNOTEMPTY",
-    { limit: TRUNCATION_SCAN_LIMIT, fields: ["sys_id", column] },
+    { limit: TRUNCATION_SCAN_LIMIT + 1, fields: ["sys_id", column] },
   );
+  var incomplete = rows.length > TRUNCATION_SCAN_LIMIT;
+  var measured = incomplete ? rows.slice(0, TRUNCATION_SCAN_LIMIT) : rows;
+
   var offenders = 0;
   var longest = 0;
   var samples: Array<string> = [];
-  for (var i = 0; i < rows.length; i += 1) {
-    var value = fieldToString(rows[i][column]);
+  for (var i = 0; i < measured.length; i += 1) {
+    var value = fieldToString(measured[i][column]);
     if (value.length > longest) longest = value.length;
     if (value.length > newLength) {
       offenders += 1;
-      if (samples.length < 3) samples.push(fieldToString(rows[i].sys_id));
+      if (samples.length < 3) samples.push(fieldToString(measured[i].sys_id));
     }
   }
   return {
     offenders: offenders,
     longest: longest,
     samples: samples,
-    incomplete: rows.length >= TRUNCATION_SCAN_LIMIT,
+    incomplete: incomplete,
   };
 }
 
@@ -464,9 +470,9 @@ export async function setColumn(
   }
   var updateSetSysId = String(params.updateSetSysId).trim();
 
-  // The shrink guard. Refuse rather than fire an ALTER that would cut live data: the
-  // truncation is silent and irreversible, and a verb built to stop silent data loss
-  // must not be the thing that causes it. Opting in has to be deliberate and explicit.
+  // The shrink guard. ServiceNow will not perform this shrink — it refuses silently,
+  // returning 200 and leaving the column alone — so issuing the write would buy nothing
+  // but a confusing no-op. Refuse here instead, and say which rows are in the way.
   if (unsafeShrink && shrink && risk) {
     throw new Error(
       "set-column: refusing to shrink — " +
@@ -501,11 +507,19 @@ export async function setColumn(
     };
   }
 
+  // Write ONLY what actually differs. Sending an attribute that already holds the
+  // requested value is a no-op the platform ignores — harmless, but it would make the
+  // captured payload and the reported `changes` disagree about what this call did.
+  var fieldsToWrite: Record<string, string> = {};
+  for (var k = 0; k < changes.length; k += 1) {
+    fieldsToWrite[changes[k].attribute] = changes[k].to;
+  }
+
   await params.client.claude.pushWithUpdateSet({
     update_set_sys_id: updateSetSysId,
     table: "sys_dictionary",
     record_sys_id: columnSysId,
-    fields: writes,
+    fields: fieldsToWrite,
   });
 
   // Read back from the instance. The write returning 200 is not evidence — that is

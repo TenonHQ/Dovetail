@@ -1,4 +1,9 @@
-import { setColumn, resolveAttributes, toStoredValue } from "../src/table";
+import {
+  setColumn,
+  resolveAttributes,
+  toStoredValue,
+  findTruncationRisk,
+} from "../src/table";
 import type { ServiceNowClient } from "../src/client";
 
 /**
@@ -289,13 +294,11 @@ describe("setColumn live", function () {
     expect(result.changes).toEqual([
       { attribute: "max_length", from: "40", to: "4000" },
     ]);
-    // The unchanged label is not written: a same-value write is a no-op that would
-    // still report success.
+    // The unchanged label is NOT in the payload. Sending it would be a no-op the
+    // platform ignores, and it would make the captured write disagree with the
+    // `changes` we report — the payload must say exactly what the call did.
     expect(pushesOf(client)).toHaveLength(1);
-    expect(pushesOf(client)[0].fields).toEqual({
-      max_length: "4000",
-      column_label: "Description",
-    });
+    expect(pushesOf(client)[0].fields).toEqual({ max_length: "4000" });
     expect(pushesOf(client)[0].table).toBe("sys_dictionary");
     expect(pushesOf(client)[0].update_set_sys_id).toBe("us1");
   });
@@ -469,12 +472,39 @@ describe("setColumn truncation guard", function () {
     expect(pushesOf(client)).toHaveLength(0);
   });
 
+  it("does NOT cry 'unscannable' on a table with exactly the scan limit of rows", async function () {
+    // Asking for exactly N and getting exactly N back proves nothing. The scan reads
+    // N+1 so that the extra row — and only the extra row — means "there are more".
+    var exactly: Array<string> = [];
+    for (var n = 0; n < 1000; n += 1) exactly.push("short");
+    var risk = await findTruncationRisk(
+      liveClient({ dict: Object.assign({}, dict40), rowValues: exactly }),
+      "x_t",
+      "description",
+      40,
+    );
+    expect(risk.incomplete).toBe(false);
+    expect(risk.offenders).toBe(0);
+  });
+
+  it("DOES flag unscannable when there is genuinely a row beyond the limit", async function () {
+    var over: Array<string> = [];
+    for (var n = 0; n < 1001; n += 1) over.push("short");
+    var risk = await findTruncationRisk(
+      liveClient({ dict: Object.assign({}, dict40), rowValues: over }),
+      "x_t",
+      "description",
+      40,
+    );
+    expect(risk.incomplete).toBe(true);
+  });
+
   it("ATTEMPTS the shrink when the table is too big to scan and nothing seen is too long", async function () {
     // Blocking here would refuse a change that is probably fine. The platform is the
     // real backstop (it will not cut data) and the read-back catches a silent refusal,
     // so we try it rather than inventing a restriction the caller must escape.
     var many: Array<string> = [];
-    for (var i = 0; i < 1000; i += 1) many.push("short");
+    for (var i = 0; i < 1001; i += 1) many.push("short");
     var client = liveClient({
       dict: Object.assign({}, dict40),
       rowValues: many,

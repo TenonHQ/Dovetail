@@ -179,11 +179,12 @@ export var addColumnSchema = z.object({
   debug: z.boolean().optional(),
 });
 
-// set-column takes a CLOSED attribute set, not an open field map: an unbounded write
-// to sys_dictionary lets a caller silently corrupt the schema. internal_type and
-// element are absent on purpose — ServiceNow will not honour either on an existing
-// column, and setColumn refuses them with an explanation rather than writing a change
-// that reports success and does nothing.
+// set-column takes a CLOSED attribute set, not an open field map: an unbounded write to
+// sys_dictionary lets a caller silently corrupt the schema. internalType and element are
+// listed but are NOT settable — ServiceNow honours neither on an existing column, and
+// setColumn refuses both by name. They are accepted here only so that asking for one
+// earns an explanation instead of being silently dropped, which would leave a caller who
+// asked to rename a column believing it had happened.
 export var columnAttributesSchema = z.object({
   label: z.string().min(1).optional(),
   mandatory: z.boolean().optional(),

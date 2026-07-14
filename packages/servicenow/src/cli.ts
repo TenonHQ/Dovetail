@@ -1511,7 +1511,7 @@ main()
   })
   .catch(function (err) {
     process.stderr.write(
-      "sinc-sn error: " +
+      "dove-sn error: " +
         (err && err.message ? err.message : String(err)) +
         "\n",
     );
