@@ -76,27 +76,39 @@ import type {
 interface ParsedArgs {
   command: string;
   flags: Record<string, string>;
+  /**
+   * Flags that arrived with no value at all (`--label` followed by another flag, or by
+   * nothing). They land in `flags` as the string "true", which is right for a boolean and
+   * a trap for a string: `--label` with a forgotten value would rename a column to "true".
+   * Recorded here so a verb can tell the two apart and refuse.
+   */
+  bare: Record<string, boolean>;
 }
 
 function parseArgs(argv: Array<string>): ParsedArgs {
   var command = argv[0] || "";
   var flags: Record<string, string> = {};
+  var bare: Record<string, boolean> = {};
   for (var i = 1; i < argv.length; i += 1) {
     var arg = argv[i];
     if (arg.indexOf("--") !== 0) continue;
     var key = arg.slice(2);
     var value = "true";
+    var isBare = true;
     var eq = key.indexOf("=");
     if (eq !== -1) {
       value = key.slice(eq + 1);
       key = key.slice(0, eq);
+      isBare = false;
     } else if (i + 1 < argv.length && argv[i + 1].indexOf("--") !== 0) {
       value = argv[i + 1];
       i += 1;
+      isBare = false;
     }
     flags[key] = value;
+    if (isBare) bare[key] = true;
   }
-  return { command: command, flags: flags };
+  return { command: command, flags: flags, bare: bare };
 }
 
 function parseChoicesInline(input: string): Array<ChoiceValue> {
@@ -1072,7 +1084,24 @@ function parseBoolFlag(name: string, raw: string): boolean {
  * ServiceNow silently ignores both on an existing column. To CREATE one, use add-column;
  * to set a RECORD's value, use set-field.
  */
-async function runSetColumn(flags: Record<string, string>): Promise<number> {
+async function runSetColumn(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // A string flag whose value was forgotten arrives as the literal "true" — `--label`
+  // with nothing after it would rename the column to "true". Booleans legitimately do
+  // that, strings never do, so refuse rather than silently write nonsense.
+  var stringFlags = ["label", "default", "table", "column", "update-set"];
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      process.stderr.write(
+        "set-column: --" +
+          stringFlags[f] +
+          " needs a value (it was given none).\n",
+      );
+      return 1;
+    }
+  }
   var table = flags.table;
   var column = flags.column;
   if (!table || !column) {
@@ -1452,7 +1481,7 @@ async function main(): Promise<number> {
     return await runAddColumn(parsed.flags);
   }
   if (parsed.command === "set-column") {
-    return await runSetColumn(parsed.flags);
+    return await runSetColumn(parsed.flags, parsed.bare);
   }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);

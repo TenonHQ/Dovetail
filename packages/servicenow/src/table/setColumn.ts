@@ -58,6 +58,32 @@
 
 import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
+// Reused, not re-invented: every value interpolated into a ServiceNow encoded query goes
+// through this first. A stray "^" or "=" does not error — it silently changes what the
+// query MEANS, which is the worst kind of bug to ship into a schema tool.
+import { encodeQueryValue } from "../choices";
+
+/** How far up a super_class chain to look for an inherited column before giving up. */
+var MAX_INHERITANCE_DEPTH = 20;
+
+/**
+ * Types that carry no length at all, so max_length on them is meaningless. Setting it
+ * would be a fourth silent no-op: ServiceNow takes the write and ignores it. Deliberately
+ * a DENY list, not an allow list — types are extensible, and a new one should default to
+ * "we'll try it and verify" rather than "refused because we hadn't heard of it".
+ */
+var LENGTHLESS_TYPES = [
+  "reference",
+  "glide_date",
+  "glide_date_time",
+  "glide_time",
+  "glide_duration",
+  "boolean",
+  "GUID",
+  "sys_class_name",
+  "domain_id",
+  "domain_path",
+];
 
 /** The dictionary attributes set-column will write, keyed by the friendly name a
  *  caller uses. Everything absent from this map is refused. */
@@ -195,6 +221,55 @@ export function resolveAttributes(
   return out;
 }
 
+/**
+ * Which table in the hierarchy actually DEFINES this column, if any.
+ *
+ * On an extended table the columns live on the ancestor's dictionary rows, not the
+ * child's — a child of x_cadso_journey_flow carries only a couple of dictionary rows of
+ * its own while every real column is inherited. So a plain name+element lookup against
+ * the child finds nothing, even though the column is plainly there on the form. Walking
+ * super_class turns "no such column" into "it lives on <parent>", which is the
+ * difference between a dead end and an answer.
+ */
+async function findDefiningTable(
+  client: ServiceNowClient,
+  table: string,
+  column: string,
+): Promise<string> {
+  var current = table;
+  for (var depth = 0; depth < MAX_INHERITANCE_DEPTH; depth += 1) {
+    var tableRows = await client.table.query<Record<string, unknown>>(
+      "sys_db_object",
+      "name=" + encodeQueryValue(current),
+      { limit: 1, fields: ["name", "super_class"] },
+    );
+    if (tableRows.length === 0) return "";
+    var parentSysId = fieldToString(tableRows[0].super_class);
+    if (!parentSysId) return "";
+
+    var parentRows = await client.table.query<Record<string, unknown>>(
+      "sys_db_object",
+      "sys_id=" + encodeQueryValue(parentSysId),
+      { limit: 1, fields: ["name"] },
+    );
+    if (parentRows.length === 0) return "";
+    var parentName = fieldToString(parentRows[0].name);
+    if (!parentName) return "";
+
+    var dictRows = await client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "name=" +
+        encodeQueryValue(parentName) +
+        "^element=" +
+        encodeQueryValue(column),
+      { limit: 1, fields: ["sys_id"] },
+    );
+    if (dictRows.length > 0) return parentName;
+    current = parentName;
+  }
+  return "";
+}
+
 /** Fetch the column's dictionary row, or throw a message that says what to check. */
 async function fetchColumn(
   client: ServiceNowClient,
@@ -204,20 +279,77 @@ async function fetchColumn(
 ): Promise<Record<string, unknown>> {
   var rows = await client.table.query<Record<string, unknown>>(
     "sys_dictionary",
-    "name=" + table + "^element=" + column,
+    "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
     { limit: 1, fields: fields },
+  );
+  if (rows.length > 0) return rows[0];
+
+  // Before declaring the column missing, check whether it is simply inherited. Saying
+  // "no such column" about a column the caller can see on the form sends them hunting
+  // for a typo that is not there.
+  var owner = await findDefiningTable(client, table, column);
+  if (owner) {
+    throw new Error(
+      "set-column: '" +
+        column +
+        "' is not defined on '" +
+        table +
+        "' — it is INHERITED from '" +
+        owner +
+        "'. Change it there: set-column --table " +
+        owner +
+        " --column " +
+        column +
+        ". Note that doing so changes the column for EVERY table that extends " +
+        owner +
+        ", not just " +
+        table +
+        " — which is why this is not done implicitly on your behalf.",
+    );
+  }
+  throw new Error(
+    "set-column: no column '" +
+      column +
+      "' on table '" +
+      table +
+      "' (no sys_dictionary row, and none inherited from a parent table). Check the " +
+      "table and column names, and that your user can read sys_dictionary. To CREATE a " +
+      "column, use add-column.",
+  );
+}
+
+/**
+ * Require the update set to be open. A write into a Complete/Ignored set is accepted and
+ * then silently lost — the change lands on the instance and is captured nowhere, so it
+ * can never be promoted. choices.ts already refuses this; so do we.
+ */
+async function assertUpdateSetOpen(
+  client: ServiceNowClient,
+  updateSetSysId: string,
+): Promise<void> {
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_update_set",
+    "sys_id=" + encodeQueryValue(updateSetSysId),
+    { limit: 1, fields: ["sys_id", "name", "state"] },
   );
   if (rows.length === 0) {
     throw new Error(
-      "set-column: no column '" +
-        column +
-        "' on table '" +
-        table +
-        "' (no sys_dictionary row). Check the table and column names, and that your " +
-        "user can read sys_dictionary. To CREATE a column, use add-column.",
+      "set-column: update set " +
+        updateSetSysId +
+        " not found on this instance.",
     );
   }
-  return rows[0];
+  var state = fieldToString(rows[0].state);
+  if (state !== "in progress" && state !== "in_progress") {
+    throw new Error(
+      "set-column: update set '" +
+        fieldToString(rows[0].name) +
+        "' is '" +
+        state +
+        "', not 'in progress'. A change written into a closed set is captured nowhere " +
+        "and can never be promoted. Re-open it, or use an open set.",
+    );
+  }
 }
 
 /** How many rows we will read when checking a shrink for truncation. A table bigger
@@ -268,7 +400,7 @@ export async function findTruncationRisk(
   // ambiguous (a table with precisely that many rows would be reported unscannable).
   var rows = await client.table.query<Record<string, unknown>>(
     table,
-    column + "ISNOTEMPTY",
+    encodeQueryValue(column) + "ISNOTEMPTY",
     { limit: TRUNCATION_SCAN_LIMIT + 1, fields: ["sys_id", column] },
   );
   var incomplete = rows.length > TRUNCATION_SCAN_LIMIT;
@@ -353,7 +485,10 @@ async function assertCaptured(
   var name = "sys_dictionary_" + table + "_" + column;
   var rows = await client.table.query<Record<string, unknown>>(
     "sys_update_xml",
-    "update_set=" + updateSetSysId + "^name=" + name,
+    "update_set=" +
+      encodeQueryValue(updateSetSysId) +
+      "^name=" +
+      encodeQueryValue(name),
     { limit: 1, fields: ["sys_id", "name"] },
   );
   return rows.length > 0;
@@ -381,6 +516,22 @@ export async function setColumn(
 
   var readFields = ["sys_id", "element", "internal_type"].concat(targets);
   var row = await fetchColumn(params.client, table, column, readFields);
+
+  // max_length is meaningless on a type that has no length. ServiceNow would take the
+  // write and ignore it (a fourth silent no-op), so refuse it here where we can say why.
+  if (writes.max_length !== undefined) {
+    var columnType = fieldToString(row.internal_type);
+    if (LENGTHLESS_TYPES.indexOf(columnType) !== -1) {
+      throw new Error(
+        "set-column: '" +
+          column +
+          "' is a '" +
+          columnType +
+          "' column, which has no length — max_length does not apply to it, and " +
+          "ServiceNow would accept the write and ignore it. Drop --max-length.",
+      );
+    }
+  }
   var columnSysId = fieldToString(row.sys_id);
 
   // Diff against what the instance actually stores. Only a genuine difference is
@@ -470,6 +621,10 @@ export async function setColumn(
   }
   var updateSetSysId = String(params.updateSetSysId).trim();
 
+  // The set has to be OPEN. A write into a closed set is accepted and then captured
+  // nowhere — the change lives on this instance and can never be promoted off it.
+  await assertUpdateSetOpen(params.client, updateSetSysId);
+
   // The shrink guard. ServiceNow will not perform this shrink — it refuses silently,
   // returning 200 and leaving the column alone — so issuing the write would buy nothing
   // but a confusing no-op. Refuse here instead, and say which rows are in the way.
@@ -515,16 +670,76 @@ export async function setColumn(
     fieldsToWrite[changes[k].attribute] = changes[k].to;
   }
 
-  await params.client.claude.pushWithUpdateSet({
-    update_set_sys_id: updateSetSysId,
-    table: "sys_dictionary",
-    record_sys_id: columnSysId,
-    fields: fieldsToWrite,
-  });
+  try {
+    await params.client.claude.pushWithUpdateSet({
+      update_set_sys_id: updateSetSysId,
+      table: "sys_dictionary",
+      record_sys_id: columnSysId,
+      fields: fieldsToWrite,
+    });
+  } catch (e) {
+    // The write may or may not have landed — the transport failed, not necessarily the
+    // change. Say exactly that, rather than throwing and leaving the caller to guess.
+    return {
+      status: "failed",
+      table: table,
+      column: column,
+      columnSysId: columnSysId,
+      updateSetSysId: updateSetSysId,
+      changes: changes,
+      verified: false,
+      capturedInUpdateSet: false,
+      note:
+        "the write to " +
+        table +
+        "." +
+        column +
+        " failed in transit: " +
+        (e && (e as Error).message ? (e as Error).message : String(e)) +
+        ". It is NOT known whether the change landed — read the column on the instance " +
+        "before retrying.",
+    };
+  }
 
   // Read back from the instance. The write returning 200 is not evidence — that is
   // exactly what internal_type does while changing nothing.
-  var after = await fetchColumn(params.client, table, column, readFields);
+  //
+  // From here the write HAS landed, so a failure to verify must not be thrown away as a
+  // bare exception: the caller would be told the operation failed when the instance had
+  // in fact changed. Report it, with the column's sys_id, so the state is recoverable.
+  var after: Record<string, unknown>;
+  var captured: boolean;
+  try {
+    after = await fetchColumn(params.client, table, column, readFields);
+    captured = await assertCaptured(
+      params.client,
+      table,
+      column,
+      updateSetSysId,
+    );
+  } catch (e) {
+    return {
+      status: "failed",
+      table: table,
+      column: column,
+      columnSysId: columnSysId,
+      updateSetSysId: updateSetSysId,
+      changes: changes,
+      verified: false,
+      capturedInUpdateSet: false,
+      note:
+        "the write to " +
+        table +
+        "." +
+        column +
+        " was SENT, but verifying it failed: " +
+        (e && (e as Error).message ? (e as Error).message : String(e)) +
+        ". The change may well have landed — do not blindly retry; read sys_dictionary " +
+        columnSysId +
+        " on the instance and confirm before doing anything else.",
+    };
+  }
+
   var mismatched: Array<string> = [];
   for (var j = 0; j < targets.length; j += 1) {
     var name = targets[j];
@@ -536,12 +751,6 @@ export async function setColumn(
     }
   }
   var verified = mismatched.length === 0;
-  var captured = await assertCaptured(
-    params.client,
-    table,
-    column,
-    updateSetSysId,
-  );
 
   if (!verified) {
     return {

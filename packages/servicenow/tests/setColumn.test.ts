@@ -17,6 +17,12 @@ function liveClient(opts: {
   ignoreWrites?: boolean;
   /** Values currently held by rows in the column, for the truncation guard. */
   rowValues?: Array<string>;
+  /** State of the update set — a closed set must be refused. */
+  updateSetState?: string;
+  /** Name of the parent table, when the column is inherited rather than local. */
+  parentTable?: string;
+  /** The parent's dictionary row, when `parentTable` defines the column. */
+  parentDict?: Record<string, string>;
 }) {
   var dict =
     opts.dict === undefined
@@ -39,7 +45,41 @@ function liveClient(opts: {
     },
     table: {
       query: async function (table: string, query: string) {
+        if (table === "sys_update_set") {
+          return [
+            {
+              sys_id: "us1",
+              name: "Test Set",
+              state:
+                opts.updateSetState === undefined
+                  ? "in progress"
+                  : opts.updateSetState,
+            },
+          ];
+        }
+        // The super_class walk: the child names a parent, the parent defines the column.
+        if (table === "sys_db_object") {
+          if (query.indexOf("name=x_t") === 0) {
+            return [
+              {
+                name: "x_t",
+                super_class: opts.parentTable ? "PARENTSYS" : "",
+              },
+            ];
+          }
+          if (query.indexOf("sys_id=PARENTSYS") === 0 && opts.parentTable) {
+            return [{ name: opts.parentTable }];
+          }
+          return [];
+        }
         if (table === "sys_dictionary") {
+          // The parent's row — only consulted when the child has none.
+          if (
+            opts.parentTable &&
+            query.indexOf("name=" + opts.parentTable) === 0
+          ) {
+            return opts.parentDict ? [opts.parentDict] : [];
+          }
           return dict ? [dict] : [];
         }
         if (table === "sys_update_xml") {
@@ -551,5 +591,182 @@ describe("setColumn truncation guard", function () {
     expect(result.note).toMatch(/WILL BE REFUSED/);
     expect(result.note).toMatch(/will NOT take/);
     expect(result.note).toMatch(/refuses SILENTLY/);
+  });
+});
+
+/**
+ * The scenarios that are not the happy path. Each of these was a real gap found by
+ * asking "what else could a caller do?" rather than by re-running the demo.
+ */
+describe("setColumn hostile inputs and awkward states", function () {
+  it("refuses a table/column name carrying encoded-query metacharacters", async function () {
+    // "^" and "=" do not error in an encoded query — they silently change what it MEANS.
+    // A schema tool must never interpolate them blind.
+    await expect(
+      setColumn({
+        client: liveClient({}),
+        table: "x_t^ORDERBYsys_id",
+        column: "description",
+        attributes: { label: "X" },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/Invalid character in query value/);
+
+    await expect(
+      setColumn({
+        client: liveClient({}),
+        table: "x_t",
+        column: "description^active=true",
+        attributes: { label: "X" },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/Invalid character in query value/);
+  });
+
+  it("points at the PARENT when the column is inherited, instead of claiming it does not exist", async function () {
+    // On an extended table the columns live on the ancestor's dictionary rows. Saying
+    // "no such column" about a column the caller can see on the form is a dead end.
+    var client = liveClient({
+      dict: null, // nothing on the child
+      parentTable: "x_parent",
+      parentDict: { sys_id: "PCOL", element: "description" },
+    });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { maxLength: 200 },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/INHERITED from 'x_parent'/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("says the change would hit every descendant — so it is never done implicitly", async function () {
+    var err: Error | null = null;
+    try {
+      await setColumn({
+        client: liveClient({
+          dict: null,
+          parentTable: "x_parent",
+          parentDict: { sys_id: "PCOL", element: "description" },
+        }),
+        table: "x_t",
+        column: "description",
+        attributes: { maxLength: 200 },
+        updateSetSysId: "us1",
+      });
+    } catch (e) {
+      err = e as Error;
+    }
+    expect((err as Error).message).toMatch(/EVERY table that extends x_parent/);
+  });
+
+  it("still reports a genuinely missing column as missing", async function () {
+    await expect(
+      setColumn({
+        client: liveClient({ dict: null }), // no child row, no parent
+        table: "x_t",
+        column: "nope",
+        attributes: { label: "X" },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/no column 'nope' on table 'x_t'/);
+  });
+
+  it("refuses a CLOSED update set — a write into one is captured nowhere", async function () {
+    var client = liveClient({ updateSetState: "complete" });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { maxLength: 4000 },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/is 'complete', not 'in progress'/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("refuses max_length on a type that has no length", async function () {
+    var client = liveClient({
+      dict: {
+        sys_id: "COL1",
+        element: "assigned_to",
+        internal_type: "reference",
+        column_label: "Assigned To",
+        max_length: "32",
+      },
+    });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "assigned_to",
+        attributes: { maxLength: 4000 },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/has no length/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("reports a transport failure as a structured result, not a bare throw", async function () {
+    var client = liveClient({});
+    (
+      client as unknown as {
+        claude: { pushWithUpdateSet: () => Promise<never> };
+      }
+    ).claude.pushWithUpdateSet = async function () {
+      throw new Error("socket hang up");
+    };
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 4000 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/failed in transit/);
+    expect(result.note).toMatch(/NOT known whether the change landed/);
+  });
+
+  it("a verify failure AFTER a successful write does not masquerade as 'nothing happened'", async function () {
+    // The write landed. If the read-back blows up, telling the caller it failed outright
+    // would be a lie — they would retry against an instance that had already changed.
+    var client = liveClient({});
+    var calls = 0;
+    var realQuery = (
+      client as unknown as {
+        table: {
+          query: (t: string, q: string, o?: unknown) => Promise<unknown>;
+        };
+      }
+    ).table.query;
+    (
+      client as unknown as {
+        table: {
+          query: (t: string, q: string, o?: unknown) => Promise<unknown>;
+        };
+      }
+    ).table.query = async function (t: string, q: string, o?: unknown) {
+      if (t === "sys_dictionary") {
+        calls += 1;
+        if (calls > 1) throw new Error("instance unreachable");
+      }
+      return realQuery(t, q, o);
+    };
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 4000 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/was SENT, but verifying it failed/);
+    expect(result.note).toMatch(/do not blindly retry/);
+    expect(result.columnSysId).toBe("COL1");
   });
 });
