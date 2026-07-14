@@ -1,12 +1,16 @@
-import fs from "fs"
-import path from "path";
-import {init} from "../bootstrap"
-
+// --- Mock setup (must be before imports) ---
+//
 // These tests assert on credential loading only. init() also boots the CLI
 // parser, which under Jest sees jest's own argv, finds no `dove` command, and
 // now exits 1 (the parser rejects unknown commands instead of silently
 // succeeding). Stub the parser so the credential assertions are what's tested.
 jest.mock("../commander", () => ({ initCommands: jest.fn() }));
+
+// --- Imports (after mocks) ---
+
+import fs from "fs"
+import path from "path";
+import {init} from "../bootstrap"
 
 let envPath = path.join(process.cwd(), ".env");
 

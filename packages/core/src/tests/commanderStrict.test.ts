@@ -1,8 +1,5 @@
-import yargsFactory from "yargs/yargs";
-import type { Argv } from "yargs";
-import { configureCli } from "../commander";
-import { refreshCommand, statusCommand, pushCommand } from "../commands";
-
+// --- Mock setup (must be before imports) ---
+//
 // Every command module is mocked: these tests exercise the parser (routing +
 // strictness), not the commands themselves, and the real handlers would hit
 // ServiceNow.
@@ -52,6 +49,13 @@ jest.mock("../clickupCommands", () => ({
   clickupSpacesCommand: jest.fn(),
   clickupListsCommand: jest.fn(),
 }));
+
+// --- Imports (after mocks) ---
+
+import yargsFactory from "yargs/yargs";
+import type { Argv } from "yargs";
+import { configureCli } from "../commander";
+import { refreshCommand, statusCommand, pushCommand } from "../commands";
 
 interface ParseResult {
   error: Error | undefined;
