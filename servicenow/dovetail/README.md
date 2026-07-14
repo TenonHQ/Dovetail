@@ -25,10 +25,28 @@ and un-promotable. This directory is the source of truth going forward.
   reported success while capturing nothing). Present on both the `Dovetail Core`
   and `Dovetail` defs.
 
+- `sys_script_include/DovetailUtilsMS.js` — the base class behind **`Dovetail Sync`**:
+  `getManifest`, `bulkDownload` (`processMissingFiles`), `getAppList`,
+  `getCurrentScope`, `pushATFfile`. This is the **server half of the sync engine** —
+  every `dove refresh` runs through it. **Hardened**: `buildTableMap` and
+  `processMissingFiles` key records by display name, so two records sharing a name
+  used to silently overwrite each other — one vanished from the manifest with no
+  warning, and because the survivor kept the shared folder, a later push to that
+  folder wrote to the **wrong record**. Colliding names are now disambiguated with a
+  sys_id suffix (`Blueprint (1607d7f0)`) and a `gs.warn`. Covered by
+  `packages/core/src/tests/dovetailUtilsMSCollision.test.ts`, which loads this file
+  into a sandbox with ServiceNow stubs — so a regression here fails the pre-publish
+  test gate in CI (`publish.yml` runs the full suite before anything ships).
+
+  > Not to be confused with `../sys_script_include/SincUtilsMS.js`, which backs the
+  > **dead** Sincronia API and carries the same (now un-fixed) bug. It is slated for
+  > removal, not repair.
+
 _TODO — capture the remaining live ops here so the whole API is version-controlled:_
 `createRecord`, `createUpdateSet`, `changeScope`, `changeUpdateSet`,
-`currentUpdateSet`, `deleteRecord` (write API), plus the `Dovetail Sync` and
-`Dovetail Promote` ops.
+`currentUpdateSet`, `deleteRecord` (write API), plus the remaining `Dovetail Sync`
+operation handlers (`getManifest.js`, `bulkDownload.js`, … — the thin wrappers that
+call into `DovetailUtilsMS`) and the `Dovetail Promote` ops.
 
 ## Relationship to the legacy Sincronia API
 
