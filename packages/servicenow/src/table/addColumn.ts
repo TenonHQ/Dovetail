@@ -194,7 +194,15 @@ export async function addColumn(
   // Normalize the single column (validates label, resolves the friendly type to an
   // internal type, requires a target for a reference column). mandatory/default are
   // read straight off the raw ColumnSpec below — they pass through untransformed.
-  var normalized = normalizeColumns([params.column]);
+  // normalizeColumns is shared with create-table and prefixes its errors "createTable:",
+  // which reads as the wrong command when it surfaces from add-column — re-prefix it.
+  var normalized;
+  try {
+    normalized = normalizeColumns([params.column]);
+  } catch (e) {
+    var reason = e && (e as Error).message ? (e as Error).message : String(e);
+    throw new Error("add-column: " + reason.replace(/^createTable:\s*/, ""));
+  }
   var col = normalized[0];
   var element = deriveElement(col.label, params.column.name);
 
@@ -262,39 +270,71 @@ export async function addColumn(
     }
   }
 
+  // max_length is deliberately NOT sent on the insert — see the sizing step below.
+  // Reference (and date) columns carry no max_length at all.
+  var wantLength = col.type === "reference" ? "" : col.maxLength;
+
   // Idempotency: if the column already exists, skip the insert (never duplicate a
-  // dictionary row on a re-run). Best-effort by name+element (the value we send).
+  // dictionary row on a re-run). Matched by name+element — the element IS the column's
+  // identity; a label is not unique, so matching on one would silently skip a genuinely
+  // different column.
   var existing = await client.table.query<Record<string, unknown>>(
     "sys_dictionary",
     "name=" + resolved.name + "^element=" + element,
-    { limit: 1, fields: ["sys_id", "internal_type"] },
+    { limit: 1, fields: ["sys_id", "element", "internal_type", "max_length"] },
   );
   if (existing.length > 0) {
     var existingSysId = fieldToString(existing[0].sys_id);
+    var existingElement = fieldToString(existing[0].element) || element;
+    var existingType = fieldToString(existing[0].internal_type);
+    var existingLength = fieldToString(existing[0].max_length);
+    // "Already there" is not the same as "already what you asked for". Report the column
+    // that EXISTS, not the one that was requested, and refuse to call a mismatched column
+    // verified — silently green-lighting a column of the wrong type or size is the same
+    // failure as shipping one that lies about its length.
+    var drift: Array<string> = [];
+    if (existingType && existingType !== col.type) {
+      drift.push(
+        "type is '" + existingType + "', not the requested '" + col.type + "'",
+      );
+    }
+    if (wantLength && existingLength && existingLength !== wantLength) {
+      drift.push(
+        "max_length is " + existingLength + ", not the requested " + wantLength,
+      );
+    }
     return {
       status: "skipped",
       table: resolved.name,
       tableSysId: resolved.sysId,
-      element: element,
+      element: existingElement,
       label: col.label,
-      internalType: col.type,
+      internalType: existingType || col.type,
       columnSysId: existingSysId,
       updateSetSysId: params.updateSetSysId,
-      verified: true,
+      verified: drift.length === 0,
       note:
-        "Column '" +
-        element +
-        "' already exists on " +
-        resolved.name +
-        " (sys_dictionary " +
-        existingSysId +
-        ") — nothing to do.",
+        drift.length === 0
+          ? "Column '" +
+            existingElement +
+            "' already exists on " +
+            resolved.name +
+            " (sys_dictionary " +
+            existingSysId +
+            ") and matches the requested spec — nothing to do."
+          : "Column '" +
+            existingElement +
+            "' already exists on " +
+            resolved.name +
+            " (sys_dictionary " +
+            existingSysId +
+            ") but DOES NOT match what was requested: " +
+            drift.join("; ") +
+            ". Nothing was written. Reconcile the column on the instance — add-column " +
+            "will not alter an existing column.",
     };
   }
 
-  // max_length is deliberately NOT sent on the insert — see the sizing step below.
-  // Reference (and date) columns carry no max_length at all.
-  var wantLength = col.type === "reference" ? "" : col.maxLength;
   var fields: Record<string, string> = {
     name: resolved.name,
     column_label: col.label,
@@ -348,29 +388,54 @@ export async function addColumn(
   // column ends up the size it claims. When the requested length IS the default there is
   // nothing to change and nothing to fix: row and column already agree.
   // Verified live 2026-07-14 on tenonworkshed by round-tripping an over-length value.
-  var rows = await client.table.query<Record<string, unknown>>(
-    "sys_dictionary",
-    "sys_id=" + columnSysId,
-    { limit: 1, fields: ["sys_id", "element", "internal_type", "max_length"] },
-  );
-  if (rows.length > 0 && wantLength) {
-    var builtLength = fieldToString(rows[0].max_length);
-    if (builtLength !== wantLength) {
-      await setMaxLength(
-        client,
-        columnSysId,
-        params.updateSetSysId,
-        wantLength,
-      );
-      rows = await client.table.query<Record<string, unknown>>(
-        "sys_dictionary",
-        "sys_id=" + columnSysId,
-        {
-          limit: 1,
-          fields: ["sys_id", "element", "internal_type", "max_length"],
-        },
-      );
+  //
+  // The column now EXISTS on the instance, so from here on a thrown error would leave the
+  // caller with no idea what landed. Every step below reports through the same structured
+  // `failed` result as the insert path — never a bare throw — so the CLI's exit code and
+  // the returned columnSysId still tell you exactly what state the instance is in.
+  var rows: Array<Record<string, unknown>>;
+  try {
+    rows = await client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "sys_id=" + columnSysId,
+      {
+        limit: 1,
+        fields: ["sys_id", "element", "internal_type", "max_length"],
+      },
+    );
+    if (rows.length > 0 && wantLength) {
+      var builtLength = fieldToString(rows[0].max_length);
+      if (builtLength !== wantLength) {
+        await setMaxLength(
+          client,
+          columnSysId,
+          params.updateSetSysId,
+          wantLength,
+        );
+        rows = await client.table.query<Record<string, unknown>>(
+          "sys_dictionary",
+          "sys_id=" + columnSysId,
+          {
+            limit: 1,
+            fields: ["sys_id", "element", "internal_type", "max_length"],
+          },
+        );
+      }
     }
+  } catch (e) {
+    return failure(
+      resolved,
+      col,
+      element,
+      params.updateSetSysId,
+      "column " +
+        columnSysId +
+        " was created, but sizing/verifying it failed: " +
+        (e && (e as Error).message ? (e as Error).message : String(e)) +
+        " — the column EXISTS but may not be the size it was declared, so treat it as " +
+        "unsafe to write to until it is checked on the instance.",
+      columnSysId,
+    );
   }
 
   // The read-back proves THIS insert landed (by sys_id, not element — ServiceNow can

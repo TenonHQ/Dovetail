@@ -70,6 +70,9 @@ function liveClient(opts: {
   /** The max_length the column materialises at when the insert carries none — i.e.
    *  ServiceNow's platform default (255 for a string on tenonworkshed). */
   defaultLength?: string;
+  /** internal_type / max_length of the ALREADY-EXISTING column, for drift tests. */
+  existingType?: string;
+  existingLength?: string;
   /** Pin the max_length the instance reports back no matter what is written, to
    *  simulate a column whose physical size never took. */
   readBackLength?: string;
@@ -123,7 +126,18 @@ function liveClient(opts: {
             ];
           }
           return opts.existing
-            ? [{ sys_id: "EXIST", internal_type: "url" }]
+            ? [
+                {
+                  sys_id: "EXIST",
+                  element: "url",
+                  internal_type:
+                    opts.existingType === undefined ? "url" : opts.existingType,
+                  max_length:
+                    opts.existingLength === undefined
+                      ? ""
+                      : opts.existingLength,
+                },
+              ]
             : [];
         }
         return [];
@@ -371,6 +385,105 @@ describe("addColumn physical sizing", function () {
     });
     expect(callsOf(client).maxLengthWrites).toEqual([]);
     expect(result.status).toBe("created");
+  });
+
+  it("returns a structured failure (never throws) when the sizing step blows up", async function () {
+    // The column already exists on the instance at this point, so a bare throw would
+    // leave the caller with no idea what landed. The failure must carry the sys_id.
+    var client = liveClient({ existing: false, defaultLength: "255" });
+    (
+      client as unknown as {
+        claude: { pushWithUpdateSet: () => Promise<never> };
+      }
+    ).claude.pushWithUpdateSet = async function () {
+      throw new Error("instance exploded");
+    };
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "string", max_length: 4000 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.verified).toBe(false);
+    expect(result.columnSysId).toBe("NEWSYS");
+    expect(result.note).toMatch(/was created, but sizing\/verifying it failed/);
+    expect(result.note).toMatch(/instance exploded/);
+  });
+});
+
+/**
+ * "Already there" is not "already what you asked for". A skip that reports verified
+ * without comparing the existing column to the request is the same trust-the-label
+ * failure as a column that lies about its length.
+ */
+describe("addColumn skip-path drift", function () {
+  it("verifies a skip when the existing column matches the request", async function () {
+    var result = await addColumn({
+      client: liveClient({ existing: true, existingType: "url" }),
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "url" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(true);
+    expect(result.note).toMatch(/matches the requested spec/);
+  });
+
+  it("refuses to verify a skip when the existing column is a different TYPE", async function () {
+    var result = await addColumn({
+      client: liveClient({ existing: true, existingType: "integer" }),
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "url" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(false);
+    expect(result.note).toMatch(/DOES NOT match what was requested/);
+    expect(result.note).toMatch(/type is 'integer', not the requested 'url'/);
+    // It reports the column that EXISTS, not the one that was asked for.
+    expect(result.internalType).toBe("integer");
+  });
+
+  it("refuses to verify a skip when the existing column is a different SIZE", async function () {
+    var result = await addColumn({
+      client: liveClient({
+        existing: true,
+        existingType: "string_full_utf8",
+        existingLength: "40",
+      }),
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "string", max_length: 4000 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(false);
+    expect(result.note).toMatch(/max_length is 40, not the requested 4000/);
+  });
+
+  it("writes nothing on a drifted skip — it never silently alters an existing column", async function () {
+    var client = liveClient({ existing: true, existingType: "integer" });
+    await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "url" },
+      updateSetSysId: "us1",
+    });
+    expect(callsOf(client).maxLengthWrites).toEqual([]);
+    expect(callsOf(client).createRecordFields).toEqual({});
+  });
+});
+
+describe("addColumn error prefixes", function () {
+  it("re-prefixes a shared-helper error as add-column, not createTable", async function () {
+    await expect(
+      addColumn({
+        client: noNetworkClient(),
+        table: "x_cadso_journey",
+        column: { label: "X", type: "frobnicate" },
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/^add-column: /);
   });
 });
 
