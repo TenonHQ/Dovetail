@@ -43,17 +43,29 @@ import {
 } from "./clickupCommands";
 import { loginCommand } from "./loginCommand";
 import { knowledgeDiffCommand } from "./knowledgeDiffCommand";
-import yargs from "yargs";
-export async function initCommands() {
+import yargs, { Argv } from "yargs";
+
+/**
+ * @description Registers every `dove` command, the global options, and the
+ * parser-strictness rules on a yargs instance. Split out from initCommands so
+ * tests can drive a fresh, non-exiting parser (see tests/commanderStrict.test.ts).
+ * @param {Argv} cli - A yargs instance to configure.
+ * @returns {Argv} The same instance, with all commands and options registered.
+ */
+export function configureCli(cli: Argv): Argv {
   const sharedOptions = {
     logLevel: {
       default: "info",
     },
   };
 
-  yargs
+  return cli
+    .scriptName("dove")
     .option("env", {
-      alias: "e",
+      // `--env-file` / `--envFile` are long-documented spellings and are parsed
+      // from raw argv in envArg.ts. Declaring them as aliases keeps `--help` and
+      // the parser honest about what is actually accepted.
+      alias: ["e", "env-file", "envFile"],
       type: "string",
       describe:
         "Path to a .env file to load for this command (default: .env in the project root). Lets one checkout target multiple instances.",
@@ -100,7 +112,9 @@ export async function initCommands() {
       },
     )
     .command(
-      ["refresh", "r"],
+      // `pull` is the verb people reach for ("pull before push") and it appears
+      // in downstream docs and scripts — alias it rather than silently no-op.
+      ["refresh", "r", "pull"],
       "Pull latest manifest and file contents from the ServiceNow instance",
       (cmdArgs) => {
         cmdArgs.options({
@@ -116,6 +130,14 @@ export async function initCommands() {
             type: "string",
             describe: "Refresh a single scope (default: all declared scopes)",
           },
+          table: {
+            alias: "t",
+            type: "array",
+            describe:
+              "Refresh file content for only these tables (repeatable or comma-separated). " +
+              "Must already be synced via includes._tables or includes._scopes.<scope>._tables. " +
+              "Default: every synced table.",
+          },
           benchmark: {
             alias: "b",
             type: "boolean",
@@ -130,6 +152,7 @@ export async function initCommands() {
           force?: boolean;
           scope?: string;
           benchmark?: boolean;
+          table?: string | string[];
         });
       },
     )
@@ -793,5 +816,18 @@ export async function initCommands() {
         );
       },
     )
-    .help().argv;
+    // An unrecognized command used to fall through the parser and exit 0, doing
+    // nothing — so `dove pull` (and any typo) looked like it had succeeded, which
+    // is the exact false confidence "pull before push" exists to prevent.
+    // strictCommands (not strict) is deliberate: it rejects unknown *commands*
+    // while still tolerating undeclared flags, so documented option spellings
+    // keep working. demandCommand turns a bare `dove` into help + exit 1.
+    .demandCommand(1, "Please specify a command (run `dove --help` to see them all)")
+    .strictCommands()
+    .recommendCommands()
+    .help();
+}
+
+export async function initCommands() {
+  configureCli(yargs).argv;
 }

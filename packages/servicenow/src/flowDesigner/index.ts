@@ -32,6 +32,19 @@ export type { PublishActionTypeParams, PublishActionTypeResult } from "./publish
 export { editActionType } from "./editActionType";
 export type { EditActionTypeParams, EditActionTypeResult, EditActionTypeOps } from "./editActionType";
 
+export { applyStepOps, verifySteps, summarizeSteps, formatStepPill, findStep, hasStepOps } from "./stepOps";
+export type {
+  StepOps,
+  StepRecord,
+  StepSummary,
+  StepIoSummary,
+  PatchStepScriptOp,
+  AddStepOutputOp,
+  AddStepInputOp,
+  ApplyStepOpsResult,
+  VerifyStepsResult
+} from "./stepOps";
+
 export { readFlow } from "./readFlow";
 export type { ReadFlowParams, ReadFlowResult, FlowStep, FlowVariable } from "./readFlow";
 

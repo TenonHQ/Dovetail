@@ -49,7 +49,7 @@ export type {
   PostResult,
 } from "./formSession";
 
-export { addColumn, deriveElement, applyAddColumnOverlay } from "./addColumn";
+export { addColumn, deriveElement } from "./addColumn";
 export type { AddColumnParams, AddColumnResult } from "./addColumn";
 
 export {

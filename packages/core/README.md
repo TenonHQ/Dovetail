@@ -26,7 +26,7 @@ Quick reference:
 ```bash
 npx dove watch         # multi-scope watch + dashboard
 npx dove push          # build + push current files
-npx dove refresh       # pull manifest + new files
+npx dove refresh       # pull manifest + new files (aliases: pull, r)
 npx dove build         # local build only
 npx dove deploy        # deploy built artifacts
 npx dove dashboard     # update-set dashboard web UI

@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * sinc-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
+ * dove-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
  *
  * Usage:
- *   sinc-sn add-choices \
+ *   dove-sn add-choices \
  *     --table x_cadso_core_event \
  *     --column state \
  *     --update-set <sys_id> \
  *     --choices 'delivered=Delivered,failed=Failed,...' \
  *     [--choice-type 3] [--json]
  *
- *   sinc-sn add-choices --from-json path/to/choices.json
+ *   dove-sn add-choices --from-json path/to/choices.json
  *
  * JSON payload shape:
  *   {
@@ -166,7 +166,7 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
 }
 
 /**
- * sinc-sn build-flow:
+ * dove-sn build-flow:
  *   --from-json <path>      Required. JSON spec for the artifact (clone | create).
  *   --update-set <sys_id>   Optional. Overrides spec.updateSetSysId at the CLI level.
  *   --dry-run               Optional. Emit the planned write graph; do nothing.
@@ -726,17 +726,58 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
  * dove-sn edit-action:
  *   --sys-id <sys_id>                  Required. sys_hub_action_type_definition sys_id.
  *   --scope <sys_id>                   Required. sysparm_transaction_scope (app scope sys_id).
- *   --patch-script "<find>::<replace>" Optional. Find/replace in the script step value.
- *   --set-script <path>                Optional. Replace the script step value from a file.
+ *   --from-json <path>                 Optional. JSON EditActionTypeOps — the full surface, incl.
+ *                                      per-step ops: patchStepScripts / addStepOutputs / addStepInputs.
+ *   --patch-script "<find>::<replace>" Optional. Find/replace in the auto-detected script step value.
+ *   --set-script <path>                Optional. Replace the auto-detected script step value from a file.
  *   --merge-outputs <path>             Optional. JSON file: an output-variable object/array to merge by name.
  *   --script-input <name>              Optional. Input name holding the script (default: auto-detect).
  *   --update-set <sys_id>              Optional. Capture the republish into this update set.
  *   --apply                            Optional. Republish (POST /snapshot). Omit for dry-run.
  *   --json                             Optional. Emit the structured EditActionTypeResult.
  *
- * Edits a published Custom Action Type's script and/or output variables and
- * republishes through the snapshot POST. Dry-run (read-only) by default; --apply writes.
+ * Edits a published Custom Action Type and republishes through the snapshot POST.
+ * Dry-run (read-only) by default; --apply writes.
+ *
+ * The flag form handles the single-script case. For anything structural — patching
+ * several steps' scripts, adding a step-level output, adding a step-level input
+ * pill-wired to another step's output — use --from-json:
+ *
+ *   {
+ *     "patchStepScripts": [{ "step": "Parse Response", "scriptFile": "./parse.js" }],
+ *     "addStepOutputs":   [{ "step": "Parse Response", "name": "isRetryable", "type": "boolean" }],
+ *     "addStepInputs":    [{ "step": "Handle Error", "name": "isRetryable", "type": "boolean",
+ *                            "pillFrom": { "step": "Parse Response", "output": "isRetryable" } }]
+ *   }
+ *
+ * `step` is a step cid or label. `scriptFile` is sugar for `setScript` and is
+ * resolved RELATIVE TO THE OPS FILE, so an ops file can sit next to its scripts.
  */
+
+/** Resolve `scriptFile` sugar in patchStepScripts, relative to the ops file's own dir. */
+function resolveScriptFiles(ops: any, opsPath: string): void {
+  var stepScripts = ops.patchStepScripts;
+  if (!Array.isArray(stepScripts)) {
+    return;
+  }
+  var opsDir = path.dirname(path.resolve(opsPath));
+  for (var i = 0; i < stepScripts.length; i += 1) {
+    var op = stepScripts[i];
+    if (!op || typeof op !== "object" || typeof op.scriptFile !== "string") {
+      continue;
+    }
+    if (typeof op.setScript === "string") {
+      throw new Error(
+        "edit-action: step '" +
+          String(op.step) +
+          "' sets both scriptFile and setScript — pick one.",
+      );
+    }
+    op.setScript = fs.readFileSync(path.resolve(opsDir, op.scriptFile), "utf8");
+    delete op.scriptFile;
+  }
+}
+
 async function runEditAction(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
   var scope = flags.scope || flags.scopeSysId;
@@ -747,6 +788,16 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
     return 1;
   }
   var ops: any = {};
+  if (flags["from-json"]) {
+    ops = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
+    if (!ops || typeof ops !== "object" || Array.isArray(ops)) {
+      process.stderr.write(
+        "edit-action: --from-json must contain an EditActionTypeOps object\n",
+      );
+      return 1;
+    }
+    resolveScriptFiles(ops, flags["from-json"]);
+  }
   if (flags["patch-script"]) {
     var parts = String(flags["patch-script"]).split("::");
     if (parts.length !== 2) {
@@ -798,6 +849,61 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
   for (var wi = 0; wi < result.warnings.length; wi += 1) {
     process.stdout.write("  ! " + result.warnings[wi] + "\n");
   }
+
+  // Per-step before/after — the dry-run's whole job is to make this inspectable.
+  if (result.stepsBefore && result.stepsAfter) {
+    process.stdout.write("\n--- steps (before -> after) ---\n");
+    for (var si = 0; si < result.stepsAfter.length; si += 1) {
+      var after = result.stepsAfter[si];
+      var before = result.stepsBefore[si];
+      var io = function (
+        label: string,
+        list: Array<{ name: string; value: string }>,
+      ): string {
+        if (list.length === 0) {
+          return "";
+        }
+        var rendered = list
+          .map(function (e) {
+            return e.name + (e.value ? "=" + e.value : "");
+          })
+          .join(", ");
+        return "\n      " + label + ": " + rendered;
+      };
+      process.stdout.write(
+        "  " +
+          after.label +
+          " (" +
+          after.cid +
+          ")\n" +
+          "      script: " +
+          String(before ? before.scriptChars : "?") +
+          " -> " +
+          String(after.scriptChars) +
+          " chars" +
+          io("in ", after.extendedInputs) +
+          io("out", after.extendedOutputs) +
+          "\n",
+      );
+    }
+  }
+
+  if (result.verified) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n");
+    process.stdout.write("  " + (result.verified.ok ? "OK" : "FAILED") + "\n");
+    for (var vi = 0; vi < result.verified.notes.length; vi += 1) {
+      process.stdout.write(
+        "  " +
+          (result.verified.ok ? "+ " : "! ") +
+          result.verified.notes[vi] +
+          "\n",
+      );
+    }
+    if (!result.verified.ok) {
+      return 2;
+    }
+  }
+
   if (
     result.status === "preview" &&
     result.scriptAfter !== undefined &&
@@ -856,10 +962,11 @@ function printHelp(): void {
       '                      --columns "Label:type:max, ..."  OR  --from-json <spec.json>\n' +
       "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
       "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
-      "  add-column         Add ONE column to an EXISTING table via the Studio form save, then verify\n" +
-      "                     (--table <name|sys_id> --label <l> --type <t>\n" +
+      "  add-column         Add ONE column to an EXISTING table via a scope-aware sys_dictionary insert, then verify\n" +
+      "                     (--table <name|sys_id> --label <l> --type <t> --update-set <sys_id>\n" +
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
-      "                      [--scope <s>] [--update-set <sys_id>] [--dry-run] [--json])\n" +
+      "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
+      "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
@@ -871,21 +978,27 @@ function printHelp(): void {
       "                     Shorten or clear those values first, then re-run.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
+      "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
+      "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
       "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
       '                     (--table <t> --sys-id <id>|--query <q> --fields "k=v,k2=v2"\n' +
       "                      --update-set <sys_id> [--dry-run] [--json])\n" +
       "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
       '                     (--table <t> --fields "k=v,k2=v2" --scope <s> --update-set <sys_id>\n' +
       "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
-      "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
-      "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
       "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
       "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
       "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
       "  test-flow          Validate (default) or run a flow/subflow\n" +
       "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
+      "  edit-action        Patch a published Custom Action Type and republish (snapshot)\n" +
+      "                     (--sys-id <sys_id> --scope <sys_id>\n" +
+      "                      --from-json <ops.json>  ops: patchStepScripts / addStepOutputs / addStepInputs\n" +
+      "                                              (per-step scripts + step IO + data-pill wiring)\n" +
+      '                      | --patch-script "<find>::<replace>" | --set-script <path> | --merge-outputs <path>\n' +
+      "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
@@ -1000,8 +1113,10 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
  * dove-sn add-column:
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
- *   [--scope x_cadso_journey] [--update-set <sys_id>] [--save-action <sys_id>]
- *   [--columns-rel-id <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ *   [--mandatory] [--default <value>]
+ *   [--scope x_cadso_journey] [--update-set <sys_id>]
+ *   [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ * --update-set is required unless --dry-run.
  */
 async function runAddColumn(flags: Record<string, string>): Promise<number> {
   var spec: Partial<AddColumnParams> = {};
@@ -1017,6 +1132,8 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
     if (flags.name) column.name = flags.name;
     if (flags["max-length"]) column.max_length = flags["max-length"];
     if (flags.reference) column.reference = flags.reference;
+    if (flags.mandatory === "true") column.mandatory = true;
+    if (flags["default"] !== undefined) column.default = flags["default"];
   }
   if (!table || !column || !column.label) {
     process.stderr.write(
@@ -1033,12 +1150,17 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   if (scope) params.scope = scope;
   var us = flags["update-set"] || spec.updateSetSysId;
   if (us) params.updateSetSysId = us;
-  var sa = flags["save-action"] || spec.saveActionSysId;
-  if (sa) params.saveActionSysId = sa;
-  var relId = flags["columns-rel-id"] || spec.columnsRelId;
-  if (relId) params.columnsRelId = relId;
   if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
   if (flags.debug === "true" || spec.debug === true) params.debug = true;
+
+  // Fail fast with a targeted message + exit 1 instead of falling through to the
+  // top-level fatal handler — the live path cannot proceed without a target update set.
+  if (!params.dryRun && !params.updateSetSysId) {
+    process.stderr.write(
+      "add-column: --update-set is required on the live path (only --dry-run works without one)\n",
+    );
+    return 1;
+  }
 
   var result = await addColumn(params);
   if (flags.json === "true") {
@@ -1309,6 +1431,55 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
 }
 
 /**
+ * dove-sn host-assets:
+ *   --dir <dist>            Required. Path to the pre-built dist/ directory.
+ *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
+ *   --scope <namespace>     Required. Carrier scope, e.g. x_cadso_app_shell.
+ *   --update-set <sys_id>   Optional. Defaults to the scope's current update set.
+ *   --max-bytes <n>         Optional. Per-chunk serve cap (default ~5 MB).
+ *   --allow-oversize        Optional. Warn instead of failing on an oversize chunk.
+ *   --dry-run               Optional. Plan only; no writes/uploads/prunes.
+ *   --json                  Optional. Emit the structured HostAssetsResult.
+ *
+ * Exit codes: 0 done/dry-run, 1 bad args, 2 a write landed but read-back is unverified.
+ */
+async function runHostAssets(flags: Record<string, string>): Promise<number> {
+  var dir = flags.dir;
+  var app = flags.app;
+  var scope = flags.scope;
+  if (!dir || !app || !scope) {
+    process.stderr.write(
+      "host-assets: --dir, --app and --scope are required\n",
+    );
+    return 1;
+  }
+  var params: HostAssetsParams = {
+    dir: path.resolve(dir),
+    app: app,
+    scope: scope,
+  };
+  var us = flags["update-set"] || flags.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  if (flags["max-bytes"]) params.maxBytes = Number(flags["max-bytes"]);
+  if (flags["allow-oversize"] === "true") params.allowOversize = true;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var client = createClient({});
+  var result = await hostAssets(client, params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatHostAssetsResult(result) + "\n");
+  }
+  var unverified =
+    !result.dryRun &&
+    result.chunks.some(function (c) {
+      return !c.verified;
+    });
+  return unverified ? 2 : 0;
+}
+
+/**
  * dove-sn invoke-rest:
  *   --method <GET|POST|PUT|DELETE>  Required.
  *   --path </api/...>       Required. Instance-relative; must start with /api/.
@@ -1400,55 +1571,6 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
-/**
- * dove-sn host-assets:
- *   --dir <dist>            Required. Path to the pre-built dist/ directory.
- *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
- *   --scope <namespace>     Required. Carrier scope, e.g. x_cadso_app_shell.
- *   --update-set <sys_id>   Optional. Defaults to the scope's current update set.
- *   --max-bytes <n>         Optional. Per-chunk serve cap (default ~5 MB).
- *   --allow-oversize        Optional. Warn instead of failing on an oversize chunk.
- *   --dry-run               Optional. Plan only; no writes/uploads/prunes.
- *   --json                  Optional. Emit the structured HostAssetsResult.
- *
- * Exit codes: 0 done/dry-run, 1 bad args, 2 a write landed but read-back is unverified.
- */
-async function runHostAssets(flags: Record<string, string>): Promise<number> {
-  var dir = flags.dir;
-  var app = flags.app;
-  var scope = flags.scope;
-  if (!dir || !app || !scope) {
-    process.stderr.write(
-      "host-assets: --dir, --app and --scope are required\n",
-    );
-    return 1;
-  }
-  var params: HostAssetsParams = {
-    dir: path.resolve(dir),
-    app: app,
-    scope: scope,
-  };
-  var us = flags["update-set"] || flags.updateSetSysId;
-  if (us) params.updateSetSysId = us;
-  if (flags["max-bytes"]) params.maxBytes = Number(flags["max-bytes"]);
-  if (flags["allow-oversize"] === "true") params.allowOversize = true;
-  if (flags["dry-run"] === "true") params.dryRun = true;
-
-  var client = createClient({});
-  var result = await hostAssets(client, params);
-  if (flags.json === "true") {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } else {
-    process.stdout.write(formatHostAssetsResult(result) + "\n");
-  }
-  var unverified =
-    !result.dryRun &&
-    result.chunks.some(function (c) {
-      return !c.verified;
-    });
-  return unverified ? 2 : 0;
-}
-
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -1480,6 +1602,9 @@ async function main(): Promise<number> {
   if (parsed.command === "create-table") {
     return await runCreateTable(parsed.flags);
   }
+  if (parsed.command === "invoke-rest") {
+    return await runInvokeRest(parsed.flags);
+  }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
   }
@@ -1491,9 +1616,6 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-record") {
     return await runCreateRecord(parsed.flags);
-  }
-  if (parsed.command === "invoke-rest") {
-    return await runInvokeRest(parsed.flags);
   }
   if (parsed.command === "host-assets") {
     return await runHostAssets(parsed.flags);

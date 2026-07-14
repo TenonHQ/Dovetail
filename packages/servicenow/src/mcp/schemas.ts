@@ -115,6 +115,67 @@ export var stepInputPatchSchema = z.object({
   value: z.any(),
 });
 
+/** A step is addressed by its cid or its label. */
+var stepRefSchema = z.string().min(1);
+
+export var editActionSchema = z.object({
+  sysId: z.string().min(1),
+  scopeSysId: z.string().min(1),
+  ops: z.object({
+    patchStepScripts: z
+      .array(
+        z.object({
+          step: stepRefSchema,
+          setScript: z.string().optional(),
+          patchScript: z
+            .object({
+              find: z.string().min(1),
+              replace: z.string(),
+            })
+            .optional(),
+          scriptInputName: z.string().optional(),
+        }),
+      )
+      .optional(),
+    addStepOutputs: z
+      .array(
+        z.object({
+          step: stepRefSchema,
+          name: z.string().min(1),
+          label: z.string().optional(),
+          type: z.string().optional(),
+        }),
+      )
+      .optional(),
+    addStepInputs: z
+      .array(
+        z.object({
+          step: stepRefSchema,
+          name: z.string().min(1),
+          label: z.string().optional(),
+          type: z.string().optional(),
+          pillFrom: z.object({
+            step: stepRefSchema,
+            output: z.string().min(1),
+          }),
+        }),
+      )
+      .optional(),
+    patchScript: z
+      .object({
+        find: z.string().min(1),
+        replace: z.string(),
+      })
+      .optional(),
+    setScript: z.string().optional(),
+    mergeOutputs: z.array(z.record(z.unknown())).optional(),
+    scriptInputName: z.string().optional(),
+  }),
+  /** Default false — dry-run. Only true republishes. */
+  apply: z.boolean().optional(),
+  updateSetSysId: z.string().optional(),
+});
+
 export var editFlowSchema = z.object({
   sysId: z.string().min(1),
   ops: z.object({
@@ -148,6 +209,8 @@ export var columnSpecSchema = z.object({
   name: z.string().optional(),
   max_length: z.union([z.string(), z.number()]).optional(),
   reference: z.string().optional(),
+  mandatory: z.boolean().optional(),
+  default: z.string().optional(),
 });
 
 export var createTableSchema = z.object({
@@ -173,8 +236,6 @@ export var addColumnSchema = z.object({
   column: columnSpecSchema,
   scope: z.string().optional(),
   updateSetSysId: z.string().optional(),
-  saveActionSysId: z.string().optional(),
-  columnsRelId: z.string().optional(),
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional(),
 });

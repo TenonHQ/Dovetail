@@ -201,7 +201,61 @@ npx dove-sn edit-action --sys-id <action_type_sys_id> --scope <scope_sys_id> \
   --patch-script "grabHashData::grabRecipients"                                   # dry-run (diff)
 npx dove-sn edit-action --sys-id <id> --scope <scope> --set-script ./script.js \
   --merge-outputs ./output-var.json --apply --update-set <id>                     # persist + publish
+
+# Edit it STRUCTURALLY — several steps' scripts, step-level IO, pill wiring — in one publish
+npx dove-sn edit-action --sys-id <id> --scope <scope> --from-json ops.json             # dry-run
+npx dove-sn edit-action --sys-id <id> --scope <scope> --from-json ops.json \
+  --apply --update-set <id>                                                            # publish + verify
 ```
+
+### Editing an action type's steps (`--from-json`)
+
+The flag form above patches the one auto-detected script. When you need to touch
+more than one step — or the step's own inputs and outputs — pass an ops file:
+
+```json
+{
+  "patchStepScripts": [
+    { "step": "Parse Response", "scriptFile": "./parse-response.js" },
+    { "step": "Handle Error", "patchScript": { "find": "gs.error", "replace": "gs.warn" } }
+  ],
+  "addStepOutputs": [
+    { "step": "Parse Response", "name": "isRetryable", "label": "Is Retryable", "type": "boolean" }
+  ],
+  "addStepInputs": [
+    {
+      "step": "Handle Error",
+      "name": "isRetryable",
+      "type": "boolean",
+      "pillFrom": { "step": "Parse Response", "output": "isRetryable" }
+    }
+  ]
+}
+```
+
+- **`step`** is a step's `cid` **or** its label — an unknown ref fails with the list of steps that do exist.
+- **`scriptFile`** is sugar for `setScript`, resolved **relative to the ops file**, so scripts can live beside it.
+- **`addStepInputs[].pillFrom`** wires the input to another step's output. You never write the pill
+  yourself — the correct format is `{{step[<source_cid>].<output>}}`, and getting it wrong does not
+  fail the publish, it compiles a dead reference that reads `undefined` at runtime.
+- Ops are **order-independent**: an input may pill from an output added in the same call. Everything
+  lands in a **single** `/snapshot` POST.
+- Adding IO is **idempotent** — a name that is already present is skipped with a warning, not duplicated.
+
+Two behaviours worth knowing before you rely on this:
+
+**It refuses to guess an entry shape.** A new `extended_inputs` / `extended_outputs` entry is built by
+mirroring an existing sibling entry on the same step, because those entries carry more keys than the
+four you supply and some are wrapped as `{value: x}` inconsistently. If the step has *no* existing
+entry in that list, there is nothing to mirror and the command **errors out** rather than hand-author
+an object that would corrupt the action. Author one entry in the Designer first, then re-run.
+
+**It verifies the publish.** A `201` from `/snapshot` means the snapshot compiled — not that your edit
+landed as intended. With `--apply`, the steps are read back from the instance and compared against what
+was sent: script **content** (hashed, so a same-length-but-different script can't pass) and each IO
+entry's **name, type and value** — so an entry that landed with a mis-wired pill is caught, not just a
+missing one. A mismatch prints the diff and exits **2**. When every op was a no-op, there is nothing to
+read back and the round-trip is skipped.
 
 `copy-flow` calls the Designer's own `POST /processflow/flow/{id}/copy` — a
 complete, faithful clone created as an **inactive draft**. (Don't publish +
@@ -427,7 +481,9 @@ Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 existing record) and `create_record` (insert one record) — both update-set-captured
 and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
-type's model), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
+type's model), `action_edit` (structurally edit a published action type — per-step
+scripts, step-level inputs/outputs, data-pill wiring — dry-run by default, and the
+publish is read back and verified), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
 (copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
 publish, grafting a template), `flow_test` (validate or run a flow), and
 `flow_edit` (patch a flow), plus `invoke_rest` (invoke an arbitrary authenticated

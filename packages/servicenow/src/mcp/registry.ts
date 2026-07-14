@@ -33,6 +33,7 @@ import { publishFlow } from "../flowDesigner/publishFlow";
 import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
+import { editActionType } from "../flowDesigner/editActionType";
 import { testFlow } from "../flowDesigner/testFlow";
 import { createTable, addColumn, setColumn } from "../table";
 import { hostAssets } from "../hostAssets";
@@ -48,6 +49,7 @@ import {
   addChoicesToFieldSchema,
   viewFlowSchema,
   viewActionSchema,
+  editActionSchema,
   publishFlowSchema,
   copyFlowSchema,
   createFlowSchema,
@@ -70,6 +72,7 @@ export var TOOL_NAMES = [
   "add_choices_to_field",
   "flow_view",
   "action_view",
+  "action_edit",
   "flow_publish",
   "flow_copy",
   "flow_create",
@@ -200,6 +203,32 @@ export function buildDescriptors(
           sysId: p.sysId,
           scopeSysId: p.scopeSysId,
           raw: p.raw,
+        });
+      },
+    },
+    {
+      name: "action_edit",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Structurally edit a published Custom Action Type and republish it as one snapshot. " +
+        "Ops: patchStepScripts (per-step script edits, step addressed by cid or label), " +
+        "addStepOutputs (step-level extended_outputs), addStepInputs (step-level extended_inputs " +
+        "wired to another step's output via pillFrom {step, output} — the pill format and the " +
+        "entry shape are handled for you). Also supports the action-level patchScript / setScript / " +
+        "mergeOutputs. DRY-RUN BY DEFAULT: without apply:true it returns the per-step before/after " +
+        "diff and writes nothing. With apply:true it POSTs /snapshot, captures into updateSetSysId " +
+        "when given, then reads the steps back and verifies the edit actually landed. " +
+        "sysId is the sys_hub_action_type_definition sys_id; scopeSysId is the app scope.",
+      shape: editActionSchema.shape,
+      handler: async function (args: any) {
+        var p = editActionSchema.parse(args);
+        return editActionType({
+          client: client(),
+          sysId: p.sysId,
+          scopeSysId: p.scopeSysId,
+          ops: p.ops,
+          apply: p.apply === true,
+          updateSetSysId: p.updateSetSysId,
         });
       },
     },
@@ -355,27 +384,37 @@ export function buildDescriptors(
       name: "add_column",
       annotations: WRITE_CREATE,
       description:
-        "Add ONE column to an EXISTING ServiceNow table, headless and faithfully. Creating a column is a " +
-        "sys_dictionary insert; a REST/createRecord insert reliably 500s for a scoped-app column. This " +
-        "replays the Studio table-form save (POST /sys_db_object.do) against the existing table record, " +
-        "embedding the new column as list-edit XML, then READS THE COLUMN BACK from sys_dictionary to prove " +
-        "it landed (a 302 that did not create the field is reported failed, not created). table is the table " +
-        "name or its sys_db_object sys_id; column is { label, type, name?, max_length?, reference? } with " +
-        "friendly types mapped to internal types (string -> string_full_utf8); element is derived from label " +
-        "unless column.name is given. dryRun:true returns the plan + column XML with no session and no writes. " +
-        "NOTE: the live write path is pending a validated-live spike — prefer dryRun until confirmed, and " +
-        "always verify the sys_update_xml landed in the intended update set.",
+        "Add ONE column to an EXISTING ServiceNow table, headless. Creating a column is a sys_dictionary " +
+        "insert; this uses the scope-aware createRecord op (switches app scope + update set server-side, " +
+        "inserts, restores) so the column lands in the right scope and update set, then READS THE COLUMN " +
+        "BACK from sys_dictionary to prove it materialised (a returned sys_id with no column is reported " +
+        "failed, not created). table is the table name or its sys_db_object sys_id; column is " +
+        "{ label, type, name?, max_length?, reference?, mandatory?, default? } with friendly types mapped to " +
+        "internal types (string -> string_full_utf8) and reference = the target table NAME; element is " +
+        "derived from label unless column.name is given. updateSetSysId is required on the live path. " +
+        "dryRun:true returns the plan with no writes.",
       shape: addColumnSchema.shape,
       handler: async function (args: any) {
         var p = addColumnSchema.parse(args);
+        // The schema leaves updateSetSysId optional (dry-run doesn't need one), so
+        // enforce the live-path requirement HERE — a tool-level error before any
+        // work beats a failure surfacing from deep inside addColumn.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "add_column: updateSetSysId is required on the live path so the " +
+              "sys_dictionary insert is captured in a known update set — " +
+              "set dryRun:true to plan without one.",
+          );
+        }
         return addColumn({
           client: client(),
           table: p.table,
           column: p.column,
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
-          saveActionSysId: p.saveActionSysId,
-          columnsRelId: p.columnsRelId,
           dryRun: p.dryRun,
           debug: p.debug,
         });

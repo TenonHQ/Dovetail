@@ -24,12 +24,45 @@
  */
 
 import type { ServiceNowClient } from "../client";
+import {
+  applyStepOps,
+  hasStepOps,
+  summarizeSteps,
+  verifySteps
+} from "./stepOps";
+import type {
+  AddStepInputOp,
+  AddStepOutputOp,
+  PatchStepScriptOp,
+  StepRecord,
+  StepSummary,
+  VerifyStepsResult
+} from "./stepOps";
 
 export interface EditActionTypeOps {
   /** Replace every occurrence of `find` with `replace` inside the script step value. */
   patchScript?: { find: string; replace: string };
   /** Replace the script step value outright (wins over patchScript). */
   setScript?: string;
+  /**
+   * Per-step script edits, addressing each step by `cid` or `label`. Use this
+   * instead of patchScript/setScript when the action has more than one scripted
+   * step, or when you need to target a specific one rather than the auto-detected
+   * first match.
+   */
+  patchStepScripts?: Array<PatchStepScriptOp>;
+  /**
+   * Step-level outputs (`extended_outputs`) to add — the values one step exposes
+   * to the steps after it. Idempotent: an output whose name is already present is
+   * skipped, not duplicated.
+   */
+  addStepOutputs?: Array<AddStepOutputOp>;
+  /**
+   * Step-level inputs (`extended_inputs`) to add, each wired by data pill to
+   * another step's output via `pillFrom: { step, output }`. Outputs added in the
+   * same call are visible to these — it all lands in one snapshot.
+   */
+  addStepInputs?: Array<AddStepInputOp>;
   /**
    * Output-variable definition objects to merge into `model.outputs`, matched by
    * `name` (replaced in place, else appended). Supply the modeled output JSON —
@@ -64,6 +97,15 @@ export interface EditActionTypeResult {
   scriptBefore?: string;
   scriptAfter?: string;
   outputsMerged: Array<string>;
+  /** Per-step scripts + step-level IO, as read (before) and as sent (after). */
+  stepsBefore?: Array<StepSummary>;
+  stepsAfter?: Array<StepSummary>;
+  /**
+   * Post-publish read-back of /step_instances for the steps we touched. A 201 from
+   * /snapshot means "compiled", not "your edit landed" — only set when applied and
+   * step ops were supplied.
+   */
+  verified?: VerifyStepsResult;
   /** HTTP status of the snapshot POST (201 on success); only set when applied. */
   httpStatus?: number;
   snapshotSysId?: string;
@@ -118,13 +160,26 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   if (!scopeSysId) {
     throw new Error("editActionType: scopeSysId is required (sysparm_transaction_scope).");
   }
-  if (!ops.patchScript && !ops.setScript && !(ops.mergeOutputs && ops.mergeOutputs.length > 0)) {
-    throw new Error("editActionType: no ops — supply patchScript, setScript, and/or mergeOutputs.");
+  var stepOpsSupplied = hasStepOps(ops);
+  if (!ops.patchScript && !ops.setScript && !(ops.mergeOutputs && ops.mergeOutputs.length > 0) && !stepOpsSupplied) {
+    throw new Error(
+      "editActionType: no ops — supply patchScript, setScript, mergeOutputs, "
+        + "patchStepScripts, addStepOutputs, and/or addStepInputs."
+    );
+  }
+  if (stepOpsSupplied && (ops.patchScript || ops.setScript)) {
+    throw new Error(
+      "editActionType: patchScript/setScript (auto-detected single script) cannot be combined with "
+        + "patchStepScripts (explicit per-step). Use patchStepScripts for all script edits."
+    );
   }
 
   var changes: Array<string> = [];
   var warnings: Array<string> = [];
   var outputsMerged: Array<string> = [];
+  var stepsBefore: Array<StepSummary> | undefined;
+  var stepsAfter: Array<StepSummary> | undefined;
+  var touchedCids: Array<string> = [];
 
   // 1. GET the model (outputs[], steps:null).
   var model = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "")));
@@ -137,6 +192,21 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   var steps: Array<any> = stepsResp && Array.isArray(stepsResp.steps) ? stepsResp.steps : [];
   if (steps.length === 0) {
     throw new Error("editActionType: /step_instances returned no steps for action type " + sysId);
+  }
+
+  // 2b. Per-step ops — scripts, step-level IO, pill wiring. Pure; see stepOps.ts.
+  if (stepOpsSupplied) {
+    stepsBefore = summarizeSteps(steps as Array<StepRecord>);
+    var applied = applyStepOps(steps as Array<StepRecord>, {
+      patchStepScripts: ops.patchStepScripts,
+      addStepOutputs: ops.addStepOutputs,
+      addStepInputs: ops.addStepInputs
+    });
+    steps = applied.steps;
+    stepsAfter = summarizeSteps(steps as Array<StepRecord>);
+    touchedCids = applied.touchedCids;
+    changes = changes.concat(applied.changes);
+    warnings = warnings.concat(applied.warnings);
   }
 
   // 3. Patch the script step input.
@@ -215,7 +285,9 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
       warnings: warnings,
       scriptBefore: scriptBefore,
       scriptAfter: scriptAfter,
-      outputsMerged: outputsMerged
+      outputsMerged: outputsMerged,
+      stepsBefore: stepsBefore,
+      stepsAfter: stepsAfter
     };
   }
 
@@ -235,6 +307,26 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
     }
   }
 
+  // 7. Verify — a 201 says the snapshot compiled, not that the edit landed as
+  //    intended. Read the steps back and compare against what we sent.
+  var verified: VerifyStepsResult | undefined;
+  if (stepOpsSupplied && touchedCids.length === 0) {
+    // Every op was a no-op (already present / nothing to patch) — there is nothing
+    // to read back, so don't spend a round-trip proving we changed nothing.
+    verified = { ok: true, notes: ["no step changed — nothing to verify"] };
+  } else if (stepOpsSupplied && stepsAfter) {
+    var freshResp = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "/step_instances")));
+    var freshSteps: Array<StepRecord> = freshResp && Array.isArray(freshResp.steps) ? freshResp.steps : [];
+    if (freshSteps.length === 0) {
+      verified = { ok: false, notes: ["read-back returned no steps — could not verify the publish"] };
+    } else {
+      verified = verifySteps(stepsAfter, summarizeSteps(freshSteps), touchedCids);
+    }
+    if (!verified.ok) {
+      warnings.push("VERIFY FAILED — the snapshot compiled but the read-back does not match what was sent");
+    }
+  }
+
   return {
     status: "published",
     changes: changes,
@@ -242,6 +334,9 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
     scriptBefore: scriptBefore,
     scriptAfter: scriptAfter,
     outputsMerged: outputsMerged,
+    stepsBefore: stepsBefore,
+    stepsAfter: stepsAfter,
+    verified: verified,
     httpStatus: 201,
     snapshotSysId: snapshotSysId
   };

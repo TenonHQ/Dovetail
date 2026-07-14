@@ -313,11 +313,45 @@ export const processManifest = async (
 export interface SyncManifestOptions {
   force?: boolean;
   benchmark?: boolean;
+  // Narrow the FILE refresh to these tables (a subset of the scope's `_tables`
+  // whitelist). The manifest itself is still written in full — narrowing it
+  // would drop every other table from dove.manifest.<scope>.json and break
+  // push/watch. Empty/absent means "every allowed table", the historic default.
+  tables?: string[];
   // Internal: the active collector + request to close the per-scope segment.
   // Passed scope-to-scope so the caller can wire a single collector across an
   // all-scopes refresh. Not exposed on the CLI surface.
   _benchmarkCollector?: import("./benchmark").BenchmarkCollector;
 }
+
+/**
+ * Narrow a manifest's table map to `tables`, for the FILE refresh only.
+ *
+ * Returns a NEW manifest and NEVER mutates its input — the caller must keep
+ * writing the original, full manifest to disk. Narrowing the persisted manifest
+ * would drop every other table from dove.manifest.<scope>.json and break
+ * push/watch. That non-mutation is the whole safety property of `--table`, so
+ * it lives in one testable function rather than inline in syncManifest.
+ *
+ * An empty table map means the scope holds none of the requested tables;
+ * refreshAllFiles no-ops on an empty map, so the scope is skipped untouched.
+ */
+export const narrowManifestToTables = (
+  manifest: SN.AppManifest,
+  tables?: string[],
+): SN.AppManifest => {
+  if (!tables || tables.length === 0) return manifest;
+
+  var wantedTables: SN.TableMap = {} as SN.TableMap;
+  var presentTableNames = Object.keys(manifest.tables || {});
+  for (var w = 0; w < presentTableNames.length; w++) {
+    var wName = presentTableNames[w];
+    if (tables.indexOf(wName) !== -1) {
+      wantedTables[wName] = manifest.tables[wName];
+    }
+  }
+  return Object.assign({}, manifest, { tables: wantedTables });
+};
 
 export const syncManifest = async (
   scope?: string,
@@ -395,9 +429,35 @@ export const syncManifest = async (
       const refreshTableCount = Object.keys(newManifest.tables).length;
       fileLogger.debug("Refreshed manifest for " + scope + ": " + refreshTableCount + " tables");
 
+      // The manifest is always written in FULL. Narrowing it to the --table
+      // subset would drop every other table from dove.manifest.<scope>.json and
+      // break push/watch, so the filter applies only to the file download below.
       await fUtils.writeScopeManifest(scope, newManifest);
+
+      // --table gate: refresh file content for only the requested tables. Any
+      // table outside this scope's `_tables` whitelist was already dropped above,
+      // so intersecting the manifest is enough. `newManifest` is left intact —
+      // see narrowManifestToTables.
+      var refreshManifest = narrowManifestToTables(newManifest, options.tables);
+      if (options.tables && options.tables.length > 0) {
+        var wantedNames = Object.keys(refreshManifest.tables);
+        if (wantedNames.length === 0) {
+          // Expected on every non-matching scope of an all-scopes filtered
+          // refresh, so this is debug — at info it would emit one noise line per
+          // scope that simply doesn't hold the table you asked for.
+          fileLogger.debug(
+            "syncManifest: scope " + scope + " holds none of the requested tables — skipping file refresh",
+          );
+        } else {
+          logger.info(
+            "Refreshing " + wantedNames.length + " of " + refreshTableCount + " tables in " +
+            scope + " (--table): " + wantedNames.join(", "),
+          );
+        }
+      }
+
       if (collector) collector.startScope(scope);
-      await refreshAllFiles(newManifest, scopeSourcePath, {
+      await refreshAllFiles(refreshManifest, scopeSourcePath, {
         force: options.force,
         benchmarkCollector: collector,
       });
@@ -413,6 +473,7 @@ export const syncManifest = async (
       // scopes that leaked in before the whitelist gate existed.
       var childOptions: SyncManifestOptions = {
         force: options.force,
+        tables: options.tables,
         _benchmarkCollector: collector,
       };
       if (declaredScopes.length > 0) {
