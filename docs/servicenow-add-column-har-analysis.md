@@ -7,8 +7,9 @@
 produced alongside PR #191, so it's reconstructed here from the shipped implementation (which
 *is* the replayed request, byte for byte) rather than from a freshly re-captured HAR file. No
 `.har` file has ever been committed to this repo — the equivalent create-table analysis doc
-referenced in `createTable.ts`'s header comment (`servicenow-create-table-har-analysis.md`) was
-likewise never written down separately.
+referenced in `createTable.ts`'s header comment (`servicenow-create-table-har-analysis.md`) does
+exist (built from the original HAR capture), but it lives outside this repo at the path those
+header comments point to and has never been committed here either.
 
 ## The mechanism
 
@@ -24,10 +25,11 @@ GET  /sys_db_object.do?sys_id=<tableSysId>&sysparm_stack=no   — harvest the ex
 POST /sys_db_object.do                                         — the save
 ```
 
-Critically, an **existing** record's form *renders its related lists* — unlike the `sys_id=-1`
+Critically, an **existing** record's form *can render its related lists* — unlike the `sys_id=-1`
 new-record form `create-table` has to work around by falling back to a hardcoded relId
 (`createTable.ts:44-52`). So for add-column, `getRecordForm()` (`formSession.ts:225-255`) harvests
-the real key straight off the page:
+the real key straight off the page whenever the list renders (not guaranteed on every table —
+see §7):
 
 ```ts
 for (var i = 0; i < keys.length; i += 1) {
@@ -38,10 +40,12 @@ for (var i = 0; i < keys.length; i += 1) {
 }
 ```
 
-This resolves the RFC's §6 framing exactly as hypothesized: the existing-table case is *more*
-tractable than table-create, not less, because there's no constant to hardcode — the relId comes
-back live in the harvested form. `columnsRelId` is kept as an override param only for an instance
-that customized the relationship.
+This resolves the RFC's §6 framing *mostly* as hypothesized: the existing-table case is *more*
+tractable than table-create, not less, because the relId *can* come back live in the harvested
+form instead of relying on a hardcoded constant. But the harvest isn't guaranteed — the
+2026-07-07 spike run got an empty harvest and rode the same constant fallback `create-table`
+always uses (see §7), so the fallback is load-bearing, not vestigial. `columnsRelId` is kept as
+an override param only for an instance that customized the relationship.
 
 ### 2. The list-edit form key
 
@@ -50,8 +54,9 @@ ni.java.com.glide.ui_list_edit.ListEditFormatterAction[sys_db_object.REL:<dict-r
 ```
 
 Built by `listEditKey()` (`buildTableSave.ts:150-152`). `<dict-relId>` is the `sys_relationship`
-sys_id for the table's "Columns" related list — harvested per-table above; `create-table`'s
-constant (`4344f6f5bf1320001875647fcf0739ad`) is the fallback only.
+sys_id for the table's "Columns" related list — harvested per-table above when the form renders
+the related list; `create-table`'s constant (`4344f6f5bf1320001875647fcf0739ad`) is the fallback,
+still exercised on some tables (§7).
 
 ### 3. The `<record operation="add">` XML
 
@@ -164,7 +169,8 @@ not installed, so `dove createUpdateSet` fell back to a plain Table API insert �
 ## Decision
 
 **Replayable — confirmed.** The Studio list-edit transaction that creates a column on an existing
-table replays headlessly exactly as hypothesized in RFC §6, and is *more* tractable than
-table-create because the real relId is harvested from the existing form rather than hardcoded.
+table replays headlessly as hypothesized in RFC §6, and is *more* tractable than table-create
+because the real relId can be harvested from the existing form rather than hardcoded — with the
+constant fallback carrying the tables where the related list doesn't render (§7).
 S2's scope is delivered (shipped as `add-column` / `add_column`, not the `add-field` /
 `add_field_to_table` names originally proposed in the RFC — a naming choice, not a capability gap).
