@@ -9,6 +9,8 @@
   "properties": {
     "taskIdPattern": { "type": "string", "minLength": 1 },
     "promotePath": { "type": "string" },
+    "devInstanceFieldId": { "type": "string", "minLength": 1 },
+    "devInstanceHostPattern": { "type": "string", "minLength": 1 },
     "skipPreviewErrors": { "type": "array", "items": { "type": "string" } },
     "instances": {
       "type": "object",
@@ -31,7 +33,6 @@
         "type": "object",
         "required": [
           "clickupStatusId",
-          "sourceInstance",
           "targetInstance",
           "transport",
           "enabled"
@@ -40,13 +41,24 @@
         "properties": {
           "clickupStatusId": { "type": "string", "minLength": 1 },
           "sourceInstance": { "type": "string", "minLength": 1 },
+          "sourceFrom": { "type": "string", "enum": ["devInstance"] },
           "targetInstance": { "type": "string", "minLength": 1 },
           "transport": {
             "type": "string",
             "enum": ["sawmill", "company-repo", "manual"]
           },
           "enabled": { "type": "boolean" }
-        }
+        },
+        "oneOf": [
+          {
+            "required": ["sourceInstance"],
+            "not": { "required": ["sourceFrom"] }
+          },
+          {
+            "required": ["sourceFrom"],
+            "not": { "required": ["sourceInstance"] }
+          }
+        ]
       }
     }
   }

@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-deploy@0.0.2",
+  "package": "@tenonhq/dovetail-deploy",
+  "version": "0.0.2",
+  "prev_version": "0.0.1",
+  "published_at": "2026-07-10T18:41:37.089Z",
+  "git": {
+    "sha": "58c416a421d7b9eaff3483468601cc1eda753b20",
+    "tag": "dovetail-deploy@0.0.2"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "58c416a42",
+      "subject": "feat(deploy): dynamic per-developer promotion source (#211)",
+      "pr": 211
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

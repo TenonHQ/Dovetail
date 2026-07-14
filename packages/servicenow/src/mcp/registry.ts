@@ -38,6 +38,8 @@ import { createTable, addColumn } from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
+import { invokeRest } from "../invokeRest";
+import type { InvokeRestParams } from "../invokeRest";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -55,7 +57,8 @@ import {
   addColumnSchema,
   setFieldSchema,
   createRecordSchema,
-  hostAssetsSchema
+  hostAssetsSchema,
+  invokeRestSchema
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -75,7 +78,8 @@ export var TOOL_NAMES = [
   "add_column",
   "set_field",
   "create_record",
-  "host_assets"
+  "host_assets",
+  "invoke_rest"
 ] as const;
 
 export type ToolName = typeof TOOL_NAMES[number];
@@ -425,6 +429,39 @@ export function buildDescriptors(deps: RegistryDeps = {}): Array<ToolDescriptor>
       shape: hostAssetsSchema.shape,
       handler: async function (args: any) {
         return hostAssets(client(), hostAssetsSchema.parse(args));
+      }
+    },
+    {
+      name: "invoke_rest",
+      annotations: WRITE_EXECUTE,
+      description:
+        "Invoke an arbitrary authenticated ServiceNow REST operation — including an application's "
+        + "own Scripted REST endpoints (/api/<scope>/<service>/<resource>) — with GET, POST, PUT or "
+        + "DELETE. A transport primitive: it can drive update and DELETE operations, so it is "
+        + "destructive-capable and non-idempotent. DRY-RUN BY DEFAULT — without confirm:true nothing "
+        + "is sent and the resolved method + path + body are echoed back; dryRun:true forces a "
+        + "dry-run even with confirm. On send, returns { httpStatus, ok, body } with the response "
+        + "passed through verbatim — non-2xx responses are returned, not thrown, so the operation's "
+        + "own error contract is preserved (429/5xx are retried by the transport first). path must "
+        + "be instance-relative and start with /api/. Request/response bodies are never logged — "
+        + "they exist only in this result. For sys_* / x_* record CRUD use set_field / "
+        + "create_record instead; this tool is for operations those fixed verbs cannot express.",
+      shape: invokeRestSchema.shape,
+      handler: async function (args: any) {
+        var p = invokeRestSchema.parse(args);
+        var params: InvokeRestParams = {
+          method: p.method,
+          path: p.path,
+          body: p.body,
+          confirm: p.confirm,
+          dryRun: p.dryRun
+        };
+        // Client resolution is lazy: a dry-run needs no credentials, so only
+        // attach one when injected (tests) — invokeRest creates its own on send.
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return invokeRest(params);
       }
     }
   ];

@@ -55,6 +55,15 @@ function noNetworkClient(): ServiceNowClient {
       post: async function () {
         return boom();
       },
+      put: async function () {
+        return boom();
+      },
+      delete: async function () {
+        return boom();
+      },
+      invoke: async function () {
+        return boom();
+      },
     },
   } as ServiceNowClient;
 }

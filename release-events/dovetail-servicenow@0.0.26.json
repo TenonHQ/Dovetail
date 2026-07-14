@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.26",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.26",
+  "prev_version": "0.0.25",
+  "published_at": "2026-07-10T16:27:58.460Z",
+  "git": {
+    "sha": "9b3b58b8fb9aa53b32473c8c7711446f5a52a576",
+    "tag": "dovetail-servicenow@0.0.26"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "9b3b58b8f",
+      "subject": "feat: invoke arbitrary authenticated Scripted REST operations (invoke-rest) (#214)",
+      "pr": 214
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

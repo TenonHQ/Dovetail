@@ -50,6 +50,8 @@ import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
+import { invokeRest } from "./invokeRest";
+import type { InvokeRestParams } from "./invokeRest";
 import { hostAssets, formatHostAssetsResult } from "./hostAssets";
 import {
   formatReadFlowResult,
@@ -841,6 +843,10 @@ function printHelp(): void {
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
       "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
       "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
+      "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
+      "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
       "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
       '                     (--table <t> --sys-id <id>|--query <q> --fields "k=v,k2=v2"\n' +
       "                      --update-set <sys_id> [--dry-run] [--json])\n" +
@@ -1211,6 +1217,98 @@ async function runHostAssets(flags: Record<string, string>): Promise<number> {
   return unverified ? 2 : 0;
 }
 
+/**
+ * dove-sn invoke-rest:
+ *   --method <GET|POST|PUT|DELETE>  Required.
+ *   --path </api/...>       Required. Instance-relative; must start with /api/.
+ *   --body '<json>'         Optional inline JSON body (or --body-json <path>).
+ *   --confirm               Send for real. WITHOUT it the command is a DRY-RUN.
+ *   --dry-run               Force a dry-run even with --confirm.
+ *   --json                  Emit the structured InvokeRestResult.
+ *
+ * Invoke an arbitrary authenticated REST operation (Scripted REST included).
+ * Dry-run by default; --confirm sends and returns { httpStatus, ok, body } with
+ * the response passed through verbatim (non-2xx included — the transport still
+ * retries 429/5xx first). Bodies are NEVER printed in human output — request or
+ * response, dry-run or sent: method, path and status only. The structured
+ * --json result is the one channel that carries them (a dry-run's requestBody
+ * echo satisfies the #212 "echo the plan" gate there).
+ * Exit codes: 0 dry-run or 2xx, 1 bad args, 2 sent but non-2xx.
+ */
+async function runInvokeRest(flags: Record<string, string>): Promise<number> {
+  if (!flags.method || !flags.path) {
+    process.stderr.write(
+      "invoke-rest: --method <GET|POST|PUT|DELETE> and --path </api/...> are required\n",
+    );
+    return 1;
+  }
+  var body: unknown;
+  if (flags["body-json"]) {
+    try {
+      body = JSON.parse(fs.readFileSync(flags["body-json"], "utf8"));
+    } catch (err: any) {
+      process.stderr.write(
+        "invoke-rest: --body-json must point to a readable JSON file: " +
+          (err && err.message ? err.message : String(err)) +
+          "\n",
+      );
+      return 1;
+    }
+  } else if (flags.body !== undefined) {
+    try {
+      body = JSON.parse(flags.body);
+    } catch (err: any) {
+      process.stderr.write(
+        "invoke-rest: --body must be valid JSON: " + err.message + "\n",
+      );
+      return 1;
+    }
+  }
+  var params: InvokeRestParams = {
+    method: flags.method,
+    path: flags.path,
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+  };
+  if (body !== undefined) {
+    params.body = body;
+  }
+  var result = await invokeRest(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else if (result.status === "dry-run") {
+    process.stdout.write(
+      "[dry-run] " +
+        result.method +
+        " " +
+        result.path +
+        "\n" +
+        (result.requestBody !== undefined
+          ? "Request body withheld from human output — use --json to view.\n"
+          : "") +
+        result.note +
+        "\n",
+    );
+  } else {
+    // Bodies are never logged: human output is method + path + status only.
+    process.stdout.write(
+      "[sent] " +
+        result.method +
+        " " +
+        result.path +
+        " -> HTTP " +
+        result.httpStatus +
+        (result.ok ? "" : " (non-2xx)") +
+        "\n" +
+        "Response body withheld from human output — use --json for { httpStatus, ok, body }.\n",
+    );
+  }
+  if (result.status === "sent" && result.ok !== true) {
+    return 2;
+  }
+  return 0;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -1241,6 +1339,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-table") {
     return await runCreateTable(parsed.flags);
+  }
+  if (parsed.command === "invoke-rest") {
+    return await runInvokeRest(parsed.flags);
   }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
