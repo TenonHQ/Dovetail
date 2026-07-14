@@ -28,13 +28,24 @@
  *   - element — immutable. A column cannot be renamed (RFC §4.5); that is a
  *     delete + recreate. REFUSED.
  *
+ *   - a max_length SHRINK below the data already in the column — the third silent
+ *     no-op. ServiceNow refuses it, and refuses SILENTLY: 200 OK, column unchanged,
+ *     data intact. Clear the over-long values and the identical shrink then works. So
+ *     the platform protects the data; it just never tells you why nothing happened.
+ *     set-column runs a pre-flight, NAMES the rows that block the shrink, and refuses
+ *     rather than issuing a write that would be quietly ignored (--force-shrink to
+ *     attempt it regardless).
+ *
  * AN ALTER FIRES ON A CHANGE, NOT ON A WRITE. Writing 40 over an existing 40 is a
  * no-op: ServiceNow sees no change, no ALTER runs, and the call still succeeds. So a
  * request whose values already match is reported as `unchanged` — never as `applied`,
  * which would imply we had confirmed the physical column. We have not, and cannot,
  * from metadata alone: a column created by the pre-fix add-column claims 40 while
- * really being varchar(255). Repairing such a column needs a forced transition that
- * can TRUNCATE live data, so it is deliberately out of scope here.
+ * really being varchar(255). Repairing such a column is a separate story.
+ *
+ * The through-line: THREE of the operations this verb could perform return HTTP 200 and
+ * do nothing. That is why every write is read back and compared, and why nothing is ever
+ * reported as applied on the strength of a status code.
  *
  * Fields are taken from a strict ALLOWLIST, not an open map — an unbounded write to
  * sys_dictionary lets a caller quietly corrupt the schema.
@@ -103,6 +114,15 @@ export interface SetColumnParams {
   updateSetSysId?: string;
   /** Plan only — resolves and diffs, writes nothing. */
   dryRun?: boolean;
+  /**
+   * Skip the pre-flight check and attempt a shrink anyway, even though rows hold longer
+   * values. OFF by default. Not a way to force data loss — ServiceNow silently refuses
+   * such a shrink and preserves the data (see findTruncationRisk); the write will simply
+   * be reported `failed` on read-back. The escape hatch exists because that behaviour was
+   * observed on one instance, and an instance that DID truncate must not be able to do so
+   * by accident.
+   */
+  forceShrink?: boolean;
 }
 
 /** One attribute's before -> after, as stored on the instance. */
@@ -206,6 +226,119 @@ async function fetchColumn(
   return rows[0];
 }
 
+/** How many rows we will read when checking a shrink for truncation. A table bigger
+ *  than this cannot be proven safe from here, and we say so rather than guess. */
+var TRUNCATION_SCAN_LIMIT = 1000;
+
+export interface TruncationRisk {
+  /** Rows (within the scan) whose current value is longer than the new length. */
+  offenders: number;
+  /** The longest value found, so the caller can see how much room is actually needed. */
+  longest: number;
+  /** sys_ids of the first few offending rows, to make the problem concrete. */
+  samples: Array<string>;
+  /** True when the table has more populated rows than we read — we did NOT see them
+   *  all, so "no offenders found" would be a guess, not a fact. */
+  incomplete: boolean;
+}
+
+/**
+ * Would shrinking this column cut existing data?
+ *
+ * WHAT THE PLATFORM ACTUALLY DOES (measured on tenonworkshed, 2026-07-14, by trying it):
+ * ServiceNow REFUSES to shrink a column below the length of data already in it — and
+ * refuses SILENTLY. The write returns HTTP 200, max_length stays where it was, and the
+ * data is left intact. Clear the offending values and the identical shrink then works.
+ * So the platform protects the data; what it does not do is tell you why nothing
+ * happened. Without this check you get an opaque "the column did not change".
+ *
+ * Hence the pre-flight: find the rows that block the shrink and NAME them, instead of
+ * letting the caller issue a write that will be quietly ignored. It is also
+ * defence-in-depth — that silent refusal was observed on ONE instance, and betting a
+ * table's data on every ServiceNow/DB combination behaving identically is not a bet
+ * worth taking.
+ *
+ * ServiceNow's encoded queries cannot filter on string length, so the values have to be
+ * read and measured here. That is bounded: we read at most TRUNCATION_SCAN_LIMIT rows,
+ * and if the column has more populated rows than that we report `incomplete` rather than
+ * pretending the absence of evidence is evidence of absence.
+ */
+export async function findTruncationRisk(
+  client: ServiceNowClient,
+  table: string,
+  column: string,
+  newLength: number,
+): Promise<TruncationRisk> {
+  var rows = await client.table.query<Record<string, unknown>>(
+    table,
+    column + "ISNOTEMPTY",
+    { limit: TRUNCATION_SCAN_LIMIT, fields: ["sys_id", column] },
+  );
+  var offenders = 0;
+  var longest = 0;
+  var samples: Array<string> = [];
+  for (var i = 0; i < rows.length; i += 1) {
+    var value = fieldToString(rows[i][column]);
+    if (value.length > longest) longest = value.length;
+    if (value.length > newLength) {
+      offenders += 1;
+      if (samples.length < 3) samples.push(fieldToString(rows[i].sys_id));
+    }
+  }
+  return {
+    offenders: offenders,
+    longest: longest,
+    samples: samples,
+    incomplete: rows.length >= TRUNCATION_SCAN_LIMIT,
+  };
+}
+
+/** Human-readable version of the risk, used in both the refusal and the dry-run note. */
+function describeRisk(
+  table: string,
+  column: string,
+  from: string,
+  to: string,
+  risk: TruncationRisk,
+): string {
+  if (risk.offenders > 0) {
+    return (
+      "shrinking " +
+      table +
+      "." +
+      column +
+      " from " +
+      from +
+      " to " +
+      to +
+      " will NOT take: " +
+      risk.offenders +
+      (risk.incomplete ? "+" : "") +
+      " row(s) already hold a longer value (longest is " +
+      risk.longest +
+      " characters). ServiceNow refuses to shrink a column below the data in it — and " +
+      "refuses SILENTLY, returning success while leaving the column unchanged. Shorten " +
+      "or clear those values first and the shrink will work. Sample rows: " +
+      risk.samples.join(", ") +
+      "."
+    );
+  }
+  return (
+    "shrinking " +
+    table +
+    "." +
+    column +
+    " from " +
+    from +
+    " to " +
+    to +
+    ", and the column holds more rows than can be checked from here (read the first " +
+    TRUNCATION_SCAN_LIMIT +
+    "). No over-length value was found among them, but the rest were NOT checked, so " +
+    "this shrink cannot be proven safe."
+  );
+}
+
 /**
  * Assert the change was captured into the named update set. A write that lands on the
  * instance but is not captured can never be promoted — it exists only here. The
@@ -263,6 +396,34 @@ export async function setColumn(
     }
   }
 
+  // A max_length SHRINK fires an ALTER that silently truncates every longer value —
+  // exactly the irreversible data loss this verb exists to prevent. Look before leaping:
+  // a warning on the dry-run, a refusal on the live path.
+  var shrink = changes.filter(function (c) {
+    return (
+      c.attribute === "max_length" &&
+      c.from !== "" &&
+      Number(c.to) < Number(c.from)
+    );
+  })[0];
+  var risk: TruncationRisk | null = null;
+  if (shrink) {
+    risk = await findTruncationRisk(
+      params.client,
+      table,
+      column,
+      Number(shrink.to),
+    );
+  }
+  var unsafeShrink = Boolean(
+    risk && (risk.offenders > 0 || risk.incomplete) && !params.forceShrink,
+  );
+  var riskNote =
+    unsafeShrink && shrink && risk
+      ? " REFUSED WITHOUT --force-shrink: " +
+        describeRisk(table, column, shrink.from, shrink.to, risk)
+      : "";
+
   if (params.dryRun) {
     return {
       status: "dry-run",
@@ -274,7 +435,8 @@ export async function setColumn(
       verified: false,
       capturedInUpdateSet: false,
       note:
-        changes.length === 0
+        riskNote +
+        (changes.length === 0
           ? "dry-run: no write. " +
             column +
             " on " +
@@ -290,7 +452,7 @@ export async function setColumn(
             (params.updateSetSysId
               ? params.updateSetSysId
               : "(none provided)") +
-            ".",
+            "."),
     };
   }
 
@@ -301,6 +463,18 @@ export async function setColumn(
     );
   }
   var updateSetSysId = String(params.updateSetSysId).trim();
+
+  // The shrink guard. Refuse rather than fire an ALTER that would cut live data: the
+  // truncation is silent and irreversible, and a verb built to stop silent data loss
+  // must not be the thing that causes it. Opting in has to be deliberate and explicit.
+  if (unsafeShrink && shrink && risk) {
+    throw new Error(
+      "set-column: refusing to shrink — " +
+        describeRisk(table, column, shrink.from, shrink.to, risk) +
+        " Nothing was written. To attempt it anyway, re-run with --force-shrink " +
+        "(forceShrink: true) — but expect ServiceNow to ignore it.",
+    );
+  }
 
   // Nothing to do. Say so honestly rather than writing a value over itself and calling
   // it applied: that write would be a no-op, no ALTER would fire, and a green result

@@ -395,7 +395,11 @@ export function buildDescriptors(
         "write would report success while changing nothing — delete and recreate the column instead. " +
         "Attributes are a closed set, never an open field map. When every requested value already " +
         "matches, nothing is written and the status is 'unchanged' (an ALTER fires on a CHANGE, not a " +
-        "write). dryRun:true diffs against the instance and writes nothing.",
+        "write). A maxLength SHRINK is REFUSED while rows hold longer values: ServiceNow silently " +
+        "refuses such a shrink (200 OK, column unchanged, data preserved), so the tool names the " +
+        "blocking rows instead of issuing a write that would be quietly ignored. Clear those values " +
+        "first, or pass forceShrink to attempt it anyway. dryRun:true diffs against the instance, " +
+        "flags the blocking rows, and writes nothing.",
       shape: setColumnSchema.shape,
       handler: async function (args: any) {
         var p = setColumnSchema.parse(args);
@@ -406,6 +410,7 @@ export function buildDescriptors(
           attributes: p.attributes,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
+          forceShrink: p.forceShrink,
         });
       },
     },

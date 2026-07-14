@@ -10,6 +10,8 @@ function liveClient(opts: {
   dict?: Record<string, string> | null;
   captured?: boolean;
   ignoreWrites?: boolean;
+  /** Values currently held by rows in the column, for the truncation guard. */
+  rowValues?: Array<string>;
 }) {
   var dict =
     opts.dict === undefined
@@ -39,6 +41,13 @@ function liveClient(opts: {
           return opts.captured === false
             ? []
             : [{ sys_id: "UX1", name: query }];
+        }
+        // The data table itself — what the truncation guard reads to see what a shrink
+        // would cut.
+        if (table === "x_t") {
+          return (opts.rowValues || []).map(function (v, i) {
+            return { sys_id: "ROW" + i, description: v };
+          });
         }
         return [];
       },
@@ -349,6 +358,18 @@ describe("setColumn live", function () {
     expect(result.note).toMatch(/max_length reads back as '40', not '4000'/);
   });
 
+  it("GROWING max_length is never blocked — nothing can be cut", async function () {
+    var client = liveClient({ rowValues: ["x".repeat(35)] });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 4000 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+  });
+
   it("flags a write that landed but was NOT captured in the update set", async function () {
     // Live on the instance but absent from the set = unpromotable. Not a success.
     var client = liveClient({ captured: false });
@@ -363,5 +384,116 @@ describe("setColumn live", function () {
     expect(result.verified).toBe(true);
     expect(result.capturedInUpdateSet).toBe(false);
     expect(result.note).toMatch(/is NOT captured, so it cannot be promoted/);
+  });
+});
+
+/**
+ * The shrink guard. Shrinking max_length fires a real ALTER and ServiceNow truncates
+ * every longer value — silently, and with no way back. A verb built to prevent silent
+ * data loss must not be the thing that causes it, so a shrink that would cut live data
+ * is REFUSED unless the caller explicitly says they accept losing it.
+ */
+describe("setColumn truncation guard", function () {
+  var dict40 = {
+    sys_id: "COL1",
+    element: "description",
+    internal_type: "string_full_utf8",
+    column_label: "Description",
+    mandatory: "false",
+    default_value: "",
+    read_only: "false",
+    max_length: "100",
+  };
+
+  it("REFUSES a shrink that ServiceNow would silently ignore, and writes nothing", async function () {
+    var client = liveClient({
+      dict: Object.assign({}, dict40),
+      rowValues: ["short", "x".repeat(80), "y".repeat(95)], // two exceed 40
+    });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { maxLength: 40 },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/refusing to shrink/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("names the damage: how many rows, the longest value, and sample sys_ids", async function () {
+    var client = liveClient({
+      dict: Object.assign({}, dict40),
+      rowValues: ["x".repeat(80), "y".repeat(95)],
+    });
+    var err: Error | null = null;
+    try {
+      await setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { maxLength: 40 },
+        updateSetSysId: "us1",
+      });
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).not.toBeNull();
+    var msg = (err as Error).message;
+    expect(msg).toMatch(/2 row\(s\) already hold a longer value/);
+    expect(msg).toMatch(/longest is 95 characters/);
+    expect(msg).toMatch(/ROW0, ROW1/);
+    expect(msg).toMatch(/--force-shrink/);
+  });
+
+  it("attempts the shrink anyway when the caller passes forceShrink", async function () {
+    var client = liveClient({
+      dict: Object.assign({}, dict40),
+      rowValues: ["x".repeat(80)],
+    });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 40 },
+      updateSetSysId: "us1",
+      forceShrink: true,
+    });
+    expect(result.status).toBe("applied");
+    expect(pushesOf(client)).toHaveLength(1);
+  });
+
+  it("allows a shrink when nothing would actually be cut", async function () {
+    var client = liveClient({
+      dict: Object.assign({}, dict40),
+      rowValues: ["short", "also short"],
+    });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 40 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+  });
+
+  it("warns on the DRY-RUN rather than letting you discover it at write time", async function () {
+    var result = await setColumn({
+      client: liveClient({
+        dict: Object.assign({}, dict40),
+        rowValues: ["x".repeat(80)],
+      }),
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 40 },
+      updateSetSysId: "us1",
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.note).toMatch(/REFUSED WITHOUT --force-shrink/);
+    expect(result.note).toMatch(/will NOT take/);
+    expect(result.note).toMatch(/refuses SILENTLY/);
   });
 });

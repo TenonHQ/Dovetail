@@ -52,10 +52,16 @@ export type {
 export { addColumn, deriveElement, applyAddColumnOverlay } from "./addColumn";
 export type { AddColumnParams, AddColumnResult } from "./addColumn";
 
-export { setColumn, resolveAttributes, toStoredValue } from "./setColumn";
+export {
+  setColumn,
+  resolveAttributes,
+  toStoredValue,
+  findTruncationRisk,
+} from "./setColumn";
 export type {
   SetColumnParams,
   SetColumnResult,
   ColumnAttributes,
   AttributeChange,
+  TruncationRisk,
 } from "./setColumn";
