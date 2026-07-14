@@ -1,7 +1,33 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-07-14T18:00:31.248Z",
+  "generated_at": "2026-07-14T19:40:43.710Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.112",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.112",
+      "prev_version": "0.0.111",
+      "published_at": "2026-07-14T19:40:43.702Z",
+      "git": {
+        "sha": "a2777edcbd46ee69de13e73173132f9cd18aa618",
+        "tag": "dovetail-core@0.0.112"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "a2777edcb",
+          "subject": "fix: reject unknown dove commands and alias pull to refresh (#219) (#221)",
+          "pr": 219
+        },
+        {
+          "sha": "6a42ef546",
+          "subject": "chore(release): @tenonhq/dovetail-core@0.0.111 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-core@0.0.111",
@@ -1247,32 +1273,6 @@
         {
           "sha": "9046da774",
           "subject": "chore(release): publish 19 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.9",
-      "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.9",
-      "prev_version": "0.0.8",
-      "published_at": "2026-06-05T06:43:18.252Z",
-      "git": {
-        "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
-        "tag": "dovetail-mcp@0.0.9"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "71bdf9bba",
-          "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
-          "pr": 148
-        },
-        {
-          "sha": "af1417796",
-          "subject": "chore(release): publish 3 packages [skip ci]"
         }
       ],
       "exports_delta": null,
