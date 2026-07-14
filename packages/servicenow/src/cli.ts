@@ -708,17 +708,58 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
  * dove-sn edit-action:
  *   --sys-id <sys_id>                  Required. sys_hub_action_type_definition sys_id.
  *   --scope <sys_id>                   Required. sysparm_transaction_scope (app scope sys_id).
- *   --patch-script "<find>::<replace>" Optional. Find/replace in the script step value.
- *   --set-script <path>                Optional. Replace the script step value from a file.
+ *   --from-json <path>                 Optional. JSON EditActionTypeOps — the full surface, incl.
+ *                                      per-step ops: patchStepScripts / addStepOutputs / addStepInputs.
+ *   --patch-script "<find>::<replace>" Optional. Find/replace in the auto-detected script step value.
+ *   --set-script <path>                Optional. Replace the auto-detected script step value from a file.
  *   --merge-outputs <path>             Optional. JSON file: an output-variable object/array to merge by name.
  *   --script-input <name>              Optional. Input name holding the script (default: auto-detect).
  *   --update-set <sys_id>              Optional. Capture the republish into this update set.
  *   --apply                            Optional. Republish (POST /snapshot). Omit for dry-run.
  *   --json                             Optional. Emit the structured EditActionTypeResult.
  *
- * Edits a published Custom Action Type's script and/or output variables and
- * republishes through the snapshot POST. Dry-run (read-only) by default; --apply writes.
+ * Edits a published Custom Action Type and republishes through the snapshot POST.
+ * Dry-run (read-only) by default; --apply writes.
+ *
+ * The flag form handles the single-script case. For anything structural — patching
+ * several steps' scripts, adding a step-level output, adding a step-level input
+ * pill-wired to another step's output — use --from-json:
+ *
+ *   {
+ *     "patchStepScripts": [{ "step": "Parse Response", "scriptFile": "./parse.js" }],
+ *     "addStepOutputs":   [{ "step": "Parse Response", "name": "isRetryable", "type": "boolean" }],
+ *     "addStepInputs":    [{ "step": "Handle Error", "name": "isRetryable", "type": "boolean",
+ *                            "pillFrom": { "step": "Parse Response", "output": "isRetryable" } }]
+ *   }
+ *
+ * `step` is a step cid or label. `scriptFile` is sugar for `setScript` and is
+ * resolved RELATIVE TO THE OPS FILE, so an ops file can sit next to its scripts.
  */
+
+/** Resolve `scriptFile` sugar in patchStepScripts, relative to the ops file's own dir. */
+function resolveScriptFiles(ops: any, opsPath: string): void {
+  var stepScripts = ops.patchStepScripts;
+  if (!Array.isArray(stepScripts)) {
+    return;
+  }
+  var opsDir = path.dirname(path.resolve(opsPath));
+  for (var i = 0; i < stepScripts.length; i += 1) {
+    var op = stepScripts[i];
+    if (!op || typeof op !== "object" || typeof op.scriptFile !== "string") {
+      continue;
+    }
+    if (typeof op.setScript === "string") {
+      throw new Error(
+        "edit-action: step '" +
+          String(op.step) +
+          "' sets both scriptFile and setScript — pick one.",
+      );
+    }
+    op.setScript = fs.readFileSync(path.resolve(opsDir, op.scriptFile), "utf8");
+    delete op.scriptFile;
+  }
+}
+
 async function runEditAction(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
   var scope = flags.scope || flags.scopeSysId;
@@ -729,6 +770,16 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
     return 1;
   }
   var ops: any = {};
+  if (flags["from-json"]) {
+    ops = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
+    if (!ops || typeof ops !== "object" || Array.isArray(ops)) {
+      process.stderr.write(
+        "edit-action: --from-json must contain an EditActionTypeOps object\n",
+      );
+      return 1;
+    }
+    resolveScriptFiles(ops, flags["from-json"]);
+  }
   if (flags["patch-script"]) {
     var parts = String(flags["patch-script"]).split("::");
     if (parts.length !== 2) {
@@ -780,6 +831,61 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
   for (var wi = 0; wi < result.warnings.length; wi += 1) {
     process.stdout.write("  ! " + result.warnings[wi] + "\n");
   }
+
+  // Per-step before/after — the dry-run's whole job is to make this inspectable.
+  if (result.stepsBefore && result.stepsAfter) {
+    process.stdout.write("\n--- steps (before -> after) ---\n");
+    for (var si = 0; si < result.stepsAfter.length; si += 1) {
+      var after = result.stepsAfter[si];
+      var before = result.stepsBefore[si];
+      var io = function (
+        label: string,
+        list: Array<{ name: string; value: string }>,
+      ): string {
+        if (list.length === 0) {
+          return "";
+        }
+        var rendered = list
+          .map(function (e) {
+            return e.name + (e.value ? "=" + e.value : "");
+          })
+          .join(", ");
+        return "\n      " + label + ": " + rendered;
+      };
+      process.stdout.write(
+        "  " +
+          after.label +
+          " (" +
+          after.cid +
+          ")\n" +
+          "      script: " +
+          String(before ? before.scriptChars : "?") +
+          " -> " +
+          String(after.scriptChars) +
+          " chars" +
+          io("in ", after.extendedInputs) +
+          io("out", after.extendedOutputs) +
+          "\n",
+      );
+    }
+  }
+
+  if (result.verified) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n");
+    process.stdout.write("  " + (result.verified.ok ? "OK" : "FAILED") + "\n");
+    for (var vi = 0; vi < result.verified.notes.length; vi += 1) {
+      process.stdout.write(
+        "  " +
+          (result.verified.ok ? "+ " : "! ") +
+          result.verified.notes[vi] +
+          "\n",
+      );
+    }
+    if (!result.verified.ok) {
+      return 2;
+    }
+  }
+
   if (
     result.status === "preview" &&
     result.scriptAfter !== undefined &&
@@ -858,6 +964,12 @@ function printHelp(): void {
       "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
       "  test-flow          Validate (default) or run a flow/subflow\n" +
       "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
+      "  edit-action        Patch a published Custom Action Type and republish (snapshot)\n" +
+      "                     (--sys-id <sys_id> --scope <sys_id>\n" +
+      "                      --from-json <ops.json>  ops: patchStepScripts / addStepOutputs / addStepInputs\n" +
+      "                                              (per-step scripts + step IO + data-pill wiring)\n" +
+      '                      | --patch-script "<find>::<replace>" | --set-script <path> | --merge-outputs <path>\n' +
+      "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +

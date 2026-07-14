@@ -33,6 +33,7 @@ import { publishFlow } from "../flowDesigner/publishFlow";
 import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
+import { editActionType } from "../flowDesigner/editActionType";
 import { testFlow } from "../flowDesigner/testFlow";
 import { createTable, addColumn } from "../table";
 import { hostAssets } from "../hostAssets";
@@ -48,6 +49,7 @@ import {
   addChoicesToFieldSchema,
   viewFlowSchema,
   viewActionSchema,
+  editActionSchema,
   publishFlowSchema,
   copyFlowSchema,
   createFlowSchema,
@@ -69,6 +71,7 @@ export var TOOL_NAMES = [
   "add_choices_to_field",
   "flow_view",
   "action_view",
+  "action_edit",
   "flow_publish",
   "flow_copy",
   "flow_create",
@@ -200,6 +203,32 @@ export function buildDescriptors(
           raw: p.raw,
         });
       },
+    },
+    {
+      name: "action_edit",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Structurally edit a published Custom Action Type and republish it as one snapshot. "
+        + "Ops: patchStepScripts (per-step script edits, step addressed by cid or label), "
+        + "addStepOutputs (step-level extended_outputs), addStepInputs (step-level extended_inputs "
+        + "wired to another step's output via pillFrom {step, output} — the pill format and the "
+        + "entry shape are handled for you). Also supports the action-level patchScript / setScript / "
+        + "mergeOutputs. DRY-RUN BY DEFAULT: without apply:true it returns the per-step before/after "
+        + "diff and writes nothing. With apply:true it POSTs /snapshot, captures into updateSetSysId "
+        + "when given, then reads the steps back and verifies the edit actually landed. "
+        + "sysId is the sys_hub_action_type_definition sys_id; scopeSysId is the app scope.",
+      shape: editActionSchema.shape,
+      handler: async function (args: any) {
+        var p = editActionSchema.parse(args);
+        return editActionType({
+          client: client(),
+          sysId: p.sysId,
+          scopeSysId: p.scopeSysId,
+          ops: p.ops,
+          apply: p.apply === true,
+          updateSetSysId: p.updateSetSysId
+        });
+      }
     },
     {
       name: "flow_publish",
