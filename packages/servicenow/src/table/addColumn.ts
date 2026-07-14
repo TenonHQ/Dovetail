@@ -19,11 +19,23 @@
  * A column always belongs to its table's scope, so the name is resolved from the
  * table; an explicit `scope` override must match it.
  *
+ * SIZING THE PHYSICAL COLUMN. A max_length carried on the INSERT sets the dictionary
+ * row but NOT the column ServiceNow actually builds — it materialises at the platform
+ * default regardless. An insert declaring string(4000) therefore leaves a varchar(255)
+ * behind a row that claims 4000, and every value over 255 chars is SILENTLY TRUNCATED.
+ * Only an UPDATE to max_length fires the physical ALTER. So the column is inserted
+ * WITHOUT max_length — the row then reports the default, which genuinely matches the
+ * column that was built — and then updated to the requested length, a real transition
+ * that fires the ALTER and leaves the column the size it claims. Requesting the default
+ * needs no update at all: row and column already agree. Verified live 2026-07-14 on
+ * tenonworkshed by round-tripping an over-length value, not by reading metadata back.
+ *
  * After the insert it READS THE COLUMN BACK from sys_dictionary BY THE RETURNED
  * sys_id (not by element — ServiceNow can normalise the element server-side) to
- * prove THIS insert landed. A pre-check skips a column that already exists so a
- * re-run never inserts a duplicate dictionary row. ES6 only, no optional chaining,
- * no `any`.
+ * prove THIS insert landed, and asserts max_length matches what was asked for — a
+ * read-back that omits max_length cannot tell a correctly-sized column from a lying
+ * one. A pre-check skips a column that already exists so a re-run never inserts a
+ * duplicate dictionary row. ES6 only, no optional chaining, no `any`.
  */
 
 import type { ServiceNowClient } from "../client";
@@ -31,6 +43,21 @@ import { fieldToString } from "../setField";
 import { ColumnSpec, normalizeColumns } from "./buildTableSave";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
+
+/** Patch max_length on a sys_dictionary row, captured in the given update set. */
+async function setMaxLength(
+  client: ServiceNowClient,
+  columnSysId: string,
+  updateSetSysId: string,
+  length: string,
+): Promise<void> {
+  await client.claude.pushWithUpdateSet({
+    update_set_sys_id: updateSetSysId,
+    table: "sys_dictionary",
+    record_sys_id: columnSysId,
+    fields: { max_length: length },
+  });
+}
 
 export interface AddColumnParams {
   /** REST client for table/scope resolution, the insert op, and the read-back verify. */
@@ -265,13 +292,14 @@ export async function addColumn(
     };
   }
 
+  // max_length is deliberately NOT sent on the insert — see the sizing step below.
+  // Reference (and date) columns carry no max_length at all.
+  var wantLength = col.type === "reference" ? "" : col.maxLength;
   var fields: Record<string, string> = {
     name: resolved.name,
     column_label: col.label,
     element: element,
     internal_type: col.type,
-    // Reference (and date) columns carry no max_length.
-    max_length: col.type === "reference" ? "" : col.maxLength,
     mandatory: params.column.mandatory === true ? "true" : "false",
     default_value:
       typeof params.column.default === "string" ? params.column.default : "",
@@ -310,16 +338,68 @@ export async function addColumn(
     );
   }
 
-  // Read back BY sys_id — proves THIS insert landed (robust to server-side element
-  // normalisation and to a pre-existing same-named column).
+  // SIZE THE PHYSICAL COLUMN. A max_length carried on the INSERT sets the dictionary
+  // row but NOT the column ServiceNow actually builds — it materialises at the platform
+  // default regardless, so an insert declaring 4000 leaves a varchar(255) behind a row
+  // that claims 4000, and every value over 255 chars is silently truncated. Only an
+  // UPDATE to max_length fires the physical ALTER. Hence: insert WITHOUT max_length (the
+  // row then reports the default, which does match the column that was built), then
+  // update to the requested length — a real transition, so the ALTER fires and the
+  // column ends up the size it claims. When the requested length IS the default there is
+  // nothing to change and nothing to fix: row and column already agree.
+  // Verified live 2026-07-14 on tenonworkshed by round-tripping an over-length value.
   var rows = await client.table.query<Record<string, unknown>>(
     "sys_dictionary",
     "sys_id=" + columnSysId,
-    { limit: 1, fields: ["sys_id", "element", "internal_type"] },
+    { limit: 1, fields: ["sys_id", "element", "internal_type", "max_length"] },
   );
+  if (rows.length > 0 && wantLength) {
+    var builtLength = fieldToString(rows[0].max_length);
+    if (builtLength !== wantLength) {
+      await setMaxLength(
+        client,
+        columnSysId,
+        params.updateSetSysId,
+        wantLength,
+      );
+      rows = await client.table.query<Record<string, unknown>>(
+        "sys_dictionary",
+        "sys_id=" + columnSysId,
+        {
+          limit: 1,
+          fields: ["sys_id", "element", "internal_type", "max_length"],
+        },
+      );
+    }
+  }
+
+  // The read-back proves THIS insert landed (by sys_id, not element — ServiceNow can
+  // normalise the element server-side) AND that the column is the size it was asked to
+  // be. A read-back that omits max_length cannot tell a correctly-sized column from one
+  // that will silently eat data, which is exactly how that bug survived.
   var verified = rows.length > 0;
   var actualElement = verified ? fieldToString(rows[0].element) : element;
   var readBackType = verified ? fieldToString(rows[0].internal_type) : "";
+  var readBackLength = verified ? fieldToString(rows[0].max_length) : "";
+
+  if (verified && wantLength && readBackLength !== wantLength) {
+    return failure(
+      resolved,
+      col,
+      element,
+      params.updateSetSysId,
+      "column '" +
+        actualElement +
+        "' materialised but max_length read back as '" +
+        readBackLength +
+        "', not the requested '" +
+        wantLength +
+        "' — the physical column is NOT the size it was declared, so values over the " +
+        "real limit would be silently truncated. Fix the column on the instance before " +
+        "writing to it.",
+      columnSysId,
+    );
+  }
 
   if (!verified) {
     return failure(
