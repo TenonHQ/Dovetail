@@ -85,9 +85,14 @@ function liveClient(opts: {
   /** Pin the max_length the instance reports back no matter what is written, to
    *  simulate a column whose physical size never took. */
   readBackLength?: string;
+  /** Pin the internal_type the read-back reports, to simulate an instance that
+   *  stored a different type than was inserted. Default: echo the inserted type. */
+  readBackType?: string;
 }): ServiceNowClient {
+  // Deliberately NOT the table name — the scope assertion below must fail if
+  // addColumn ever passes the table name where the resolved scope name belongs.
   var scopeName =
-    opts.scopeName === undefined ? "x_cadso_journey" : opts.scopeName;
+    opts.scopeName === undefined ? "x_cadso_journey_app" : opts.scopeName;
   var defaultLength =
     opts.defaultLength === undefined ? "255" : opts.defaultLength;
   var calls: {
@@ -125,11 +130,20 @@ function liveClient(opts: {
               : defaultLength;
             var reported =
               opts.readBackLength === undefined ? written : opts.readBackLength;
+            // A healthy instance stores the type it was given; readBackType simulates
+            // one that stored something else.
+            var insertedType = calls.createRecordFields.internal_type;
+            var reportedType =
+              opts.readBackType !== undefined
+                ? opts.readBackType
+                : typeof insertedType === "string" && insertedType
+                ? insertedType
+                : "url";
             return [
               {
                 sys_id: "NEWSYS",
                 element: "url",
-                internal_type: "url",
+                internal_type: reportedType,
                 max_length: reported,
               },
             ];
@@ -283,11 +297,12 @@ describe("addColumn live (stubbed)", function () {
     expect(result.verified).toBe(true);
     expect(result.element).toBe("url");
     expect(result.columnSysId).toBe("NEWSYS");
-    // createRecord must receive the scope NAME, not the sys_scope sys_id.
+    // createRecord must receive the scope NAME — not the sys_scope sys_id, and not
+    // the table name (the stub's scope name differs from the table name on purpose).
     expect(
       (client as unknown as { _calls: { createRecordScope: string } })._calls
         .createRecordScope,
-    ).toBe("x_cadso_journey");
+    ).toBe("x_cadso_journey_app");
   });
   it("skips (no insert) when the column already exists", async function () {
     var result = await addColumn({
@@ -299,6 +314,23 @@ describe("addColumn live (stubbed)", function () {
     expect(result.status).toBe("skipped");
     expect(result.verified).toBe(true);
     expect(result.columnSysId).toBe("EXIST");
+  });
+  it("fails (not verified-with-a-note) when the read-back internal_type is not the requested type", async function () {
+    // readBackType simulates an instance that stored a different type than was
+    // inserted. Same rule as max_length: the column that exists is not the column
+    // that was asked for.
+    var result = await addColumn({
+      client: liveClient({ existing: false, readBackType: "url" }),
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "string" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.verified).toBe(false);
+    expect(result.columnSysId).toBe("NEWSYS"); // the column DOES exist on the instance
+    expect(result.note).toMatch(
+      /internal_type read back as 'url', not the requested 'string_full_utf8'/,
+    );
   });
   it("rejects a --scope that does not match the table's scope", async function () {
     await expect(
@@ -468,6 +500,22 @@ describe("addColumn skip-path drift", function () {
     expect(result.status).toBe("skipped");
     expect(result.verified).toBe(false);
     expect(result.note).toMatch(/max_length is 40, not the requested 4000/);
+  });
+
+  it("refuses to verify a skip when a size was requested but the existing column reports NONE", async function () {
+    // existingLength defaults to "" in the stub — a row that reports no max_length
+    // cannot be shown to match a requested one, so it must not verify.
+    var result = await addColumn({
+      client: liveClient({ existing: true, existingType: "string_full_utf8" }),
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "string", max_length: 4000 },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(false);
+    expect(result.note).toMatch(
+      /max_length is \(empty\), not the requested 4000/,
+    );
   });
 
   it("writes nothing on a drifted skip — it never silently alters an existing column", async function () {

@@ -298,9 +298,15 @@ export async function addColumn(
         "type is '" + existingType + "', not the requested '" + col.type + "'",
       );
     }
-    if (wantLength && existingLength && existingLength !== wantLength) {
+    if (wantLength && existingLength !== wantLength) {
+      // An EMPTY existing max_length is drift too: a length was requested, and a row
+      // that reports none cannot be shown to match it — refusing to verify beats
+      // green-lighting a column of unknown size.
       drift.push(
-        "max_length is " + existingLength + ", not the requested " + wantLength,
+        "max_length is " +
+          (existingLength ? existingLength : "(empty)") +
+          ", not the requested " +
+          wantLength,
       );
     }
     return {
@@ -480,6 +486,28 @@ export async function addColumn(
     );
   }
 
+  // Same trust-the-read-back rule as max_length: a column that reads back a different
+  // internal_type than was requested is NOT the column that was asked for. Refuse to
+  // call it verified — the column EXISTS (sys_id below), so report through the
+  // structured failed result, not a green result with a note nobody reads.
+  if (readBackType && readBackType !== col.type) {
+    return failure(
+      resolved,
+      col,
+      element,
+      params.updateSetSysId,
+      "column '" +
+        actualElement +
+        "' materialised but internal_type read back as '" +
+        readBackType +
+        "', not the requested '" +
+        col.type +
+        "' — the column that exists is not the column that was asked for. Reconcile it " +
+        "on the instance before writing to it.",
+      columnSysId,
+    );
+  }
+
   var note =
     "Added column '" +
     actualElement +
@@ -495,9 +523,6 @@ export async function addColumn(
         "', not the requested '" +
         element +
         "')"
-      : "") +
-    (readBackType && readBackType !== col.type
-      ? " (NOTE: internal_type read back as '" + readBackType + "')"
       : "") +
     ".";
   if (params.debug) {

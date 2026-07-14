@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * sinc-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
+ * dove-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
  *
  * Usage:
- *   sinc-sn add-choices \
+ *   dove-sn add-choices \
  *     --table x_cadso_core_event \
  *     --column state \
  *     --update-set <sys_id> \
  *     --choices 'delivered=Delivered,failed=Failed,...' \
  *     [--choice-type 3] [--json]
  *
- *   sinc-sn add-choices --from-json path/to/choices.json
+ *   dove-sn add-choices --from-json path/to/choices.json
  *
  * JSON payload shape:
  *   {
@@ -148,7 +148,7 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
 }
 
 /**
- * sinc-sn build-flow:
+ * dove-sn build-flow:
  *   --from-json <path>      Required. JSON spec for the artifact (clone | create).
  *   --update-set <sys_id>   Optional. Overrides spec.updateSetSysId at the CLI level.
  *   --dry-run               Optional. Emit the planned write graph; do nothing.
@@ -1012,6 +1012,15 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
   if (flags.debug === "true" || spec.debug === true) params.debug = true;
 
+  // Fail fast with a targeted message + exit 1 instead of falling through to the
+  // top-level fatal handler — the live path cannot proceed without a target update set.
+  if (!params.dryRun && !params.updateSetSysId) {
+    process.stderr.write(
+      "add-column: --update-set is required on the live path (only --dry-run works without one)\n",
+    );
+    return 1;
+  }
+
   var result = await addColumn(params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -1400,7 +1409,7 @@ main()
   })
   .catch(function (err) {
     process.stderr.write(
-      "sinc-sn error: " +
+      "dove-sn error: " +
         (err && err.message ? err.message : String(err)) +
         "\n",
     );
