@@ -310,7 +310,11 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   // 7. Verify — a 201 says the snapshot compiled, not that the edit landed as
   //    intended. Read the steps back and compare against what we sent.
   var verified: VerifyStepsResult | undefined;
-  if (stepOpsSupplied && stepsAfter) {
+  if (stepOpsSupplied && touchedCids.length === 0) {
+    // Every op was a no-op (already present / nothing to patch) — there is nothing
+    // to read back, so don't spend a round-trip proving we changed nothing.
+    verified = { ok: true, notes: ["no step changed — nothing to verify"] };
+  } else if (stepOpsSupplied && stepsAfter) {
     var freshResp = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "/step_instances")));
     var freshSteps: Array<StepRecord> = freshResp && Array.isArray(freshResp.steps) ? freshResp.steps : [];
     if (freshSteps.length === 0) {

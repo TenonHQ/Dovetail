@@ -231,7 +231,49 @@ describe("stepOps — verifySteps", function () {
     });
     var verdict = verifySteps(summarizeSteps(res.steps), summarizeSteps(graph()), res.touchedCids);
     expect(verdict.ok).toBe(false);
-    expect(verdict.notes.join(" ")).toContain("chars on the instance, expected");
+    expect(verdict.notes.join(" ")).toContain("does not match what was sent");
+  });
+
+  it("fails on a DIFFERENT script of the SAME length — length is not identity", function () {
+    var sent = applyStepOps(graph(), { patchStepScripts: [{ step: PARSE_CID, setScript: "outputs.a = 1;" }] });
+    var landed = applyStepOps(graph(), { patchStepScripts: [{ step: PARSE_CID, setScript: "outputs.b = 2;" }] });
+    var sentSummary = summarizeSteps(sent.steps);
+    var landedSummary = summarizeSteps(landed.steps);
+
+    expect(sentSummary[0].scriptChars).toBe(landedSummary[0].scriptChars); // same length...
+    var verdict = verifySteps(sentSummary, landedSummary, sent.touchedCids);
+    expect(verdict.ok).toBe(false); // ...but must NOT verify
+  });
+
+  it("fails when a pill landed MIS-WIRED — the entry is present but points at the wrong output", function () {
+    // The whole point of the feature: a wrong pill publishes fine and silently
+    // reads undefined at runtime. A name-only check would call this verified.
+    var sent = applyStepOps(graph(), {
+      addStepOutputs: [{ step: "Parse Response", name: "isRetryable", type: "boolean" }],
+      addStepInputs: [{
+        step: "Handle Error", name: "isRetryable", type: "boolean",
+        pillFrom: { step: "Parse Response", output: "isRetryable" }
+      }]
+    });
+    var landed = summarizeSteps(sent.steps);
+    // Same entry name, wrong pill value — what a bad publish would look like.
+    landed[1].extendedInputs[1].value = "{{step[" + PARSE_CID + "].body}}";
+
+    var verdict = verifySteps(summarizeSteps(sent.steps), landed, sent.touchedCids);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.notes.join(" ")).toContain("expected '{{step[" + PARSE_CID + "].isRetryable}}'");
+  });
+
+  it("fails when an IO entry landed with the wrong type", function () {
+    var sent = applyStepOps(graph(), {
+      addStepOutputs: [{ step: "Parse Response", name: "isRetryable", type: "boolean" }]
+    });
+    var landed = summarizeSteps(sent.steps);
+    landed[0].extendedOutputs[1].type = "string";
+
+    var verdict = verifySteps(summarizeSteps(sent.steps), landed, sent.touchedCids);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.notes.join(" ")).toContain("has type 'string' on the instance, expected 'boolean'");
   });
 });
 

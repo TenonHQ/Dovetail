@@ -252,7 +252,10 @@ an object that would corrupt the action. Author one entry in the Designer first,
 
 **It verifies the publish.** A `201` from `/snapshot` means the snapshot compiled — not that your edit
 landed as intended. With `--apply`, the steps are read back from the instance and compared against what
-was sent; a mismatch prints the diff and exits **2**.
+was sent: script **content** (hashed, so a same-length-but-different script can't pass) and each IO
+entry's **name, type and value** — so an entry that landed with a mis-wired pill is caught, not just a
+missing one. A mismatch prints the diff and exits **2**. When every op was a no-op, there is nothing to
+read back and the round-trip is skipped.
 
 `copy-flow` calls the Designer's own `POST /processflow/flow/{id}/copy` — a
 complete, faithful clone created as an **inactive draft**. (Don't publish +

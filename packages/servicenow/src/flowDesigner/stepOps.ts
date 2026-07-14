@@ -85,7 +85,10 @@ export interface StepIoSummary {
 export interface StepSummary {
   label: string;
   cid: string;
+  /** For display. NOT sufficient to verify a script — two different scripts can share a length. */
   scriptChars: number | null;
+  /** Content hash of the script — what the verify pass actually compares. */
+  scriptHash: string | null;
   extendedInputs: Array<StepIoSummary>;
   extendedOutputs: Array<StepIoSummary>;
 }
@@ -313,11 +316,26 @@ function assertSafeName(name: unknown, what: string): string {
   return name;
 }
 
+/**
+ * FNV-1a over the script text. The verify pass compares content, not length —
+ * two different scripts of the same length must not pass as equal.
+ */
+export function hashScript(script: string): string {
+  var h = 0x811c9dc5;
+  for (var i = 0; i < script.length; i += 1) {
+    h ^= script.charCodeAt(i);
+    // h *= 16777619, kept in uint32 without overflowing the float mantissa.
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return ("0000000" + h.toString(16)).slice(-8);
+}
+
 /** A compact, loggable view of a step's scripts and step-level IO. */
 export function summarizeSteps(steps: Array<StepRecord>): Array<StepSummary> {
   return steps.map(function (step) {
     var id = stepIdentity(step);
     var scriptInput = findScriptInput(step);
+    var script = scriptInput ? readString(scriptInput.value) : null;
     var summarize = function (key: "extended_inputs" | "extended_outputs"): Array<StepIoSummary> {
       var list = Array.isArray(step[key]) ? (step[key] as Array<IoEntry>) : [];
       return list.map(function (entry) {
@@ -331,7 +349,8 @@ export function summarizeSteps(steps: Array<StepRecord>): Array<StepSummary> {
     return {
       label: id.label,
       cid: id.cid,
-      scriptChars: scriptInput ? readString(scriptInput.value).length : null,
+      scriptChars: script === null ? null : script.length,
+      scriptHash: script === null ? null : hashScript(script),
       extendedInputs: summarize("extended_inputs"),
       extendedOutputs: summarize("extended_outputs")
     };
@@ -487,8 +506,13 @@ export function verifySteps(
     }
     return null;
   };
-  var names = function (list: Array<StepIoSummary>): Array<string> {
-    return list.map(function (e) { return e.name; });
+  var ioNamed = function (list: Array<StepIoSummary>, name: string): StepIoSummary | null {
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i].name === name) {
+        return list[i];
+      }
+    }
+    return null;
   };
 
   for (var t = 0; t < touchedCids.length; t += 1) {
@@ -504,21 +528,42 @@ export function verifySteps(
       continue;
     }
     var failures: Array<string> = [];
-    if (want.scriptChars !== got.scriptChars) {
+
+    // Content, not length — same-length-different-script must NOT pass.
+    if (want.scriptHash !== got.scriptHash) {
       failures.push(
-        "script is " + String(got.scriptChars) + " chars on the instance, expected " + String(want.scriptChars)
+        "script on the instance does not match what was sent (" + String(got.scriptChars)
+          + " chars / " + String(got.scriptHash) + ", expected " + String(want.scriptChars)
+          + " chars / " + String(want.scriptHash) + ")"
       );
     }
-    var missingIo = function (kind: string, wantIo: Array<StepIoSummary>, gotIo: Array<StepIoSummary>): void {
-      var gotNames = names(gotIo);
+
+    // Name AND type AND value — a present-but-wrong entry (notably a mis-wired
+    // pill) is exactly the silent failure this whole feature exists to prevent.
+    var checkIo = function (kind: string, wantIo: Array<StepIoSummary>, gotIo: Array<StepIoSummary>): void {
       for (var i = 0; i < wantIo.length; i += 1) {
-        if (gotNames.indexOf(wantIo[i].name) === -1) {
-          failures.push(kind + " '" + wantIo[i].name + "' absent on read-back");
+        var entry = wantIo[i];
+        var landed = ioNamed(gotIo, entry.name);
+        if (!landed) {
+          failures.push(kind + " '" + entry.name + "' absent on read-back");
+          continue;
+        }
+        if (landed.value !== entry.value) {
+          failures.push(
+            kind + " '" + entry.name + "' has value '" + landed.value
+              + "' on the instance, expected '" + entry.value + "'"
+          );
+        }
+        if (landed.type !== entry.type) {
+          failures.push(
+            kind + " '" + entry.name + "' has type '" + landed.type
+              + "' on the instance, expected '" + entry.type + "'"
+          );
         }
       }
     };
-    missingIo("extended_output", want.extendedOutputs, got.extendedOutputs);
-    missingIo("extended_input", want.extendedInputs, got.extendedInputs);
+    checkIo("extended_output", want.extendedOutputs, got.extendedOutputs);
+    checkIo("extended_input", want.extendedInputs, got.extendedInputs);
 
     if (failures.length > 0) {
       ok = false;

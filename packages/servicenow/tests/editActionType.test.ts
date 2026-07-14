@@ -249,6 +249,22 @@ describe("editActionType — per-step ops", function () {
     expect(res.warnings.join(" ")).toContain("VERIFY FAILED");
   });
 
+  it("skips the read-back GET entirely when every op was a no-op", async function () {
+    var m = mockClient(stepFixtures());
+    var res = await editActionType({
+      client: m.client, sysId: SYS, scopeSysId: SCOPE,
+      // 'body' is already an output on Parse Response — idempotent skip, nothing changes.
+      ops: { addStepOutputs: [{ step: "Parse Response", name: "body", type: "string" }] },
+      apply: true
+    });
+
+    expect(res.changes.length).toBe(0);
+    expect(res.verified!.ok).toBe(true);
+    expect(res.verified!.notes.join(" ")).toContain("nothing to verify");
+    // Only the model GET + the step_instances GET — no third, wasted round-trip.
+    expect(m.cap.gets.length).toBe(2);
+  });
+
   it("refuses to mix the auto-detect script ops with explicit per-step ops", async function () {
     var m = mockClient(stepFixtures());
     await expect(editActionType({
