@@ -1,7 +1,54 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-07-14T20:15:42.612Z",
+  "generated_at": "2026-07-14T20:25:03.151Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.28",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.28",
+      "prev_version": "0.0.27",
+      "published_at": "2026-07-14T20:25:03.138Z",
+      "git": {
+        "sha": "a5aeaa3c3f56c0bb24de80f12808689c5987e457",
+        "tag": "dovetail-servicenow@0.0.28"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "a5aeaa3c3",
+          "subject": "feat(servicenow): edit a published action type's steps in one publish (#216) (#223)",
+          "pr": 216
+        },
+        {
+          "sha": "b8967c79d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.25",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.25",
+      "prev_version": "0.0.24",
+      "published_at": "2026-07-14T20:25:03.138Z",
+      "git": {
+        "sha": "a5aeaa3c3f56c0bb24de80f12808689c5987e457",
+        "tag": "dovetail-mcp@0.0.25"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "b8967c79d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.27",
@@ -1196,66 +1243,6 @@
         {
           "sha": "a8922d9d5",
           "subject": "chore(release): @tenonhq/dovetail-schema@0.0.10 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-core@0.0.103",
-      "package": "@tenonhq/dovetail-core",
-      "version": "0.0.103",
-      "prev_version": "0.0.102",
-      "published_at": "2026-06-05T06:43:18.252Z",
-      "git": {
-        "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
-        "tag": "dovetail-core@0.0.103"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "71bdf9bba",
-          "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
-          "pr": 148
-        },
-        {
-          "sha": "d5e064760",
-          "subject": "chore(release): @tenonhq/dovetail-servicenow@0.0.15 [skip ci]"
-        },
-        {
-          "sha": "af1417796",
-          "subject": "chore(release): publish 3 packages [skip ci]"
-        },
-        {
-          "sha": "e25ae74c2",
-          "subject": "chore(release): @tenonhq/dovetail-core@0.0.102 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.37",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.37",
-      "prev_version": "0.0.36",
-      "published_at": "2026-06-05T06:43:18.252Z",
-      "git": {
-        "sha": "71bdf9bba8bd5e3849a212a18d9ebc9241232b32",
-        "tag": "dovetail-dashboard@0.0.37"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "71bdf9bba",
-          "subject": "fix: float internal dep ranges to ~0.0.x so consumers need no overrides (#148)",
-          "pr": 148
-        },
-        {
-          "sha": "ba1c67775",
-          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.36 [skip ci]"
         }
       ],
       "exports_delta": null,
