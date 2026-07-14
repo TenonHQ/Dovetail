@@ -20,17 +20,76 @@ export function setLogLevel(args: Sinc.SharedCmdArgs) {
   logger.setLogLevel(args.logLevel);
 }
 
+/**
+ * Normalize the --table flag into a clean list. yargs `type: "array"` already
+ * yields a string[], but accept comma-separated values too (`-t a,b`) so the
+ * flag behaves the way people reflexively type it.
+ */
+export function normalizeTableFilter(raw?: string | string[]): string[] {
+  if (!raw) return [];
+  const parts = Array.isArray(raw) ? raw : [raw];
+  const out: string[] = [];
+  for (const part of parts) {
+    for (const piece of String(part).split(",")) {
+      const name = piece.trim();
+      if (name !== "" && out.indexOf(name) === -1) out.push(name);
+    }
+  }
+  return out;
+}
+
+/**
+ * Requested tables that no target scope actually syncs. A typo here would
+ * otherwise refresh nothing and look like a successful no-op, so the caller
+ * turns a non-empty result into a hard failure.
+ */
+export function unknownTablesForScopes(tables: string[], scope?: string): string[] {
+  const config = ConfigManager.getConfig();
+  const scopeNames = scope ? [scope] : Object.keys(config.scopes || {});
+  const allowed: string[] = [];
+  for (const scopeName of scopeNames) {
+    const resolved = ConfigManager.resolveConfigForScope(scopeName);
+    for (const table of resolved.tables || []) {
+      if (allowed.indexOf(table) === -1) allowed.push(table);
+    }
+  }
+  return tables.filter((t) => allowed.indexOf(t) === -1);
+}
+
 export async function refreshCommand(
-  args: Sinc.SharedCmdArgs & { force?: boolean; scope?: string; benchmark?: boolean },
+  args: Sinc.SharedCmdArgs & {
+    force?: boolean;
+    scope?: string;
+    benchmark?: boolean;
+    table?: string | string[];
+  },
   log: boolean = true,
 ) {
   setLogLevel(args);
   try {
     if (!log) setLogLevel({ logLevel: "warn" });
-    fileLogger.debug("Syncing manifest from instance (force=" + !!args.force + ", benchmark=" + !!args.benchmark + ")");
+
+    const tables = normalizeTableFilter(args.table);
+    if (tables.length > 0) {
+      const unknown = unknownTablesForScopes(tables, args.scope);
+      if (unknown.length > 0) {
+        const where = args.scope ? "scope '" + args.scope + "'" : "any configured scope";
+        throw new Error(
+          "--table: " + unknown.join(", ") + " is not synced by " + where + ". " +
+          "Add it to includes._tables (or includes._scopes.<scope>._tables) in dove.config.js first.",
+        );
+      }
+    }
+
+    fileLogger.debug(
+      "Syncing manifest from instance (force=" + !!args.force +
+      ", benchmark=" + !!args.benchmark +
+      ", tables=" + (tables.length > 0 ? tables.join(",") : "all") + ")",
+    );
     await AppUtils.syncManifest(args.scope, {
       force: !!args.force,
       benchmark: !!args.benchmark,
+      tables: tables.length > 0 ? tables : undefined,
     });
     logger.success("Refresh complete!");
     setLogLevel(args);

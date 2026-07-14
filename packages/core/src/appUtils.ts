@@ -313,6 +313,11 @@ export const processManifest = async (
 export interface SyncManifestOptions {
   force?: boolean;
   benchmark?: boolean;
+  // Narrow the FILE refresh to these tables (a subset of the scope's `_tables`
+  // whitelist). The manifest itself is still written in full — narrowing it
+  // would drop every other table from dove.manifest.<scope>.json and break
+  // push/watch. Empty/absent means "every allowed table", the historic default.
+  tables?: string[];
   // Internal: the active collector + request to close the per-scope segment.
   // Passed scope-to-scope so the caller can wire a single collector across an
   // all-scopes refresh. Not exposed on the CLI surface.
@@ -395,9 +400,43 @@ export const syncManifest = async (
       const refreshTableCount = Object.keys(newManifest.tables).length;
       fileLogger.debug("Refreshed manifest for " + scope + ": " + refreshTableCount + " tables");
 
+      // The manifest is always written in FULL. Narrowing it to the --table
+      // subset would drop every other table from dove.manifest.<scope>.json and
+      // break push/watch, so the filter applies only to the file download below.
       await fUtils.writeScopeManifest(scope, newManifest);
+
+      // --table gate: refresh file content for only the requested tables. Any
+      // table not in this scope's `_tables` whitelist has already been dropped
+      // above, so intersecting here is enough. An empty intersection means this
+      // scope holds none of the requested tables — refreshAllFiles no-ops on an
+      // empty table map, so the scope is skipped without touching its files.
+      var refreshManifest = newManifest;
+      if (options.tables && options.tables.length > 0) {
+        var wantedTables: any = {};
+        var wantedCount = 0;
+        var presentTableNames = Object.keys(newManifest.tables || {});
+        for (var w = 0; w < presentTableNames.length; w++) {
+          var wName = presentTableNames[w];
+          if (options.tables.indexOf(wName) !== -1) {
+            wantedTables[wName] = newManifest.tables[wName];
+            wantedCount++;
+          }
+        }
+        refreshManifest = Object.assign({}, newManifest, { tables: wantedTables });
+        if (wantedCount === 0) {
+          logger.info(
+            "Scope " + scope + " has none of the requested tables — skipping file refresh.",
+          );
+        } else {
+          logger.info(
+            "Refreshing " + wantedCount + " of " + refreshTableCount + " tables in " + scope +
+            " (--table filter): " + Object.keys(wantedTables).join(", "),
+          );
+        }
+      }
+
       if (collector) collector.startScope(scope);
-      await refreshAllFiles(newManifest, scopeSourcePath, {
+      await refreshAllFiles(refreshManifest, scopeSourcePath, {
         force: options.force,
         benchmarkCollector: collector,
       });
@@ -413,6 +452,7 @@ export const syncManifest = async (
       // scopes that leaked in before the whitelist gate existed.
       var childOptions: SyncManifestOptions = {
         force: options.force,
+        tables: options.tables,
         _benchmarkCollector: collector,
       };
       if (declaredScopes.length > 0) {
