@@ -202,9 +202,6 @@ export var setColumnSchema = z.object({
   attributes: columnAttributesSchema,
   updateSetSysId: z.string().optional(),
   dryRun: z.boolean().optional(),
-  // Off by default. Attempts a shrink even when rows hold longer values — ServiceNow
-  // silently refuses those, so this is an escape hatch, not a way to force data loss.
-  forceShrink: z.boolean().optional(),
 });
 
 // Data-record write verbs. Kept as plain z.object (no .refine wrapper) so

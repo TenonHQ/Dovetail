@@ -444,13 +444,40 @@ describe("setColumn truncation guard", function () {
     expect(msg).toMatch(/2 row\(s\) already hold a longer value/);
     expect(msg).toMatch(/longest is 95 characters/);
     expect(msg).toMatch(/ROW0, ROW1/);
-    expect(msg).toMatch(/--force-shrink/);
+    // It tells you the FIX (shorten the values), not an override — there isn't one.
+    expect(msg).toMatch(/Shorten or clear those values first/);
   });
 
-  it("attempts the shrink anyway when the caller passes forceShrink", async function () {
+  it("offers NO override — a forced shrink would either do nothing or destroy data", async function () {
+    // ServiceNow ignores a shrink below the data in the column, so forcing it past a
+    // KNOWN blocker is pointless at best and destructive at worst. Shorten the values.
     var client = liveClient({
       dict: Object.assign({}, dict40),
       rowValues: ["x".repeat(80)],
+    });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { maxLength: 40 },
+        updateSetSysId: "us1",
+        // @ts-expect-error — there is deliberately no such option.
+        forceShrink: true,
+      }),
+    ).rejects.toThrow(/refusing to shrink/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("ATTEMPTS the shrink when the table is too big to scan and nothing seen is too long", async function () {
+    // Blocking here would refuse a change that is probably fine. The platform is the
+    // real backstop (it will not cut data) and the read-back catches a silent refusal,
+    // so we try it rather than inventing a restriction the caller must escape.
+    var many: Array<string> = [];
+    for (var i = 0; i < 1000; i += 1) many.push("short");
+    var client = liveClient({
+      dict: Object.assign({}, dict40),
+      rowValues: many,
     });
     var result = await setColumn({
       client: client,
@@ -458,7 +485,6 @@ describe("setColumn truncation guard", function () {
       column: "description",
       attributes: { maxLength: 40 },
       updateSetSysId: "us1",
-      forceShrink: true,
     });
     expect(result.status).toBe("applied");
     expect(pushesOf(client)).toHaveLength(1);
@@ -492,7 +518,7 @@ describe("setColumn truncation guard", function () {
       dryRun: true,
     });
     expect(result.status).toBe("dry-run");
-    expect(result.note).toMatch(/REFUSED WITHOUT --force-shrink/);
+    expect(result.note).toMatch(/WILL BE REFUSED/);
     expect(result.note).toMatch(/will NOT take/);
     expect(result.note).toMatch(/refuses SILENTLY/);
   });

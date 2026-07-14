@@ -853,10 +853,10 @@ function printHelp(): void {
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
       "                      [--label <l>] [--mandatory true|false] [--default <v>]\n" +
       "                      [--read-only true|false] [--max-length <n>]\n" +
-      "                      [--force-shrink] [--dry-run] [--json])\n" +
+      "                      [--dry-run] [--json])\n" +
       "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
       "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
-      "                     Shorten those values first, or --force-shrink to try anyway.\n" +
+      "                     Shorten or clear those values first, then re-run.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
       "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
@@ -1116,7 +1116,6 @@ async function runSetColumn(flags: Record<string, string>): Promise<number> {
   };
   if (flags["update-set"]) params.updateSetSysId = flags["update-set"];
   if (flags["dry-run"] === "true") params.dryRun = true;
-  if (flags["force-shrink"] === "true") params.forceShrink = true;
 
   var result = await setColumn(params);
   if (flags.json === "true") {

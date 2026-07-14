@@ -31,10 +31,13 @@
  *   - a max_length SHRINK below the data already in the column — the third silent
  *     no-op. ServiceNow refuses it, and refuses SILENTLY: 200 OK, column unchanged,
  *     data intact. Clear the over-long values and the identical shrink then works. So
- *     the platform protects the data; it just never tells you why nothing happened.
- *     set-column runs a pre-flight, NAMES the rows that block the shrink, and refuses
- *     rather than issuing a write that would be quietly ignored (--force-shrink to
- *     attempt it regardless).
+ *     the PLATFORM protects the data; it just never tells you why nothing happened.
+ *     set-column therefore runs a pre-flight purely to SAY WHY: it names the rows that
+ *     block the shrink and refuses, instead of issuing a write that gets ignored and
+ *     leaving you to puzzle over the silence. There is deliberately no override — a
+ *     forced shrink would either do nothing (the platform ignores it) or destroy data
+ *     on an instance that behaved differently. Shorten the values instead; that is
+ *     explicit, visible, and yours to decide.
  *
  * AN ALTER FIRES ON A CHANGE, NOT ON A WRITE. Writing 40 over an existing 40 is a
  * no-op: ServiceNow sees no change, no ALTER runs, and the call still succeeds. So a
@@ -114,15 +117,6 @@ export interface SetColumnParams {
   updateSetSysId?: string;
   /** Plan only — resolves and diffs, writes nothing. */
   dryRun?: boolean;
-  /**
-   * Skip the pre-flight check and attempt a shrink anyway, even though rows hold longer
-   * values. OFF by default. Not a way to force data loss — ServiceNow silently refuses
-   * such a shrink and preserves the data (see findTruncationRisk); the write will simply
-   * be reported `failed` on read-back. The escape hatch exists because that behaviour was
-   * observed on one instance, and an instance that DID truncate must not be able to do so
-   * by accident.
-   */
-  forceShrink?: boolean;
 }
 
 /** One attribute's before -> after, as stored on the instance. */
@@ -332,10 +326,10 @@ function describeRisk(
     from +
     " to " +
     to +
-    ", and the column holds more rows than can be checked from here (read the first " +
+    " — no over-length value was found, but the column holds more populated rows than " +
+    "can be read from here (checked the first " +
     TRUNCATION_SCAN_LIMIT +
-    "). No over-length value was found among them, but the rest were NOT checked, so " +
-    "this shrink cannot be proven safe."
+    "), so one of the rest may still block it."
   );
 }
 
@@ -396,9 +390,17 @@ export async function setColumn(
     }
   }
 
-  // A max_length SHRINK fires an ALTER that silently truncates every longer value —
-  // exactly the irreversible data loss this verb exists to prevent. Look before leaping:
-  // a warning on the dry-run, a refusal on the live path.
+  // A max_length SHRINK below the data in the column will not take: ServiceNow refuses
+  // it, and refuses silently (200 OK, column unchanged). So the pre-flight exists to say
+  // WHY, up front, instead of leaving you staring at a write that did nothing.
+  //
+  // Only a KNOWN blocker refuses. If the column holds more rows than can be read from
+  // here, we attempt the shrink anyway rather than blocking a change that is probably
+  // fine — the platform is the real backstop (it will not cut the data), and the
+  // read-back below catches it and says so if the shrink does not take. There is
+  // deliberately no override flag: forcing past a known blocker would either do nothing
+  // (ServiceNow ignores it) or destroy data on an instance that behaved differently.
+  // Neither is worth offering. Shorten the values instead — that is explicit and visible.
   var shrink = changes.filter(function (c) {
     return (
       c.attribute === "max_length" &&
@@ -415,12 +417,10 @@ export async function setColumn(
       Number(shrink.to),
     );
   }
-  var unsafeShrink = Boolean(
-    risk && (risk.offenders > 0 || risk.incomplete) && !params.forceShrink,
-  );
+  var unsafeShrink = Boolean(risk && risk.offenders > 0);
   var riskNote =
     unsafeShrink && shrink && risk
-      ? " REFUSED WITHOUT --force-shrink: " +
+      ? " WILL BE REFUSED: " +
         describeRisk(table, column, shrink.from, shrink.to, risk)
       : "";
 
@@ -471,8 +471,8 @@ export async function setColumn(
     throw new Error(
       "set-column: refusing to shrink — " +
         describeRisk(table, column, shrink.from, shrink.to, risk) +
-        " Nothing was written. To attempt it anyway, re-run with --force-shrink " +
-        "(forceShrink: true) — but expect ServiceNow to ignore it.",
+        " Nothing was written — the shrink would be ignored anyway. Shorten or clear " +
+        "those values first, then re-run.",
     );
   }
 
@@ -543,7 +543,18 @@ export async function setColumn(
         "the write returned success but the column did NOT change: " +
         mismatched.join("; ") +
         ". ServiceNow accepts and silently ignores some dictionary changes, so treat " +
-        "this column as NOT updated and reconcile it on the instance.",
+        "this column as NOT updated and reconcile it on the instance." +
+        // The likeliest cause of an ignored SHRINK we did not predict: a row we could
+        // not read. Say so, rather than leaving the same silence we set out to fix.
+        (shrink && risk && risk.incomplete
+          ? " Most likely cause: this was a shrink, and the column holds more populated " +
+            "rows than can be read from here (checked the first " +
+            TRUNCATION_SCAN_LIMIT +
+            "). ServiceNow refuses to shrink a column below the data in it, so one of " +
+            "the rows we could not check probably still holds a value longer than " +
+            shrink.to +
+            " characters."
+          : ""),
     };
   }
 

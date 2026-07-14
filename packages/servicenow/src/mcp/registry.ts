@@ -398,8 +398,8 @@ export function buildDescriptors(
         "write). A maxLength SHRINK is REFUSED while rows hold longer values: ServiceNow silently " +
         "refuses such a shrink (200 OK, column unchanged, data preserved), so the tool names the " +
         "blocking rows instead of issuing a write that would be quietly ignored. Clear those values " +
-        "first, or pass forceShrink to attempt it anyway. dryRun:true diffs against the instance, " +
-        "flags the blocking rows, and writes nothing.",
+        "first, then re-run — there is no override, because forcing it would either do nothing or " +
+        "destroy data. dryRun:true diffs against the instance, flags the blocking rows, and writes nothing.",
       shape: setColumnSchema.shape,
       handler: async function (args: any) {
         var p = setColumnSchema.parse(args);
@@ -410,7 +410,6 @@ export function buildDescriptors(
           attributes: p.attributes,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
-          forceShrink: p.forceShrink,
         });
       },
     },
