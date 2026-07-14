@@ -5,7 +5,7 @@ status: living
 type: reference
 tags: [dovetail, servicenow, documentation]
 owner: claude
-last_updated: 2026-07-10
+last_updated: 2026-07-14
 authority: canonical
 related:
   - CLAUDE.md
@@ -108,7 +108,7 @@ Create a new update set, scoped correctly in one server call.
 
 ## Dovetail Sync (`/api/cadso/dovetail_sync`)
 
-All five of these are read/bulk operations used by `dove refresh`/`dove pull`/ATF pushes. **No server-side handler script for the current live def is checked into this repo** -- the files under `servicenow/sys_ws_operation/` (no `dovetail/` in the path) are the **dead Sincronia-era** versions of these same operation names (see Deprecated section below), not the current implementation. Treat all five as 🟡 client-contract-only; do not infer current server behavior from the old scripts.
+All five of these are read/bulk operations used by `dove refresh`/`dove pull`/ATF pushes. **The thin per-operation handler scripts for the current live def are not checked into this repo**, but the shared base class they call into -- `servicenow/dovetail/sys_script_include/DovetailUtilsMS.js` (`getManifest`/`buildTableMap`, `bulkDownload`/`processMissingFiles`, `getAppList`, `getCurrentScope`, `pushATFfile`) -- **is** tracked as of 2026-07-14 (PR #222). The files under `servicenow/sys_ws_operation/` (no `dovetail/` in the path) are the **dead Sincronia-era** versions of these same operation names (see Deprecated section below), not the current implementation. Treat the five as 🟡 client-contract-only at the wire level (the wrappers binding path/params to the base class aren't in-repo), read the core sync logic from the base class, and do not infer current server behavior from the old Sincronia scripts.
 
 ### `GET /getAppList` 🟡 client-contract-only
 
@@ -164,6 +164,6 @@ Cross-instance update-set promotion, used by the separate `dovetail-sawmill` pac
 
 ## Top manual-pain gaps
 
-The one gap with real, sourced evidence in this repo: **roughly half of the live operations (`createRecord`, `deleteRecord`, `changeScope`, `changeUpdateSet`, `currentUpdateSet`, `createUpdateSet`, and all five Sync ops) have no server-side handler script checked into version control** -- `servicenow/dovetail/README.md` has an open TODO naming this exact gap. Anyone needing to verify or modify server-side behavior for these today has to export live XML from an instance rather than read source in this repo. This catalog documents their client contracts precisely; closing the underlying gap (capturing the server scripts, per the README's TODO) is separate follow-up work, not something this catalog can substitute for.
+The one gap with real, sourced evidence in this repo: **roughly half of the live operations (`createRecord`, `deleteRecord`, `changeScope`, `changeUpdateSet`, `currentUpdateSet`, `createUpdateSet`, and the five Sync ops' thin wrapper scripts) have no server-side handler script checked into version control** -- `servicenow/dovetail/README.md` has an open TODO naming this exact gap. (The Sync ops' shared base class, `DovetailUtilsMS.js`, is the exception -- tracked since 2026-07-14.) Anyone needing to verify or modify server-side behavior for these today has to export live XML from an instance rather than read source in this repo. This catalog documents their client contracts precisely; closing the underlying gap (capturing the server scripts, per the README's TODO) is separate follow-up work, not something this catalog can substitute for.
 
-I have no access to support history, Slack, or PR comments, so I'm not asserting other "top pain points" beyond what's directly evidenced in source (this gap, the `sys_db_object` create-guard, and `createUpdateSet`'s silent mis-scoping fallback -- all three documented above at their respective operations).
+This catalog's claims are scoped to what is directly evidenced in this repo's source. Support history, Slack threads, and PR comments were not surveyed, so no further "top pain points" are asserted beyond the three documented above at their respective operations (this gap, the `sys_db_object` create-guard, and `createUpdateSet`'s silent mis-scoping fallback).
