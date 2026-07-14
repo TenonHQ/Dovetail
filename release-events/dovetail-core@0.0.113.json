@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.113",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.113",
+  "prev_version": "0.0.112",
+  "published_at": "2026-07-14T20:02:38.069Z",
+  "git": {
+    "sha": "99f064bf76f0fa4a2e049debff52be8303ebed24",
+    "tag": "dovetail-core@0.0.113"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "99f064bf7",
+      "subject": "fix(servicenow): stop getManifest silently dropping same-named records (#222)",
+      "pr": 222
+    },
+    {
+      "sha": "38ffe1e27",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.112 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
