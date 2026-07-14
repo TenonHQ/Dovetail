@@ -121,7 +121,8 @@ export async function initCommands() {
             type: "array",
             describe:
               "Refresh file content for only these tables (repeatable or comma-separated). " +
-              "Must already be synced via includes._tables. Default: every synced table.",
+              "Must already be synced via includes._tables or includes._scopes.<scope>._tables. " +
+              "Default: every synced table.",
           },
           benchmark: {
             alias: "b",

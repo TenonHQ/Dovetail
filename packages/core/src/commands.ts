@@ -82,9 +82,12 @@ export async function refreshCommand(
       const unknown = unknownTablesForScopes(tables, args.scope);
       if (unknown.length > 0) {
         const where = args.scope ? "scope '" + args.scope + "'" : "any configured scope";
+        const noun = unknown.length === 1 ? "table" : "tables";
+        const verb = unknown.length === 1 ? "is" : "are";
+        const pronoun = unknown.length === 1 ? "it" : "them";
         throw new Error(
-          "--table: " + unknown.join(", ") + " is not synced by " + where + ". " +
-          "Add it to includes._tables (or includes._scopes.<scope>._tables) in dove.config.js first.",
+          "--table: " + noun + " " + unknown.join(", ") + " " + verb + " not synced by " + where + ". " +
+          "Add " + pronoun + " to includes._tables (or includes._scopes.<scope>._tables) in dove.config.js first.",
         );
       }
     }
