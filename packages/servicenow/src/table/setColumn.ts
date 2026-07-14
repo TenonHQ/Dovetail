@@ -575,11 +575,22 @@ export async function setColumn(
     );
   }
   var unsafeShrink = Boolean(risk && risk.offenders > 0);
-  var riskNote =
-    unsafeShrink && shrink && risk
-      ? " WILL BE REFUSED: " +
-        describeRisk(table, column, shrink.from, shrink.to, risk)
-      : "";
+  // The dry-run must also surface the INDETERMINATE case — scan incomplete, no
+  // offender seen. The live path attempts that shrink (the read-back is its backstop),
+  // but a dry-run has no read-back, so silence there would read as "safe" when it
+  // actually means "unknown".
+  var riskNote = "";
+  if (shrink && risk) {
+    if (unsafeShrink) {
+      riskNote =
+        " WILL BE REFUSED: " +
+        describeRisk(table, column, shrink.from, shrink.to, risk);
+    } else if (risk.incomplete) {
+      riskNote =
+        " MAY BE REFUSED: " +
+        describeRisk(table, column, shrink.from, shrink.to, risk);
+    }
+  }
 
   if (params.dryRun) {
     return {

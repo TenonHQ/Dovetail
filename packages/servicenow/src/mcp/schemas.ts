@@ -201,7 +201,10 @@ export var setColumnSchema = z.object({
   table: z.string().min(1),
   column: z.string().min(1),
   attributes: columnAttributesSchema,
-  updateSetSysId: z.string().optional(),
+  // Optional because dryRun works without one; when given it must be non-empty.
+  // The live-path requirement is enforced at the tool boundary (registry.ts),
+  // matching add_column — a .refine here would be dropped from `.shape`.
+  updateSetSysId: z.string().min(1).optional(),
   dryRun: z.boolean().optional(),
 });
 

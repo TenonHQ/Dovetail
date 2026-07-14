@@ -1128,9 +1128,10 @@ async function runSetColumn(
   }
   if (flags["max-length"] !== undefined) {
     var len = Number(flags["max-length"]);
-    if (!isFinite(len) || len < 1) {
+    // sys_dictionary.max_length is an integer; the MCP schema enforces int() too.
+    if (!Number.isInteger(len) || len < 1) {
       process.stderr.write(
-        "set-column: --max-length must be a positive number\n",
+        "set-column: --max-length must be a positive integer\n",
       );
       return 1;
     }
@@ -1143,7 +1144,9 @@ async function runSetColumn(
     column: column,
     attributes: attributes,
   };
-  if (flags["update-set"]) params.updateSetSysId = flags["update-set"];
+  // Accept the same alias pair as the other verbs (create-view, set-list-layout, …).
+  var setColumnUs = flags["update-set"] || flags.updateSetSysId;
+  if (setColumnUs) params.updateSetSysId = setColumnUs;
   if (flags["dry-run"] === "true") params.dryRun = true;
 
   var result = await setColumn(params);

@@ -431,13 +431,13 @@ describe("setColumn live", function () {
 });
 
 /**
- * The shrink guard. Shrinking max_length fires a real ALTER and ServiceNow truncates
- * every longer value — silently, and with no way back. A verb built to prevent silent
- * data loss must not be the thing that causes it, so a shrink that would cut live data
- * is REFUSED unless the caller explicitly says they accept losing it.
+ * The shrink guard. ServiceNow silently REFUSES a max_length shrink below the data in
+ * the column (200 OK, column unchanged — no truncation happens). The guard exists so
+ * the caller learns WHY up front, with the blocking rows named, instead of issuing a
+ * write the platform quietly ignores. There is deliberately no override flag.
  */
 describe("setColumn truncation guard", function () {
-  var dict40 = {
+  var dict100 = {
     sys_id: "COL1",
     element: "description",
     internal_type: "string_full_utf8",
@@ -450,7 +450,7 @@ describe("setColumn truncation guard", function () {
 
   it("REFUSES a shrink that ServiceNow would silently ignore, and writes nothing", async function () {
     var client = liveClient({
-      dict: Object.assign({}, dict40),
+      dict: Object.assign({}, dict100),
       rowValues: ["short", "x".repeat(80), "y".repeat(95)], // two exceed 40
     });
     await expect(
@@ -467,7 +467,7 @@ describe("setColumn truncation guard", function () {
 
   it("names the damage: how many rows, the longest value, and sample sys_ids", async function () {
     var client = liveClient({
-      dict: Object.assign({}, dict40),
+      dict: Object.assign({}, dict100),
       rowValues: ["x".repeat(80), "y".repeat(95)],
     });
     var err: Error | null = null;
@@ -495,7 +495,7 @@ describe("setColumn truncation guard", function () {
     // ServiceNow ignores a shrink below the data in the column, so forcing it past a
     // KNOWN blocker is pointless at best and destructive at worst. Shorten the values.
     var client = liveClient({
-      dict: Object.assign({}, dict40),
+      dict: Object.assign({}, dict100),
       rowValues: ["x".repeat(80)],
     });
     await expect(
@@ -518,7 +518,7 @@ describe("setColumn truncation guard", function () {
     var exactly: Array<string> = [];
     for (var n = 0; n < 1000; n += 1) exactly.push("short");
     var risk = await findTruncationRisk(
-      liveClient({ dict: Object.assign({}, dict40), rowValues: exactly }),
+      liveClient({ dict: Object.assign({}, dict100), rowValues: exactly }),
       "x_t",
       "description",
       40,
@@ -531,12 +531,30 @@ describe("setColumn truncation guard", function () {
     var over: Array<string> = [];
     for (var n = 0; n < 1001; n += 1) over.push("short");
     var risk = await findTruncationRisk(
-      liveClient({ dict: Object.assign({}, dict40), rowValues: over }),
+      liveClient({ dict: Object.assign({}, dict100), rowValues: over }),
       "x_t",
       "description",
       40,
     );
     expect(risk.incomplete).toBe(true);
+  });
+
+  it("dry-run WARNS when the scan was incomplete even with no offender seen", async function () {
+    // The live path attempts this shrink (the read-back is its backstop), but a
+    // dry-run has no read-back — silence would read as "safe" when it means "unknown".
+    var many: Array<string> = [];
+    for (var i = 0; i < 1001; i += 1) many.push("short");
+    var result = await setColumn({
+      client: liveClient({ dict: Object.assign({}, dict100), rowValues: many }),
+      table: "x_t",
+      column: "description",
+      attributes: { maxLength: 40 },
+      updateSetSysId: "us1",
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.note).toMatch(/MAY BE REFUSED/);
+    expect(result.note).toMatch(/more populated rows than/);
   });
 
   it("ATTEMPTS the shrink when the table is too big to scan and nothing seen is too long", async function () {
@@ -546,7 +564,7 @@ describe("setColumn truncation guard", function () {
     var many: Array<string> = [];
     for (var i = 0; i < 1001; i += 1) many.push("short");
     var client = liveClient({
-      dict: Object.assign({}, dict40),
+      dict: Object.assign({}, dict100),
       rowValues: many,
     });
     var result = await setColumn({
@@ -562,7 +580,7 @@ describe("setColumn truncation guard", function () {
 
   it("allows a shrink when nothing would actually be cut", async function () {
     var client = liveClient({
-      dict: Object.assign({}, dict40),
+      dict: Object.assign({}, dict100),
       rowValues: ["short", "also short"],
     });
     var result = await setColumn({
@@ -578,7 +596,7 @@ describe("setColumn truncation guard", function () {
   it("warns on the DRY-RUN rather than letting you discover it at write time", async function () {
     var result = await setColumn({
       client: liveClient({
-        dict: Object.assign({}, dict40),
+        dict: Object.assign({}, dict100),
         rowValues: ["x".repeat(80)],
       }),
       table: "x_t",

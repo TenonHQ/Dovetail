@@ -403,6 +403,20 @@ export function buildDescriptors(
       shape: setColumnSchema.shape,
       handler: async function (args: any) {
         var p = setColumnSchema.parse(args);
+        // The schema leaves updateSetSysId optional (dry-run doesn't need one), so
+        // enforce the live-path requirement HERE — a tool-level error before any
+        // work beats a failure surfacing from deep inside setColumn. Same pattern
+        // as add_column.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "set_column: updateSetSysId is required on the live path so the schema " +
+              "change is captured in a known update set — set dryRun:true to plan " +
+              "without one.",
+          );
+        }
         return setColumn({
           client: client(),
           table: p.table,
