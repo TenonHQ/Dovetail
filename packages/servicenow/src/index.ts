@@ -6,7 +6,10 @@
  */
 
 export { createClient } from "./client";
-export { createClientFromEnvFile, resolveConfigFromEnvFile } from "./createClientFromEnvFile";
+export {
+  createClientFromEnvFile,
+  resolveConfigFromEnvFile,
+} from "./createClientFromEnvFile";
 export type {
   ServiceNowClient,
   TableQueryOptions,
@@ -15,12 +18,16 @@ export type {
   AttachmentMeta,
   NowInvokeMethod,
   NowInvokeParams,
-  NowInvokeResponse
+  NowInvokeResponse,
 } from "./client";
 
 export { addChoicesToField } from "./choices";
 
-export { hostAssets, classifyChunks, formatHostAssetsResult } from "./hostAssets";
+export {
+  hostAssets,
+  classifyChunks,
+  formatHostAssetsResult,
+} from "./hostAssets";
 
 export { formatAddChoicesResult } from "./formatter";
 
@@ -52,7 +59,7 @@ export {
   generateSysId,
   topoSort,
   executeWritePlan,
-  WriteOrderError
+  WriteOrderError,
 } from "./flowDesigner";
 
 export type {
@@ -95,7 +102,7 @@ export type {
   TestFlowParams,
   TestFlowResult,
   WriteOp,
-  WriteOpResult
+  WriteOpResult,
 } from "./flowDesigner";
 
 export type {
@@ -121,7 +128,7 @@ export type {
   ChunkResult,
   PrunedResult,
   HostAssetsParams,
-  HostAssetsResult
+  HostAssetsResult,
 } from "./types";
 
 export {
@@ -137,23 +144,34 @@ export {
   DEFAULT_SAVE_ACTION,
   addColumn,
   deriveElement,
-  applyAddColumnOverlay
+  applyAddColumnOverlay,
+  setColumn,
+  resolveAttributes,
+  toStoredValue,
 } from "./table";
 export type {
   CreateTableParams,
   CreateTableResult,
   AddColumnParams,
   AddColumnResult,
+  SetColumnParams,
+  SetColumnResult,
+  ColumnAttributes,
+  AttributeChange,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,
   AccessFlags,
-  OverlaySpec
+  OverlaySpec,
 } from "./table";
 
 export { setField } from "./setField";
 export { createRecord } from "./createRecord";
-export type { RecordWriteResult, SetFieldParams, SetFieldResult } from "./setField";
+export type {
+  RecordWriteResult,
+  SetFieldParams,
+  SetFieldResult,
+} from "./setField";
 export type { CreateRecordParams, CreateRecordResult } from "./createRecord";
 
 export { invokeRest, INVOKE_REST_METHODS } from "./invokeRest";

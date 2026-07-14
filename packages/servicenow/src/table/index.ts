@@ -10,9 +10,13 @@ export {
   parseSysIdFromLocation,
   DEFAULT_SUPER_CLASS,
   DEFAULT_SAVE_ACTION,
-  DEFAULT_COLUMNS_REL_ID
+  DEFAULT_COLUMNS_REL_ID,
 } from "./createTable";
-export type { CreateTableParams, CreateTableResult, TableGraph } from "./createTable";
+export type {
+  CreateTableParams,
+  CreateTableResult,
+  TableGraph,
+} from "./createTable";
 
 export { buildColumnXml, xmlEscape } from "./buildColumnXml";
 export type { NormalizedColumn } from "./buildColumnXml";
@@ -24,7 +28,7 @@ export {
   defaultAccessFlags,
   showInMenuKey,
   listEditKey,
-  TYPE_MAP
+  TYPE_MAP,
 } from "./buildTableSave";
 export type { ColumnSpec, AccessFlags, OverlaySpec } from "./buildTableSave";
 
@@ -36,9 +40,22 @@ export {
   getNewRecordForm,
   parseFormInputs,
   postForm,
-  scrapeCk
+  scrapeCk,
 } from "./formSession";
-export type { FormAuth, FormSession, HarvestedForm, PostResult } from "./formSession";
+export type {
+  FormAuth,
+  FormSession,
+  HarvestedForm,
+  PostResult,
+} from "./formSession";
 
 export { addColumn, deriveElement, applyAddColumnOverlay } from "./addColumn";
 export type { AddColumnParams, AddColumnResult } from "./addColumn";
+
+export { setColumn, resolveAttributes, toStoredValue } from "./setColumn";
+export type {
+  SetColumnParams,
+  SetColumnResult,
+  ColumnAttributes,
+  AttributeChange,
+} from "./setColumn";
