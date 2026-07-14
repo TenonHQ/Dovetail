@@ -31,10 +31,16 @@ interface FakeRecord {
   script?: string;
 }
 
-/** Minimal GlideRecord over a fixture list. Only what buildTableMap touches. */
+/** Minimal GlideRecord over a fixture list. Only what buildTableMap and processMissingFiles touch. */
 function makeGlideRecord(rows: FakeRecord[]) {
   return function GlideRecordStub(this: any, _table: string) {
     var i = -1;
+    this.get = function (sysId: string) {
+      i = rows.findIndex(function (r) {
+        return r.sys_id === sysId;
+      });
+      return i !== -1;
+    };
     this.addQuery = function () {
       return { addOrCondition: function () {} };
     };
@@ -191,5 +197,74 @@ describe("DovetailUtilsMS.buildTableMap — duplicate display names", () => {
       "Blueprint (bbbbbbbb)",
       "Send Email", // untouched — this is why differentiatorField was the wrong tool
     ]);
+  });
+});
+
+/**
+ * bulkDownload keys its response by display name too — the same collapse dropped the
+ * file CONTENT for one of a colliding pair even once the manifest listed both.
+ */
+function processMissing(rows: FakeRecord[]) {
+  const loaded = loadUtils(rows);
+  const recordMap: Record<string, Array<{ name: string; type: string }>> = {};
+  rows.forEach((r) => {
+    recordMap[r.sys_id] = [{ name: "script", type: "js" }];
+  });
+  const result = loaded.utils.processMissingFiles(
+    { x_cadso_journey_action: recordMap },
+    {},
+  );
+  return {
+    records: result.x_cadso_journey_action.records,
+    warnings: loaded.warnings,
+  };
+}
+
+describe("DovetailUtilsMS.processMissingFiles — duplicate display names", () => {
+  it("keeps BOTH records' content when two share a display name (regression: one payload was silently dropped)", () => {
+    const out = processMissing([
+      { sys_id: "1607d7f0c373f2d0d4ddf1db05013101", name: "Blueprint", script: "var a = 1;" },
+      { sys_id: "46ae2decc33f32d0d4ddf1db050131d9", name: "Blueprint", script: "var b = 2;" },
+    ]);
+
+    const keys = Object.keys(out.records).sort();
+    expect(keys).toEqual(["Blueprint (1607d7f0)", "Blueprint (46ae2dec)"]);
+    expect(out.records["Blueprint"]).toBeUndefined();
+
+    // The actual bulkDownload payload — each record keeps its OWN file content.
+    expect(out.records["Blueprint (1607d7f0)"].files[0].content).toBe("var a = 1;");
+    expect(out.records["Blueprint (46ae2dec)"].files[0].content).toBe("var b = 2;");
+  });
+
+  it("keeps record.name identical to the map key (writers build the folder path from it)", () => {
+    const out = processMissing([
+      { sys_id: "1607d7f0c373f2d0d4ddf1db05013101", name: "Blueprint", script: "" },
+      { sys_id: "46ae2decc33f32d0d4ddf1db050131d9", name: "Blueprint", script: "" },
+    ]);
+
+    Object.keys(out.records).forEach((key) => {
+      expect(out.records[key].name).toBe(key);
+    });
+  });
+
+  it("warns on a collision instead of staying silent (parity with buildTableMap)", () => {
+    const out = processMissing([
+      { sys_id: "1607d7f0c373f2d0d4ddf1db05013101", name: "Blueprint", script: "" },
+      { sys_id: "46ae2decc33f32d0d4ddf1db050131d9", name: "Blueprint", script: "" },
+    ]);
+
+    expect(out.warnings).toHaveLength(2);
+    expect(out.warnings[0]).toContain("duplicate display name");
+    expect(out.warnings[0]).toContain("bulkDownload");
+  });
+
+  it("leaves unique names completely untouched (no suffix, no warning)", () => {
+    const out = processMissing([
+      { sys_id: "dc2ef56133a0e2507b18bc534d5c7bf5", name: "Send Email", script: "" },
+      { sys_id: "0d4626f933e826507b18bc534d5c7b37", name: "Send Text", script: "" },
+    ]);
+
+    expect(Object.keys(out.records).sort()).toEqual(["Send Email", "Send Text"]);
+    expect(out.warnings).toHaveLength(0);
   });
 });

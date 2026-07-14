@@ -486,6 +486,15 @@ DovetailUtilsMS.prototype = {
 
         if (nameCounts[recordName] > 1) {
           recordName = recordName + " (" + pending.record.sys_id.substring(0, 8) + ")";
+          gs.warn(
+            "DovetailUtilsMS: duplicate display name '" +
+              pending.displayName +
+              "' in " +
+              tableName +
+              " — writing it as '" +
+              recordName +
+              "'. Before this, one of these records was dropped from the bulkDownload response."
+          );
         }
 
         // Keep record.name === the map key: every writer builds the folder path from
