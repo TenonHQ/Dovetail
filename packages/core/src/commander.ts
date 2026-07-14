@@ -116,6 +116,14 @@ export async function initCommands() {
             type: "string",
             describe: "Refresh a single scope (default: all declared scopes)",
           },
+          table: {
+            alias: "t",
+            type: "array",
+            describe:
+              "Refresh file content for only these tables (repeatable or comma-separated). " +
+              "Must already be synced via includes._tables or includes._scopes.<scope>._tables. " +
+              "Default: every synced table.",
+          },
           benchmark: {
             alias: "b",
             type: "boolean",
@@ -130,6 +138,7 @@ export async function initCommands() {
           force?: boolean;
           scope?: string;
           benchmark?: boolean;
+          table?: string | string[];
         });
       },
     )
