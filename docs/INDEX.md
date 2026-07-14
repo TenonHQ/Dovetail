@@ -19,6 +19,12 @@ Start here. Docs are tagged by audience — **🤖 Claude** (a Claude Code sessi
 | [`downstream-propagation-plan.md`](downstream-propagation-plan.md) | 🛠 Developer | Proposal: propagating package changes downstream (not yet implemented)                                                                             |
 | [`servicenow-schema-crud-rfc.md`](servicenow-schema-crud-rfc.md)   | 🛠 Developer | RFC (proposed): schema-side CRUD — tables/fields/choices — to code-side parity; surface, context-gated destructive ops, the update-set deploy seam |
 
+## Server-side REST API
+
+| Doc                                                            | Audience  | What it covers                                                                                                                      |
+| -------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [`dovetail-endpoint-catalog.md`](dovetail-endpoint-catalog.md) | 🤖 Claude | Every live `/api/cadso/dovetail*` operation — path, method, params, scope/update-set behavior, example — grounded in current source |
+
 ## Migration (Sincronia → Dovetail)
 
 | Doc                                                                    | Audience     | What it covers                                                     |
@@ -41,4 +47,4 @@ Each `packages/<pkg>/README.md` documents that package. Notables: [`packages/mcp
 
 ---
 
-_Last updated: 2026-06-16._
+_Last updated: 2026-07-10._
