@@ -118,6 +118,10 @@ DovetailUtilsMS.prototype = {
     }
 
     var records = {};
+    // Collected first, keyed into `records` only after every display name is known
+    // — see the disambiguation pass after the loop.
+    var pendingRecords = [];
+    var nameCounts = {};
     var recGR = new GlideRecord(tableName);
     recGR.addQuery("sys_scope", scopeId);
     recGR.addQuery("sys_class_name", tableName);
@@ -192,10 +196,48 @@ DovetailUtilsMS.prototype = {
         }
       }
 
-      records[recName] = {
-        files: files,
-        name: recName,
-        sys_id: recordSysId
+      pendingRecords.push({
+        displayName: recName,
+        sys_id: recordSysId,
+        files: files
+      });
+      nameCounts[recName] = (nameCounts[recName] || 0) + 1;
+    }
+
+    // `records` is keyed by display name, so two records sharing one used to
+    // silently overwrite each other: one vanished from the manifest entirely (no
+    // warning, no error), and because the survivor kept the shared folder, a later
+    // push to that folder wrote to the WRONG record.
+    //
+    // Suffix EVERY member of a colliding set, not just the later ones. Suffixing
+    // only the duplicate would leave "which record keeps the bare name" dependent on
+    // GlideRecord query order, so folder names could churn between refreshes.
+    //
+    // The record's true display name is preserved in metaData.json (`_name`); this
+    // only changes the manifest key / folder name. Mirrors the client-side guard in
+    // normalizeManifestKeys (packages/core/src/appUtils.ts), which never fired
+    // because the collapse had already happened here, server-side.
+    for (var p = 0; p < pendingRecords.length; p++) {
+      var pending = pendingRecords[p];
+      var recordName = pending.displayName;
+
+      if (nameCounts[recordName] > 1) {
+        recordName = recordName + " (" + pending.sys_id.substring(0, 8) + ")";
+        gs.warn(
+          "DovetailUtilsMS: duplicate display name '" +
+            pending.displayName +
+            "' in " +
+            tableName +
+            " — writing it as '" +
+            recordName +
+            "'. Before this, one of these records was dropped from the manifest."
+        );
+      }
+
+      records[recordName] = {
+        files: pending.files,
+        name: recordName,
+        sys_id: pending.sys_id
       };
     }
 
@@ -364,6 +406,11 @@ DovetailUtilsMS.prototype = {
       var tableMap = {
         records: {}
       };
+      // Same collision guard as buildTableMap. bulkDownload keys its response by
+      // display name too, so without this the file CONTENT for one of a colliding
+      // pair would still be dropped — even now that the manifest lists both.
+      var pendingRecords = [];
+      var nameCounts = {};
 
       for (var recordID in recordMap) {
         if (tableGR.get(recordID)) {
@@ -425,8 +472,26 @@ DovetailUtilsMS.prototype = {
             );
           }
 
-          tableMap.records[recName] = metaRecord;
+          pendingRecords.push({
+            displayName: recName,
+            record: metaRecord
+          });
+          nameCounts[recName] = (nameCounts[recName] || 0) + 1;
         }
+      }
+
+      for (var p = 0; p < pendingRecords.length; p++) {
+        var pending = pendingRecords[p];
+        var recordName = pending.displayName;
+
+        if (nameCounts[recordName] > 1) {
+          recordName = recordName + " (" + pending.record.sys_id.substring(0, 8) + ")";
+        }
+
+        // Keep record.name === the map key: every writer builds the folder path from
+        // it, and push looks the record back up by folder name.
+        pending.record.name = recordName;
+        tableMap.records[recordName] = pending.record;
       }
 
       fileTableMap[tableName] = tableMap;
