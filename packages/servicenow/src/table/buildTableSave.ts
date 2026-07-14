@@ -16,6 +16,10 @@ export interface ColumnSpec {
   type: string;
   max_length?: string | number;
   reference?: string;
+  /** Whether the column is mandatory (add-column). Ignored by the create-table form path. */
+  mandatory?: boolean;
+  /** Default value for the column (add-column). Ignored by the create-table form path. */
+  default?: string;
 }
 
 /**

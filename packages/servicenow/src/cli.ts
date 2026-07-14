@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * sinc-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
+ * dove-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
  *
  * Usage:
- *   sinc-sn add-choices \
+ *   dove-sn add-choices \
  *     --table x_cadso_core_event \
  *     --column state \
  *     --update-set <sys_id> \
  *     --choices 'delivered=Delivered,failed=Failed,...' \
  *     [--choice-type 3] [--json]
  *
- *   sinc-sn add-choices --from-json path/to/choices.json
+ *   dove-sn add-choices --from-json path/to/choices.json
  *
  * JSON payload shape:
  *   {
@@ -53,7 +53,10 @@ import type { CreateRecordParams } from "./createRecord";
 import { invokeRest } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
 import { hostAssets, formatHostAssetsResult } from "./hostAssets";
-import { formatReadFlowResult, formatReadActionTypeResult } from "./flowDesigner-formatter";
+import {
+  formatReadFlowResult,
+  formatReadActionTypeResult,
+} from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
   ChoiceValue,
@@ -61,7 +64,7 @@ import type {
   SetListLayoutParams,
   SetFormLayoutParams,
   SetRelatedListsParams,
-  HostAssetsParams
+  HostAssetsParams,
 } from "./types";
 
 interface ParsedArgs {
@@ -94,7 +97,9 @@ function parseChoicesInline(input: string): Array<ChoiceValue> {
   return input.split(",").map(function (pair) {
     var parts = pair.split("=");
     if (parts.length !== 2) {
-      throw new Error("Invalid --choices entry '" + pair + "' (expected value=Label)");
+      throw new Error(
+        "Invalid --choices entry '" + pair + "' (expected value=Label)",
+      );
     }
     return { value: parts[0].trim(), label: parts[1].trim() };
   });
@@ -111,13 +116,15 @@ function paramsFromFlags(flags: Record<string, string>): AddChoicesParams {
   var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
   var choicesInline = flags.choices;
   if (!table || !column || !updateSetSysId || !choicesInline) {
-    throw new Error("Missing required flags: --table, --column, --update-set, --choices");
+    throw new Error(
+      "Missing required flags: --table, --column, --update-set, --choices",
+    );
   }
   var params: AddChoicesParams = {
     table: table,
     column: column,
     updateSetSysId: updateSetSysId,
-    choices: parseChoicesInline(choicesInline)
+    choices: parseChoicesInline(choicesInline),
   };
   if (flags["choice-type"]) {
     params.choiceType = Number(flags["choice-type"]) as 0 | 1 | 3;
@@ -130,14 +137,18 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
   var client = createClient({});
   var result = await addChoicesToField(client, params);
   if (flags.json === "true") {
-    process.stdout.write(JSON.stringify({ params: params, result: result }, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify({ params: params, result: result }, null, 2) + "\n",
+    );
     return;
   }
-  process.stdout.write(formatAddChoicesResult(params.table, params.column, result) + "\n");
+  process.stdout.write(
+    formatAddChoicesResult(params.table, params.column, result) + "\n",
+  );
 }
 
 /**
- * sinc-sn build-flow:
+ * dove-sn build-flow:
  *   --from-json <path>      Required. JSON spec for the artifact (clone | create).
  *   --update-set <sys_id>   Optional. Overrides spec.updateSetSysId at the CLI level.
  *   --dry-run               Optional. Emit the planned write graph; do nothing.
@@ -160,7 +171,9 @@ async function runBuildFlowCmd(flags: Record<string, string>): Promise<number> {
   try {
     raw = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
   } catch (err: any) {
-    process.stderr.write("build-flow: failed to read/parse spec file: " + err.message + "\n");
+    process.stderr.write(
+      "build-flow: failed to read/parse spec file: " + err.message + "\n",
+    );
     return 5;
   }
   if (flags["update-set"] && raw && typeof raw === "object") {
@@ -183,21 +196,31 @@ async function runBuildFlowCmd(flags: Record<string, string>): Promise<number> {
 function splitList(raw: string): Array<string> {
   return raw
     .split(",")
-    .map(function (v) { return v.trim(); })
-    .filter(function (v) { return v !== ""; });
+    .map(function (v) {
+      return v.trim();
+    })
+    .filter(function (v) {
+      return v !== "";
+    });
 }
 
 async function runCreateView(flags: Record<string, string>): Promise<void> {
   var params: CreateViewParams = {
     name: flags.name,
-    updateSetSysId: flags["update-set"] || flags.updateSetSysId
+    updateSetSysId: flags["update-set"] || flags.updateSetSysId,
   };
   if (!params.name || !params.updateSetSysId) {
     throw new Error("create-view: --name and --update-set are required");
   }
-  if (flags.title) { params.title = flags.title; }
-  if (flags.scope) { params.scope = flags.scope; }
-  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  if (flags.title) {
+    params.title = flags.title;
+  }
+  if (flags.scope) {
+    params.scope = flags.scope;
+  }
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
   var result = await createView(createClient({}), params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -209,21 +232,39 @@ async function runCreateView(flags: Record<string, string>): Promise<void> {
 async function runSetListLayout(flags: Record<string, string>): Promise<void> {
   var params: SetListLayoutParams;
   if (flags["from-json"]) {
-    params = JSON.parse(fs.readFileSync(flags["from-json"], "utf8")) as SetListLayoutParams;
+    params = JSON.parse(
+      fs.readFileSync(flags["from-json"], "utf8"),
+    ) as SetListLayoutParams;
   } else {
     var table = flags.table;
     var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
     var columns = flags.columns;
     if (!table || !updateSetSysId || !columns) {
-      throw new Error("set-list-layout: --table, --update-set and --columns are required (or use --from-json)");
+      throw new Error(
+        "set-list-layout: --table, --update-set and --columns are required (or use --from-json)",
+      );
     }
-    params = { table: table, updateSetSysId: updateSetSysId, columns: splitList(columns) };
-    if (flags.view) { params.view = flags.view; }
-    if (flags.scope) { params.scope = flags.scope; }
-    if (flags.parent) { params.parent = flags.parent; }
-    if (flags.prune === "false") { params.prune = false; }
+    params = {
+      table: table,
+      updateSetSysId: updateSetSysId,
+      columns: splitList(columns),
+    };
+    if (flags.view) {
+      params.view = flags.view;
+    }
+    if (flags.scope) {
+      params.scope = flags.scope;
+    }
+    if (flags.parent) {
+      params.parent = flags.parent;
+    }
+    if (flags.prune === "false") {
+      params.prune = false;
+    }
   }
-  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
   var result = await setListLayout(createClient({}), params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -234,11 +275,19 @@ async function runSetListLayout(flags: Record<string, string>): Promise<void> {
 
 async function runSetFormLayout(flags: Record<string, string>): Promise<void> {
   if (!flags["from-json"]) {
-    throw new Error("set-form-layout: --from-json <path> is required (sections are nested — pass a JSON spec)");
+    throw new Error(
+      "set-form-layout: --from-json <path> is required (sections are nested — pass a JSON spec)",
+    );
   }
-  var params = JSON.parse(fs.readFileSync(flags["from-json"], "utf8")) as SetFormLayoutParams;
-  if (flags["update-set"]) { params.updateSetSysId = flags["update-set"]; }
-  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  var params = JSON.parse(
+    fs.readFileSync(flags["from-json"], "utf8"),
+  ) as SetFormLayoutParams;
+  if (flags["update-set"]) {
+    params.updateSetSysId = flags["update-set"];
+  }
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
   var result = await setFormLayout(createClient({}), params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -247,23 +296,41 @@ async function runSetFormLayout(flags: Record<string, string>): Promise<void> {
   process.stdout.write(formatLayoutResult("form layout", result) + "\n");
 }
 
-async function runSetRelatedLists(flags: Record<string, string>): Promise<void> {
+async function runSetRelatedLists(
+  flags: Record<string, string>,
+): Promise<void> {
   var params: SetRelatedListsParams;
   if (flags["from-json"]) {
-    params = JSON.parse(fs.readFileSync(flags["from-json"], "utf8")) as SetRelatedListsParams;
+    params = JSON.parse(
+      fs.readFileSync(flags["from-json"], "utf8"),
+    ) as SetRelatedListsParams;
   } else {
     var table = flags.table;
     var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
     var relatedLists = flags["related-lists"];
     if (!table || !updateSetSysId || !relatedLists) {
-      throw new Error("set-related-lists: --table, --update-set and --related-lists are required (or use --from-json)");
+      throw new Error(
+        "set-related-lists: --table, --update-set and --related-lists are required (or use --from-json)",
+      );
     }
-    params = { table: table, updateSetSysId: updateSetSysId, relatedLists: splitList(relatedLists) };
-    if (flags.view) { params.view = flags.view; }
-    if (flags.scope) { params.scope = flags.scope; }
-    if (flags.prune === "false") { params.prune = false; }
+    params = {
+      table: table,
+      updateSetSysId: updateSetSysId,
+      relatedLists: splitList(relatedLists),
+    };
+    if (flags.view) {
+      params.view = flags.view;
+    }
+    if (flags.scope) {
+      params.scope = flags.scope;
+    }
+    if (flags.prune === "false") {
+      params.prune = false;
+    }
   }
-  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
   var result = await setRelatedLists(createClient({}), params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -292,7 +359,11 @@ async function runViewFlow(flags: Record<string, string>): Promise<number> {
     return 1;
   }
   var client = createClient({});
-  var result = await readFlow({ client: client, sysId: sysId, raw: flags.raw === "true" });
+  var result = await readFlow({
+    client: client,
+    sysId: sysId,
+    raw: flags.raw === "true",
+  });
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 0;
@@ -313,7 +384,9 @@ async function runViewAction(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
   var scope = flags.scope || flags.scopeSysId;
   if (!sysId || !scope) {
-    process.stderr.write("view-action: --sys-id <sys_id> and --scope <sys_id> are required\n");
+    process.stderr.write(
+      "view-action: --sys-id <sys_id> and --scope <sys_id> are required\n",
+    );
     return 1;
   }
   var client = createClient({});
@@ -321,7 +394,7 @@ async function runViewAction(flags: Record<string, string>): Promise<number> {
     client: client,
     sysId: sysId,
     scopeSysId: scope,
-    raw: flags.raw === "true"
+    raw: flags.raw === "true",
   });
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -349,7 +422,7 @@ async function runPublishFlow(flags: Record<string, string>): Promise<number> {
   }
   var params: { client: any; sysId: string; scopeSysId?: string } = {
     client: createClient({}),
-    sysId: sysId
+    sysId: sysId,
   };
   if (flags.scope || flags.scopeSysId) {
     params.scopeSysId = flags.scope || flags.scopeSysId;
@@ -360,8 +433,13 @@ async function runPublishFlow(flags: Record<string, string>): Promise<number> {
     return 0;
   }
   process.stdout.write(
-    "Published flow " + sysId + " (HTTP " + result.httpStatus + ")"
-      + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n"
+    "Published flow " +
+      sysId +
+      " (HTTP " +
+      result.httpStatus +
+      ")" +
+      (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") +
+      "\n",
   );
   return 0;
 }
@@ -382,10 +460,16 @@ async function runCopyFlow(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
   var name = flags.name;
   if (!sysId || !name) {
-    process.stderr.write("copy-flow: --sys-id <sys_id> and --name <name> are required\n");
+    process.stderr.write(
+      "copy-flow: --sys-id <sys_id> and --name <name> are required\n",
+    );
     return 1;
   }
-  var params: any = { client: createClient({}), sourceSysId: sysId, newName: name };
+  var params: any = {
+    client: createClient({}),
+    sourceSysId: sysId,
+    newName: name,
+  };
   if (flags.scope || flags.scopeSysId) {
     params.scopeSysId = flags.scope || flags.scopeSysId;
   }
@@ -395,8 +479,15 @@ async function runCopyFlow(flags: Record<string, string>): Promise<number> {
     return 0;
   }
   process.stdout.write(
-    "Copied to '" + result.name + "' (sys_id " + result.sysId + ", scope " + result.scopeSysId
-      + ") — inactive draft. Publish with: dove-sn publish-flow --sys-id " + result.sysId + "\n"
+    "Copied to '" +
+      result.name +
+      "' (sys_id " +
+      result.sysId +
+      ", scope " +
+      result.scopeSysId +
+      ") — inactive draft. Publish with: dove-sn publish-flow --sys-id " +
+      result.sysId +
+      "\n",
   );
   return 0;
 }
@@ -424,45 +515,85 @@ async function runCopyFlow(flags: Record<string, string>): Promise<number> {
  */
 async function runCreateFlow(flags: Record<string, string>): Promise<number> {
   var name = flags.name;
-  var templateSysId = flags.template || flags["template-sys-id"] || flags.templateSysId;
+  var templateSysId =
+    flags.template || flags["template-sys-id"] || flags.templateSysId;
   var scope = flags.scope || flags.scopeSysId;
   if (!name || !templateSysId || !scope) {
-    process.stderr.write("create-flow: --name, --template <sys_id> and --scope <sys_id> are required\n");
+    process.stderr.write(
+      "create-flow: --name, --template <sys_id> and --scope <sys_id> are required\n",
+    );
     return 1;
   }
   var params: any = {
     client: createClient({}),
     name: name,
     templateSysId: templateSysId,
-    scopeSysId: scope
+    scopeSysId: scope,
   };
-  if (flags["internal-name"] || flags.internalName) { params.internalName = flags["internal-name"] || flags.internalName; }
-  if (flags.description) { params.description = flags.description; }
-  if (flags["trigger-table"] || flags.triggerTable) { params.triggerTable = flags["trigger-table"] || flags.triggerTable; }
-  if (flags["trigger-condition"] !== undefined || flags.triggerCondition !== undefined) {
-    params.triggerCondition = flags["trigger-condition"] !== undefined ? flags["trigger-condition"] : flags.triggerCondition;
+  if (flags["internal-name"] || flags.internalName) {
+    params.internalName = flags["internal-name"] || flags.internalName;
   }
-  if (flags["log-message"] || flags.logMessage) { params.logMessage = flags["log-message"] || flags.logMessage; }
-  if (flags["dry-run"] === "true") { params.dryRun = true; }
+  if (flags.description) {
+    params.description = flags.description;
+  }
+  if (flags["trigger-table"] || flags.triggerTable) {
+    params.triggerTable = flags["trigger-table"] || flags.triggerTable;
+  }
+  if (
+    flags["trigger-condition"] !== undefined ||
+    flags.triggerCondition !== undefined
+  ) {
+    params.triggerCondition =
+      flags["trigger-condition"] !== undefined
+        ? flags["trigger-condition"]
+        : flags.triggerCondition;
+  }
+  if (flags["log-message"] || flags.logMessage) {
+    params.logMessage = flags["log-message"] || flags.logMessage;
+  }
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
 
   var result = await createFlow(params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
     process.stdout.write(
-      "[dry-run] would create '" + result.name + "' (internal " + result.internalName + ") in scope "
-        + result.scopeSysId + " — grafting " + result.graph.triggers + " trigger + "
-        + result.graph.actions + " action + " + result.graph.logic + " logic from template\n"
+      "[dry-run] would create '" +
+        result.name +
+        "' (internal " +
+        result.internalName +
+        ") in scope " +
+        result.scopeSysId +
+        " — grafting " +
+        result.graph.triggers +
+        " trigger + " +
+        result.graph.actions +
+        " action + " +
+        result.graph.logic +
+        " logic from template\n",
     );
   } else {
     process.stdout.write(
-      "[" + result.status + "] '" + result.name + "' sys_id " + result.sysId
-        + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "")
-        + (result.active === undefined ? "" : result.active ? " — ACTIVE (will fire)" : " — inactive")
-        + "\n"
+      "[" +
+        result.status +
+        "] '" +
+        result.name +
+        "' sys_id " +
+        result.sysId +
+        (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") +
+        (result.active === undefined
+          ? ""
+          : result.active
+          ? " — ACTIVE (will fire)"
+          : " — inactive") +
+        "\n",
     );
   }
-  if (result.status === "not-published") { return 2; }
+  if (result.status === "not-published") {
+    return 2;
+  }
   return 0;
 }
 
@@ -495,7 +626,7 @@ async function runTestFlow(flags: Record<string, string>): Promise<number> {
     sysId: sysId,
     mode: flags.execute === "true" ? "execute" : "validate",
     inputs: inputs,
-    confirm: flags.confirm === "true"
+    confirm: flags.confirm === "true",
   };
   if (flags.runner) {
     params.runnerPath = flags.runner;
@@ -532,7 +663,9 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
     return 1;
   }
   if (!flags["from-json"]) {
-    process.stderr.write("edit-flow: --from-json <path> (EditFlowOps) is required\n");
+    process.stderr.write(
+      "edit-flow: --from-json <path> (EditFlowOps) is required\n",
+    );
     return 1;
   }
   var ops = JSON.parse(fs.readFileSync(flags["from-json"], "utf8"));
@@ -540,7 +673,7 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
     client: createClient({}),
     sysId: sysId,
     ops: ops,
-    apply: flags.apply === "true"
+    apply: flags.apply === "true",
   };
   if (flags.scope || flags.scopeSysId) {
     params.scopeSysId = flags.scope || flags.scopeSysId;
@@ -553,8 +686,15 @@ async function runEditFlow(flags: Record<string, string>): Promise<number> {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 0;
   }
-  process.stdout.write("[" + result.status + "] " + result.changes.length + " change(s)"
-    + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n");
+  process.stdout.write(
+    "[" +
+      result.status +
+      "] " +
+      result.changes.length +
+      " change(s)" +
+      (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") +
+      "\n",
+  );
   for (var i = 0; i < result.changes.length; i += 1) {
     process.stdout.write("  + " + result.changes[i] + "\n");
   }
@@ -583,14 +723,18 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
   var scope = flags.scope || flags.scopeSysId;
   if (!sysId || !scope) {
-    process.stderr.write("edit-action: --sys-id <sys_id> and --scope <sys_id> are required\n");
+    process.stderr.write(
+      "edit-action: --sys-id <sys_id> and --scope <sys_id> are required\n",
+    );
     return 1;
   }
   var ops: any = {};
   if (flags["patch-script"]) {
     var parts = String(flags["patch-script"]).split("::");
     if (parts.length !== 2) {
-      process.stderr.write("edit-action: --patch-script must be \"<find>::<replace>\"\n");
+      process.stderr.write(
+        'edit-action: --patch-script must be "<find>::<replace>"\n',
+      );
       return 1;
     }
     ops.patchScript = { find: parts[0], replace: parts[1] };
@@ -599,8 +743,12 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
     ops.setScript = fs.readFileSync(flags["set-script"], "utf8");
   }
   if (flags["merge-outputs"]) {
-    var parsedOutputs = JSON.parse(fs.readFileSync(flags["merge-outputs"], "utf8"));
-    ops.mergeOutputs = Array.isArray(parsedOutputs) ? parsedOutputs : [parsedOutputs];
+    var parsedOutputs = JSON.parse(
+      fs.readFileSync(flags["merge-outputs"], "utf8"),
+    );
+    ops.mergeOutputs = Array.isArray(parsedOutputs)
+      ? parsedOutputs
+      : [parsedOutputs];
   }
   if (flags["script-input"]) {
     ops.scriptInputName = flags["script-input"];
@@ -611,22 +759,35 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
     scopeSysId: scope,
     ops: ops,
     apply: flags.apply === "true",
-    updateSetSysId: flags["update-set"] || flags.updateSetSysId
+    updateSetSysId: flags["update-set"] || flags.updateSetSysId,
   });
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 0;
   }
-  process.stdout.write("[" + result.status + "] " + result.changes.length + " change(s)"
-    + (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") + "\n");
+  process.stdout.write(
+    "[" +
+      result.status +
+      "] " +
+      result.changes.length +
+      " change(s)" +
+      (result.snapshotSysId ? " — snapshot " + result.snapshotSysId : "") +
+      "\n",
+  );
   for (var ci = 0; ci < result.changes.length; ci += 1) {
     process.stdout.write("  + " + result.changes[ci] + "\n");
   }
   for (var wi = 0; wi < result.warnings.length; wi += 1) {
     process.stdout.write("  ! " + result.warnings[wi] + "\n");
   }
-  if (result.status === "preview" && result.scriptAfter !== undefined && result.scriptAfter !== result.scriptBefore) {
-    process.stdout.write("\n--- script after ---\n" + result.scriptAfter + "\n");
+  if (
+    result.status === "preview" &&
+    result.scriptAfter !== undefined &&
+    result.scriptAfter !== result.scriptBefore
+  ) {
+    process.stdout.write(
+      "\n--- script after ---\n" + result.scriptAfter + "\n",
+    );
   }
   return 0;
 }
@@ -637,69 +798,72 @@ async function runMcp(flags: Record<string, string>): Promise<number> {
     return 0;
   }
   await runStdio();
-  await new Promise(function () { /* keep the MCP server alive */ });
+  await new Promise(function () {
+    /* keep the MCP server alive */
+  });
   return 0;
 }
 
 function printHelp(): void {
   process.stdout.write(
     "dove-sn — ServiceNow platform helpers\n\n" +
-    "Commands:\n" +
-    "  add-choices        Upsert sys_choice rows for a table.column\n" +
-    "  create-view        Create a custom view (sys_ui_view)\n" +
-    "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
-    "  set-list-layout    Set the columns of a list layout\n" +
-    "                     (--from-json <path>  OR  --table <t> --columns a,b,c --update-set <sys_id>\n" +
-    "                      [--view <v>] [--parent <t>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
-    "  set-form-layout    Set the sections + fields of a form layout\n" +
-    "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--json])\n" +
-    "  set-related-lists  Set which related lists appear on a form\n" +
-    "                     (--from-json <path>  OR  --table <t> --related-lists a,b --update-set <sys_id>\n" +
-    "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
-    "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
-    "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
-    "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
-    "                     (--sys-id <sys_id> [--json] [--raw])\n" +
-    "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
-    "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
-    "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
-    "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
-    "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
-    "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
-    "  create-flow        Create a NEW flow (type=flow) from scratch + publish (grafts a template)\n" +
-    "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
-    "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
-    "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
-    "  create-table       Create a NEW table (sys_db_object) WITH columns, via the Studio form save\n" +
-    "                     (--name <x_scope_t> --label <l> --scope <s>\n" +
-    "                      --columns \"Label:type:max, ...\"  OR  --from-json <spec.json>\n" +
-    "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
-    "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
-    "  add-column         Add ONE column to an EXISTING table via the Studio form save, then verify\n" +
-    "                     (--table <name|sys_id> --label <l> --type <t>\n" +
-    "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
-    "                      [--scope <s>] [--update-set <sys_id>] [--dry-run] [--json])\n" +
-    "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
-    "                     (--table <t> --sys-id <id>|--query <q> --fields \"k=v,k2=v2\"\n" +
-    "                      --update-set <sys_id> [--dry-run] [--json])\n" +
-    "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
-    "                     (--table <t> --fields \"k=v,k2=v2\" --scope <s> --update-set <sys_id>\n" +
-    "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
-    "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
-    "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
-    "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-    "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
-    "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
-    "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
-    "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
-    "  test-flow          Validate (default) or run a flow/subflow\n" +
-    "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
-    "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
-    "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-    "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
-    "\nGlobal flags:\n" +
-    "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
-    "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n"
+      "Commands:\n" +
+      "  add-choices        Upsert sys_choice rows for a table.column\n" +
+      "  create-view        Create a custom view (sys_ui_view)\n" +
+      "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
+      "  set-list-layout    Set the columns of a list layout\n" +
+      "                     (--from-json <path>  OR  --table <t> --columns a,b,c --update-set <sys_id>\n" +
+      "                      [--view <v>] [--parent <t>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
+      "  set-form-layout    Set the sections + fields of a form layout\n" +
+      "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--json])\n" +
+      "  set-related-lists  Set which related lists appear on a form\n" +
+      "                     (--from-json <path>  OR  --table <t> --related-lists a,b --update-set <sys_id>\n" +
+      "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
+      "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
+      "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
+      "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
+      "                     (--sys-id <sys_id> [--json] [--raw])\n" +
+      "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
+      "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
+      "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
+      "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
+      "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
+      "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
+      "  create-flow        Create a NEW flow (type=flow) from scratch + publish (grafts a template)\n" +
+      "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
+      "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
+      "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
+      "  create-table       Create a NEW table (sys_db_object) WITH columns, via the Studio form save\n" +
+      "                     (--name <x_scope_t> --label <l> --scope <s>\n" +
+      '                      --columns "Label:type:max, ..."  OR  --from-json <spec.json>\n' +
+      "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
+      "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
+      "  add-column         Add ONE column to an EXISTING table via a scope-aware sys_dictionary insert, then verify\n" +
+      "                     (--table <name|sys_id> --label <l> --type <t> --update-set <sys_id>\n" +
+      "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
+      "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
+      "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
+      "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
+      "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
+      "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
+      '                     (--table <t> --sys-id <id>|--query <q> --fields "k=v,k2=v2"\n' +
+      "                      --update-set <sys_id> [--dry-run] [--json])\n" +
+      "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
+      '                     (--table <t> --fields "k=v,k2=v2" --scope <s> --update-set <sys_id>\n' +
+      "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
+      "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
+      "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
+      "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
+      "  test-flow          Validate (default) or run a flow/subflow\n" +
+      "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
+      "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
+      "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
+      "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
+      "\nGlobal flags:\n" +
+      "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
+      "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n",
   );
 }
 
@@ -734,14 +898,20 @@ function parseColumnsInline(input: string): Array<ColumnSpec> {
 async function runCreateTable(flags: Record<string, string>): Promise<number> {
   var spec: Partial<CreateTableParams> = {};
   if (flags["from-json"]) {
-    spec = JSON.parse(fs.readFileSync(path.resolve(flags["from-json"]), "utf8")) as Partial<CreateTableParams>;
+    spec = JSON.parse(
+      fs.readFileSync(path.resolve(flags["from-json"]), "utf8"),
+    ) as Partial<CreateTableParams>;
   }
   var name = flags.name || spec.name;
   var label = flags.label || spec.label;
   var scope = flags.scope || spec.scope;
-  var columns: Array<ColumnSpec> = flags.columns ? parseColumnsInline(flags.columns) : (spec.columns || []);
+  var columns: Array<ColumnSpec> = flags.columns
+    ? parseColumnsInline(flags.columns)
+    : spec.columns || [];
   if (!name || !label || !scope || columns.length === 0) {
-    process.stderr.write("create-table: --name, --label, --scope and --columns (or --from-json) are required\n");
+    process.stderr.write(
+      "create-table: --name, --label, --scope and --columns (or --from-json) are required\n",
+    );
     return 1;
   }
   var params: CreateTableParams = {
@@ -749,7 +919,7 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
     name: name,
     label: label,
     scope: scope,
-    columns: columns
+    columns: columns,
   };
   var ext = flags.extends || spec.extendsTable;
   if (ext) params.extendsTable = ext;
@@ -757,8 +927,10 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
   if (prefix) params.numberPrefix = prefix;
   var role = flags["user-role"] || spec.userRole;
   if (role) params.userRole = role;
-  if (flags["no-acls"] === "true" || spec.createAccessControls === false) params.createAccessControls = false;
-  if (flags["no-menu"] === "true" || spec.showInMenu === false) params.showInMenu = false;
+  if (flags["no-acls"] === "true" || spec.createAccessControls === false)
+    params.createAccessControls = false;
+  if (flags["no-menu"] === "true" || spec.showInMenu === false)
+    params.showInMenu = false;
   var us = flags["update-set"] || spec.updateSetSysId;
   if (us) params.updateSetSysId = us;
   var sa = flags["save-action"] || spec.saveActionSysId;
@@ -773,10 +945,23 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
     process.stdout.write(
-      "[" + result.status + "] " + result.name + " (" + result.label + ") scope=" + result.scopeSysId
-        + " — " + result.columns + " columns, projected graph " + result.graph.total + " records"
-        + (result.tableSysId ? " — sys_id " + result.tableSysId : "")
-        + "\n" + result.note + "\n"
+      "[" +
+        result.status +
+        "] " +
+        result.name +
+        " (" +
+        result.label +
+        ") scope=" +
+        result.scopeSysId +
+        " — " +
+        result.columns +
+        " columns, projected graph " +
+        result.graph.total +
+        " records" +
+        (result.tableSysId ? " — sys_id " + result.tableSysId : "") +
+        "\n" +
+        result.note +
+        "\n",
     );
   }
   if (result.status === "failed") return 2;
@@ -787,13 +972,17 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
  * dove-sn add-column:
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
- *   [--scope x_cadso_journey] [--update-set <sys_id>] [--save-action <sys_id>]
- *   [--columns-rel-id <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ *   [--mandatory] [--default <value>]
+ *   [--scope x_cadso_journey] [--update-set <sys_id>]
+ *   [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ * --update-set is required unless --dry-run.
  */
 async function runAddColumn(flags: Record<string, string>): Promise<number> {
   var spec: Partial<AddColumnParams> = {};
   if (flags["from-json"]) {
-    spec = JSON.parse(fs.readFileSync(path.resolve(flags["from-json"]), "utf8")) as Partial<AddColumnParams>;
+    spec = JSON.parse(
+      fs.readFileSync(path.resolve(flags["from-json"]), "utf8"),
+    ) as Partial<AddColumnParams>;
   }
   var table = flags.table || spec.table;
   var column: ColumnSpec | undefined = spec.column;
@@ -802,35 +991,54 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
     if (flags.name) column.name = flags.name;
     if (flags["max-length"]) column.max_length = flags["max-length"];
     if (flags.reference) column.reference = flags.reference;
+    if (flags.mandatory === "true") column.mandatory = true;
+    if (flags["default"] !== undefined) column.default = flags["default"];
   }
   if (!table || !column || !column.label) {
-    process.stderr.write("add-column: --table and --label (with --type) are required (or --from-json)\n");
+    process.stderr.write(
+      "add-column: --table and --label (with --type) are required (or --from-json)\n",
+    );
     return 1;
   }
   var params: AddColumnParams = {
     client: createClient({}),
     table: table,
-    column: column
+    column: column,
   };
   var scope = flags.scope || spec.scope;
   if (scope) params.scope = scope;
   var us = flags["update-set"] || spec.updateSetSysId;
   if (us) params.updateSetSysId = us;
-  var sa = flags["save-action"] || spec.saveActionSysId;
-  if (sa) params.saveActionSysId = sa;
-  var relId = flags["columns-rel-id"] || spec.columnsRelId;
-  if (relId) params.columnsRelId = relId;
   if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;
   if (flags.debug === "true" || spec.debug === true) params.debug = true;
+
+  // Fail fast with a targeted message + exit 1 instead of falling through to the
+  // top-level fatal handler — the live path cannot proceed without a target update set.
+  if (!params.dryRun && !params.updateSetSysId) {
+    process.stderr.write(
+      "add-column: --update-set is required on the live path (only --dry-run works without one)\n",
+    );
+    return 1;
+  }
 
   var result = await addColumn(params);
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
     process.stdout.write(
-      "[" + result.status + "] " + result.table + "." + result.element + " (" + result.internalType + ")"
-        + (result.verified ? " — verified" : "")
-        + "\n" + result.note + "\n"
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "." +
+        result.element +
+        " (" +
+        result.internalType +
+        ")" +
+        (result.verified ? " — verified" : "") +
+        "\n" +
+        result.note +
+        "\n",
     );
   }
   if (result.status === "failed") return 2;
@@ -866,9 +1074,14 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
   var fields = parseFieldsInline(flags.fields || "");
   var hasTarget = Boolean(flags["sys-id"] || flags.query);
-  if (!table || Object.keys(fields).length === 0 || !hasTarget || !flags["update-set"]) {
+  if (
+    !table ||
+    Object.keys(fields).length === 0 ||
+    !hasTarget ||
+    !flags["update-set"]
+  ) {
     process.stderr.write(
-      "set-field: --table, --fields \"k=v\", one of --sys-id/--query, and --update-set are required\n"
+      'set-field: --table, --fields "k=v", one of --sys-id/--query, and --update-set are required\n',
     );
     return 1;
   }
@@ -876,7 +1089,7 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
     client: createClient({}),
     table: table,
     fields: fields,
-    updateSetSysId: flags["update-set"]
+    updateSetSysId: flags["update-set"],
   };
   if (flags["sys-id"]) params.sysId = flags["sys-id"];
   if (flags.query) params.query = flags.query;
@@ -887,9 +1100,18 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
     process.stdout.write(
-      "[" + result.status + "] " + result.table + "/" + result.sysId + " "
-        + JSON.stringify(result.fields) + (result.verified ? " — verified" : "")
-        + "\n" + result.note + "\n"
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "/" +
+        result.sysId +
+        " " +
+        JSON.stringify(result.fields) +
+        (result.verified ? " — verified" : "") +
+        "\n" +
+        result.note +
+        "\n",
     );
   }
   if (result.status === "failed") return 2;
@@ -910,9 +1132,14 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
 async function runCreateRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
   var fields = parseFieldsInline(flags.fields || "");
-  if (!table || Object.keys(fields).length === 0 || !flags.scope || !flags["update-set"]) {
+  if (
+    !table ||
+    Object.keys(fields).length === 0 ||
+    !flags.scope ||
+    !flags["update-set"]
+  ) {
     process.stderr.write(
-      "create-record: --table, --fields \"k=v\", --scope and --update-set are required\n"
+      'create-record: --table, --fields "k=v", --scope and --update-set are required\n',
     );
     return 1;
   }
@@ -921,7 +1148,7 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
     table: table,
     fields: fields,
     scope: flags.scope,
-    updateSetSysId: flags["update-set"]
+    updateSetSysId: flags["update-set"],
   };
   if (flags["if-absent"]) params.ifAbsentQuery = flags["if-absent"];
   if (flags["dry-run"] === "true") params.dryRun = true;
@@ -931,14 +1158,72 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
     process.stdout.write(
-      "[" + result.status + "] " + result.table + "/" + (result.sysId || "(new)") + " "
-        + JSON.stringify(result.fields) + (result.verified ? " — verified" : "")
-        + "\n" + result.note + "\n"
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "/" +
+        (result.sysId || "(new)") +
+        " " +
+        JSON.stringify(result.fields) +
+        (result.verified ? " — verified" : "") +
+        "\n" +
+        result.note +
+        "\n",
     );
   }
   if (result.status === "failed") return 2;
   if (result.status === "skipped" && !result.verified) return 2;
   return 0;
+}
+
+/**
+ * dove-sn host-assets:
+ *   --dir <dist>            Required. Path to the pre-built dist/ directory.
+ *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
+ *   --scope <namespace>     Required. Carrier scope, e.g. x_cadso_app_shell.
+ *   --update-set <sys_id>   Optional. Defaults to the scope's current update set.
+ *   --max-bytes <n>         Optional. Per-chunk serve cap (default ~5 MB).
+ *   --allow-oversize        Optional. Warn instead of failing on an oversize chunk.
+ *   --dry-run               Optional. Plan only; no writes/uploads/prunes.
+ *   --json                  Optional. Emit the structured HostAssetsResult.
+ *
+ * Exit codes: 0 done/dry-run, 1 bad args, 2 a write landed but read-back is unverified.
+ */
+async function runHostAssets(flags: Record<string, string>): Promise<number> {
+  var dir = flags.dir;
+  var app = flags.app;
+  var scope = flags.scope;
+  if (!dir || !app || !scope) {
+    process.stderr.write(
+      "host-assets: --dir, --app and --scope are required\n",
+    );
+    return 1;
+  }
+  var params: HostAssetsParams = {
+    dir: path.resolve(dir),
+    app: app,
+    scope: scope,
+  };
+  var us = flags["update-set"] || flags.updateSetSysId;
+  if (us) params.updateSetSysId = us;
+  if (flags["max-bytes"]) params.maxBytes = Number(flags["max-bytes"]);
+  if (flags["allow-oversize"] === "true") params.allowOversize = true;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var client = createClient({});
+  var result = await hostAssets(client, params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatHostAssetsResult(result) + "\n");
+  }
+  var unverified =
+    !result.dryRun &&
+    result.chunks.some(function (c) {
+      return !c.verified;
+    });
+  return unverified ? 2 : 0;
 }
 
 /**
@@ -961,7 +1246,9 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
  */
 async function runInvokeRest(flags: Record<string, string>): Promise<number> {
   if (!flags.method || !flags.path) {
-    process.stderr.write("invoke-rest: --method <GET|POST|PUT|DELETE> and --path </api/...> are required\n");
+    process.stderr.write(
+      "invoke-rest: --method <GET|POST|PUT|DELETE> and --path </api/...> are required\n",
+    );
     return 1;
   }
   var body: unknown;
@@ -970,8 +1257,9 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
       body = JSON.parse(fs.readFileSync(flags["body-json"], "utf8"));
     } catch (err: any) {
       process.stderr.write(
-        "invoke-rest: --body-json must point to a readable JSON file: "
-          + (err && err.message ? err.message : String(err)) + "\n"
+        "invoke-rest: --body-json must point to a readable JSON file: " +
+          (err && err.message ? err.message : String(err)) +
+          "\n",
       );
       return 1;
     }
@@ -979,7 +1267,9 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     try {
       body = JSON.parse(flags.body);
     } catch (err: any) {
-      process.stderr.write("invoke-rest: --body must be valid JSON: " + err.message + "\n");
+      process.stderr.write(
+        "invoke-rest: --body must be valid JSON: " + err.message + "\n",
+      );
       return 1;
     }
   }
@@ -987,7 +1277,7 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     method: flags.method,
     path: flags.path,
     confirm: flags.confirm === "true",
-    dryRun: flags["dry-run"] === "true"
+    dryRun: flags["dry-run"] === "true",
   };
   if (body !== undefined) {
     params.body = body;
@@ -997,63 +1287,35 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
     process.stdout.write(
-      "[dry-run] " + result.method + " " + result.path + "\n"
-        + (result.requestBody !== undefined
+      "[dry-run] " +
+        result.method +
+        " " +
+        result.path +
+        "\n" +
+        (result.requestBody !== undefined
           ? "Request body withheld from human output — use --json to view.\n"
-          : "")
-        + result.note + "\n"
+          : "") +
+        result.note +
+        "\n",
     );
   } else {
     // Bodies are never logged: human output is method + path + status only.
     process.stdout.write(
-      "[sent] " + result.method + " " + result.path + " -> HTTP " + result.httpStatus
-        + (result.ok ? "" : " (non-2xx)") + "\n"
-        + "Response body withheld from human output — use --json for { httpStatus, ok, body }.\n"
+      "[sent] " +
+        result.method +
+        " " +
+        result.path +
+        " -> HTTP " +
+        result.httpStatus +
+        (result.ok ? "" : " (non-2xx)") +
+        "\n" +
+        "Response body withheld from human output — use --json for { httpStatus, ok, body }.\n",
     );
   }
   if (result.status === "sent" && result.ok !== true) {
     return 2;
   }
   return 0;
-}
-
-/**
- * dove-sn host-assets:
- *   --dir <dist>            Required. Path to the pre-built dist/ directory.
- *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
- *   --scope <namespace>     Required. Carrier scope, e.g. x_cadso_app_shell.
- *   --update-set <sys_id>   Optional. Defaults to the scope's current update set.
- *   --max-bytes <n>         Optional. Per-chunk serve cap (default ~5 MB).
- *   --allow-oversize        Optional. Warn instead of failing on an oversize chunk.
- *   --dry-run               Optional. Plan only; no writes/uploads/prunes.
- *   --json                  Optional. Emit the structured HostAssetsResult.
- *
- * Exit codes: 0 done/dry-run, 1 bad args, 2 a write landed but read-back is unverified.
- */
-async function runHostAssets(flags: Record<string, string>): Promise<number> {
-  var dir = flags.dir;
-  var app = flags.app;
-  var scope = flags.scope;
-  if (!dir || !app || !scope) {
-    process.stderr.write("host-assets: --dir, --app and --scope are required\n");
-    return 1;
-  }
-  var params: HostAssetsParams = { dir: path.resolve(dir), app: app, scope: scope };
-  var us = flags["update-set"] || flags.updateSetSysId;
-  if (us) params.updateSetSysId = us;
-  if (flags["max-bytes"]) params.maxBytes = Number(flags["max-bytes"]);
-  if (flags["allow-oversize"] === "true") params.allowOversize = true;
-  if (flags["dry-run"] === "true") params.dryRun = true;
-
-  var client = createClient({});
-  var result = await hostAssets(client, params);
-  if (flags.json === "true") {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } else {
-    process.stdout.write(formatHostAssetsResult(result) + "\n");
-  }
-  var unverified = !result.dryRun && result.chunks.some(function (c) { return !c.verified; });
-  return unverified ? 2 : 0;
 }
 
 async function main(): Promise<number> {
@@ -1087,6 +1349,9 @@ async function main(): Promise<number> {
   if (parsed.command === "create-table") {
     return await runCreateTable(parsed.flags);
   }
+  if (parsed.command === "invoke-rest") {
+    return await runInvokeRest(parsed.flags);
+  }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
   }
@@ -1095,9 +1360,6 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-record") {
     return await runCreateRecord(parsed.flags);
-  }
-  if (parsed.command === "invoke-rest") {
-    return await runInvokeRest(parsed.flags);
   }
   if (parsed.command === "host-assets") {
     return await runHostAssets(parsed.flags);
@@ -1130,7 +1392,11 @@ async function main(): Promise<number> {
   if (parsed.command === "mcp") {
     return await runMcp(parsed.flags);
   }
-  if (!parsed.command || parsed.command === "help" || parsed.flags.help === "true") {
+  if (
+    !parsed.command ||
+    parsed.command === "help" ||
+    parsed.flags.help === "true"
+  ) {
     printHelp();
     return 0;
   }
@@ -1142,6 +1408,10 @@ main()
     process.exit(code);
   })
   .catch(function (err) {
-    process.stderr.write("sinc-sn error: " + (err && err.message ? err.message : String(err)) + "\n");
+    process.stderr.write(
+      "dove-sn error: " +
+        (err && err.message ? err.message : String(err)) +
+        "\n",
+    );
     process.exit(1);
   });

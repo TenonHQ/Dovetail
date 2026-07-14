@@ -142,7 +142,9 @@ export var columnSpecSchema = z.object({
   type: z.string().min(1),
   name: z.string().optional(),
   max_length: z.union([z.string(), z.number()]).optional(),
-  reference: z.string().optional()
+  reference: z.string().optional(),
+  mandatory: z.boolean().optional(),
+  default: z.string().optional()
 });
 
 export var createTableSchema = z.object({
@@ -168,8 +170,6 @@ export var addColumnSchema = z.object({
   column: columnSpecSchema,
   scope: z.string().optional(),
   updateSetSysId: z.string().optional(),
-  saveActionSysId: z.string().optional(),
-  columnsRelId: z.string().optional(),
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional()
 });

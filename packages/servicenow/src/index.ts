@@ -136,8 +136,7 @@ export {
   DEFAULT_SUPER_CLASS,
   DEFAULT_SAVE_ACTION,
   addColumn,
-  deriveElement,
-  applyAddColumnOverlay
+  deriveElement
 } from "./table";
 export type {
   CreateTableParams,
