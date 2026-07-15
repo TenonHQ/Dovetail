@@ -44,8 +44,14 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn } from "./table";
-import type { ColumnSpec, CreateTableParams, AddColumnParams } from "./table";
+import { createTable, addColumn, setColumn } from "./table";
+import type {
+  ColumnSpec,
+  CreateTableParams,
+  AddColumnParams,
+  SetColumnParams,
+  ColumnAttributes,
+} from "./table";
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
@@ -70,27 +76,39 @@ import type {
 interface ParsedArgs {
   command: string;
   flags: Record<string, string>;
+  /**
+   * Flags that arrived with no value at all (`--label` followed by another flag, or by
+   * nothing). They land in `flags` as the string "true", which is right for a boolean and
+   * a trap for a string: `--label` with a forgotten value would rename a column to "true".
+   * Recorded here so a verb can tell the two apart and refuse.
+   */
+  bare: Record<string, boolean>;
 }
 
 function parseArgs(argv: Array<string>): ParsedArgs {
   var command = argv[0] || "";
   var flags: Record<string, string> = {};
+  var bare: Record<string, boolean> = {};
   for (var i = 1; i < argv.length; i += 1) {
     var arg = argv[i];
     if (arg.indexOf("--") !== 0) continue;
     var key = arg.slice(2);
     var value = "true";
+    var isBare = true;
     var eq = key.indexOf("=");
     if (eq !== -1) {
       value = key.slice(eq + 1);
       key = key.slice(0, eq);
+      isBare = false;
     } else if (i + 1 < argv.length && argv[i + 1].indexOf("--") !== 0) {
       value = argv[i + 1];
       i += 1;
+      isBare = false;
     }
     flags[key] = value;
+    if (isBare) bare[key] = true;
   }
-  return { command: command, flags: flags };
+  return { command: command, flags: flags, bare: bare };
 }
 
 function parseChoicesInline(input: string): Array<ChoiceValue> {
@@ -949,6 +967,17 @@ function printHelp(): void {
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
       "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
       "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
+      "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
+      "                     into an update set, then verify against the instance\n" +
+      "                     (--table <t> --column <c> --update-set <sys_id>\n" +
+      "                      [--label <l>] [--mandatory true|false] [--default <v>]\n" +
+      "                      [--read-only true|false] [--max-length <n>]\n" +
+      "                      [--dry-run] [--json])\n" +
+      "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
+      "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
+      "                     Shorten or clear those values first, then re-run.\n" +
+      "                     --element / --internal-type are REFUSED with an explanation:\n" +
+      "                     ServiceNow silently ignores both on an existing column.\n" +
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
@@ -1154,6 +1183,118 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
     );
   }
   if (result.status === "failed") return 2;
+  return 0;
+}
+
+/** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
+ *  false. Anything else is rejected rather than quietly coerced to `true`. */
+function parseBoolFlag(name: string, raw: string): boolean {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(
+    "set-column: --" + name + " must be true or false (got '" + raw + "').",
+  );
+}
+
+/**
+ * dove-sn set-column:
+ *   --table x_cadso_journey --column description --update-set <sys_id>
+ *   [--label "Description"] [--mandatory true|false] [--default <v>]
+ *   [--read-only true|false] [--max-length 4000] [--dry-run] [--json]
+ *
+ * Updates an EXISTING column's schema. `internal_type` and a rename are refused —
+ * ServiceNow silently ignores both on an existing column. To CREATE one, use add-column;
+ * to set a RECORD's value, use set-field.
+ */
+async function runSetColumn(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // A string flag whose value was forgotten arrives as the literal "true" — `--label`
+  // with nothing after it would rename the column to "true". Booleans legitimately do
+  // that, strings never do, so refuse rather than silently write nonsense.
+  var stringFlags = ["label", "default", "table", "column", "update-set"];
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      process.stderr.write(
+        "set-column: --" +
+          stringFlags[f] +
+          " needs a value (it was given none).\n",
+      );
+      return 1;
+    }
+  }
+  var table = flags.table;
+  var column = flags.column;
+  if (!table || !column) {
+    process.stderr.write(
+      "set-column: --table and --column are required " +
+        "(--update-set is required too, unless --dry-run)\n",
+    );
+    return 1;
+  }
+  var attributes: ColumnAttributes = {};
+  // Accepted so that setColumn can REFUSE them by name with the reason. Dropping them
+  // silently would leave someone who asked for a rename believing it happened.
+  if (flags.element !== undefined) attributes.element = flags.element;
+  if (flags["internal-type"] !== undefined) {
+    attributes.internalType = flags["internal-type"];
+  }
+  if (flags.label !== undefined) attributes.label = flags.label;
+  if (flags.default !== undefined) attributes.default = flags.default;
+  if (flags.mandatory !== undefined) {
+    attributes.mandatory = parseBoolFlag("mandatory", flags.mandatory);
+  }
+  if (flags["read-only"] !== undefined) {
+    attributes.readOnly = parseBoolFlag("read-only", flags["read-only"]);
+  }
+  if (flags["max-length"] !== undefined) {
+    var len = Number(flags["max-length"]);
+    // sys_dictionary.max_length is an integer; the MCP schema enforces int() too.
+    if (!Number.isInteger(len) || len < 1) {
+      process.stderr.write(
+        "set-column: --max-length must be a positive integer\n",
+      );
+      return 1;
+    }
+    attributes.maxLength = len;
+  }
+
+  var params: SetColumnParams = {
+    client: createClient({}),
+    table: table,
+    column: column,
+    attributes: attributes,
+  };
+  // Accept the same alias pair as the other verbs (create-view, set-list-layout, …).
+  var setColumnUs = flags["update-set"] || flags.updateSetSysId;
+  if (setColumnUs) params.updateSetSysId = setColumnUs;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await setColumn(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "." +
+        result.column +
+        (result.verified && result.status === "applied" ? " — verified" : "") +
+        (result.status === "applied" && !result.capturedInUpdateSet
+          ? " — NOT CAPTURED"
+          : "") +
+        "\n" +
+        result.note +
+        "\n",
+    );
+  }
+  // 2 = the write landed but the instance does not reflect it (or it was not captured),
+  // which must not read as success to a script.
+  if (result.status === "failed") return 2;
+  if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
   return 0;
 }
 
@@ -1466,6 +1607,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
+  }
+  if (parsed.command === "set-column") {
+    return await runSetColumn(parsed.flags, parsed.bare);
   }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);

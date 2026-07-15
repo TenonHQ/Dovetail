@@ -5,32 +5,33 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 19 expected tools", function () {
-    var names = buildDescriptors().map(function (d) { return d.name; });
-    expect(names.slice().sort()).toEqual(
-      [
-        "action_edit",
-        "action_view",
-        "add_choices_to_field",
-        "add_column",
-        "create_record",
-        "create_table",
-        "create_view",
-        "flow_copy",
-        "flow_create",
-        "flow_edit",
-        "flow_publish",
-        "flow_test",
-        "flow_view",
-        "host_assets",
-        "invoke_rest",
-        "set_field",
-        "set_form_layout",
-        "set_list_layout",
-        "set_related_lists"
-      ]
-    );
-    expect(TOOL_NAMES).toHaveLength(19);
+  it("registers exactly the 20 expected tools", function () {
+    var names = buildDescriptors().map(function (d) {
+      return d.name;
+    });
+    expect(names.slice().sort()).toEqual([
+      "action_edit",
+      "action_view",
+      "add_choices_to_field",
+      "add_column",
+      "create_record",
+      "create_table",
+      "create_view",
+      "flow_copy",
+      "flow_create",
+      "flow_edit",
+      "flow_publish",
+      "flow_test",
+      "flow_view",
+      "host_assets",
+      "invoke_rest",
+      "set_column",
+      "set_field",
+      "set_form_layout",
+      "set_list_layout",
+      "set_related_lists",
+    ]);
+    expect(TOOL_NAMES).toHaveLength(20);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -46,14 +47,16 @@ describe("MCP registry", function () {
       query: async function (table) {
         if (table === "sys_update_set") return [US];
         return [];
-      }
+      },
     });
     var descriptors = buildDescriptors({ client: ctx.client });
-    var createView = descriptors.filter(function (d) { return d.name === "create_view"; })[0];
+    var createView = descriptors.filter(function (d) {
+      return d.name === "create_view";
+    })[0];
     var result = await createView.handler({
       name: "sales_support",
       updateSetSysId: "us1",
-      scope: "global"
+      scope: "global",
     });
     expect(result.view.action).toBe("created");
     expect(ctx.calls.createRecord).toHaveLength(1);
@@ -65,19 +68,24 @@ describe("MCP registry", function () {
       query: async function (table) {
         if (table === "sys_update_set") return [US];
         return [];
-      }
+      },
     });
     var descriptors = buildDescriptors({ client: ctx.client });
-    var setList = descriptors.filter(function (d) { return d.name === "set_list_layout"; })[0];
+    var setList = descriptors.filter(function (d) {
+      return d.name === "set_list_layout";
+    })[0];
     var result = await setList.handler({
       table: "x_cadso_automate_audience",
       columns: ["number", "name"],
       updateSetSysId: "us1",
-      scope: "x_cadso_automate"
+      scope: "x_cadso_automate",
     });
     expect(result.dryRun).toBe(false);
-    expect(ctx.calls.createRecord.filter(function (c) { return c.table === "sys_ui_list_element"; }))
-      .toHaveLength(2);
+    expect(
+      ctx.calls.createRecord.filter(function (c) {
+        return c.table === "sys_ui_list_element";
+      }),
+    ).toHaveLength(2);
   });
 
   it("set_field handler writes via the injected client and verifies", async function () {
@@ -85,15 +93,17 @@ describe("MCP registry", function () {
       query: async function (table: string, query?: string) {
         if (query === "sys_id=rec1") return [{ sys_id: "rec1", order: "20" }];
         return [];
-      }
+      },
     });
     var descriptors = buildDescriptors({ client: ctx.client });
-    var setFieldTool = descriptors.filter(function (d) { return d.name === "set_field"; })[0];
+    var setFieldTool = descriptors.filter(function (d) {
+      return d.name === "set_field";
+    })[0];
     var result = await setFieldTool.handler({
       table: "x_cadso_core_metric_point_type",
       sysId: "rec1",
       fields: { order: "20" },
-      updateSetSysId: "us1"
+      updateSetSysId: "us1",
     });
     expect(result.status).toBe("applied");
     expect(result.verified).toBe(true);
@@ -104,17 +114,20 @@ describe("MCP registry", function () {
   it("create_record handler inserts via the injected client and verifies", async function () {
     var ctx = makeMockClient({
       query: async function (table: string, query?: string) {
-        if (query === "sys_id=new_1") return [{ sys_id: "new_1", name: "avg_parts" }];
+        if (query === "sys_id=new_1")
+          return [{ sys_id: "new_1", name: "avg_parts" }];
         return [];
-      }
+      },
     });
     var descriptors = buildDescriptors({ client: ctx.client });
-    var createRecordTool = descriptors.filter(function (d) { return d.name === "create_record"; })[0];
+    var createRecordTool = descriptors.filter(function (d) {
+      return d.name === "create_record";
+    })[0];
     var result = await createRecordTool.handler({
       table: "x_cadso_core_metric_point_type",
       fields: { name: "avg_parts" },
       scope: "x_cadso_core",
-      updateSetSysId: "us1"
+      updateSetSysId: "us1",
     });
     expect(result.status).toBe("created");
     expect(result.verified).toBe(true);
@@ -126,10 +139,12 @@ describe("MCP registry", function () {
   it("invoke_rest handler is a dry-run by default — nothing is sent", async function () {
     var ctx = makeMockClient();
     var descriptors = buildDescriptors({ client: ctx.client });
-    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    var invokeTool = descriptors.filter(function (d) {
+      return d.name === "invoke_rest";
+    })[0];
     var result = await invokeTool.handler({
       method: "DELETE",
-      path: "/api/x_cadso_core/testkit/resource/abc"
+      path: "/api/x_cadso_core/testkit/resource/abc",
     });
     expect(result.status).toBe("dry-run");
     expect(ctx.calls.nowInvoke).toHaveLength(0);
@@ -138,12 +153,14 @@ describe("MCP registry", function () {
   it("invoke_rest handler sends via the injected client when confirm:true", async function () {
     var ctx = makeMockClient();
     var descriptors = buildDescriptors({ client: ctx.client });
-    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    var invokeTool = descriptors.filter(function (d) {
+      return d.name === "invoke_rest";
+    })[0];
     var result = await invokeTool.handler({
       method: "PUT",
       path: "/api/x_cadso_core/testkit/resource/abc",
       body: { name: "updated" },
-      confirm: true
+      confirm: true,
     });
     expect(result.status).toBe("sent");
     expect(result.httpStatus).toBe(200);
@@ -152,18 +169,20 @@ describe("MCP registry", function () {
     expect(ctx.calls.nowInvoke[0]).toEqual({
       method: "PUT",
       path: "/api/x_cadso_core/testkit/resource/abc",
-      body: { name: "updated" }
+      body: { name: "updated" },
     });
   });
 
   it("invoke_rest accepts a lowercase method via the schema preprocess", async function () {
     var ctx = makeMockClient();
     var descriptors = buildDescriptors({ client: ctx.client });
-    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
+    var invokeTool = descriptors.filter(function (d) {
+      return d.name === "invoke_rest";
+    })[0];
     var result = await invokeTool.handler({
       method: "delete",
       path: "/api/x_cadso_core/testkit/resource/abc",
-      confirm: true
+      confirm: true,
     });
     expect(result.status).toBe("sent");
     expect(ctx.calls.nowInvoke[0].method).toBe("DELETE");
@@ -171,27 +190,38 @@ describe("MCP registry", function () {
 
   it("invoke_rest rejects a non-/api/ path via the zod schema", async function () {
     var descriptors = buildDescriptors();
-    var invokeTool = descriptors.filter(function (d) { return d.name === "invoke_rest"; })[0];
-    await expect(invokeTool.handler({ method: "GET", path: "https://evil.example/api/now" }))
-      .rejects.toThrow();
+    var invokeTool = descriptors.filter(function (d) {
+      return d.name === "invoke_rest";
+    })[0];
+    await expect(
+      invokeTool.handler({
+        method: "GET",
+        path: "https://evil.example/api/now",
+      }),
+    ).rejects.toThrow();
   });
 
   it("rejects invalid args via the zod schema", async function () {
     var descriptors = buildDescriptors();
-    var setList = descriptors.filter(function (d) { return d.name === "set_list_layout"; })[0];
-    await expect(setList.handler({ table: "x", columns: [], updateSetSysId: "u" }))
-      .rejects.toThrow();
+    var setList = descriptors.filter(function (d) {
+      return d.name === "set_list_layout";
+    })[0];
+    await expect(
+      setList.handler({ table: "x", columns: [], updateSetSysId: "u" }),
+    ).rejects.toThrow();
   });
 
   it("runSmoke lists every registered tool", async function () {
     var out = "";
-    var spy = jest.spyOn(process.stdout, "write").mockImplementation((function (s: any) {
+    var spy = jest.spyOn(process.stdout, "write").mockImplementation(function (
+      s: any,
+    ) {
       out += String(s);
       return true;
-    }) as any);
+    } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (19)");
+    expect(out).toContain("Registered tools (20)");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");
@@ -240,7 +270,16 @@ describe("MCP registry — annotations", function () {
     });
 
     // destructive-but-idempotent overwrites (prune/recompile/in-place edit/scalar set)
-    ["set_list_layout", "set_form_layout", "set_related_lists", "flow_publish", "flow_edit", "host_assets", "set_field"].forEach(function (name) {
+    [
+      "set_list_layout",
+      "set_form_layout",
+      "set_related_lists",
+      "flow_publish",
+      "flow_edit",
+      "host_assets",
+      "set_field",
+      "set_column",
+    ].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);
       expect(map[name].annotations.idempotentHint).toBe(true);

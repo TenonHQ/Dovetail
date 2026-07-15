@@ -35,7 +35,7 @@ import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable, addColumn } from "../table";
+import { createTable, addColumn, setColumn } from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
@@ -57,6 +57,7 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
+  setColumnSchema,
   setFieldSchema,
   createRecordSchema,
   hostAssetsSchema,
@@ -79,6 +80,7 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
+  "set_column",
   "set_field",
   "create_record",
   "host_assets",
@@ -208,15 +210,15 @@ export function buildDescriptors(
       name: "action_edit",
       annotations: WRITE_OVERWRITE,
       description:
-        "Structurally edit a published Custom Action Type and republish it as one snapshot. "
-        + "Ops: patchStepScripts (per-step script edits, step addressed by cid or label), "
-        + "addStepOutputs (step-level extended_outputs), addStepInputs (step-level extended_inputs "
-        + "wired to another step's output via pillFrom {step, output} — the pill format and the "
-        + "entry shape are handled for you). Also supports the action-level patchScript / setScript / "
-        + "mergeOutputs. DRY-RUN BY DEFAULT: without apply:true it returns the per-step before/after "
-        + "diff and writes nothing. With apply:true it POSTs /snapshot, captures into updateSetSysId "
-        + "when given, then reads the steps back and verifies the edit actually landed. "
-        + "sysId is the sys_hub_action_type_definition sys_id; scopeSysId is the app scope.",
+        "Structurally edit a published Custom Action Type and republish it as one snapshot. " +
+        "Ops: patchStepScripts (per-step script edits, step addressed by cid or label), " +
+        "addStepOutputs (step-level extended_outputs), addStepInputs (step-level extended_inputs " +
+        "wired to another step's output via pillFrom {step, output} — the pill format and the " +
+        "entry shape are handled for you). Also supports the action-level patchScript / setScript / " +
+        "mergeOutputs. DRY-RUN BY DEFAULT: without apply:true it returns the per-step before/after " +
+        "diff and writes nothing. With apply:true it POSTs /snapshot, captures into updateSetSysId " +
+        "when given, then reads the steps back and verifies the edit actually landed. " +
+        "sysId is the sys_hub_action_type_definition sys_id; scopeSysId is the app scope.",
       shape: editActionSchema.shape,
       handler: async function (args: any) {
         var p = editActionSchema.parse(args);
@@ -226,9 +228,9 @@ export function buildDescriptors(
           scopeSysId: p.scopeSysId,
           ops: p.ops,
           apply: p.apply === true,
-          updateSetSysId: p.updateSetSysId
+          updateSetSysId: p.updateSetSysId,
         });
-      }
+      },
     },
     {
       name: "flow_publish",
@@ -415,6 +417,52 @@ export function buildDescriptors(
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
           debug: p.debug,
+        });
+      },
+    },
+    {
+      name: "set_column",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Update the SCHEMA of an EXISTING column on an EXISTING ServiceNow table — its label, " +
+        "mandatory, default, readOnly, or maxLength — captured into a named update set, then READ " +
+        "BACK from the instance to verify. This is the schema counterpart to set_field: set_field " +
+        "changes a RECORD's value, set_column changes the COLUMN's definition (sys_dictionary). Use " +
+        "add_column to CREATE a column. maxLength is PHYSICAL — changing it fires a real ALTER on the " +
+        "table, and that works (verified live). internal_type and element (rename) are REFUSED, not " +
+        "written: ServiceNow returns HTTP 200 and silently ignores both on an existing column, so a " +
+        "write would report success while changing nothing — delete and recreate the column instead. " +
+        "Attributes are a closed set, never an open field map. When every requested value already " +
+        "matches, nothing is written and the status is 'unchanged' (an ALTER fires on a CHANGE, not a " +
+        "write). A maxLength SHRINK is REFUSED while rows hold longer values: ServiceNow silently " +
+        "refuses such a shrink (200 OK, column unchanged, data preserved), so the tool names the " +
+        "blocking rows instead of issuing a write that would be quietly ignored. Clear those values " +
+        "first, then re-run — there is no override, because forcing it would either do nothing or " +
+        "destroy data. dryRun:true diffs against the instance, flags the blocking rows, and writes nothing.",
+      shape: setColumnSchema.shape,
+      handler: async function (args: any) {
+        var p = setColumnSchema.parse(args);
+        // The schema leaves updateSetSysId optional (dry-run doesn't need one), so
+        // enforce the live-path requirement HERE — a tool-level error before any
+        // work beats a failure surfacing from deep inside setColumn. Same pattern
+        // as add_column.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "set_column: updateSetSysId is required on the live path so the schema " +
+              "change is captured in a known update set — set dryRun:true to plan " +
+              "without one.",
+          );
+        }
+        return setColumn({
+          client: client(),
+          table: p.table,
+          column: p.column,
+          attributes: p.attributes,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun,
         });
       },
     },
