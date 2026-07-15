@@ -984,11 +984,12 @@ function printHelp(): void {
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
       "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
       "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
-      '                     (--table <t> --sys-id <id>|--query <q> --fields "k=v,k2=v2"\n' +
-      "                      --update-set <sys_id> [--from-json <path>] [--dry-run] [--json])\n" +
+      "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
+      '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
       "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
-      '                     (--table <t> --fields "k=v,k2=v2" --scope <s> --update-set <sys_id>\n' +
-      "                      [--from-json <path>] [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
+      "                     (--table <t> --scope <s> --update-set <sys_id>\n" +
+      '                      (--fields "k=v,k2=v2" | --from-json <path>)\n' +
+      "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
       "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
       "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
       "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
@@ -1332,10 +1333,11 @@ function mergeFields(flags: Record<string, string>): Record<string, string> {
  * dove-sn set-field:
  *   --table x_cadso_core_metric_point_type
  *   --sys-id <id>  |  --query "name=send_size"   (query must resolve to exactly 1 row)
- *   --fields "order=20"                          (comma-separated key=value pairs)
+ *   [--fields "order=20"]                        (comma-separated key=value pairs)
  *   [--from-json <path>]                         (JSON { field: value }; carries large or
  *                                                 multiline values the inline form can't;
  *                                                 overrides --fields on a shared key)
+ *                                                — at least one of --fields / --from-json is required
  *   --update-set <sys_id>                        (required — the change is captured here)
  *   [--dry-run] [--json]
  * Exit codes: 0 applied/dry-run, 1 bad args, 2 write landed but read-back unverified.
@@ -1399,9 +1401,10 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
 /**
  * dove-sn create-record:
  *   --table x_cadso_core_metric_point_type
- *   --fields "name=avg_message_parts,label=Avg. Message Parts,order=35"
+ *   [--fields "name=avg_message_parts,label=Avg. Message Parts,order=35"]
  *   [--from-json <path>]                         (JSON { field: value }; carries large or
  *                                                 multiline values the inline form can't)
+ *                                                — at least one of --fields / --from-json is required
  *   --scope x_cadso_core                         (the app that owns the new record)
  *   --update-set <sys_id>                        (required — the insert is captured here)
  *   [--if-absent "name=avg_message_parts"]       (skip the insert when this query already matches)
