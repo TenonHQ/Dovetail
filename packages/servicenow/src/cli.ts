@@ -26,6 +26,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { loadEnvFile } from "./loadEnv";
 import { createClient } from "./client";
+import { readFieldsFromJsonFile } from "./fieldsFromJson";
 import { addChoicesToField } from "./choices";
 import { formatAddChoicesResult } from "./formatter";
 import { createView } from "./layout/views";
@@ -982,11 +983,12 @@ function printHelp(): void {
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
       "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
-      "  set-field          Set scalar field value(s) on an EXISTING record, into an update set, then verify\n" +
-      '                     (--table <t> --sys-id <id>|--query <q> --fields "k=v,k2=v2"\n' +
-      "                      --update-set <sys_id> [--dry-run] [--json])\n" +
+      "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
+      "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
+      '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
       "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
-      '                     (--table <t> --fields "k=v,k2=v2" --scope <s> --update-set <sys_id>\n' +
+      "                     (--table <t> --scope <s> --update-set <sys_id>\n" +
+      '                      (--fields "k=v,k2=v2" | --from-json <path>)\n' +
       "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
       "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
       "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
@@ -1315,17 +1317,42 @@ function parseFieldsInline(input: string): Record<string, string> {
 }
 
 /**
+ * Merge the two field sources for the record-write verbs: inline `--fields "k=v,k2=v2"`
+ * and `--from-json <path>` (a JSON object — the only form that can carry a large or
+ * multiline value, since the inline form splits on commas and trims). On a key present in
+ * both, `--from-json` wins: it is the explicit spec file. Throws on an unreadable file,
+ * malformed JSON, or a non-scalar value (surfaced by the caller as a bad-args error).
+ */
+function mergeFields(flags: Record<string, string>): Record<string, string> {
+  var inline = parseFieldsInline(flags.fields || "");
+  if (!flags["from-json"]) return inline;
+  return Object.assign(inline, readFieldsFromJsonFile(flags["from-json"]));
+}
+
+/**
  * dove-sn set-field:
  *   --table x_cadso_core_metric_point_type
  *   --sys-id <id>  |  --query "name=send_size"   (query must resolve to exactly 1 row)
- *   --fields "order=20"                          (comma-separated key=value pairs)
+ *   [--fields "order=20"]                        (comma-separated key=value pairs)
+ *   [--from-json <path>]                         (JSON { field: value }; carries large or
+ *                                                 multiline values the inline form can't;
+ *                                                 overrides --fields on a shared key)
+ *                                                — at least one of --fields / --from-json is required
  *   --update-set <sys_id>                        (required — the change is captured here)
  *   [--dry-run] [--json]
  * Exit codes: 0 applied/dry-run, 1 bad args, 2 write landed but read-back unverified.
  */
 async function runSetField(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
-  var fields = parseFieldsInline(flags.fields || "");
+  var fields: Record<string, string>;
+  try {
+    fields = mergeFields(flags);
+  } catch (err) {
+    process.stderr.write(
+      "set-field: " + (err instanceof Error ? err.message : String(err)) + "\n",
+    );
+    return 1;
+  }
   var hasTarget = Boolean(flags["sys-id"] || flags.query);
   if (
     !table ||
@@ -1334,7 +1361,7 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
     !flags["update-set"]
   ) {
     process.stderr.write(
-      'set-field: --table, --fields "k=v", one of --sys-id/--query, and --update-set are required\n',
+      'set-field: --table, one of --sys-id/--query, --update-set, and at least one field (--fields "k=v" or --from-json <path>) are required\n',
     );
     return 1;
   }
@@ -1374,7 +1401,10 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
 /**
  * dove-sn create-record:
  *   --table x_cadso_core_metric_point_type
- *   --fields "name=avg_message_parts,label=Avg. Message Parts,order=35"
+ *   [--fields "name=avg_message_parts,label=Avg. Message Parts,order=35"]
+ *   [--from-json <path>]                         (JSON { field: value }; carries large or
+ *                                                 multiline values the inline form can't)
+ *                                                — at least one of --fields / --from-json is required
  *   --scope x_cadso_core                         (the app that owns the new record)
  *   --update-set <sys_id>                        (required — the insert is captured here)
  *   [--if-absent "name=avg_message_parts"]       (skip the insert when this query already matches)
@@ -1384,7 +1414,17 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
  */
 async function runCreateRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
-  var fields = parseFieldsInline(flags.fields || "");
+  var fields: Record<string, string>;
+  try {
+    fields = mergeFields(flags);
+  } catch (err) {
+    process.stderr.write(
+      "create-record: " +
+        (err instanceof Error ? err.message : String(err)) +
+        "\n",
+    );
+    return 1;
+  }
   if (
     !table ||
     Object.keys(fields).length === 0 ||
@@ -1392,7 +1432,7 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
     !flags["update-set"]
   ) {
     process.stderr.write(
-      'create-record: --table, --fields "k=v", --scope and --update-set are required\n',
+      'create-record: --table, --scope, --update-set, and at least one field (--fields "k=v" or --from-json <path>) are required\n',
     );
     return 1;
   }
