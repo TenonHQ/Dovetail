@@ -42,11 +42,40 @@ and un-promotable. This directory is the source of truth going forward.
   > **dead** Sincronia API and carries the same (now un-fixed) bug. It is slated for
   > removal, not repair.
 
-_TODO — capture the remaining live ops here so the whole API is version-controlled:_
-`createRecord`, `createUpdateSet`, `changeScope`, `changeUpdateSet`,
-`currentUpdateSet`, `deleteRecord` (write API), plus the remaining `Dovetail Sync`
-operation handlers (`getManifest.js`, `bulkDownload.js`, … — the thin wrappers that
-call into `DovetailUtilsMS`) and the `Dovetail Promote` ops.
+- `sys_ws_operation/` — the rest of the live operation handlers, captured verbatim
+  from the instance (`tenonworkstudio`, 2026-07-14):
+  - **Dovetail Core / Dovetail** write + scope/update-set ops: `createRecord.js`,
+    `deleteRecord.js`, `createUpdateSet.js`, `changeScope.js`, `changeUpdateSet.js`,
+    `currentUpdateSet.js`. These ops are mirrored on both the `Dovetail Core` (primary)
+    and `Dovetail` (legacy 404-fallback) defs. The three POST ops are identical across
+    both defs; the three GET ops (`changeScope`, `changeUpdateSet`, `currentUpdateSet`)
+    have **drifted** — the `Dovetail Core` def carries a newer ES5 rewrite (2026-06-01)
+    while the legacy `Dovetail` def still runs the older ES6 variant (2025-08-10). Since
+    `Dovetail Core` is the client's primary target, **the Core version is captured here**
+    as canonical. (Reconciling the legacy def to match is a separate cleanup.)
+  - **Dovetail Sync** thin wrappers into `DovetailUtils`: `getAppList.js`,
+    `getManifest.js`, `bulkDownload.js`, `getCurrentScope.js`, `pushATFfile.js`.
+  - **Dovetail Promote**: `promote.js`.
+
+- `sys_script_include/DovetailUtils.js` — entry-point class the `Dovetail Sync` ops
+  instantiate (`new DovetailUtils()`); extends `DovetailUtilsMS`.
+
+- `sys_script_include/DovetailPromote.js` — the engine behind `promote.js`:
+  retrieve → preview → (optionally) commit a named update set from a registered
+  update-set source. The commit path replicates the platform's
+  `UpdateSetCommitAjax.commitRemoteUpdateSet`.
+
+> **These are the cadso-scope successors to the dead `../sys_script_include/SincUtils*`
+> + `../sys_ws_operation/*` handlers.** `DovetailUtilsMS` has since diverged forward
+> (the duplicate-display-name collision guard above); the Sincronia copies carry the
+> old, unfixed logic and are slated for removal, not repair.
+
+### Deployment note
+
+These live in **global scope**, which `dove` does not sync (`dove.config.js` excludes
+global scope), so there is no automated repo→instance push for this folder — it is a
+**source-of-truth mirror** for review and promotion, kept current by capturing from the
+instance. When an op changes on the instance, re-capture the handler here in the same PR.
 
 ## Relationship to the legacy Sincronia API
 
