@@ -1,0 +1,47 @@
+name: Test
+
+# PR-time test gate: build + run every workspace's jest suite on pull requests.
+# Tests ONLY — no publish path here (publishing stays merge-triggered in
+# publish.yml). Before this workflow existed, PRs merged without any test run
+# and the first execution of the suites happened inside the publish job, after
+# the merge was already irreversible (npm publishes can't be cleanly pulled).
+#
+# Check name for branch protection: "Test / jest". Not marked as a required
+# check by this change — flipping it on is a repo-settings decision once this
+# workflow has some green history on real PRs.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: dovetail-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same sequence the publish job runs, minus everything publish-related:
+      # prepack builds the TS packages so cross-workspace imports resolve, then
+      # every workspace with a test script runs (missing test scripts are
+      # skipped by the orchestrator, matching local `npm test`).
+      - name: Build all packages
+        run: node Scripts/run-workspaces.js prepack
+
+      - name: Test all packages
+        run: node Scripts/run-workspaces.js test
