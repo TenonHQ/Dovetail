@@ -406,6 +406,45 @@ Programmatic: `invokeRest({ method, path, body, confirm })` is exported, and the
 client gained `now.put` / `now.delete` / `now.invoke` (the latter returns
 `{ status, body }` verbatim) alongside the existing `now.get` / `now.post`.
 
+### Publish an app to the Store / application repository
+
+Publish a scoped application to the **ServiceNow Store**, the **company
+application repository**, or both — headlessly, with the publish's progress
+tracker polled to completion.
+
+```bash
+# Dry-run — the DEFAULT: resolves the app, prints the plan, publishes NOTHING
+npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260716 --target both
+
+# Publish for real (store, then repo, same version)
+npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260716 \
+  --target both --dev-notes "July release" --confirm --json
+```
+
+**Store publish is EXTERNALLY VISIBLE on the ServiceNow Store — treat
+`--target store --confirm` as a release.** `publish-app` is dry-run by default:
+without `--confirm` it prints the resolved plan and exits `1` (a deliberate
+refusal). `--target both` runs store then repo sequentially and short-circuits
+if the store leg fails.
+
+The two targets ride different transports:
+
+- **store** replays the `sys_app` form's upload flow (`xmlhttp.do` +
+  `sn_appauthor.ScopedAppUploaderAJAX`) over a form-login session — basic auth
+  alone no-ops there. It needs the Store account credentials in the loaded env
+  file as `SN_STORE_USERNAME` / `SN_STORE_PASSWORD`. The password is **never
+  accepted as a flag** and never appears in output, dry-run previews included.
+- **repo** uses the supported CI/CD REST API (`POST /api/sn_cicd/app_repo/publish`
+  + `GET /api/sn_cicd/progress/{id}`) over basic auth. The API user needs the
+  `sn_cicd` role (or admin).
+
+`--app` accepts a scope name, `sys_app` sys_id, or app name; `--version` must be
+above the currently published version. The result carries the progress-tracker
+id, per-step states ("Packaging application", "Uploading application"), the
+Store `appLink`, and the publish's update-set sys_id where the instance reports
+one. Exit codes: `0` published or dry-run, `1` bad args/unconfirmed, `2`
+failed/timeout. Programmatic: `publishApp({ app, version, target, confirm })`.
+
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
@@ -488,8 +527,10 @@ publish is read back and verified), `flow_publish` (compile a flow/subflow snaps
 publish, grafting a template), `flow_test` (validate or run a flow), and
 `flow_edit` (patch a flow), plus `invoke_rest` (invoke an arbitrary authenticated
 REST operation — Scripted REST included — with GET/POST/PUT/DELETE; dry-run by
-default, response passed through verbatim, bodies never logged). It reads
-ServiceNow credentials from the same env vars as the CLI.
+default, response passed through verbatim, bodies never logged) and `app_publish`
+(publish a scoped app to the ServiceNow Store and/or the application repository;
+dry-run by default, Store credentials env-only — they never transit tool
+arguments). It reads ServiceNow credentials from the same env vars as the CLI.
 
 ```bash
 npx dove-sn mcp --smoke   # list the registered tools and exit

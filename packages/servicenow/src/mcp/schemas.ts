@@ -291,6 +291,20 @@ export var createRecordSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+// app_publish: publish a scoped app to the ServiceNow Store or the company
+// application repository. Deliberately NO credential fields — the Store
+// account resolves from SN_STORE_USERNAME/SN_STORE_PASSWORD inside the verb,
+// so credentials never transit MCP arguments or telemetry.
+export var publishAppSchema = z.object({
+  app: z.string().min(1),
+  version: z.string().min(1),
+  devNotes: z.string().optional(),
+  target: z.union([z.literal("store"), z.literal("repo")]),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+});
+
 // invoke_rest: transport primitive for arbitrary authenticated REST operations
 // (Scripted REST included). The dry-run-unless-confirm gate lives in invokeRest
 // itself; the regex here rejects absolute URLs and non-/api/ paths early.

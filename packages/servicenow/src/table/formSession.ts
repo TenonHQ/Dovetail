@@ -293,16 +293,24 @@ function attr(tag: string, name: string): string | null {
   return null;
 }
 
-function decodeHtml(s: string): string {
-  // Unescape &amp; LAST. Doing it first double-unescapes inputs like "&amp;lt;"
-  // ("&amp;lt;" -> "&lt;" -> "<"), the js/double-escaping vulnerability. With the
-  // ampersand handled last, each entity is unescaped exactly once.
+/**
+ * Decode the HTML entities ServiceNow uses in attribute values. Unescape &amp;
+ * LAST. Doing it first double-unescapes inputs like "&amp;lt;" ("&amp;lt;" ->
+ * "&lt;" -> "<"), the js/double-escaping vulnerability. With the ampersand
+ * handled last, each entity is unescaped exactly once. Exported for the
+ * xmlhttp.do consumers (publishApp's progress-tree answers arrive entity-encoded).
+ */
+export function decodeHtmlEntities(s: string): string {
   return s
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&");
+}
+
+function decodeHtml(s: string): string {
+  return decodeHtmlEntities(s);
 }
 
 export interface PostResult {
