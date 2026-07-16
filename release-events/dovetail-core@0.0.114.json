@@ -1,0 +1,42 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.114",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.114",
+  "prev_version": "0.0.113",
+  "published_at": "2026-07-16T04:13:03.276Z",
+  "git": {
+    "sha": "25b61e955ec6c13a7e1444c1d866d7681aca1cd0",
+    "tag": "dovetail-core@0.0.114"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "25b61e955",
+      "subject": "fix(core): scope dove create's round-trip to the new record (no whole-scope churn) (#229)",
+      "pr": 229
+    },
+    {
+      "sha": "0ab5a243b",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "e0c350259",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "6a4081d25",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "b8967c79d",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "ff7ced55a",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.113 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
