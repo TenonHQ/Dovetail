@@ -386,10 +386,13 @@ export const narrowManifestToRecord = (
   var records = tableEntry.records;
   var recKeys = Object.keys(records);
   var wantedRecords: Record<string, any> = {};
+  // sys_id is unique per table, so stop at the first match — the record set for
+  // a large table can be sizable and this is the exact scenario the feature targets.
   for (var i = 0; i < recKeys.length; i++) {
     var rec = records[recKeys[i]];
     if (rec && rec.sys_id === sysId) {
       wantedRecords[recKeys[i]] = rec;
+      break;
     }
   }
   if (Object.keys(wantedRecords).length === 0) return empty;
@@ -498,7 +501,9 @@ export const syncManifest = async (
           logger.warn(
             "Created record " + options.record.sysId + " (" + options.record.table +
             ") not found in the refreshed scope manifest — local files not written. " +
-            "Run 'npx dove refresh' to pull it.",
+            "If '" + options.record.table + "' is missing from this scope's `_tables` " +
+            "whitelist in dove.config.js, add it there first; otherwise run " +
+            "'npx dove refresh' to pull it.",
           );
         } else {
           fileLogger.debug(

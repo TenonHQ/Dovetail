@@ -316,7 +316,11 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
         await AppUtils.syncManifest(scope, {
           record: { table: table, sysId: newSysId },
         });
-        var sourcePath = ConfigManager.getSourcePath();
+        // Resolve the scope's own source directory — syncManifest writes into
+        // getSourcePathForScope(scope), which a scope config can override. Using
+        // the top-level getSourcePath() here would print a wrong path in
+        // multi-scope setups even though the files landed correctly.
+        var sourcePath = ConfigManager.getSourcePathForScope(scope);
         var localPath = path.join(sourcePath, table, recordName);
         logger.success(chalk.green("Local files created at: ") + localPath);
       } catch (syncErr) {
