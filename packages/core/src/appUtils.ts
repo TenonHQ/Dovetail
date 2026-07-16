@@ -318,6 +318,13 @@ export interface SyncManifestOptions {
   // would drop every other table from dove.manifest.<scope>.json and break
   // push/watch. Empty/absent means "every allowed table", the historic default.
   tables?: string[];
+  // Narrow the FILE refresh to a SINGLE record (by table + sys_id). Same safety
+  // property as `tables`: the manifest is still written in full — only the file
+  // download is scoped to the one record. This is what lets `dove create`'s
+  // post-create round-trip write just the new record's files instead of
+  // refreshing every record in the scope (the whole-scope-churn footgun).
+  // Only meaningful with a specific `scope`; ignored on an all-scopes refresh.
+  record?: { table: string; sysId: string };
   // Internal: the active collector + request to close the per-scope segment.
   // Passed scope-to-scope so the caller can wire a single collector across an
   // all-scopes refresh. Not exposed on the CLI surface.
@@ -351,6 +358,45 @@ export const narrowManifestToTables = (
     }
   }
   return Object.assign({}, manifest, { tables: wantedTables });
+};
+
+/**
+ * Narrow a manifest's table map to a SINGLE record (matched by `table` +
+ * `sysId`), for the FILE refresh only.
+ *
+ * Returns a NEW manifest and NEVER mutates its input — same safety contract as
+ * `narrowManifestToTables`: the caller keeps writing the original, full manifest
+ * to disk, so the on-disk `dove.manifest.<scope>.json` never loses its other
+ * tables/records. Only the file download is scoped to this one record.
+ *
+ * If the table or a record with that sys_id is absent from the manifest, the
+ * returned manifest has an empty table map — refreshAllFiles no-ops on it, so no
+ * files are written (the create flow warns and points the user at `dove refresh`).
+ */
+export const narrowManifestToRecord = (
+  manifest: SN.AppManifest,
+  table: string,
+  sysId: string,
+): SN.AppManifest => {
+  var empty = Object.assign({}, manifest, { tables: {} as SN.TableMap });
+  var tables = manifest.tables || {};
+  var tableEntry = (tables as any)[table];
+  if (!tableEntry || !tableEntry.records) return empty;
+
+  var records = tableEntry.records;
+  var recKeys = Object.keys(records);
+  var wantedRecords: Record<string, any> = {};
+  for (var i = 0; i < recKeys.length; i++) {
+    var rec = records[recKeys[i]];
+    if (rec && rec.sys_id === sysId) {
+      wantedRecords[recKeys[i]] = rec;
+    }
+  }
+  if (Object.keys(wantedRecords).length === 0) return empty;
+
+  var narrowedTables: any = {};
+  narrowedTables[table] = Object.assign({}, tableEntry, { records: wantedRecords });
+  return Object.assign({}, manifest, { tables: narrowedTables });
 };
 
 export const syncManifest = async (
@@ -439,6 +485,28 @@ export const syncManifest = async (
       // so intersecting the manifest is enough. `newManifest` is left intact —
       // see narrowManifestToTables.
       var refreshManifest = narrowManifestToTables(newManifest, options.tables);
+      // Single-record narrowing (dove create round-trip). Applied after the
+      // --table narrowing so the two compose; the full manifest was already
+      // written above, so only the file download is scoped to the one record.
+      if (options.record) {
+        refreshManifest = narrowManifestToRecord(
+          refreshManifest,
+          options.record.table,
+          options.record.sysId,
+        );
+        if (Object.keys(refreshManifest.tables).length === 0) {
+          logger.warn(
+            "Created record " + options.record.sysId + " (" + options.record.table +
+            ") not found in the refreshed scope manifest — local files not written. " +
+            "Run 'npx dove refresh' to pull it.",
+          );
+        } else {
+          fileLogger.debug(
+            "syncManifest: narrowed file refresh to single record " +
+            options.record.sysId + " (" + options.record.table + ")",
+          );
+        }
+      }
       if (options.tables && options.tables.length > 0) {
         var wantedNames = Object.keys(refreshManifest.tables);
         if (wantedNames.length === 0) {

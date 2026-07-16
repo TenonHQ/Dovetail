@@ -314,6 +314,12 @@ export function configureCli(cli: Argv): Argv {
             default: false,
             describe: "Skip interactive prompts",
           },
+          refresh: {
+            type: "boolean",
+            default: true,
+            describe:
+              "Pull the created record's files to disk afterward (default: true; --no-refresh skips the local sync)",
+          },
         });
         return cmdArgs;
       },
