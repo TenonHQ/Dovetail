@@ -290,6 +290,15 @@ describe("publishApp — validation", function () {
     ).rejects.toThrow(/target must be 'store' or 'repo'/);
   });
 
+  it("refuses a NaN/non-positive timeout (would poll forever)", async function () {
+    await expect(
+      publishApp(storeParams({ timeoutMs: NaN })),
+    ).rejects.toThrow(/timeoutMs must be a positive number/);
+    await expect(
+      publishApp(storeParams({ timeoutMs: -5 })),
+    ).rejects.toThrow(/timeoutMs must be a positive number/);
+  });
+
   it("refuses a live store publish without store credentials, naming the vars", async function () {
     await expect(
       publishApp(

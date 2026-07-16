@@ -578,8 +578,9 @@ export function buildDescriptors(
       name: "app_publish",
       annotations: WRITE_EXECUTE,
       description:
-        "Publish a scoped ServiceNow application to the ServiceNow Store and/or the company " +
-        "Application Repository, then poll the publish to completion. STORE PUBLISH IS EXTERNALLY " +
+        "Publish a scoped ServiceNow application to ONE target per call — the ServiceNow Store " +
+        "(target 'store') or the company Application Repository (target 'repo'); call twice to " +
+        "publish to both — then poll the publish to completion. STORE PUBLISH IS EXTERNALLY " +
         "VISIBLE on the ServiceNow Store — treat it as a release. DRY-RUN BY DEFAULT: without " +
         "confirm:true the resolved plan (app, current version, target) is returned and nothing is " +
         "published. target 'store' replays the sys_app form's upload flow over a form-login session " +

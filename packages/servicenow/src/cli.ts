@@ -1681,7 +1681,20 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
     };
     if (flags["dev-notes"]) params.devNotes = flags["dev-notes"];
     if (flags["store-user"]) params.storeUsername = flags["store-user"];
-    if (flags["timeout-ms"]) params.timeoutMs = Number(flags["timeout-ms"]);
+    if (flags["timeout-ms"]) {
+      // A NaN timeout would make the poll-loop budget check always false —
+      // an infinite loop. Validate here, exit 1 on garbage.
+      var timeoutMs = Number(flags["timeout-ms"]);
+      if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+        process.stderr.write(
+          "publish-app: --timeout-ms must be a positive integer (got '" +
+            flags["timeout-ms"] +
+            "')\n",
+        );
+        return 1;
+      }
+      params.timeoutMs = timeoutMs;
+    }
     var result = await publishApp(params);
     results.push(result);
     if (flags.json !== "true") {

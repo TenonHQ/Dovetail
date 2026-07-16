@@ -259,8 +259,11 @@ export function flattenSteps(root: ProgressNode): Array<PublishStep> {
 }
 
 /**
- * Harvest the interesting result values from the progress tree: the deepest
- * non-empty appLink/appName any node carries, and the root's update-set sys_id.
+ * Harvest the interesting result values from the progress tree, walking
+ * root-down: the FIRST non-empty appLink/appName/update-set sys_id encountered
+ * wins and is never overwritten. In the observed HAR trees each value appears
+ * on exactly one node, so first-wins is equivalent — the rule just needs to be
+ * deterministic.
  */
 export function harvestProgressResults(root: ProgressNode): {
   appLink: string;
@@ -794,6 +797,20 @@ export async function publishApp(
     throw new Error(
       "publish-app: target must be 'store' or 'repo' (got '" +
         String(params.target) +
+        "').",
+    );
+  }
+  // A NaN/non-positive timeout would make the poll-loop budget check always
+  // false — an infinite loop. Refuse it here so every caller is covered.
+  if (
+    params.timeoutMs != null &&
+    (typeof params.timeoutMs !== "number" ||
+      !isFinite(params.timeoutMs) ||
+      params.timeoutMs <= 0)
+  ) {
+    throw new Error(
+      "publish-app: timeoutMs must be a positive number (got '" +
+        String(params.timeoutMs) +
         "').",
     );
   }
