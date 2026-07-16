@@ -131,3 +131,37 @@ export async function invokeRest(params: InvokeRestParams): Promise<InvokeRestRe
   }
   return result;
 }
+
+/**
+ * Write an invoke-rest result to a file as pretty-printed JSON — the
+ * first-class landing spot for large responses (piped stdout truncates at the
+ * OS pipe buffer if the process exits before draining; see the CLI's
+ * flush-aware exit). ATOMIC: writes to a same-directory temp file then
+ * renames, so a killed process leaves either the old file or the new one —
+ * never a silently-truncated hybrid. Overwrites an existing file by design
+ * (documented in --help). The parent directory must already exist; a missing
+ * or unwritable directory throws with the underlying error so the CLI can
+ * exit 1 loudly instead of "succeeding" with no file.
+ */
+export function writeInvokeRestResultFile(outPath: string, result: unknown): void {
+  var fs = require("fs") as typeof import("fs");
+  var pathMod = require("path") as typeof import("path");
+  var dir = pathMod.dirname(outPath);
+  var tempPath = pathMod.join(
+    dir,
+    "." + pathMod.basename(outPath) + ".tmp-" + process.pid + "-" + Date.now(),
+  );
+  var payload = JSON.stringify(result, null, 2) + "\n";
+  try {
+    fs.writeFileSync(tempPath, payload, { encoding: "utf8" });
+    fs.renameSync(tempPath, outPath);
+  } catch (err) {
+    // Best-effort temp cleanup so a failed write leaves no residue.
+    try {
+      fs.unlinkSync(tempPath);
+    } catch (cleanupErr) {
+      // The temp file never landed — nothing to clean.
+    }
+    throw err;
+  }
+}
