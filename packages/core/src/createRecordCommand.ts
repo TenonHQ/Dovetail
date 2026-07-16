@@ -18,6 +18,7 @@ interface CreateRecordArgs {
   from?: string;
   field?: string[];
   ci?: boolean;
+  refresh?: boolean;
   logLevel: string;
 }
 
@@ -300,20 +301,34 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
         ")",
     );
 
-    // 7. Full round-trip: pull the record back locally
-    logger.info("Syncing record to local files...");
-    fileLogger.debug("Starting manifest sync for scope:", scope);
+    // 7. Round-trip: pull ONLY the new record's files back locally. Scoped to
+    // { table, sysId } so creating one record no longer refreshes the entire
+    // scope (the whole-scope-churn footgun). --no-refresh skips it entirely.
+    if (typedArgs.refresh === false) {
+      logger.info(
+        "Skipping local sync (--no-refresh). Run 'npx dove refresh' to pull the record locally.",
+      );
+    } else {
+      logger.info("Syncing record to local files...");
+      fileLogger.debug("Starting single-record sync for scope:", scope);
 
-    try {
-      await AppUtils.syncManifest(scope);
-      var sourcePath = ConfigManager.getSourcePath();
-      var localPath = path.join(sourcePath, table, recordName);
-      logger.success(chalk.green("Local files created at: ") + localPath);
-    } catch (syncErr) {
-      logger.warn("Record created on instance but local sync failed.");
-      logger.warn("Run 'npx dove refresh' to pull the record locally.");
-      if (syncErr instanceof Error) {
-        fileLogger.error("Sync error:", syncErr.message);
+      try {
+        await AppUtils.syncManifest(scope, {
+          record: { table: table, sysId: newSysId },
+        });
+        // Resolve the scope's own source directory — syncManifest writes into
+        // getSourcePathForScope(scope), which a scope config can override. Using
+        // the top-level getSourcePath() here would print a wrong path in
+        // multi-scope setups even though the files landed correctly.
+        var sourcePath = ConfigManager.getSourcePathForScope(scope);
+        var localPath = path.join(sourcePath, table, recordName);
+        logger.success(chalk.green("Local files created at: ") + localPath);
+      } catch (syncErr) {
+        logger.warn("Record created on instance but local sync failed.");
+        logger.warn("Run 'npx dove refresh' to pull the record locally.");
+        if (syncErr instanceof Error) {
+          fileLogger.error("Sync error:", syncErr.message);
+        }
       }
     }
 
