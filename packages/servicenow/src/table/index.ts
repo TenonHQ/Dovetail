@@ -41,6 +41,7 @@ export {
   parseFormInputs,
   postForm,
   scrapeCk,
+  decodeHtmlEntities,
 } from "./formSession";
 export type {
   FormAuth,

@@ -41,6 +41,8 @@ import { setField } from "../setField";
 import { createRecord } from "../createRecord";
 import { invokeRest } from "../invokeRest";
 import type { InvokeRestParams } from "../invokeRest";
+import { publishApp } from "../publishApp";
+import type { PublishAppParams } from "../publishApp";
 import {
   createViewSchema,
   setListLayoutSchema,
@@ -62,6 +64,7 @@ import {
   createRecordSchema,
   hostAssetsSchema,
   invokeRestSchema,
+  publishAppSchema,
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -85,6 +88,7 @@ export var TOOL_NAMES = [
   "create_record",
   "host_assets",
   "invoke_rest",
+  "app_publish",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -568,6 +572,39 @@ export function buildDescriptors(
           params.client = deps.client;
         }
         return invokeRest(params);
+      },
+    },
+    {
+      name: "app_publish",
+      annotations: WRITE_EXECUTE,
+      description:
+        "Publish a scoped ServiceNow application to the ServiceNow Store and/or the company " +
+        "Application Repository, then poll the publish to completion. STORE PUBLISH IS EXTERNALLY " +
+        "VISIBLE on the ServiceNow Store — treat it as a release. DRY-RUN BY DEFAULT: without " +
+        "confirm:true the resolved plan (app, current version, target) is returned and nothing is " +
+        "published. target 'store' replays the sys_app form's upload flow over a form-login session " +
+        "and requires SN_STORE_USERNAME/SN_STORE_PASSWORD in the server's env file — credentials " +
+        "never transit tool arguments. target 'repo' uses the supported CI/CD REST API " +
+        "(/api/sn_cicd/app_repo/publish) and requires the sn_cicd role. app is a scope name, " +
+        "sys_app sys_id, or app name; version must be above the currently published version. The " +
+        "result carries the progress-tracker id, per-step states, the Store appLink, and the " +
+        "publish's update-set sys_id where the instance reports one.",
+      shape: publishAppSchema.shape,
+      handler: async function (args: any) {
+        var p = publishAppSchema.parse(args);
+        var params: PublishAppParams = {
+          app: p.app,
+          version: p.version,
+          target: p.target,
+          devNotes: p.devNotes,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+          timeoutMs: p.timeoutMs,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return publishApp(params);
       },
     },
   ];

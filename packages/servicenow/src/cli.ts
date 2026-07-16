@@ -59,6 +59,12 @@ import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
 import { invokeRest } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
+import { publishApp } from "./publishApp";
+import type {
+  PublishAppParams,
+  PublishAppResult,
+  PublishTarget,
+} from "./publishApp";
 import { hostAssets, formatHostAssetsResult } from "./hostAssets";
 import {
   formatReadFlowResult,
@@ -1003,6 +1009,15 @@ function printHelp(): void {
       "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
+      "  publish-app        Publish a scoped app to the ServiceNow Store and/or the company\n" +
+      "                     application repository, then poll the publish to completion.\n" +
+      "                     STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store.\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
+      "                     (--app <scope|sys_id|name> --version <v> --target store|repo|both\n" +
+      "                      [--dev-notes <text>] [--store-user <email>] [--timeout-ms <n>]\n" +
+      "                      [--dry-run] [--json] [--confirm])\n" +
+      "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
+      "                     the password is never a flag. Repo publish needs the sn_cicd role.\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
       "\nGlobal flags:\n" +
       "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
@@ -1611,6 +1626,102 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn publish-app:
+ *   --app <scope|sys_id|name>   Required. The sys_app to publish.
+ *   --version <v>               Required. Version to publish (e.g. 6.0.20260716).
+ *   --target store|repo|both    Required. STORE PUBLISH IS EXTERNALLY VISIBLE.
+ *   [--dev-notes <text>]        Optional developer notes.
+ *   [--store-user <email>]      Store account email (else SN_STORE_USERNAME).
+ *                               The password comes ONLY from SN_STORE_PASSWORD —
+ *                               there is no flag for it, ever.
+ *   [--timeout-ms <n>]          Progress-poll budget (default 120000).
+ *   [--dry-run] [--json] [--confirm]
+ *
+ * DRY-RUN unless --confirm: without it the resolved plan is printed and the
+ * command exits 1 (a deliberate refusal, not success). --target both publishes
+ * store then repo sequentially with the same version and short-circuits if the
+ * store leg fails; --json emits an array of per-target results.
+ * Exit codes: 0 published/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
+ */
+async function runPublishApp(flags: Record<string, string>): Promise<number> {
+  var app = flags.app;
+  var version = flags.version;
+  var target = flags.target;
+  if (!app || !version || !target) {
+    process.stderr.write(
+      "publish-app: --app, --version and --target store|repo|both are required\n",
+    );
+    return 1;
+  }
+  if (target !== "store" && target !== "repo" && target !== "both") {
+    process.stderr.write(
+      "publish-app: --target must be store, repo or both (got '" +
+        target +
+        "')\n",
+    );
+    return 1;
+  }
+  var targets: Array<PublishTarget> =
+    target === "both" ? ["store", "repo"] : [target as PublishTarget];
+  var dryRun = flags["dry-run"] === "true";
+  var confirmed = flags.confirm === "true";
+  var client = createClient({});
+
+  var results: Array<PublishAppResult> = [];
+  var exitCode = 0;
+  for (var i = 0; i < targets.length; i += 1) {
+    var params: PublishAppParams = {
+      client: client,
+      app: app,
+      version: version,
+      target: targets[i],
+      confirm: confirmed,
+      dryRun: dryRun,
+    };
+    if (flags["dev-notes"]) params.devNotes = flags["dev-notes"];
+    if (flags["store-user"]) params.storeUsername = flags["store-user"];
+    if (flags["timeout-ms"]) params.timeoutMs = Number(flags["timeout-ms"]);
+    var result = await publishApp(params);
+    results.push(result);
+    if (flags.json !== "true") {
+      process.stdout.write(
+        "[" +
+          result.status +
+          "] " +
+          result.target +
+          " — " +
+          result.appName +
+          " (" +
+          result.appScope +
+          ") v" +
+          result.version +
+          (result.appLink ? " — " + result.appLink : "") +
+          (result.updateSetSysId
+            ? " — update set " + result.updateSetSysId
+            : "") +
+          "\n" +
+          result.note +
+          "\n",
+      );
+    }
+    if (result.status === "failed" || result.status === "timeout") {
+      exitCode = 2;
+      break; // Short-circuit: never repo-publish after a failed store leg.
+    }
+  }
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(results, null, 2) + "\n");
+  }
+  if (exitCode === 0 && !dryRun && !confirmed) {
+    process.stderr.write(
+      "publish-app: refusing to publish without --confirm (the plan above is a dry-run).\n",
+    );
+    return 1;
+  }
+  return exitCode;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -1684,6 +1795,9 @@ async function main(): Promise<number> {
   if (parsed.command === "set-related-lists") {
     await runSetRelatedLists(parsed.flags);
     return 0;
+  }
+  if (parsed.command === "publish-app") {
+    return await runPublishApp(parsed.flags);
   }
   if (parsed.command === "mcp") {
     return await runMcp(parsed.flags);
