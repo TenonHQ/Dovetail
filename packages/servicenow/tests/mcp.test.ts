@@ -31,8 +31,9 @@ describe("MCP registry", function () {
       "set_form_layout",
       "set_list_layout",
       "set_related_lists",
+      "set_table",
     ]);
-    expect(TOOL_NAMES).toHaveLength(21);
+    expect(TOOL_NAMES).toHaveLength(22);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -222,7 +223,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (21)");
+    expect(out).toContain("Registered tools (22)");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");
@@ -280,6 +281,7 @@ describe("MCP registry — annotations", function () {
       "host_assets",
       "set_field",
       "set_column",
+      "set_table",
     ].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);

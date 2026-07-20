@@ -269,6 +269,22 @@ export var setColumnSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+// set-table takes a CLOSED attribute set for the same reason set-column does: an
+// unbounded write to sys_dictionary lets a caller silently corrupt schema. These are
+// the TABLE's own attributes (the internal_type=collection row), not a column's.
+export var tableAttributesSchema = z.object({
+  audit: z.boolean().optional(),
+});
+
+export var setTableSchema = z.object({
+  table: z.string().min(1),
+  attributes: tableAttributesSchema,
+  // Optional because dryRun works without one; the live-path requirement is
+  // enforced at the tool boundary (registry.ts), matching set_column.
+  updateSetSysId: z.string().min(1).optional(),
+  dryRun: z.boolean().optional(),
+});
+
 // Data-record write verbs. Kept as plain z.object (no .refine wrapper) so
 // registry.ts can read `.shape`; the deeper rules — one of sysId/query, at
 // least one field, the schema-table refusal — are enforced by the core

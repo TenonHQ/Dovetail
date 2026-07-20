@@ -35,7 +35,7 @@ import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable, addColumn, setColumn } from "../table";
+import { createTable, addColumn, setColumn, setTable } from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
@@ -60,6 +60,7 @@ import {
   createTableSchema,
   addColumnSchema,
   setColumnSchema,
+  setTableSchema,
   setFieldSchema,
   createRecordSchema,
   hostAssetsSchema,
@@ -84,6 +85,7 @@ export var TOOL_NAMES = [
   "create_table",
   "add_column",
   "set_column",
+  "set_table",
   "set_field",
   "create_record",
   "host_assets",
@@ -464,6 +466,47 @@ export function buildDescriptors(
           client: client(),
           table: p.table,
           column: p.column,
+          attributes: p.attributes,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun,
+        });
+      },
+    },
+    {
+      name: "set_table",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Update an EXISTING ServiceNow TABLE's own dictionary attributes — the row where " +
+        "internal_type=collection and element is EMPTY — captured into a named update set, then " +
+        "READ BACK from the instance to verify. Completes the trio: set_field changes a RECORD's " +
+        "value, set_column changes a COLUMN's definition, set_table changes the TABLE's own. " +
+        "Currently settable: audit. audit=true turns RECORD AUDITING on for the whole table — " +
+        "ServiceNow then writes a sys_audit row per changed field on every insert and update, " +
+        "which is a real storage and write cost on a high-volume table, so weigh it before " +
+        "enabling. Attributes are a closed set, never an open field map; a COLUMN attribute " +
+        "(label/mandatory/maxLength/readOnly/element/internalType) is refused by name and " +
+        "redirected to set_column. When the requested value already matches, nothing is written " +
+        "and the status is 'unchanged' — note that an identical-value write also captures " +
+        "NOTHING, so there is no update-set row to promote. dryRun:true diffs against the " +
+        "instance and writes nothing.",
+      shape: setTableSchema.shape,
+      handler: async function (args: any) {
+        var p = setTableSchema.parse(args);
+        // Same live-path guard as set_column: the schema leaves updateSetSysId
+        // optional so dry-run works without one.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "set_table: updateSetSysId is required on the live path so the schema " +
+              "change is captured in a known update set — set dryRun:true to plan " +
+              "without one.",
+          );
+        }
+        return setTable({
+          client: client(),
+          table: p.table,
           attributes: p.attributes,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
