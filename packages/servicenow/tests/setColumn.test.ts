@@ -641,9 +641,13 @@ describe("setColumn hostile inputs and awkward states", function () {
     ).rejects.toThrow(/Invalid character in query value/);
   });
 
-  it("points at the PARENT when the column is inherited, instead of claiming it does not exist", async function () {
-    // On an extended table the columns live on the ancestor's dictionary rows. Saying
-    // "no such column" about a column the caller can see on the form is a dead end.
+  // NOTE ON THE TWO TESTS BELOW. They used to assert that an inherited column could not
+  // be changed at all, and had to be changed on the parent. That was false — a child
+  // narrows an inherited column for itself via sys_dictionary_override /
+  // sys_documentation (see the "inherited columns" suite). MAX_LENGTH is the one genuine
+  // exception, because it is the ancestor's physical column and has no override, and it
+  // is what these two always actually exercised. Their names now say so.
+  it("refuses a max_length change on an inherited column — it is the ancestor's physical column", async function () {
     var client = liveClient({
       dict: null, // nothing on the child
       parentTable: "x_parent",
@@ -661,7 +665,7 @@ describe("setColumn hostile inputs and awkward states", function () {
     expect(pushesOf(client)).toHaveLength(0);
   });
 
-  it("says the change would hit every descendant — so it is never done implicitly", async function () {
+  it("spells out max_length's blast radius AND that the other attributes need no such trade-off", async function () {
     var err: Error | null = null;
     try {
       await setColumn({
@@ -678,7 +682,13 @@ describe("setColumn hostile inputs and awkward states", function () {
     } catch (e) {
       err = e as Error;
     }
-    expect((err as Error).message).toMatch(/EVERY table that extends x_parent/);
+    // Resizing at the source really does hit every descendant, so say so...
+    expect((err as Error).message).toMatch(
+      /EVERY table that extends 'x_parent'/,
+    );
+    // ...but do not let that imply the same is true of the rest. It is not, and the old
+    // message's silence on that point is what sent people to edit the parent.
+    expect((err as Error).message).toMatch(/CAN be set on 'x_t' alone/);
   });
 
   it("still reports a genuinely missing column as missing", async function () {

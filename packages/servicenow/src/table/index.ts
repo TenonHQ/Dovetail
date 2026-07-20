@@ -66,3 +66,23 @@ export type {
   AttributeChange,
   TruncationRisk,
 } from "./setColumn";
+
+export {
+  OVERRIDABLE,
+  LABEL_LANGUAGE,
+  explainMaxLengthNotOverridable,
+  resolveTableScope,
+  findOverrideRow,
+  findLabelRow,
+  effectiveValue,
+  diffInherited,
+  applyInheritedWrites,
+  overrideUpdateName,
+  labelUpdateName,
+} from "./overrideColumn";
+export type {
+  OverridableAttribute,
+  InheritedChange,
+  InheritedWriteParams,
+  InheritedWriteResult,
+} from "./overrideColumn";

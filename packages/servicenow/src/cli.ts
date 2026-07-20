@@ -983,6 +983,10 @@ function printHelp(): void {
       "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
       "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
       "                     Shorten or clear those values first, then re-run.\n" +
+      "                     An INHERITED column (one defined on a parent table) is narrowed for\n" +
+      "                     YOUR table alone, via sys_dictionary_override / sys_documentation —\n" +
+      "                     the parent and its other children are untouched. max-length is the\n" +
+      "                     exception: it is the parent's physical column and is refused.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
@@ -1299,6 +1303,12 @@ async function runSetColumn(
         result.table +
         "." +
         result.column +
+        // Say when the change went to an override rather than the column's own row. The
+        // caller asked for a table + column; without this they have no reason to expect
+        // the write landed on a different record type entirely.
+        (result.via === "override"
+          ? " — override (inherited from " + result.definedOn + ")"
+          : "") +
         (result.verified && result.status === "applied" ? " — verified" : "") +
         (result.status === "applied" && !result.capturedInUpdateSet
           ? " — NOT CAPTURED"
