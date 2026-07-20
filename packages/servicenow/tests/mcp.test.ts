@@ -5,7 +5,7 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 21 expected tools", function () {
+  it("registers exactly the 22 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -26,13 +26,14 @@ describe("MCP registry", function () {
       "flow_view",
       "host_assets",
       "invoke_rest",
+      "remove_choices_from_field",
       "set_column",
       "set_field",
       "set_form_layout",
       "set_list_layout",
       "set_related_lists",
     ]);
-    expect(TOOL_NAMES).toHaveLength(21);
+    expect(TOOL_NAMES).toHaveLength(22);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -222,7 +223,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (21)");
+    expect(out).toContain("Registered tools (22)");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");

@@ -27,8 +27,8 @@ import * as path from "path";
 import { loadEnvFile } from "./loadEnv";
 import { createClient } from "./client";
 import { readFieldsFromJsonFile } from "./fieldsFromJson";
-import { addChoicesToField } from "./choices";
-import { formatAddChoicesResult } from "./formatter";
+import { addChoicesToField, removeChoicesFromField } from "./choices";
+import { formatAddChoicesResult, formatRemoveChoicesResult } from "./formatter";
 import { createView } from "./layout/views";
 import { setListLayout } from "./layout/listLayout";
 import { setFormLayout } from "./layout/formLayout";
@@ -72,6 +72,7 @@ import {
 } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
+  RemoveChoicesParams,
   ChoiceValue,
   CreateViewParams,
   SetListLayoutParams,
@@ -169,6 +170,56 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
   }
   process.stdout.write(
     formatAddChoicesResult(params.table, params.column, result) + "\n",
+  );
+}
+
+function removeParamsFromFlags(
+  flags: Record<string, string>,
+): RemoveChoicesParams {
+  if (flags["from-json"]) {
+    var raw = fs.readFileSync(flags["from-json"], "utf8");
+    return JSON.parse(raw) as RemoveChoicesParams;
+  }
+  var table = flags.table;
+  var column = flags.column;
+  var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
+  var valuesInline = flags.values;
+  if (!table || !column || !updateSetSysId || !valuesInline) {
+    throw new Error(
+      "Missing required flags: --table, --column, --update-set, --values",
+    );
+  }
+  var params: RemoveChoicesParams = {
+    table: table,
+    column: column,
+    updateSetSysId: updateSetSysId,
+    values: valuesInline
+      .split(",")
+      .map(function (v) {
+        return v.trim();
+      })
+      .filter(function (v) {
+        return v.length > 0;
+      }),
+  };
+  if (flags.language) {
+    params.language = flags.language;
+  }
+  return params;
+}
+
+async function runRemoveChoices(flags: Record<string, string>): Promise<void> {
+  var params = removeParamsFromFlags(flags);
+  var client = createClient({});
+  var result = await removeChoicesFromField(client, params);
+  if (flags.json === "true") {
+    process.stdout.write(
+      JSON.stringify({ params: params, result: result }, null, 2) + "\n",
+    );
+    return;
+  }
+  process.stdout.write(
+    formatRemoveChoicesResult(params.table, params.column, result) + "\n",
   );
 }
 
@@ -940,6 +991,8 @@ function printHelp(): void {
     "dove-sn — ServiceNow platform helpers\n\n" +
       "Commands:\n" +
       "  add-choices        Upsert sys_choice rows for a table.column\n" +
+      "  remove-choices     Soft-delete (inactive=true) sys_choice values for a table.column\n" +
+      "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id> [--language en] [--json])\n" +
       "  create-view        Create a custom view (sys_ui_view)\n" +
       "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
       "  set-list-layout    Set the columns of a list layout\n" +
@@ -1743,6 +1796,10 @@ async function main(): Promise<number> {
   loadEnvFile(parsed.flags.env || parsed.flags["env-file"]);
   if (parsed.command === "add-choices") {
     await runAddChoices(parsed.flags);
+    return 0;
+  }
+  if (parsed.command === "remove-choices") {
+    await runRemoveChoices(parsed.flags);
     return 0;
   }
   if (parsed.command === "build-flow") {

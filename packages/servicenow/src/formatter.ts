@@ -1,4 +1,4 @@
-import type { AddChoicesResult } from "./types";
+import type { AddChoicesResult, RemoveChoicesResult } from "./types";
 
 /**
  * Human-readable one-page summary of an addChoicesToField result.
@@ -39,6 +39,45 @@ export function formatAddChoicesResult(
   lines.push("");
   lines.push(
     "Summary: " + created + " created, " + updated + " updated, " + unchanged + " unchanged."
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Human-readable one-page summary of a removeChoicesFromField result.
+ * Soft-delete semantics: "deactivated" set inactive=true; "unchanged" was already
+ * inactive; "missing" was not found on the field.
+ */
+export function formatRemoveChoicesResult(
+  table: string,
+  column: string,
+  result: RemoveChoicesResult
+): string {
+  var lines: Array<string> = [];
+  lines.push(
+    "ServiceNow choice soft-delete — " + table + "." + column + " [" + result.field.language + "]"
+  );
+  lines.push("");
+  lines.push("Update set: " + result.updateSet.name + " (" + result.updateSet.sysId + ")");
+  lines.push("Dictionary: " + result.field.dictionarySysId);
+  lines.push("");
+
+  var deactivated = 0;
+  var unchanged = 0;
+  var missing = 0;
+  lines.push("Choices:");
+  result.choices.forEach(function (row) {
+    if (row.action === "deactivated") deactivated += 1;
+    else if (row.action === "unchanged") unchanged += 1;
+    else missing += 1;
+    lines.push(
+      "  [" + row.action.padEnd(11) + "] " + row.value +
+      (row.sysId ? "  (" + row.sysId + ")" : "")
+    );
+  });
+  lines.push("");
+  lines.push(
+    "Summary: " + deactivated + " deactivated, " + unchanged + " unchanged, " + missing + " missing."
   );
   return lines.join("\n");
 }

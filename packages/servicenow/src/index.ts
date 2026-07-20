@@ -21,7 +21,7 @@ export type {
   NowInvokeResponse,
 } from "./client";
 
-export { addChoicesToField } from "./choices";
+export { addChoicesToField, removeChoicesFromField } from "./choices";
 
 export {
   hostAssets,
@@ -29,7 +29,7 @@ export {
   formatHostAssetsResult,
 } from "./hostAssets";
 
-export { formatAddChoicesResult } from "./formatter";
+export { formatAddChoicesResult, formatRemoveChoicesResult } from "./formatter";
 
 export { createView } from "./layout/views";
 export { setListLayout } from "./layout/listLayout";
@@ -125,6 +125,9 @@ export type {
   AddChoicesParams,
   AddChoicesResult,
   ChoiceActionResult,
+  RemoveChoicesParams,
+  RemoveChoicesResult,
+  ChoiceRemovalResult,
   DictionaryRecord,
   UpdateSetRecord,
   LayoutAction,

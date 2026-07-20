@@ -79,6 +79,45 @@ export interface AddChoicesResult {
   choices: Array<ChoiceActionResult>;
 }
 
+export interface RemoveChoicesParams {
+  /** Target table, e.g. "x_cadso_core_event". */
+  table: string;
+  /** Target column, e.g. "state". */
+  column: string;
+  /** Choice values to soft-delete (deactivate). */
+  values: Array<string>;
+  /** Language of the choices to deactivate. Defaults to "en". */
+  language?: string;
+  /** Update set sys_id that will capture every write. Required — no default. */
+  updateSetSysId: string;
+}
+
+export interface ChoiceRemovalResult {
+  value: string;
+  /** "" when the value was not found on the field. */
+  sysId: string;
+  /**
+   * deactivated — was active, now inactive=true.
+   * unchanged   — already inactive; nothing written (idempotent).
+   * missing     — no such value on this field.language; nothing written.
+   */
+  action: "deactivated" | "unchanged" | "missing";
+}
+
+export interface RemoveChoicesResult {
+  field: {
+    table: string;
+    column: string;
+    language: string;
+    dictionarySysId: string;
+  };
+  updateSet: {
+    sysId: string;
+    name: string;
+  };
+  choices: Array<ChoiceRemovalResult>;
+}
+
 /* ─── Form / list / view layout tooling ─────────────────────────────────── */
 
 /** Outcome of a single sys_ui_* record within a layout reconcile. */

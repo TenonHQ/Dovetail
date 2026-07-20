@@ -13,9 +13,12 @@ import type {
   AddChoicesParams,
   AddChoicesResult,
   ChoiceActionResult,
+  ChoiceRemovalResult,
   ChoiceType,
   ChoiceValue,
   DictionaryRecord,
+  RemoveChoicesParams,
+  RemoveChoicesResult,
   UpdateSetRecord,
 } from "./types";
 
@@ -282,6 +285,85 @@ export async function addChoicesToField(
       scope: dict.sys_scope,
       choiceWas: choiceWas,
       choiceNow: choiceNow,
+    },
+    updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
+    choices: results,
+  };
+}
+
+/**
+ * Soft-delete choice values for a field: set `inactive=true` on each matching
+ * sys_choice row via pushWithUpdateSet. NEVER a hard delete — the row stays, so the
+ * change is reversible and the historical value still resolves on records that
+ * already hold it. (A hard drop of sys_choice is deliberately deferred; see DEV-511.)
+ *
+ * Idempotent:
+ *   - active value   -> "deactivated" (inactive flipped to true, one write)
+ *   - already inactive -> "unchanged"  (no write)
+ *   - value not found  -> "missing"    (no write)
+ *
+ * The dictionary row is fetched only to PROVE the field exists — without that guard a
+ * mistyped column reports every value as "missing", the silent-failure this family
+ * exists to catch. sys_dictionary.choice is left alone on purpose: removing values
+ * does not un-make the column a choice field.
+ */
+export async function removeChoicesFromField(
+  client: ServiceNowClient,
+  params: RemoveChoicesParams,
+): Promise<RemoveChoicesResult> {
+  if (!params.updateSetSysId) {
+    throw new Error(
+      "updateSetSysId is required — every write must be captured in a named update set.",
+    );
+  }
+  if (!params.values || params.values.length === 0) {
+    throw new Error("values must be a non-empty array.");
+  }
+  var language = params.language || "en";
+
+  // fetchDictionary throws a clear error when the field does not exist; fetchUpdateSet
+  // throws unless the set is in progress. Both mirror the add path's guards.
+  var dict = await fetchDictionary(client, params.table, params.column);
+  var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
+
+  var existing = await fetchExistingChoices(
+    client,
+    params.table,
+    params.column,
+  );
+  var existingByValue: Record<string, ExistingChoice> = {};
+  existing.forEach(function (row) {
+    var key = (row.language || "en") + "::" + row.value;
+    existingByValue[key] = row;
+  });
+
+  var results: Array<ChoiceRemovalResult> = [];
+  for (var i = 0; i < params.values.length; i += 1) {
+    var value = params.values[i];
+    var match = existingByValue[language + "::" + value];
+    if (!match) {
+      results.push({ value: value, sysId: "", action: "missing" });
+      continue;
+    }
+    if (match.inactive === "true") {
+      results.push({ value: value, sysId: match.sys_id, action: "unchanged" });
+      continue;
+    }
+    await client.claude.pushWithUpdateSet({
+      update_set_sys_id: params.updateSetSysId,
+      table: "sys_choice",
+      record_sys_id: match.sys_id,
+      fields: { inactive: "true" },
+    });
+    results.push({ value: value, sysId: match.sys_id, action: "deactivated" });
+  }
+
+  return {
+    field: {
+      table: params.table,
+      column: params.column,
+      language: language,
+      dictionarySysId: dict.sys_id,
     },
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
     choices: results,
