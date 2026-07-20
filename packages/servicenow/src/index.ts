@@ -6,6 +6,20 @@
  */
 
 export { createClient } from "./client";
+
+export {
+  resolveExecutionContext,
+  isCiEnvironment,
+  evaluateWriteGate,
+  assertWriteAllowed,
+} from "./executionContext";
+export type {
+  ExecutionContext,
+  ResolveContextInput,
+  MergeSignal,
+  WriteGateInput,
+  GateDecision,
+} from "./executionContext";
 export {
   createClientFromEnvFile,
   resolveConfigFromEnvFile,
