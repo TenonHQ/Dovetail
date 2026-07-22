@@ -21,6 +21,9 @@ concurrency:
 jobs:
   jest:
     runs-on: ubuntu-latest
+    # Full build + all suites runs ~4 min; a hung run should die long before
+    # the 6-hour Actions default eats the runner.
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
