@@ -484,7 +484,7 @@ export function buildDescriptors(
         "ServiceNow then writes a sys_audit row per changed field on every insert and update, " +
         "which is a real storage and write cost on a high-volume table, so weigh it before " +
         "enabling. Attributes are a closed set, never an open field map; a COLUMN attribute " +
-        "(label/mandatory/maxLength/readOnly/element/internalType) is refused by name and " +
+        "(label/mandatory/default/maxLength/readOnly/element/internalType) is refused by name and " +
         "redirected to set_column. When the requested value already matches, nothing is written " +
         "and the status is 'unchanged' — note that an identical-value write also captures " +
         "NOTHING, so there is no update-set row to promote. dryRun:true diffs against the " +

@@ -1215,11 +1215,11 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
 
 /** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
  *  false. Anything else is rejected rather than quietly coerced to `true`. */
-function parseBoolFlag(name: string, raw: string): boolean {
+function parseBoolFlag(name: string, raw: string, verb: string = "set-column"): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(
-    "set-column: --" + name + " must be true or false (got '" + raw + "').",
+    verb + ": --" + name + " must be true or false (got '" + raw + "').",
   );
 }
 
@@ -1338,7 +1338,10 @@ async function runSetTable(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
-  var stringFlags = ["table", "update-set"];
+  // Guard the string flags AND the updateSetSysId alias: a value-less string flag
+  // arrives as the literal "true", so --update-set (or its alias) with nothing after
+  // it would silently become the sys_id "true" and later fail as "not found".
+  var stringFlags = ["table", "update-set", "updateSetSysId"];
   for (var f = 0; f < stringFlags.length; f += 1) {
     if (bare[stringFlags[f]]) {
       process.stderr.write(
@@ -1357,7 +1360,7 @@ async function runSetTable(
   }
   var attributes: TableAttributes = {};
   if (flags.audit !== undefined) {
-    attributes.audit = parseBoolFlag("audit", flags.audit);
+    attributes.audit = parseBoolFlag("audit", flags.audit, "set-table");
   }
 
   var params: SetTableParams = {

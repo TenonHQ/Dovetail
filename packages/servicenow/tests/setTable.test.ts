@@ -112,7 +112,7 @@ describe("resolveTableAttributes", function () {
   });
 
   it("redirects column attributes to set-column by name", function () {
-    var columnAttrs = ["label", "mandatory", "maxLength", "readOnly", "element", "internalType"];
+    var columnAttrs = ["label", "mandatory", "default", "maxLength", "readOnly", "element", "internalType"];
     for (var i = 0; i < columnAttrs.length; i += 1) {
       var attrs = {} as Record<string, unknown>;
       attrs[columnAttrs[i]] = "x";
