@@ -59,7 +59,7 @@ import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
-import { invokeRest } from "./invokeRest";
+import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
 import { publishApp } from "./publishApp";
 import type {
@@ -998,7 +998,8 @@ function printHelp(): void {
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json]\n" +
+      "                      [--out <file>  full JSON result to a file (atomic; overwrites); for large bodies])\n" +
       "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
       "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
       '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
@@ -1624,6 +1625,11 @@ async function runHostAssets(flags: Record<string, string>): Promise<number> {
  *   --confirm               Send for real. WITHOUT it the command is a DRY-RUN.
  *   --dry-run               Force a dry-run even with --confirm.
  *   --json                  Emit the structured InvokeRestResult.
+ *   --out <file>            Also write the full structured result to a file
+ *                           (pretty JSON, atomic temp+rename, OVERWRITES an
+ *                           existing file; parent dir must exist). The reliable
+ *                           channel for large response bodies - piped stdout is
+ *                           flush-guarded but a file needs no downstream reader.
  *
  * Invoke an arbitrary authenticated REST operation (Scripted REST included).
  * Dry-run by default; --confirm sends and returns { httpStatus, ok, body } with
@@ -1673,6 +1679,18 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     params.body = body;
   }
   var result = await invokeRest(params);
+  if (flags.out) {
+    try {
+      writeInvokeRestResultFile(flags.out, result);
+    } catch (err) {
+      process.stderr.write(
+        "invoke-rest: --out write failed: " +
+          (err instanceof Error ? err.message : String(err)) +
+          "\n",
+      );
+      return 1;
+    }
+  }
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
@@ -1911,9 +1929,54 @@ async function main(): Promise<number> {
   throw new Error("Unknown command: " + parsed.command);
 }
 
+// A closed downstream pipe (e.g. `dove-sn ... --json | head`) surfaces as an
+// EPIPE on stdout. Exit quietly with the code already set instead of crashing
+// with an unhandled stream error.
+process.stdout.on("error", function (err: NodeJS.ErrnoException) {
+  if (err && err.code === "EPIPE") {
+    process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+  }
+  throw err;
+});
+
+/**
+ * process.exit() discards buffered stdout/stderr - when stdout is a PIPE,
+ * anything past the OS pipe buffer (~64KB) is silently dropped, which is how
+ * `invoke-rest --json` used to truncate large bodies mid-string. Queue an
+ * empty chunk behind any pending data on each stream and exit only when both
+ * callbacks confirm the flush. The barrier is queued UNCONDITIONALLY (not
+ * gated on writableLength) so the exit never races stream internals about
+ * whether a prior write is still in flight.
+ */
+function exitAfterFlush(code: number): void {
+  process.exitCode = code;
+  var pending = 0;
+  var finish = function (): void {
+    pending -= 1;
+    if (pending <= 0) {
+      process.exit(code);
+    }
+  };
+  [process.stdout, process.stderr].forEach(function (stream) {
+    if (stream.destroyed || !stream.writable) {
+      return;
+    }
+    pending += 1;
+    try {
+      stream.write("", finish);
+    } catch (writeErr) {
+      // A stream that rejects the barrier write has nothing left to flush.
+      pending -= 1;
+    }
+  });
+  if (pending === 0) {
+    process.exit(code);
+  }
+}
+
 main()
   .then(function (code) {
-    process.exit(code);
+    exitAfterFlush(code);
   })
   .catch(function (err) {
     process.stderr.write(
@@ -1921,5 +1984,5 @@ main()
         (err && err.message ? err.message : String(err)) +
         "\n",
     );
-    process.exit(1);
+    exitAfterFlush(1);
   });
