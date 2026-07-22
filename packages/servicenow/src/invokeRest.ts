@@ -17,6 +17,10 @@
  * carry method, path and status ONLY.
  */
 
+import * as fs from "fs";
+// Aliased: `path` is the instance-relative REST path throughout this module.
+import * as nodePath from "path";
+
 import { createClient } from "./client";
 import type { NowInvokeMethod, ServiceNowClient } from "./client";
 
@@ -144,12 +148,10 @@ export async function invokeRest(params: InvokeRestParams): Promise<InvokeRestRe
  * exit 1 loudly instead of "succeeding" with no file.
  */
 export function writeInvokeRestResultFile(outPath: string, result: unknown): void {
-  var fs = require("fs") as typeof import("fs");
-  var pathMod = require("path") as typeof import("path");
-  var dir = pathMod.dirname(outPath);
-  var tempPath = pathMod.join(
+  var dir = nodePath.dirname(outPath);
+  var tempPath = nodePath.join(
     dir,
-    "." + pathMod.basename(outPath) + ".tmp-" + process.pid + "-" + Date.now(),
+    "." + nodePath.basename(outPath) + ".tmp-" + process.pid + "-" + Date.now(),
   );
   var payload = JSON.stringify(result, null, 2) + "\n";
   try {

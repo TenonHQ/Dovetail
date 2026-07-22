@@ -1682,10 +1682,10 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
   if (flags.out) {
     try {
       writeInvokeRestResultFile(flags.out, result);
-    } catch (err: any) {
+    } catch (err) {
       process.stderr.write(
         "invoke-rest: --out write failed: " +
-          (err && err.message ? err.message : String(err)) +
+          (err instanceof Error ? err.message : String(err)) +
           "\n",
       );
       return 1;
@@ -1944,7 +1944,9 @@ process.stdout.on("error", function (err: NodeJS.ErrnoException) {
  * anything past the OS pipe buffer (~64KB) is silently dropped, which is how
  * `invoke-rest --json` used to truncate large bodies mid-string. Queue an
  * empty chunk behind any pending data on each stream and exit only when both
- * callbacks confirm the flush.
+ * callbacks confirm the flush. The barrier is queued UNCONDITIONALLY (not
+ * gated on writableLength) so the exit never races stream internals about
+ * whether a prior write is still in flight.
  */
 function exitAfterFlush(code: number): void {
   process.exitCode = code;
@@ -1956,9 +1958,15 @@ function exitAfterFlush(code: number): void {
     }
   };
   [process.stdout, process.stderr].forEach(function (stream) {
-    if (stream.writableLength > 0) {
-      pending += 1;
+    if (stream.destroyed || !stream.writable) {
+      return;
+    }
+    pending += 1;
+    try {
       stream.write("", finish);
+    } catch (writeErr) {
+      // A stream that rejects the barrier write has nothing left to flush.
+      pending -= 1;
     }
   });
   if (pending === 0) {
