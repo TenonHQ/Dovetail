@@ -45,13 +45,15 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, setColumn } from "./table";
+import { createTable, addColumn, setColumn, setTable } from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
   SetColumnParams,
   ColumnAttributes,
+  SetTableParams,
+  TableAttributes,
 } from "./table";
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
@@ -985,6 +987,14 @@ function printHelp(): void {
       "                     Shorten or clear those values first, then re-run.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
+      "  set-table          Update an EXISTING TABLE's own dictionary row (the collection row),\n" +
+      "                     into an update set, then verify against the instance\n" +
+      "                     (--table <t> --update-set <sys_id> [--audit true|false]\n" +
+      "                      [--dry-run] [--json])\n" +
+      "                     --audit turns RECORD AUDITING on/off for the whole table: with it\n" +
+      "                     true ServiceNow writes a sys_audit row per changed field on every\n" +
+      "                     insert and update — a real cost on a high-write table.\n" +
+      "                     Column attributes belong to set-column, record values to set-field.\n" +
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
@@ -1205,11 +1215,11 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
 
 /** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
  *  false. Anything else is rejected rather than quietly coerced to `true`. */
-function parseBoolFlag(name: string, raw: string): boolean {
+function parseBoolFlag(name: string, raw: string, verb: string = "set-column"): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(
-    "set-column: --" + name + " must be true or false (got '" + raw + "').",
+    verb + ": --" + name + " must be true or false (got '" + raw + "').",
   );
 }
 
@@ -1310,6 +1320,78 @@ async function runSetColumn(
   }
   // 2 = the write landed but the instance does not reflect it (or it was not captured),
   // which must not read as success to a script.
+  if (result.status === "failed") return 2;
+  if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
+  return 0;
+}
+
+/**
+ * dove-sn set-table:
+ *   --table x_cadso_core_setting --audit true --update-set <sys_id>
+ *   [--dry-run] [--json]
+ *
+ * Updates the TABLE's own dictionary row (the `internal_type=collection` row, whose
+ * `element` is empty) — not a column's. Column attributes belong to set-column; a
+ * record's values belong to set-field.
+ */
+async function runSetTable(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // Guard the string flags AND the updateSetSysId alias: a value-less string flag
+  // arrives as the literal "true", so --update-set (or its alias) with nothing after
+  // it would silently become the sys_id "true" and later fail as "not found".
+  var stringFlags = ["table", "update-set", "updateSetSysId"];
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      process.stderr.write(
+        "set-table: --" + stringFlags[f] + " needs a value (it was given none).\n",
+      );
+      return 1;
+    }
+  }
+  var table = flags.table;
+  if (!table) {
+    process.stderr.write(
+      "set-table: --table is required " +
+        "(--update-set is required too, unless --dry-run)\n",
+    );
+    return 1;
+  }
+  var attributes: TableAttributes = {};
+  if (flags.audit !== undefined) {
+    attributes.audit = parseBoolFlag("audit", flags.audit, "set-table");
+  }
+
+  var params: SetTableParams = {
+    client: createClient({}),
+    table: table,
+    attributes: attributes,
+  };
+  var setTableUs = flags["update-set"] || flags.updateSetSysId;
+  if (setTableUs) params.updateSetSysId = setTableUs;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await setTable(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        (result.verified && result.status === "applied" ? " — verified" : "") +
+        (result.status === "applied" && !result.capturedInUpdateSet
+          ? " — NOT CAPTURED"
+          : "") +
+        "\n" +
+        result.note +
+        "\n",
+    );
+  }
+  // 2 = the write landed but the instance does not reflect it (or it was not
+  // captured), which must not read as success to a script.
   if (result.status === "failed") return 2;
   if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
   return 0;
@@ -1774,6 +1856,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
+  }
+  if (parsed.command === "set-table") {
+    return await runSetTable(parsed.flags, parsed.bare);
   }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);
