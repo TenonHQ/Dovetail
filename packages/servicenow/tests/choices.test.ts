@@ -1,4 +1,5 @@
 import { addChoicesToField, removeChoicesFromField } from "../src/choices";
+import type { ChoiceActionResult } from "../src/types";
 import { makeMockClient as makeClient } from "./mockClient";
 
 describe("addChoicesToField", function () {
@@ -171,6 +172,21 @@ describe("addChoicesToField", function () {
         choices: [{ value: "x", label: "X" }]
       })
     ).rejects.toThrow(/updateSetSysId is required/);
+  });
+
+  it("keeps ChoiceActionResult constructible without sysIds — published type stays compatible", function () {
+    // ChoiceActionResult ships in @tenonhq/dovetail-servicenow, so a REQUIRED new field
+    // would fail to compile for any consumer that builds or mocks one. This object is
+    // the pre-sysIds shape; if sysIds ever becomes required again, tsc fails here.
+    var legacy: ChoiceActionResult = {
+      value: "delivered",
+      label: "Delivered",
+      sysId: "ch1",
+      action: "created"
+    };
+
+    expect(legacy.sysIds).toBeUndefined();
+    // The runtime nonetheless always populates it — see the assertions below.
   });
 
   it("updates EVERY duplicate row for a value so they converge on one label", async function () {

@@ -73,8 +73,13 @@ export interface ChoiceActionResult {
    * duplicates; on "updated" only the rows that actually differ are written, and any
    * duplicate that already matched the spec is left alone. A length > 1 is the caller's
    * signal that the field needs cleaning up.
+   *
+   * OPTIONAL only for backwards compatibility: this type ships in a published package,
+   * and a required field would break any consumer that constructs or mocks one. The
+   * runtime always populates it — treat a missing value as "an older build produced
+   * this", not as a state addChoicesToField can return.
    */
-  sysIds: Array<string>;
+  sysIds?: Array<string>;
   action: "created" | "updated" | "unchanged";
 }
 
@@ -119,6 +124,10 @@ export interface ChoiceRemovalResult {
    * can hold more than one row for a value (sys_choice has no uniqueness constraint),
    * and all live ones are deactivated — acting on just the first would leave the
    * choice selectable while reporting success.
+   *
+   * Required, unlike its counterpart on ChoiceActionResult: this type is new in the
+   * remove-choices verb and has never shipped, so there is no consumer to break, and
+   * the formatter can read it without an existence guard.
    */
   sysIds: Array<string>;
   /**
