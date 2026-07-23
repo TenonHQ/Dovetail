@@ -129,34 +129,65 @@ interface ExistingChoice {
 
 var CHOICE_PAGE_LIMIT = 1000;
 
+/**
+ * Values per encoded-query batch. Keeps `valueIN a,b,c…` comfortably inside practical
+ * URL limits when a caller passes a long list.
+ */
+var CHOICE_QUERY_BATCH = 50;
+
+/**
+ * Read the existing sys_choice rows for JUST the values being acted on.
+ *
+ * Scoped rather than whole-field on purpose. Reading every row of the field means the
+ * result set grows with the field, not with the request, and `client.table.query` has no
+ * `sysparm_offset` — so a field with more choices than one page could only be handled by
+ * guessing at a truncated read (silently wrong: the add path inserts a duplicate, the
+ * remove path reports a live value as "missing") or by refusing outright, which would
+ * make both verbs unusable on large choice sets. Asking only for the requested values
+ * bounds the read by the request, so large fields stay editable and there is nothing to
+ * truncate.
+ *
+ * Note that values are interpolated into an encoded query, so `encodeQueryValue` rejects
+ * ones carrying `,` `^` `=`. Both CLI surfaces already split on those characters, so such
+ * values were never expressible there; the library paths now refuse them loudly rather
+ * than building a malformed query.
+ */
 async function fetchExistingChoices(
   client: ServiceNowClient,
   table: string,
   column: string,
+  values: Array<string>,
 ): Promise<Array<ExistingChoice>> {
-  // Ask for one MORE than the supported ceiling. Requesting exactly the ceiling cannot
-  // distinguish "there are exactly that many" from "there are more and this is page 1",
-  // which would reject a field holding exactly CHOICE_PAGE_LIMIT choices forever.
-  var rows = await client.table.query<ExistingChoice>(
-    "sys_choice",
-    "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
-    CHOICE_PAGE_LIMIT + 1,
-  );
-  // A truncated read is indistinguishable from "the value isn't there": the add path
-  // would insert a duplicate, the remove path would report a live value as "missing"
-  // and write nothing. Both are silent. Refuse instead of guessing.
-  if (rows.length > CHOICE_PAGE_LIMIT) {
-    throw new Error(
-      "Refusing to act on a truncated choice list: " +
-        table +
-        "." +
-        column +
-        " has more than " +
-        CHOICE_PAGE_LIMIT +
-        " sys_choice rows, so a single read cannot be trusted to be complete.",
+  var base =
+    "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column);
+  var out: Array<ExistingChoice> = [];
+  for (var i = 0; i < values.length; i += CHOICE_QUERY_BATCH) {
+    var batch = values.slice(i, i + CHOICE_QUERY_BATCH).map(encodeQueryValue);
+    // Ask for one MORE than the ceiling: requesting exactly it cannot distinguish "there
+    // are exactly that many" from "there are more and this is page 1".
+    var rows = await client.table.query<ExistingChoice>(
+      "sys_choice",
+      base + "^valueIN" + batch.join(","),
+      CHOICE_PAGE_LIMIT + 1,
     );
+    // A backstop, not an everyday path: this batch asked for at most CHOICE_QUERY_BATCH
+    // values, so overflowing a page means one value has an absurd number of duplicate
+    // rows. Refuse rather than act on a read that may be incomplete.
+    if (rows.length > CHOICE_PAGE_LIMIT) {
+      throw new Error(
+        "Refusing to act on a truncated choice list: " +
+          table +
+          "." +
+          column +
+          " returned more than " +
+          CHOICE_PAGE_LIMIT +
+          " sys_choice rows for a single batch of requested values, so the read cannot " +
+          "be trusted to be complete.",
+      );
+    }
+    out = out.concat(rows);
   }
-  return rows;
+  return out;
 }
 
 /**
@@ -291,17 +322,24 @@ export async function addChoicesToField(
     choiceNow = targetChoiceType;
   }
 
-  var existing = await fetchExistingChoices(
-    client,
-    params.table,
-    params.column,
-  );
-  var existingByValue = groupExistingByKey(existing);
-
   // Collapse repeats on language::value, last spec wins. Without this a value listed
   // twice is created twice — the cache is read once up front, so the second pass still
   // sees "not present" and inserts a genuine duplicate sys_choice row.
   var choices = dedupeChoices(params.choices);
+
+  // Read only the values being upserted — see fetchExistingChoices on why the read is
+  // scoped to the request rather than the whole field.
+  var existing = await fetchExistingChoices(
+    client,
+    params.table,
+    params.column,
+    dedupe(
+      choices.map(function (c) {
+        return c.value;
+      }),
+    ),
+  );
+  var existingByValue = groupExistingByKey(existing);
 
   var results: Array<ChoiceActionResult> = [];
   for (var i = 0; i < choices.length; i += 1) {
@@ -430,16 +468,19 @@ export async function removeChoicesFromField(
   var dict = await fetchDictionary(client, params.table, params.column);
   var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
 
+  // Collapse repeats: without this a duplicated value writes twice and is counted
+  // twice in the summary, which contradicts the idempotency contract.
+  var values = dedupe(params.values);
+
+  // Read only the values being removed — see fetchExistingChoices on why the read is
+  // scoped to the request rather than the whole field.
   var existing = await fetchExistingChoices(
     client,
     params.table,
     params.column,
+    values,
   );
   var existingByValue = groupExistingByKey(existing);
-
-  // Collapse repeats: without this a duplicated value writes twice and is counted
-  // twice in the summary, which contradicts the idempotency contract.
-  var values = dedupe(params.values);
 
   var results: Array<ChoiceRemovalResult> = [];
   for (var i = 0; i < values.length; i += 1) {

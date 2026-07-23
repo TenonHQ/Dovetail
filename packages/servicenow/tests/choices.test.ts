@@ -498,8 +498,83 @@ describe("removeChoicesFromField", function () {
     return rows;
   }
 
-  it("refuses a truncated choice list rather than reporting live values as missing", async function () {
-    // More rows than a single read can be trusted to cover.
+  it("reads only the requested values, so the query does not grow with the field", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["delivered", "failed"],
+      updateSetSysId: "us1"
+    });
+
+    var choiceQueries = ctx.calls.tableQuery.filter(function (c) {
+      return c.table === "sys_choice";
+    });
+    expect(choiceQueries).toHaveLength(1);
+    expect(choiceQueries[0].query).toBe(
+      "name=x_cadso_core_event^element=state^valueINdelivered,failed"
+    );
+  });
+
+  it("batches a long value list instead of building one enormous query", async function () {
+    var ctx = clientWithChoices([]);
+    var values = [];
+    for (var i = 0; i < 120; i += 1) {
+      values.push("v" + i);
+    }
+
+    await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: values,
+      updateSetSysId: "us1"
+    });
+
+    var choiceQueries = ctx.calls.tableQuery.filter(function (c) {
+      return c.table === "sys_choice";
+    });
+    // 120 values at a batch size of 50 → 50 + 50 + 20.
+    expect(choiceQueries).toHaveLength(3);
+    expect(choiceQueries[0].query.split(",")).toHaveLength(50);
+    expect(choiceQueries[2].query.split(",")).toHaveLength(20);
+  });
+
+  it("stays usable on a field with far more choices than one page fits", async function () {
+    // The whole-field read refused outright above the page ceiling, which made both
+    // verbs unusable on a large choice set. Scoping the read to the requested values
+    // bounds it by the request instead, so field size stops mattering.
+    var ctx = makeClient({
+      query: async function (table: string, query?: string) {
+        if (table === "sys_dictionary") return [dictRow];
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_choice") {
+          // A 40,000-row field: the instance only ever returns the asked-for value.
+          expect(query).toContain("^valueINv7");
+          return [
+            { sys_id: "ch7", value: "v7", label: "V7", sequence: "", language: "en", inactive: "false" }
+          ];
+        }
+        return [];
+      }
+    });
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["v7"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices[0].action).toBe("deactivated");
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+  });
+
+  it("refuses a truncated read rather than reporting live values as missing", async function () {
+    // Backstop only: one batch asks for at most 50 values, so overflowing a page means
+    // absurd duplication on a single value. Still must refuse rather than guess.
     var ctx = clientWithChoices(manyChoices(1001));
 
     await expect(
@@ -510,6 +585,20 @@ describe("removeChoicesFromField", function () {
         updateSetSysId: "us1"
       })
     ).rejects.toThrow(/truncated choice list/);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
+  it("refuses a value carrying encoded-query metacharacters instead of malforming the query", async function () {
+    var ctx = clientWithChoices([]);
+
+    await expect(
+      removeChoicesFromField(ctx.client, {
+        table: "x_cadso_core_event",
+        column: "state",
+        values: ["a^b"],
+        updateSetSysId: "us1"
+      })
+    ).rejects.toThrow(/Invalid character in query value/);
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 
