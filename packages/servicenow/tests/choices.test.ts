@@ -483,10 +483,10 @@ describe("removeChoicesFromField", function () {
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 
-  it("refuses a truncated choice list rather than reporting live values as missing", async function () {
-    var thousand = [];
-    for (var i = 0; i < 1000; i += 1) {
-      thousand.push({
+  function manyChoices(count: number) {
+    var rows = [];
+    for (var i = 0; i < count; i += 1) {
+      rows.push({
         sys_id: "ch" + i,
         value: "v" + i,
         label: "V" + i,
@@ -495,7 +495,12 @@ describe("removeChoicesFromField", function () {
         inactive: "false"
       });
     }
-    var ctx = clientWithChoices(thousand);
+    return rows;
+  }
+
+  it("refuses a truncated choice list rather than reporting live values as missing", async function () {
+    // More rows than a single read can be trusted to cover.
+    var ctx = clientWithChoices(manyChoices(1001));
 
     await expect(
       removeChoicesFromField(ctx.client, {
@@ -506,5 +511,51 @@ describe("removeChoicesFromField", function () {
       })
     ).rejects.toThrow(/truncated choice list/);
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
+  it("handles values named after Object.prototype members without dropping them", async function () {
+    // On a plain {} lookup, seen["constructor"] is truthy via the prototype chain, so
+    // dedupe would treat the value as a repeat and drop it from the request entirely —
+    // never written, never reported.
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "constructor", label: "C", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "ch2", value: "toString", label: "T", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "ch3", value: "__proto__", label: "P", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["constructor", "toString", "__proto__"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices.map(c => c.value)).toEqual([
+      "constructor",
+      "toString",
+      "__proto__"
+    ]);
+    expect(result.choices.map(c => c.action)).toEqual([
+      "deactivated",
+      "deactivated",
+      "deactivated"
+    ]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(3);
+  });
+
+  it("still works on a field holding exactly the page limit — no off-by-one refusal", async function () {
+    // Guards the boundary: reading exactly the ceiling must not be mistaken for
+    // "there may be more", or such a field could never be edited again.
+    var ctx = clientWithChoices(manyChoices(1000));
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["v0"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices[0].action).toBe("deactivated");
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
   });
 });

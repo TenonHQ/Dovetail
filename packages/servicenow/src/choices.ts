@@ -134,23 +134,26 @@ async function fetchExistingChoices(
   table: string,
   column: string,
 ): Promise<Array<ExistingChoice>> {
+  // Ask for one MORE than the supported ceiling. Requesting exactly the ceiling cannot
+  // distinguish "there are exactly that many" from "there are more and this is page 1",
+  // which would reject a field holding exactly CHOICE_PAGE_LIMIT choices forever.
   var rows = await client.table.query<ExistingChoice>(
     "sys_choice",
     "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
-    CHOICE_PAGE_LIMIT,
+    CHOICE_PAGE_LIMIT + 1,
   );
   // A truncated read is indistinguishable from "the value isn't there": the add path
   // would insert a duplicate, the remove path would report a live value as "missing"
   // and write nothing. Both are silent. Refuse instead of guessing.
-  if (rows.length >= CHOICE_PAGE_LIMIT) {
+  if (rows.length > CHOICE_PAGE_LIMIT) {
     throw new Error(
       "Refusing to act on a truncated choice list: " +
         table +
         "." +
         column +
-        " returned the full page limit of " +
+        " has more than " +
         CHOICE_PAGE_LIMIT +
-        " sys_choice rows, so the read may be incomplete.",
+        " sys_choice rows, so a single read cannot be trusted to be complete.",
     );
   }
   return rows;
@@ -167,7 +170,9 @@ async function fetchExistingChoices(
 function groupExistingByKey(
   rows: Array<ExistingChoice>,
 ): Record<string, Array<ExistingChoice>> {
-  var byKey: Record<string, Array<ExistingChoice>> = {};
+  // Null-prototype: keys derive from record data, and Object.prototype members must not
+  // masquerade as existing entries. See dedupe() for the failure this avoids.
+  var byKey: Record<string, Array<ExistingChoice>> = Object.create(null);
   rows.forEach(function (row) {
     var key = (row.language || "en") + "::" + row.value;
     if (!byKey[key]) byKey[key] = [];
@@ -182,7 +187,7 @@ function groupExistingByKey(
  * most recently rather than silently writing both.
  */
 function dedupeChoices(choices: Array<ChoiceValue>): Array<ChoiceValue> {
-  var byKey: Record<string, ChoiceValue> = {};
+  var byKey: Record<string, ChoiceValue> = Object.create(null);
   var order: Array<string> = [];
   choices.forEach(function (c) {
     var key = (c.language || "en") + "::" + c.value;
@@ -194,9 +199,16 @@ function dedupeChoices(choices: Array<ChoiceValue>): Array<ChoiceValue> {
   });
 }
 
-/** Preserve first-seen order while dropping repeats. */
+/**
+ * Preserve first-seen order while dropping repeats.
+ *
+ * The lookup is a null-prototype map because the keys are raw choice values: on a plain
+ * `{}`, `seen["constructor"]` / `["toString"]` / `["__proto__"]` are already truthy via
+ * Object.prototype, so a value with one of those names would be treated as a repeat and
+ * silently dropped from the request — never written, never even reported.
+ */
 function dedupe(values: Array<string>): Array<string> {
-  var seen: Record<string, boolean> = {};
+  var seen: Record<string, boolean> = Object.create(null);
   var out: Array<string> = [];
   values.forEach(function (v) {
     if (seen[v]) return;

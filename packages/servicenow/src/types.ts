@@ -61,7 +61,11 @@ export interface UpdateSetRecord {
 export interface ChoiceActionResult {
   value: string;
   label: string;
-  /** The primary row acted on — `sysIds[0]`. */
+  /**
+   * The FIRST row matching this value — `sysIds[0]`. On "created" it is the new row;
+   * on "updated" a duplicate that was already correct is left untouched, so this is
+   * not necessarily a row that was written. `sysIds` is the complete picture.
+   */
   sysId: string;
   /**
    * EVERY sys_choice row that matched this language::value. Normally one, but
@@ -102,7 +106,12 @@ export interface RemoveChoicesParams {
 
 export interface ChoiceRemovalResult {
   value: string;
-  /** The primary row acted on — `sysIds[0]`, or "" when the value was not found. */
+  /**
+   * The FIRST row matching this value — `sysIds[0]`, or "" when the value was not
+   * found. Not necessarily a row that was written: when one duplicate is already
+   * inactive and another is live, only the live one is touched. `sysIds` is the
+   * complete picture.
+   */
   sysId: string;
   /**
    * EVERY sys_choice row that matched this language::value; [] when missing. A field

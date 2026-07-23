@@ -82,16 +82,23 @@ export function formatRemoveChoicesResult(
     if (row.action === "deactivated") deactivated += 1;
     else if (row.action === "unchanged") unchanged += 1;
     else missing += 1;
-    var dupes = row.sysIds.length > 1 ? row.sysIds.length : 0;
+    // A value with more than one row is worth saying out loud — the field carries
+    // duplicates. The wording has to follow the action: on "unchanged" nothing was
+    // written, so claiming they were deactivated would contradict the summary below.
+    var note = "";
+    if (row.sysIds.length > 1) {
+      note =
+        row.action === "deactivated"
+          ? "  [" + row.sysIds.length + " duplicate rows, all deactivated]"
+          : "  [" + row.sysIds.length + " duplicate rows, all already inactive]";
+    }
     lines.push(
       "  [" +
         row.action.padEnd(11) +
         "] " +
         row.value +
         (row.sysId ? "  (" + row.sysId + ")" : "") +
-        // A value with more than one row is worth saying out loud: the field carries
-        // duplicates, and every one of them was just deactivated.
-        (dupes ? "  [" + dupes + " duplicate rows, all deactivated]" : ""),
+        note,
     );
   });
   lines.push("");
