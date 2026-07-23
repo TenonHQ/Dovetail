@@ -85,11 +85,15 @@ export function formatRemoveChoicesResult(
     // A value with more than one row is worth saying out loud — the field carries
     // duplicates. The wording has to follow the action: on "unchanged" nothing was
     // written, so claiming they were deactivated would contradict the summary below.
+    // "all now inactive" rather than "all deactivated": on a mixed set — one duplicate
+    // already inactive, one live — only the live row is written, so claiming both were
+    // deactivated overstates it. End state is what the reader needs, and it is true in
+    // both cases.
     var note = "";
     if (row.sysIds.length > 1) {
       note =
         row.action === "deactivated"
-          ? "  [" + row.sysIds.length + " duplicate rows, all deactivated]"
+          ? "  [" + row.sysIds.length + " duplicate rows, all now inactive]"
           : "  [" + row.sysIds.length + " duplicate rows, all already inactive]";
     }
     lines.push(

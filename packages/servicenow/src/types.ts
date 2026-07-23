@@ -68,10 +68,11 @@ export interface ChoiceActionResult {
    */
   sysId: string;
   /**
-   * EVERY sys_choice row that matched this language::value. Normally one, but
-   * sys_choice has no uniqueness constraint, so a field can hold duplicates — all of
-   * them are written, and a length > 1 is the caller's signal that the field needs
-   * cleaning up.
+   * EVERY sys_choice row that matched this language::value — not only the ones written.
+   * Normally one, but sys_choice has no uniqueness constraint, so a field can hold
+   * duplicates; on "updated" only the rows that actually differ are written, and any
+   * duplicate that already matched the spec is left alone. A length > 1 is the caller's
+   * signal that the field needs cleaning up.
    */
   sysIds: Array<string>;
   action: "created" | "updated" | "unchanged";

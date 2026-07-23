@@ -15,7 +15,7 @@ function resultWith(choices: Array<ChoiceRemovalResult>): RemoveChoicesResult {
 }
 
 describe("formatRemoveChoicesResult", function () {
-  it("says duplicates were deactivated only when they actually were", function () {
+  it("reports the END STATE of duplicates, not an overstated write count", function () {
     var out = formatRemoveChoicesResult(
       "x_cadso_core_event",
       "state",
@@ -29,7 +29,11 @@ describe("formatRemoveChoicesResult", function () {
       ]),
     );
 
-    expect(out).toContain("2 duplicate rows, all deactivated");
+    // On a mixed set (one duplicate already inactive, one live) only the live row is
+    // written, so "all deactivated" would overstate it. "all now inactive" holds either
+    // way — and the formatter cannot tell the two apart from action + sysIds alone.
+    expect(out).toContain("2 duplicate rows, all now inactive");
+    expect(out).not.toContain("all deactivated");
     expect(out).toContain("Summary: 1 deactivated");
   });
 

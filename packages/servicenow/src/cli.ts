@@ -183,10 +183,13 @@ async function runAddChoices(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
+  // `updateSetSysId` is guarded alongside `update-set` because paramsFromFlags accepts
+  // both spellings — guarding only the dashed one leaves the alias as a way in.
   var bareErr = bareStringFlagError("add-choices", bare, [
     "table",
     "column",
     "update-set",
+    "updateSetSysId",
     "choices",
     "from-json",
     "choice-type",
@@ -261,6 +264,7 @@ async function runRemoveChoices(
     "table",
     "column",
     "update-set",
+    "updateSetSysId",
     "values",
     "language",
     "from-json",
@@ -1342,19 +1346,17 @@ async function runSetColumn(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
-  // A string flag whose value was forgotten arrives as the literal "true" — `--label`
-  // with nothing after it would rename the column to "true". Booleans legitimately do
-  // that, strings never do, so refuse rather than silently write nonsense.
-  var stringFlags = ["label", "default", "table", "column", "update-set"];
-  for (var f = 0; f < stringFlags.length; f += 1) {
-    if (bare[stringFlags[f]]) {
-      process.stderr.write(
-        "set-column: --" +
-          stringFlags[f] +
-          " needs a value (it was given none).\n",
-      );
-      return 1;
-    }
+  var bareErr = bareStringFlagError("set-column", bare, [
+    "label",
+    "default",
+    "table",
+    "column",
+    "update-set",
+    "updateSetSysId",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
   }
   var table = flags.table;
   var column = flags.column;

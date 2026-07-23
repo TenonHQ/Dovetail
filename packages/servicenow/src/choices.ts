@@ -391,7 +391,8 @@ export async function addChoicesToField(
  * already hold it. (A hard drop of sys_choice is deliberately deferred; see DEV-511.)
  *
  * Idempotent:
- *   - active value   -> "deactivated" (inactive flipped to true, one write)
+ *   - active value     -> "deactivated" (every live row for it flipped to inactive —
+ *                         usually one write, but more when the field holds duplicates)
  *   - already inactive -> "unchanged"  (no write)
  *   - value not found  -> "missing"    (no write)
  *
