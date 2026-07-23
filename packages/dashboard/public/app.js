@@ -164,7 +164,7 @@ function renderScopes() {
       '<input type="text" id="quick-name-' +
       scope.scope +
       '" value="' +
-      escapeHtml(scope.suggested_update_set_name || "") +
+      escapeAttr(scope.suggested_update_set_name || "") +
       '" placeholder="Update set name..." class="quick-create-input" onkeydown="if(event.key===\'Enter\')quickCreateUpdateSet(\'' +
       scope.scope +
       "', '" +
@@ -1195,6 +1195,17 @@ function escapeHtml(str) {
   var div = document.createElement("div");
   div.appendChild(document.createTextNode(str));
   return div.innerHTML;
+}
+
+// Attribute-safe escape: escapeHtml() covers text-node contexts but leaves
+// quotes intact, so it is unsafe for a value="..." attribute. Escape quotes too.
+function escapeAttr(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // --- Keyboard ---

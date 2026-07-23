@@ -318,7 +318,14 @@ app.get("/api/scopes", async (req, res) => {
     // When a task is active, precompute the scope-qualified update-set name for
     // each scope (same generator the Start Task / quick-create path uses) so the
     // create UI never prefills a scope-less name that would collide across scopes.
-    const activeTaskForNames = readActiveTask();
+    // A malformed active-task file must not take down the scopes list, so treat a
+    // read/parse failure as "no active task".
+    let activeTaskForNames = null;
+    try {
+      activeTaskForNames = readActiveTask();
+    } catch (e) {
+      activeTaskForNames = null;
+    }
     const scopes = scopeKeys.map((key) => ({
       scope: key,
       sys_id: scopeMap[key] ? scopeMap[key].sys_id : null,
