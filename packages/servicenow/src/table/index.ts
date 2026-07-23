@@ -86,3 +86,9 @@ export type {
   InheritedWriteParams,
   InheritedWriteResult,
 } from "./overrideColumn";
+export { setTable, resolveTableAttributes } from "./setTable";
+export type {
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
+} from "./setTable";
