@@ -61,7 +61,15 @@ export interface UpdateSetRecord {
 export interface ChoiceActionResult {
   value: string;
   label: string;
+  /** The primary row acted on — `sysIds[0]`. */
   sysId: string;
+  /**
+   * EVERY sys_choice row that matched this language::value. Normally one, but
+   * sys_choice has no uniqueness constraint, so a field can hold duplicates — all of
+   * them are written, and a length > 1 is the caller's signal that the field needs
+   * cleaning up.
+   */
+  sysIds: Array<string>;
   action: "created" | "updated" | "unchanged";
 }
 
@@ -94,8 +102,15 @@ export interface RemoveChoicesParams {
 
 export interface ChoiceRemovalResult {
   value: string;
-  /** "" when the value was not found on the field. */
+  /** The primary row acted on — `sysIds[0]`, or "" when the value was not found. */
   sysId: string;
+  /**
+   * EVERY sys_choice row that matched this language::value; [] when missing. A field
+   * can hold more than one row for a value (sys_choice has no uniqueness constraint),
+   * and all live ones are deactivated — acting on just the first would leave the
+   * choice selectable while reporting success.
+   */
+  sysIds: Array<string>;
   /**
    * deactivated — was active, now inactive=true.
    * unchanged   — already inactive; nothing written (idempotent).

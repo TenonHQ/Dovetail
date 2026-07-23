@@ -157,6 +157,26 @@ async function fetchExistingChoices(
 }
 
 /**
+ * Group the instance's rows by language::value, keeping EVERY row per key.
+ *
+ * sys_choice has no uniqueness constraint on (name, element, value, language), so a
+ * field can genuinely hold two live rows for one value. Indexing to a single row would
+ * act on one and silently leave the other — the tool reports success while the choice
+ * still renders in the dropdown.
+ */
+function groupExistingByKey(
+  rows: Array<ExistingChoice>,
+): Record<string, Array<ExistingChoice>> {
+  var byKey: Record<string, Array<ExistingChoice>> = {};
+  rows.forEach(function (row) {
+    var key = (row.language || "en") + "::" + row.value;
+    if (!byKey[key]) byKey[key] = [];
+    byKey[key].push(row);
+  });
+  return byKey;
+}
+
+/**
  * Collapse choices that target the same language::value. Position is first-seen, but
  * the LAST spec wins, so `[{a,"Old"},{a,"New"}]` upserts the label the caller asked for
  * most recently rather than silently writing both.
@@ -264,11 +284,7 @@ export async function addChoicesToField(
     params.table,
     params.column,
   );
-  var existingByValue: Record<string, ExistingChoice> = {};
-  existing.forEach(function (row) {
-    var key = (row.language || "en") + "::" + row.value;
-    existingByValue[key] = row;
-  });
+  var existingByValue = groupExistingByKey(existing);
 
   // Collapse repeats on language::value, last spec wins. Without this a value listed
   // twice is created twice — the cache is read once up front, so the second pass still
@@ -279,17 +295,26 @@ export async function addChoicesToField(
   for (var i = 0; i < choices.length; i += 1) {
     var choice = choices[i];
     var key = (choice.language || "en") + "::" + choice.value;
-    var match = existingByValue[key];
-    if (match && isUnchanged(match, choice)) {
+    var matches = existingByValue[key] || [];
+    var matchSysIds = matches.map(function (row) {
+      return row.sys_id;
+    });
+    // Every live row for this value, not just one: a field can already hold duplicates,
+    // and updating one would leave the other showing the old label in the dropdown.
+    var stale = matches.filter(function (row) {
+      return !isUnchanged(row, choice);
+    });
+    if (matches.length > 0 && stale.length === 0) {
       results.push({
         value: choice.value,
         label: choice.label,
-        sysId: match.sys_id,
+        sysId: matchSysIds[0],
+        sysIds: matchSysIds,
         action: "unchanged",
       });
       continue;
     }
-    if (match) {
+    if (matches.length > 0) {
       var updFields: Record<string, any> = {
         label: choice.label,
         language: choice.language || "en",
@@ -298,16 +323,19 @@ export async function addChoicesToField(
       if (choice.sequence != null) {
         updFields.sequence = String(choice.sequence);
       }
-      await client.claude.pushWithUpdateSet({
-        update_set_sys_id: params.updateSetSysId,
-        table: "sys_choice",
-        record_sys_id: match.sys_id,
-        fields: updFields,
-      });
+      for (var s = 0; s < stale.length; s += 1) {
+        await client.claude.pushWithUpdateSet({
+          update_set_sys_id: params.updateSetSysId,
+          table: "sys_choice",
+          record_sys_id: stale[s].sys_id,
+          fields: updFields,
+        });
+      }
       results.push({
         value: choice.value,
         label: choice.label,
-        sysId: match.sys_id,
+        sysId: matchSysIds[0],
+        sysIds: matchSysIds,
         action: "updated",
       });
       continue;
@@ -327,6 +355,7 @@ export async function addChoicesToField(
       value: choice.value,
       label: choice.label,
       sysId: created.sys_id,
+      sysIds: [created.sys_id],
       action: "created",
     });
   }
@@ -393,11 +422,7 @@ export async function removeChoicesFromField(
     params.table,
     params.column,
   );
-  var existingByValue: Record<string, ExistingChoice> = {};
-  existing.forEach(function (row) {
-    var key = (row.language || "en") + "::" + row.value;
-    existingByValue[key] = row;
-  });
+  var existingByValue = groupExistingByKey(existing);
 
   // Collapse repeats: without this a duplicated value writes twice and is counted
   // twice in the summary, which contradicts the idempotency contract.
@@ -406,22 +431,42 @@ export async function removeChoicesFromField(
   var results: Array<ChoiceRemovalResult> = [];
   for (var i = 0; i < values.length; i += 1) {
     var value = values[i];
-    var match = existingByValue[language + "::" + value];
-    if (!match) {
-      results.push({ value: value, sysId: "", action: "missing" });
+    var matches = existingByValue[language + "::" + value] || [];
+    if (matches.length === 0) {
+      results.push({ value: value, sysId: "", sysIds: [], action: "missing" });
       continue;
     }
-    if (match.inactive === "true") {
-      results.push({ value: value, sysId: match.sys_id, action: "unchanged" });
-      continue;
-    }
-    await client.claude.pushWithUpdateSet({
-      update_set_sys_id: params.updateSetSysId,
-      table: "sys_choice",
-      record_sys_id: match.sys_id,
-      fields: { inactive: "true" },
+    var sysIds = matches.map(function (row) {
+      return row.sys_id;
     });
-    results.push({ value: value, sysId: match.sys_id, action: "deactivated" });
+    // Deactivate EVERY live row for this value. A field can hold more than one, and
+    // stopping at the first leaves the choice selectable while reporting success.
+    var active = matches.filter(function (row) {
+      return row.inactive !== "true";
+    });
+    if (active.length === 0) {
+      results.push({
+        value: value,
+        sysId: sysIds[0],
+        sysIds: sysIds,
+        action: "unchanged",
+      });
+      continue;
+    }
+    for (var a = 0; a < active.length; a += 1) {
+      await client.claude.pushWithUpdateSet({
+        update_set_sys_id: params.updateSetSysId,
+        table: "sys_choice",
+        record_sys_id: active[a].sys_id,
+        fields: { inactive: "true" },
+      });
+    }
+    results.push({
+      value: value,
+      sysId: sysIds[0],
+      sysIds: sysIds,
+      action: "deactivated",
+    });
   }
 
   return {

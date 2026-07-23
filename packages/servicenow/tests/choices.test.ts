@@ -173,6 +173,38 @@ describe("addChoicesToField", function () {
     ).rejects.toThrow(/updateSetSysId is required/);
   });
 
+  it("updates EVERY duplicate row for a value so they converge on one label", async function () {
+    // Same reasoning as the remove path: updating one of two live rows leaves the other
+    // showing the stale label in the dropdown while the result claims "updated".
+    var ctx = makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_choice")
+          return [
+            { sys_id: "dupeA", value: "delivered", label: "Stale", sequence: "", language: "en", inactive: "false" },
+            { sys_id: "dupeB", value: "delivered", label: "Stale", sequence: "", language: "en", inactive: "false" }
+          ];
+        return [];
+      }
+    });
+
+    var result = await addChoicesToField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      updateSetSysId: "us1",
+      choices: [{ value: "delivered", label: "Delivered" }]
+    });
+
+    expect(result.choices[0].action).toBe("updated");
+    expect(result.choices[0].sysIds).toEqual(["dupeA", "dupeB"]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(2);
+    expect(ctx.calls.createRecord).toHaveLength(0);
+    expect(ctx.calls.pushWithUpdateSet[0].fields.label).toBe("Delivered");
+    expect(ctx.calls.pushWithUpdateSet[1].fields.label).toBe("Delivered");
+  });
+
   it("never creates a duplicate sys_choice row for a repeated value — last label wins", async function () {
     var ctx = makeClient({
       query: async function (table: string, _query?: string) {
@@ -385,6 +417,70 @@ describe("removeChoicesFromField", function () {
     expect(result.choices).toHaveLength(1);
     expect(result.choices[0].action).toBe("deactivated");
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+  });
+
+  it("deactivates EVERY duplicate row for a value, not just the last one found", async function () {
+    // sys_choice has no uniqueness constraint on (name, element, value, language), so a
+    // field can genuinely hold two live rows for one value. Acting on one and reporting
+    // "deactivated" would leave the choice selectable in the dropdown.
+    var ctx = clientWithChoices([
+      { sys_id: "dupeA", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "dupeB", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["delivered"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices).toHaveLength(1);
+    expect(result.choices[0].action).toBe("deactivated");
+    expect(result.choices[0].sysIds).toEqual(["dupeA", "dupeB"]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(2);
+    expect(
+      ctx.calls.pushWithUpdateSet.map(function (c: any) {
+        return c.record_sys_id;
+      })
+    ).toEqual(["dupeA", "dupeB"]);
+  });
+
+  it("deactivates only the still-live duplicate when one is already inactive", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "dupeA", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "true" },
+      { sys_id: "dupeB", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["delivered"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices[0].action).toBe("deactivated");
+    expect(result.choices[0].sysIds).toEqual(["dupeA", "dupeB"]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+    expect(ctx.calls.pushWithUpdateSet[0].record_sys_id).toBe("dupeB");
+  });
+
+  it("reports 'unchanged' with no write when every duplicate is already inactive", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "dupeA", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "true" },
+      { sys_id: "dupeB", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "true" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["delivered"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices[0].action).toBe("unchanged");
+    expect(result.choices[0].sysIds).toEqual(["dupeA", "dupeB"]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 
   it("refuses a truncated choice list rather than reporting live values as missing", async function () {
