@@ -163,6 +163,8 @@ function renderScopes() {
       '<div class="quick-create">' +
       '<input type="text" id="quick-name-' +
       scope.scope +
+      '" value="' +
+      escapeHtml(scope.suggested_update_set_name || "") +
       '" placeholder="Update set name..." class="quick-create-input" onkeydown="if(event.key===\'Enter\')quickCreateUpdateSet(\'' +
       scope.scope +
       "', '" +
@@ -321,9 +323,15 @@ function openCreateModal(scope, scopeSysId) {
   modalScopeKey = scope;
   modalScopeSysId = scopeSysId;
   document.getElementById("modal-scope").value = scope;
-  document.getElementById("modal-name").value = activeTask
-    ? activeTask.updateSetName
-    : "";
+  var modalScopeData = scopesData.find(function (s) {
+    return s.scope === scope;
+  });
+  // Prefer the scope-qualified name (…| DEV-x | App | …) so sets created in
+  // different scopes don't share an identical name; fall back to the scope-less
+  // task name only when no per-scope suggestion is available.
+  document.getElementById("modal-name").value =
+    (modalScopeData && modalScopeData.suggested_update_set_name) ||
+    (activeTask ? activeTask.updateSetName : "");
   document.getElementById("modal-description").value = activeTask
     ? activeTask.description
     : "";

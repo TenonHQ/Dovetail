@@ -315,11 +315,18 @@ app.get("/api/scopes", async (req, res) => {
       saved = JSON.parse(fs.readFileSync(UPDATE_SET_CONFIG, "utf8"));
     }
 
+    // When a task is active, precompute the scope-qualified update-set name for
+    // each scope (same generator the Start Task / quick-create path uses) so the
+    // create UI never prefills a scope-less name that would collide across scopes.
+    const activeTaskForNames = readActiveTask();
     const scopes = scopeKeys.map((key) => ({
       scope: key,
       sys_id: scopeMap[key] ? scopeMap[key].sys_id : null,
       display_name: scopeMap[key] ? scopeMap[key].name : key,
       selected_update_set: saved[key] || null,
+      suggested_update_set_name: activeTaskForNames
+        ? buildScopedUpdateSetName(activeTaskForNames, scopeLabel(key))
+        : "",
     }));
 
     res.json({ scopes });
