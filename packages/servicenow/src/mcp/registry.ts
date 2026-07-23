@@ -186,7 +186,9 @@ export function buildDescriptors(
         "Soft-delete sys_choice values for a ServiceNow table.column by setting inactive=true " +
         "(the row is kept, so it is reversible and historical values still resolve). Never a " +
         "hard delete. Idempotent: an already-inactive value is 'unchanged', an absent value is " +
-        "'missing'. sys_dictionary.choice is left alone. Writes are captured in the supplied update set.",
+        "'missing', and repeated values collapse to one write. sys_dictionary.choice is left alone. " +
+        "Matching is scoped to this table, so a choice INHERITED from a parent table reports " +
+        "'missing' rather than being deactivated. Writes are captured in the supplied update set.",
       shape: removeChoicesFromFieldSchema.shape,
       handler: async function (args: any) {
         return removeChoicesFromField(

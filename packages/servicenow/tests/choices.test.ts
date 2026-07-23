@@ -172,6 +172,34 @@ describe("addChoicesToField", function () {
       })
     ).rejects.toThrow(/updateSetSysId is required/);
   });
+
+  it("never creates a duplicate sys_choice row for a repeated value — last label wins", async function () {
+    var ctx = makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_choice") return [];
+        return [];
+      }
+    });
+
+    var result = await addChoicesToField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      updateSetSysId: "us1",
+      choices: [
+        { value: "delivered", label: "Old Label" },
+        { value: "delivered", label: "New Label" }
+      ]
+    });
+
+    // The existing-choice cache is read once, so an un-deduped repeat would fall through
+    // to createRecord twice and leave two live rows for the same value.
+    expect(ctx.calls.createRecord).toHaveLength(1);
+    expect(ctx.calls.createRecord[0].fields.label).toBe("New Label");
+    expect(result.choices).toHaveLength(1);
+  });
 });
 
 describe("removeChoicesFromField", function () {
@@ -338,5 +366,49 @@ describe("removeChoicesFromField", function () {
         updateSetSysId: "us1"
       })
     ).rejects.toThrow(/values must be a non-empty array/);
+  });
+
+  it("collapses a repeated value to one write and one result row", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["delivered", "delivered", "delivered"],
+      updateSetSysId: "us1"
+    });
+
+    // The cache is read once up front, so an un-deduped repeat would re-push the same
+    // sys_id and double-count it in the summary.
+    expect(result.choices).toHaveLength(1);
+    expect(result.choices[0].action).toBe("deactivated");
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+  });
+
+  it("refuses a truncated choice list rather than reporting live values as missing", async function () {
+    var thousand = [];
+    for (var i = 0; i < 1000; i += 1) {
+      thousand.push({
+        sys_id: "ch" + i,
+        value: "v" + i,
+        label: "V" + i,
+        sequence: "",
+        language: "en",
+        inactive: "false"
+      });
+    }
+    var ctx = clientWithChoices(thousand);
+
+    await expect(
+      removeChoicesFromField(ctx.client, {
+        table: "x_cadso_core_event",
+        column: "state",
+        values: ["v0"],
+        updateSetSysId: "us1"
+      })
+    ).rejects.toThrow(/truncated choice list/);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 });

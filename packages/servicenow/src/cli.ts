@@ -35,6 +35,7 @@ import { setFormLayout } from "./layout/formLayout";
 import { setRelatedLists } from "./layout/relatedLists";
 import { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
 import { runStdio, runSmoke } from "./mcp/server";
+import { removeChoicesFromFieldSchema } from "./mcp/schemas";
 import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
 import { formatBuildFlowResult } from "./flowDesigner-formatter";
 import { readFlow } from "./flowDesigner/readFlow";
@@ -158,7 +159,42 @@ function paramsFromFlags(flags: Record<string, string>): AddChoicesParams {
   return params;
 }
 
-async function runAddChoices(flags: Record<string, string>): Promise<void> {
+/**
+ * A string flag whose value was forgotten arrives as the literal "true" (see
+ * ParsedArgs.bare). Booleans legitimately do that, strings never do — so refuse
+ * rather than write nonsense. Returns the message to print, or null when clean.
+ */
+function bareStringFlagError(
+  verb: string,
+  bare: Record<string, boolean>,
+  stringFlags: Array<string>,
+): string | null {
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      return (
+        verb + ": --" + stringFlags[f] + " needs a value (it was given none).\n"
+      );
+    }
+  }
+  return null;
+}
+
+async function runAddChoices(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("add-choices", bare, [
+    "table",
+    "column",
+    "update-set",
+    "choices",
+    "from-json",
+    "choice-type",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
   var params = paramsFromFlags(flags);
   var client = createClient({});
   var result = await addChoicesToField(client, params);
@@ -166,11 +202,12 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
     process.stdout.write(
       JSON.stringify({ params: params, result: result }, null, 2) + "\n",
     );
-    return;
+    return 0;
   }
   process.stdout.write(
     formatAddChoicesResult(params.table, params.column, result) + "\n",
   );
+  return 0;
 }
 
 function removeParamsFromFlags(
@@ -178,7 +215,12 @@ function removeParamsFromFlags(
 ): RemoveChoicesParams {
   if (flags["from-json"]) {
     var raw = fs.readFileSync(flags["from-json"], "utf8");
-    return JSON.parse(raw) as RemoveChoicesParams;
+    // Validate rather than cast: the same zod schema the MCP tool parses with, so a
+    // malformed spec fails here with a field-level message instead of somewhere
+    // downstream as an undefined table name.
+    return removeChoicesFromFieldSchema.parse(
+      JSON.parse(raw),
+    ) as RemoveChoicesParams;
   }
   var table = flags.table;
   var column = flags.column;
@@ -208,7 +250,25 @@ function removeParamsFromFlags(
   return params;
 }
 
-async function runRemoveChoices(flags: Record<string, string>): Promise<void> {
+async function runRemoveChoices(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // --language matters most here: a bare one makes every lookup key "true::<value>",
+  // so every value reports "missing", nothing is written, and the summary still reads
+  // like a clean run. That is the silent failure this verb family exists to catch.
+  var bareErr = bareStringFlagError("remove-choices", bare, [
+    "table",
+    "column",
+    "update-set",
+    "values",
+    "language",
+    "from-json",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
   var params = removeParamsFromFlags(flags);
   var client = createClient({});
   var result = await removeChoicesFromField(client, params);
@@ -216,11 +276,12 @@ async function runRemoveChoices(flags: Record<string, string>): Promise<void> {
     process.stdout.write(
       JSON.stringify({ params: params, result: result }, null, 2) + "\n",
     );
-    return;
+    return 0;
   }
   process.stdout.write(
     formatRemoveChoicesResult(params.table, params.column, result) + "\n",
   );
+  return 0;
 }
 
 /**
@@ -992,7 +1053,8 @@ function printHelp(): void {
       "Commands:\n" +
       "  add-choices        Upsert sys_choice rows for a table.column\n" +
       "  remove-choices     Soft-delete (inactive=true) sys_choice values for a table.column\n" +
-      "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id> [--language en] [--json])\n" +
+      "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id>\n" +
+      "                      [--language en] [--from-json <path>] [--json])\n" +
       "  create-view        Create a custom view (sys_ui_view)\n" +
       "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
       "  set-list-layout    Set the columns of a list layout\n" +
@@ -1795,12 +1857,10 @@ async function main(): Promise<number> {
   // target multiple instances; otherwise the cwd `.env` is used.
   loadEnvFile(parsed.flags.env || parsed.flags["env-file"]);
   if (parsed.command === "add-choices") {
-    await runAddChoices(parsed.flags);
-    return 0;
+    return await runAddChoices(parsed.flags, parsed.bare);
   }
   if (parsed.command === "remove-choices") {
-    await runRemoveChoices(parsed.flags);
-    return 0;
+    return await runRemoveChoices(parsed.flags, parsed.bare);
   }
   if (parsed.command === "build-flow") {
     return await runBuildFlowCmd(parsed.flags);

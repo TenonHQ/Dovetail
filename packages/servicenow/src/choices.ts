@@ -127,16 +127,63 @@ interface ExistingChoice {
   inactive: string;
 }
 
+var CHOICE_PAGE_LIMIT = 1000;
+
 async function fetchExistingChoices(
   client: ServiceNowClient,
   table: string,
   column: string,
 ): Promise<Array<ExistingChoice>> {
-  return client.table.query<ExistingChoice>(
+  var rows = await client.table.query<ExistingChoice>(
     "sys_choice",
     "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
-    1000,
+    CHOICE_PAGE_LIMIT,
   );
+  // A truncated read is indistinguishable from "the value isn't there": the add path
+  // would insert a duplicate, the remove path would report a live value as "missing"
+  // and write nothing. Both are silent. Refuse instead of guessing.
+  if (rows.length >= CHOICE_PAGE_LIMIT) {
+    throw new Error(
+      "Refusing to act on a truncated choice list: " +
+        table +
+        "." +
+        column +
+        " returned the full page limit of " +
+        CHOICE_PAGE_LIMIT +
+        " sys_choice rows, so the read may be incomplete.",
+    );
+  }
+  return rows;
+}
+
+/**
+ * Collapse choices that target the same language::value. Position is first-seen, but
+ * the LAST spec wins, so `[{a,"Old"},{a,"New"}]` upserts the label the caller asked for
+ * most recently rather than silently writing both.
+ */
+function dedupeChoices(choices: Array<ChoiceValue>): Array<ChoiceValue> {
+  var byKey: Record<string, ChoiceValue> = {};
+  var order: Array<string> = [];
+  choices.forEach(function (c) {
+    var key = (c.language || "en") + "::" + c.value;
+    if (!byKey[key]) order.push(key);
+    byKey[key] = c;
+  });
+  return order.map(function (key) {
+    return byKey[key];
+  });
+}
+
+/** Preserve first-seen order while dropping repeats. */
+function dedupe(values: Array<string>): Array<string> {
+  var seen: Record<string, boolean> = {};
+  var out: Array<string> = [];
+  values.forEach(function (v) {
+    if (seen[v]) return;
+    seen[v] = true;
+    out.push(v);
+  });
+  return out;
 }
 
 function buildChoiceFields(
@@ -223,9 +270,14 @@ export async function addChoicesToField(
     existingByValue[key] = row;
   });
 
+  // Collapse repeats on language::value, last spec wins. Without this a value listed
+  // twice is created twice — the cache is read once up front, so the second pass still
+  // sees "not present" and inserts a genuine duplicate sys_choice row.
+  var choices = dedupeChoices(params.choices);
+
   var results: Array<ChoiceActionResult> = [];
-  for (var i = 0; i < params.choices.length; i += 1) {
-    var choice = params.choices[i];
+  for (var i = 0; i < choices.length; i += 1) {
+    var choice = choices[i];
     var key = (choice.language || "en") + "::" + choice.value;
     var match = existingByValue[key];
     if (match && isUnchanged(match, choice)) {
@@ -306,6 +358,16 @@ export async function addChoicesToField(
  * mistyped column reports every value as "missing", the silent-failure this family
  * exists to catch. sys_dictionary.choice is left alone on purpose: removing values
  * does not un-make the column a choice field.
+ *
+ * Repeated values are collapsed before the loop, so `["a", "a"]` is one write and one
+ * result row — an idempotent verb must not depend on the caller de-duplicating first.
+ *
+ * LIMITATION — inherited choices. Matching is scoped to `sys_choice.name = <table>`, so
+ * a value defined on a PARENT table (task.state inherited by a child) reports "missing"
+ * rather than being deactivated. Hiding an inherited choice on a child table needs an
+ * override row on the child, which this verb does not write. For the x_cadso_* tables
+ * this family targets that case does not arise; on extended OOB tables, treat a
+ * surprising "missing" as a signal to check the parent.
  */
 export async function removeChoicesFromField(
   client: ServiceNowClient,
@@ -337,9 +399,13 @@ export async function removeChoicesFromField(
     existingByValue[key] = row;
   });
 
+  // Collapse repeats: without this a duplicated value writes twice and is counted
+  // twice in the summary, which contradicts the idempotency contract.
+  var values = dedupe(params.values);
+
   var results: Array<ChoiceRemovalResult> = [];
-  for (var i = 0; i < params.values.length; i += 1) {
-    var value = params.values[i];
+  for (var i = 0; i < values.length; i += 1) {
+    var value = values[i];
     var match = existingByValue[language + "::" + value];
     if (!match) {
       results.push({ value: value, sysId: "", action: "missing" });

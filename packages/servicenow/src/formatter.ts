@@ -51,14 +51,26 @@ export function formatAddChoicesResult(
 export function formatRemoveChoicesResult(
   table: string,
   column: string,
-  result: RemoveChoicesResult
+  result: RemoveChoicesResult,
 ): string {
   var lines: Array<string> = [];
   lines.push(
-    "ServiceNow choice soft-delete — " + table + "." + column + " [" + result.field.language + "]"
+    "ServiceNow choice soft-delete — " +
+      table +
+      "." +
+      column +
+      " [" +
+      result.field.language +
+      "]",
   );
   lines.push("");
-  lines.push("Update set: " + result.updateSet.name + " (" + result.updateSet.sysId + ")");
+  lines.push(
+    "Update set: " +
+      result.updateSet.name +
+      " (" +
+      result.updateSet.sysId +
+      ")",
+  );
   lines.push("Dictionary: " + result.field.dictionarySysId);
   lines.push("");
 
@@ -71,13 +83,22 @@ export function formatRemoveChoicesResult(
     else if (row.action === "unchanged") unchanged += 1;
     else missing += 1;
     lines.push(
-      "  [" + row.action.padEnd(11) + "] " + row.value +
-      (row.sysId ? "  (" + row.sysId + ")" : "")
+      "  [" +
+        row.action.padEnd(11) +
+        "] " +
+        row.value +
+        (row.sysId ? "  (" + row.sysId + ")" : ""),
     );
   });
   lines.push("");
   lines.push(
-    "Summary: " + deactivated + " deactivated, " + unchanged + " unchanged, " + missing + " missing."
+    "Summary: " +
+      deactivated +
+      " deactivated, " +
+      unchanged +
+      " unchanged, " +
+      missing +
+      " missing.",
   );
   return lines.join("\n");
 }
