@@ -45,19 +45,21 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, setColumn } from "./table";
+import { createTable, addColumn, setColumn, setTable } from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
   SetColumnParams,
   ColumnAttributes,
+  SetTableParams,
+  TableAttributes,
 } from "./table";
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
-import { invokeRest } from "./invokeRest";
+import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
 import { publishApp } from "./publishApp";
 import type {
@@ -983,12 +985,25 @@ function printHelp(): void {
       "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
       "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
       "                     Shorten or clear those values first, then re-run.\n" +
+      "                     An INHERITED column (one defined on a parent table) is narrowed for\n" +
+      "                     YOUR table alone, via sys_dictionary_override / sys_documentation —\n" +
+      "                     the parent and its other children are untouched. max-length is the\n" +
+      "                     exception: it is the parent's physical column and is refused.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
+      "  set-table          Update an EXISTING TABLE's own dictionary row (the collection row),\n" +
+      "                     into an update set, then verify against the instance\n" +
+      "                     (--table <t> --update-set <sys_id> [--audit true|false]\n" +
+      "                      [--dry-run] [--json])\n" +
+      "                     --audit turns RECORD AUDITING on/off for the whole table: with it\n" +
+      "                     true ServiceNow writes a sys_audit row per changed field on every\n" +
+      "                     insert and update — a real cost on a high-write table.\n" +
+      "                     Column attributes belong to set-column, record values to set-field.\n" +
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json]\n" +
+      "                      [--out <file>  full JSON result to a file (atomic; overwrites); for large bodies])\n" +
       "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
       "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
       '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
@@ -1205,11 +1220,11 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
 
 /** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
  *  false. Anything else is rejected rather than quietly coerced to `true`. */
-function parseBoolFlag(name: string, raw: string): boolean {
+function parseBoolFlag(name: string, raw: string, verb: string = "set-column"): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(
-    "set-column: --" + name + " must be true or false (got '" + raw + "').",
+    verb + ": --" + name + " must be true or false (got '" + raw + "').",
   );
 }
 
@@ -1299,6 +1314,12 @@ async function runSetColumn(
         result.table +
         "." +
         result.column +
+        // Say when the change went to an override rather than the column's own row. The
+        // caller asked for a table + column; without this they have no reason to expect
+        // the write landed on a different record type entirely.
+        (result.via === "override"
+          ? " — override (inherited from " + result.definedOn + ")"
+          : "") +
         (result.verified && result.status === "applied" ? " — verified" : "") +
         (result.status === "applied" && !result.capturedInUpdateSet
           ? " — NOT CAPTURED"
@@ -1310,6 +1331,78 @@ async function runSetColumn(
   }
   // 2 = the write landed but the instance does not reflect it (or it was not captured),
   // which must not read as success to a script.
+  if (result.status === "failed") return 2;
+  if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
+  return 0;
+}
+
+/**
+ * dove-sn set-table:
+ *   --table x_cadso_core_setting --audit true --update-set <sys_id>
+ *   [--dry-run] [--json]
+ *
+ * Updates the TABLE's own dictionary row (the `internal_type=collection` row, whose
+ * `element` is empty) — not a column's. Column attributes belong to set-column; a
+ * record's values belong to set-field.
+ */
+async function runSetTable(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // Guard the string flags AND the updateSetSysId alias: a value-less string flag
+  // arrives as the literal "true", so --update-set (or its alias) with nothing after
+  // it would silently become the sys_id "true" and later fail as "not found".
+  var stringFlags = ["table", "update-set", "updateSetSysId"];
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      process.stderr.write(
+        "set-table: --" + stringFlags[f] + " needs a value (it was given none).\n",
+      );
+      return 1;
+    }
+  }
+  var table = flags.table;
+  if (!table) {
+    process.stderr.write(
+      "set-table: --table is required " +
+        "(--update-set is required too, unless --dry-run)\n",
+    );
+    return 1;
+  }
+  var attributes: TableAttributes = {};
+  if (flags.audit !== undefined) {
+    attributes.audit = parseBoolFlag("audit", flags.audit, "set-table");
+  }
+
+  var params: SetTableParams = {
+    client: createClient({}),
+    table: table,
+    attributes: attributes,
+  };
+  var setTableUs = flags["update-set"] || flags.updateSetSysId;
+  if (setTableUs) params.updateSetSysId = setTableUs;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await setTable(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        (result.verified && result.status === "applied" ? " — verified" : "") +
+        (result.status === "applied" && !result.capturedInUpdateSet
+          ? " — NOT CAPTURED"
+          : "") +
+        "\n" +
+        result.note +
+        "\n",
+    );
+  }
+  // 2 = the write landed but the instance does not reflect it (or it was not
+  // captured), which must not read as success to a script.
   if (result.status === "failed") return 2;
   if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
   return 0;
@@ -1542,6 +1635,11 @@ async function runHostAssets(flags: Record<string, string>): Promise<number> {
  *   --confirm               Send for real. WITHOUT it the command is a DRY-RUN.
  *   --dry-run               Force a dry-run even with --confirm.
  *   --json                  Emit the structured InvokeRestResult.
+ *   --out <file>            Also write the full structured result to a file
+ *                           (pretty JSON, atomic temp+rename, OVERWRITES an
+ *                           existing file; parent dir must exist). The reliable
+ *                           channel for large response bodies - piped stdout is
+ *                           flush-guarded but a file needs no downstream reader.
  *
  * Invoke an arbitrary authenticated REST operation (Scripted REST included).
  * Dry-run by default; --confirm sends and returns { httpStatus, ok, body } with
@@ -1591,6 +1689,18 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     params.body = body;
   }
   var result = await invokeRest(params);
+  if (flags.out) {
+    try {
+      writeInvokeRestResultFile(flags.out, result);
+    } catch (err) {
+      process.stderr.write(
+        "invoke-rest: --out write failed: " +
+          (err instanceof Error ? err.message : String(err)) +
+          "\n",
+      );
+      return 1;
+    }
+  }
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
@@ -1775,6 +1885,9 @@ async function main(): Promise<number> {
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
   }
+  if (parsed.command === "set-table") {
+    return await runSetTable(parsed.flags, parsed.bare);
+  }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);
   }
@@ -1826,9 +1939,54 @@ async function main(): Promise<number> {
   throw new Error("Unknown command: " + parsed.command);
 }
 
+// A closed downstream pipe (e.g. `dove-sn ... --json | head`) surfaces as an
+// EPIPE on stdout. Exit quietly with the code already set instead of crashing
+// with an unhandled stream error.
+process.stdout.on("error", function (err: NodeJS.ErrnoException) {
+  if (err && err.code === "EPIPE") {
+    process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+  }
+  throw err;
+});
+
+/**
+ * process.exit() discards buffered stdout/stderr - when stdout is a PIPE,
+ * anything past the OS pipe buffer (~64KB) is silently dropped, which is how
+ * `invoke-rest --json` used to truncate large bodies mid-string. Queue an
+ * empty chunk behind any pending data on each stream and exit only when both
+ * callbacks confirm the flush. The barrier is queued UNCONDITIONALLY (not
+ * gated on writableLength) so the exit never races stream internals about
+ * whether a prior write is still in flight.
+ */
+function exitAfterFlush(code: number): void {
+  process.exitCode = code;
+  var pending = 0;
+  var finish = function (): void {
+    pending -= 1;
+    if (pending <= 0) {
+      process.exit(code);
+    }
+  };
+  [process.stdout, process.stderr].forEach(function (stream) {
+    if (stream.destroyed || !stream.writable) {
+      return;
+    }
+    pending += 1;
+    try {
+      stream.write("", finish);
+    } catch (writeErr) {
+      // A stream that rejects the barrier write has nothing left to flush.
+      pending -= 1;
+    }
+  });
+  if (pending === 0) {
+    process.exit(code);
+  }
+}
+
 main()
   .then(function (code) {
-    process.exit(code);
+    exitAfterFlush(code);
   })
   .catch(function (err) {
     process.stderr.write(
@@ -1836,5 +1994,5 @@ main()
         (err && err.message ? err.message : String(err)) +
         "\n",
     );
-    process.exit(1);
+    exitAfterFlush(1);
   });

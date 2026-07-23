@@ -50,6 +50,19 @@
  * do nothing. That is why every write is read back and compared, and why nothing is ever
  * reported as applied on the strength of a status code.
  *
+ * INHERITED COLUMNS. On an extended table the column is defined on an ancestor, not here.
+ * That is not an error and not a dead end: mandatory / default / read_only are narrowed
+ * for THIS table alone via sys_dictionary_override, and label via sys_documentation,
+ * leaving the ancestor and every sibling untouched. See overrideColumn.ts, which carries
+ * the live-verified detail. max_length is the one real exception — it is the ancestor's
+ * physical column and has no per-child override, so it is refused with the reason.
+ *
+ * This verb originally refused every inherited column and told the caller to go edit the
+ * ancestor "since that changes it for EVERY table that extends" it. That was the
+ * destructive option offered as the only one, and it was never checked against an
+ * instance — a claim about ServiceNow trusted on reasoning alone, in the one file whose
+ * whole argument is that ServiceNow must be read back rather than believed.
+ *
  * Fields are taken from a strict ALLOWLIST, not an open map — an unbounded write to
  * sys_dictionary lets a caller quietly corrupt the schema.
  *
@@ -62,6 +75,17 @@ import { fieldToString } from "../setField";
 // through this first. A stray "^" or "=" does not error — it silently changes what the
 // query MEANS, which is the worst kind of bug to ship into a schema tool.
 import { encodeQueryValue } from "../choices";
+// The inherited-column path. An extended table's columns live on an ancestor's
+// dictionary rows, and ServiceNow's answer for narrowing one per-child is
+// sys_dictionary_override / sys_documentation — not editing the ancestor.
+import {
+  OVERRIDABLE,
+  explainMaxLengthNotOverridable,
+  findOverrideRow,
+  findLabelRow,
+  diffInherited,
+  applyInheritedWrites,
+} from "./overrideColumn";
 
 /** How far up a super_class chain to look for an inherited column before giving up. */
 var MAX_INHERITANCE_DEPTH = 20;
@@ -156,8 +180,21 @@ export interface SetColumnResult {
   status: "dry-run" | "applied" | "unchanged" | "failed";
   table: string;
   column: string;
-  /** sys_id of the sys_dictionary row. */
+  /** sys_id of the sys_dictionary row that DEFINES the column. On an inherited column
+   *  this is the ancestor's row — the child has none — so it is not what was written;
+   *  see overrideSysId / labelSysId for that. */
   columnSysId: string;
+  /** How the change was made. "dictionary" — written straight to the column's own
+   *  sys_dictionary row. "override" — the column is inherited, so it was narrowed for
+   *  THIS table alone via sys_dictionary_override / sys_documentation, leaving the
+   *  defining table and every sibling untouched. */
+  via: "dictionary" | "override";
+  /** The ancestor that defines the column, when it is inherited; "" when it is local. */
+  definedOn: string;
+  /** sys_id of the sys_dictionary_override row written, when via === "override". */
+  overrideSysId?: string;
+  /** sys_id of the sys_documentation row written, when a label override was applied. */
+  labelSysId?: string;
   updateSetSysId: string;
   /** The attributes that differed and were written (empty when nothing changed). */
   changes: Array<AttributeChange>;
@@ -228,8 +265,12 @@ export function resolveAttributes(
  * child's — a child of x_cadso_journey_flow carries only a couple of dictionary rows of
  * its own while every real column is inherited. So a plain name+element lookup against
  * the child finds nothing, even though the column is plainly there on the form. Walking
- * super_class turns "no such column" into "it lives on <parent>", which is the
- * difference between a dead end and an answer.
+ * super_class finds the row that really defines it.
+ *
+ * That answer used to end the story: set-column reported "it lives on <parent>, go change
+ * it there" and stopped. It now ROUTES instead — the defining table is where the column's
+ * inherited values are read from for the diff, and what `base_table` is set to on the
+ * override that narrows it for the child. See overrideColumn.ts.
  */
 async function findDefiningTable(
   client: ServiceNowClient,
@@ -270,42 +311,53 @@ async function findDefiningTable(
   return "";
 }
 
-/** Fetch the column's dictionary row, or throw a message that says what to check. */
-async function fetchColumn(
+/** Where a column's definition actually lives. */
+interface ColumnResolution {
+  /** The sys_dictionary row that defines the column. */
+  row: Record<string, unknown>;
+  /** "" when the column is defined on the requested table itself; otherwise the
+   *  ancestor that defines it, whose row is the one above. */
+  definedOn: string;
+}
+
+/**
+ * Find the column's dictionary row — on the table itself, or on the ancestor that
+ * defines it — or throw a message that says what to check.
+ *
+ * An inherited column is NOT an error. It is the normal shape of an extended table, and
+ * the caller's request ("make this column mandatory on this table") is answerable
+ * exactly as asked, by overriding it for the child. Resolution just reports where the
+ * definition lives; setColumn decides what to write.
+ */
+async function resolveColumn(
   client: ServiceNowClient,
   table: string,
   column: string,
   fields: Array<string>,
-): Promise<Record<string, unknown>> {
+): Promise<ColumnResolution> {
   var rows = await client.table.query<Record<string, unknown>>(
     "sys_dictionary",
     "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
     { limit: 1, fields: fields },
   );
-  if (rows.length > 0) return rows[0];
+  if (rows.length > 0) return { row: rows[0], definedOn: "" };
 
   // Before declaring the column missing, check whether it is simply inherited. Saying
   // "no such column" about a column the caller can see on the form sends them hunting
   // for a typo that is not there.
   var owner = await findDefiningTable(client, table, column);
   if (owner) {
-    throw new Error(
-      "set-column: '" +
-        column +
-        "' is not defined on '" +
-        table +
-        "' — it is INHERITED from '" +
-        owner +
-        "'. Change it there: set-column --table " +
-        owner +
-        " --column " +
-        column +
-        ". Note that doing so changes the column for EVERY table that extends " +
-        owner +
-        ", not just " +
-        table +
-        " — which is why this is not done implicitly on your behalf.",
+    var ownerRows = await client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "name=" +
+        encodeQueryValue(owner) +
+        "^element=" +
+        encodeQueryValue(column),
+      { limit: 1, fields: fields },
     );
+    if (ownerRows.length > 0) {
+      return { row: ownerRows[0], definedOn: owner };
+    }
   }
   throw new Error(
     "set-column: no column '" +
@@ -515,10 +567,16 @@ export async function setColumn(
   var column = String(params.column).trim();
 
   var readFields = ["sys_id", "element", "internal_type"].concat(targets);
-  var row = await fetchColumn(params.client, table, column, readFields);
+  var resolved = await resolveColumn(params.client, table, column, readFields);
+  var row = resolved.row;
 
   // max_length is meaningless on a type that has no length. ServiceNow would take the
   // write and ignore it (a fourth silent no-op), so refuse it here where we can say why.
+  //
+  // This runs BEFORE the inherited branch on purpose. The type is a property of the
+  // COLUMN, so it is wrong wherever the column is defined — and the inherited refusal
+  // says "change it at the source instead", which for a lengthless type would send the
+  // caller to the parent to attempt something that cannot work there either.
   if (writes.max_length !== undefined) {
     var columnType = fieldToString(row.internal_type);
     if (LENGTHLESS_TYPES.indexOf(columnType) !== -1) {
@@ -532,6 +590,19 @@ export async function setColumn(
       );
     }
   }
+
+  // The column is INHERITED. It is narrowed for this table alone via an override — never
+  // by editing the ancestor, which would change it for every sibling too.
+  if (resolved.definedOn) {
+    return await setInheritedColumn(params, {
+      table: table,
+      column: column,
+      writes: writes,
+      parentRow: row,
+      definedOn: resolved.definedOn,
+    });
+  }
+
   var columnSysId = fieldToString(row.sys_id);
 
   // Diff against what the instance actually stores. Only a genuine difference is
@@ -598,6 +669,8 @@ export async function setColumn(
       table: table,
       column: column,
       columnSysId: columnSysId,
+      via: "dictionary",
+      definedOn: "",
       updateSetSysId: params.updateSetSysId ? params.updateSetSysId : "",
       changes: changes,
       verified: false,
@@ -658,6 +731,8 @@ export async function setColumn(
       table: table,
       column: column,
       columnSysId: columnSysId,
+      via: "dictionary",
+      definedOn: "",
       updateSetSysId: updateSetSysId,
       changes: [],
       verified: true,
@@ -696,6 +771,8 @@ export async function setColumn(
       table: table,
       column: column,
       columnSysId: columnSysId,
+      via: "dictionary",
+      definedOn: "",
       updateSetSysId: updateSetSysId,
       changes: changes,
       verified: false,
@@ -721,7 +798,7 @@ export async function setColumn(
   var after: Record<string, unknown>;
   var captured: boolean;
   try {
-    after = await fetchColumn(params.client, table, column, readFields);
+    after = (await resolveColumn(params.client, table, column, readFields)).row;
     captured = await assertCaptured(
       params.client,
       table,
@@ -734,6 +811,8 @@ export async function setColumn(
       table: table,
       column: column,
       columnSysId: columnSysId,
+      via: "dictionary",
+      definedOn: "",
       updateSetSysId: updateSetSysId,
       changes: changes,
       verified: false,
@@ -769,6 +848,8 @@ export async function setColumn(
       table: table,
       column: column,
       columnSysId: columnSysId,
+      via: "dictionary",
+      definedOn: "",
       updateSetSysId: updateSetSysId,
       changes: changes,
       verified: false,
@@ -797,6 +878,8 @@ export async function setColumn(
     table: table,
     column: column,
     columnSysId: columnSysId,
+    via: "dictionary",
+    definedOn: "",
     updateSetSysId: updateSetSysId,
     changes: changes,
     verified: true,
@@ -822,6 +905,232 @@ export async function setColumn(
         " — the change is live on this instance but is NOT captured, so it cannot be " +
         "promoted. Check the update set is in progress and in the column's scope.",
   };
+}
+
+interface InheritedContext {
+  table: string;
+  column: string;
+  /** The dictionary columns to set, already allowlisted by resolveAttributes. */
+  writes: Record<string, string>;
+  /** The DEFINING table's dictionary row — where the inherited values are read from. */
+  parentRow: Record<string, unknown>;
+  definedOn: string;
+}
+
+/**
+ * Set an INHERITED column's attributes for this table alone.
+ *
+ * The caller asked to change a column on a child table. ServiceNow's answer to that is an
+ * override on the child — not an edit to the ancestor, which would silently change the
+ * column for every other table extending it. Four of the five attributes set-column
+ * supports can be narrowed this way; max_length cannot, because it is the ancestor's
+ * physical column, and that is the one case where "change it at the source" is the honest
+ * answer (given with its blast radius spelled out, rather than as a casual suggestion).
+ */
+async function setInheritedColumn(
+  params: SetColumnParams,
+  ctx: InheritedContext,
+): Promise<SetColumnResult> {
+  var columnSysId = fieldToString(ctx.parentRow.sys_id);
+
+  // Refuse before touching anything else, so a dry-run fails identically to a live run.
+  if (ctx.writes.max_length !== undefined) {
+    throw new Error(
+      explainMaxLengthNotOverridable(ctx.table, ctx.column, ctx.definedOn),
+    );
+  }
+
+  var overrideRow = await findOverrideRow(params.client, ctx.table, ctx.column);
+  var labelRow = await findLabelRow(params.client, ctx.table, ctx.column);
+  var changes = diffInherited(ctx.writes, overrideRow, ctx.parentRow, labelRow);
+
+  var base = {
+    table: ctx.table,
+    column: ctx.column,
+    columnSysId: columnSysId,
+    via: "override" as const,
+    definedOn: ctx.definedOn,
+  };
+
+  if (params.dryRun) {
+    return Object.assign({}, base, {
+      status: "dry-run" as const,
+      updateSetSysId: params.updateSetSysId ? params.updateSetSysId : "",
+      changes: changes,
+      verified: false,
+      capturedInUpdateSet: false,
+      note:
+        changes.length === 0
+          ? "dry-run: no write. " +
+            ctx.column +
+            " is inherited from " +
+            ctx.definedOn +
+            " and already presents every requested value on " +
+            ctx.table +
+            " — nothing would change."
+          : "dry-run: no write. " +
+            ctx.column +
+            " is inherited from " +
+            ctx.definedOn +
+            "; would override " +
+            describeChanges(changes) +
+            " for " +
+            ctx.table +
+            " ALONE (" +
+            describeTargets(changes) +
+            "), leaving " +
+            ctx.definedOn +
+            " and its other children untouched. Captured into update set " +
+            (params.updateSetSysId
+              ? params.updateSetSysId
+              : "(none provided)") +
+            ".",
+    });
+  }
+
+  if (!params.updateSetSysId || !String(params.updateSetSysId).trim()) {
+    throw new Error(
+      "set-column: --update-set <sys_id> is required so the schema change is captured " +
+        "and can be promoted. An uncaptured change exists only on this instance.",
+    );
+  }
+  var updateSetSysId = String(params.updateSetSysId).trim();
+  await assertUpdateSetOpen(params.client, updateSetSysId);
+
+  // Nothing differs from what the child already sees. Note WHY no override was written:
+  // pinning a value the column already inherits would decouple it from the ancestor as an
+  // invisible side effect of a request that never asked for that.
+  if (changes.length === 0) {
+    return Object.assign({}, base, {
+      status: "unchanged" as const,
+      updateSetSysId: updateSetSysId,
+      changes: [],
+      verified: true,
+      capturedInUpdateSet: false,
+      note:
+        ctx.table +
+        "." +
+        ctx.column +
+        " already presents every requested value — nothing written. The column is " +
+        "inherited from " +
+        ctx.definedOn +
+        " and no override was created, so it still TRACKS " +
+        ctx.definedOn +
+        ": a later change there will follow through to " +
+        ctx.table +
+        ".",
+    });
+  }
+
+  var written;
+  try {
+    written = await applyInheritedWrites({
+      client: params.client,
+      table: ctx.table,
+      column: ctx.column,
+      definedOn: ctx.definedOn,
+      changes: changes,
+      overrideRow: overrideRow,
+      labelRow: labelRow,
+      updateSetSysId: updateSetSysId,
+    });
+  } catch (e) {
+    return Object.assign({}, base, {
+      status: "failed" as const,
+      updateSetSysId: updateSetSysId,
+      changes: changes,
+      verified: false,
+      capturedInUpdateSet: false,
+      note:
+        "the override write for " +
+        ctx.table +
+        "." +
+        ctx.column +
+        " failed: " +
+        (e && (e as Error).message ? (e as Error).message : String(e)) +
+        ". It is NOT known whether it landed — read sys_dictionary_override for name=" +
+        ctx.table +
+        "^element=" +
+        ctx.column +
+        " on the instance before retrying.",
+    });
+  }
+
+  if (!written.verified) {
+    return Object.assign({}, base, {
+      status: "failed" as const,
+      updateSetSysId: updateSetSysId,
+      overrideSysId: written.overrideSysId,
+      labelSysId: written.labelSysId,
+      changes: changes,
+      verified: false,
+      capturedInUpdateSet: written.captured,
+      note:
+        "the override write returned success but the instance does NOT reflect it: " +
+        written.mismatched.join("; ") +
+        ". Treat " +
+        ctx.table +
+        "." +
+        ctx.column +
+        " as NOT overridden and reconcile it on the instance.",
+    });
+  }
+
+  return Object.assign({}, base, {
+    status: "applied" as const,
+    updateSetSysId: updateSetSysId,
+    overrideSysId: written.overrideSysId,
+    labelSysId: written.labelSysId,
+    changes: changes,
+    verified: true,
+    capturedInUpdateSet: written.captured,
+    note: written.captured
+      ? "Overrode " +
+        describeChanges(changes) +
+        " for " +
+        ctx.table +
+        "." +
+        ctx.column +
+        " — inherited from " +
+        ctx.definedOn +
+        ", now narrowed for " +
+        ctx.table +
+        " ALONE (" +
+        describeTargets(changes) +
+        "); " +
+        ctx.definedOn +
+        " and its other children are unchanged. Verified by read-back and captured in " +
+        "update set " +
+        updateSetSysId +
+        "."
+      : "Overrode " +
+        describeChanges(changes) +
+        " for " +
+        ctx.table +
+        "." +
+        ctx.column +
+        " and verified by read-back, but the change was NOT captured in update set " +
+        updateSetSysId +
+        " — it is live on this instance and cannot be promoted. Check the update set is " +
+        "in progress and in " +
+        ctx.table +
+        "'s scope.",
+  });
+}
+
+/** Which record type each change was written to — the two are not interchangeable, and
+ *  a reader who does not know that will go looking for a label on the override row. */
+function describeTargets(changes: Array<AttributeChange>): string {
+  var hasOverride = changes.some(function (c) {
+    return Boolean(OVERRIDABLE[c.attribute]);
+  });
+  var hasLabel = changes.some(function (c) {
+    return c.attribute === "column_label";
+  });
+  if (hasOverride && hasLabel) {
+    return "sys_dictionary_override + sys_documentation";
+  }
+  return hasLabel ? "sys_documentation" : "sys_dictionary_override";
 }
 
 /** "max_length 40 -> 4000, mandatory false -> true" */

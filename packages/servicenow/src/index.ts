@@ -160,6 +160,8 @@ export {
   setColumn,
   resolveAttributes,
   toStoredValue,
+  setTable,
+  resolveTableAttributes,
 } from "./table";
 export type {
   CreateTableParams,
@@ -170,6 +172,9 @@ export type {
   SetColumnResult,
   ColumnAttributes,
   AttributeChange,
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,
