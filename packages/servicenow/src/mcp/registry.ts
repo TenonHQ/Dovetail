@@ -444,7 +444,14 @@ export function buildDescriptors(
         "refuses such a shrink (200 OK, column unchanged, data preserved), so the tool names the " +
         "blocking rows instead of issuing a write that would be quietly ignored. Clear those values " +
         "first, then re-run — there is no override, because forcing it would either do nothing or " +
-        "destroy data. dryRun:true diffs against the instance, flags the blocking rows, and writes nothing.",
+        "destroy data. INHERITED COLUMNS ARE SUPPORTED: on an extended table the column is defined on " +
+        "an ancestor, and set_column narrows it for THAT TABLE ALONE via sys_dictionary_override " +
+        "(mandatory/default/readOnly) or sys_documentation (label) — the ancestor and every sibling " +
+        "table are left untouched, and the result reports via:'override' with definedOn set. Do NOT " +
+        "call set_column against the parent table to change a child's column: that changes it for " +
+        "EVERY descendant. maxLength is the sole exception — it is the ancestor's physical column, has " +
+        "no per-child override, and is refused with an explanation. dryRun:true diffs against the " +
+        "instance, flags the blocking rows, and writes nothing.",
       shape: setColumnSchema.shape,
       handler: async function (args: any) {
         var p = setColumnSchema.parse(args);
