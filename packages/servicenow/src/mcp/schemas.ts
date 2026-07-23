@@ -269,6 +269,30 @@ export var setColumnSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+// set-table takes a CLOSED attribute set for the same reason set-column does: an
+// unbounded write to sys_dictionary lets a caller silently corrupt schema. These are
+// the TABLE's own attributes (the internal_type=collection row), not a column's.
+//
+// .passthrough() is deliberate: z.object() strips unknown keys by default, which would
+// silently drop a column attribute (or a typo) BEFORE resolveTableAttributes could see
+// it — so { audit:true, label:"x" } would succeed, quietly discarding label. Passing
+// unknown keys through lets the core allowlist reject them (a column attribute earns the
+// "use set-column" redirect; anything else, "not a settable table attribute").
+export var tableAttributesSchema = z
+  .object({
+    audit: z.boolean().optional(),
+  })
+  .passthrough();
+
+export var setTableSchema = z.object({
+  table: z.string().min(1),
+  attributes: tableAttributesSchema,
+  // Optional because dryRun works without one; the live-path requirement is
+  // enforced at the tool boundary (registry.ts), matching set_column.
+  updateSetSysId: z.string().min(1).optional(),
+  dryRun: z.boolean().optional(),
+});
+
 // Data-record write verbs. Kept as plain z.object (no .refine wrapper) so
 // registry.ts can read `.shape`; the deeper rules — one of sysId/query, at
 // least one field, the schema-table refusal — are enforced by the core
@@ -289,6 +313,20 @@ export var createRecordSchema = z.object({
   updateSetSysId: z.string().min(1),
   ifAbsentQuery: z.string().optional(),
   dryRun: z.boolean().optional(),
+});
+
+// app_publish: publish a scoped app to the ServiceNow Store or the company
+// application repository. Deliberately NO credential fields — the Store
+// account resolves from SN_STORE_USERNAME/SN_STORE_PASSWORD inside the verb,
+// so credentials never transit MCP arguments or telemetry.
+export var publishAppSchema = z.object({
+  app: z.string().min(1),
+  version: z.string().min(1),
+  devNotes: z.string().optional(),
+  target: z.union([z.literal("store"), z.literal("repo")]),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+  timeoutMs: z.number().int().positive().optional(),
 });
 
 // invoke_rest: transport primitive for arbitrary authenticated REST operations

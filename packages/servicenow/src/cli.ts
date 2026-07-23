@@ -45,20 +45,28 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, setColumn } from "./table";
+import { createTable, addColumn, setColumn, setTable } from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
   SetColumnParams,
   ColumnAttributes,
+  SetTableParams,
+  TableAttributes,
 } from "./table";
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
-import { invokeRest } from "./invokeRest";
+import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
+import { publishApp } from "./publishApp";
+import type {
+  PublishAppParams,
+  PublishAppResult,
+  PublishTarget,
+} from "./publishApp";
 import { hostAssets, formatHostAssetsResult } from "./hostAssets";
 import {
   formatReadFlowResult,
@@ -979,10 +987,19 @@ function printHelp(): void {
       "                     Shorten or clear those values first, then re-run.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
+      "  set-table          Update an EXISTING TABLE's own dictionary row (the collection row),\n" +
+      "                     into an update set, then verify against the instance\n" +
+      "                     (--table <t> --update-set <sys_id> [--audit true|false]\n" +
+      "                      [--dry-run] [--json])\n" +
+      "                     --audit turns RECORD AUDITING on/off for the whole table: with it\n" +
+      "                     true ServiceNow writes a sys_audit row per changed field on every\n" +
+      "                     insert and update — a real cost on a high-write table.\n" +
+      "                     Column attributes belong to set-column, record values to set-field.\n" +
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json]\n" +
+      "                      [--out <file>  full JSON result to a file (atomic; overwrites); for large bodies])\n" +
       "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
       "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
       '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
@@ -1003,6 +1020,15 @@ function printHelp(): void {
       "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
+      "  publish-app        Publish a scoped app to the ServiceNow Store and/or the company\n" +
+      "                     application repository, then poll the publish to completion.\n" +
+      "                     STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store.\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
+      "                     (--app <scope|sys_id|name> --version <v> --target store|repo|both\n" +
+      "                      [--dev-notes <text>] [--store-user <email>] [--timeout-ms <n>]\n" +
+      "                      [--dry-run] [--json] [--confirm])\n" +
+      "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
+      "                     the password is never a flag. Repo publish needs the sn_cicd role.\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
       "\nGlobal flags:\n" +
       "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
@@ -1190,11 +1216,11 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
 
 /** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
  *  false. Anything else is rejected rather than quietly coerced to `true`. */
-function parseBoolFlag(name: string, raw: string): boolean {
+function parseBoolFlag(name: string, raw: string, verb: string = "set-column"): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(
-    "set-column: --" + name + " must be true or false (got '" + raw + "').",
+    verb + ": --" + name + " must be true or false (got '" + raw + "').",
   );
 }
 
@@ -1295,6 +1321,78 @@ async function runSetColumn(
   }
   // 2 = the write landed but the instance does not reflect it (or it was not captured),
   // which must not read as success to a script.
+  if (result.status === "failed") return 2;
+  if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
+  return 0;
+}
+
+/**
+ * dove-sn set-table:
+ *   --table x_cadso_core_setting --audit true --update-set <sys_id>
+ *   [--dry-run] [--json]
+ *
+ * Updates the TABLE's own dictionary row (the `internal_type=collection` row, whose
+ * `element` is empty) — not a column's. Column attributes belong to set-column; a
+ * record's values belong to set-field.
+ */
+async function runSetTable(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // Guard the string flags AND the updateSetSysId alias: a value-less string flag
+  // arrives as the literal "true", so --update-set (or its alias) with nothing after
+  // it would silently become the sys_id "true" and later fail as "not found".
+  var stringFlags = ["table", "update-set", "updateSetSysId"];
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      process.stderr.write(
+        "set-table: --" + stringFlags[f] + " needs a value (it was given none).\n",
+      );
+      return 1;
+    }
+  }
+  var table = flags.table;
+  if (!table) {
+    process.stderr.write(
+      "set-table: --table is required " +
+        "(--update-set is required too, unless --dry-run)\n",
+    );
+    return 1;
+  }
+  var attributes: TableAttributes = {};
+  if (flags.audit !== undefined) {
+    attributes.audit = parseBoolFlag("audit", flags.audit, "set-table");
+  }
+
+  var params: SetTableParams = {
+    client: createClient({}),
+    table: table,
+    attributes: attributes,
+  };
+  var setTableUs = flags["update-set"] || flags.updateSetSysId;
+  if (setTableUs) params.updateSetSysId = setTableUs;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await setTable(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        (result.verified && result.status === "applied" ? " — verified" : "") +
+        (result.status === "applied" && !result.capturedInUpdateSet
+          ? " — NOT CAPTURED"
+          : "") +
+        "\n" +
+        result.note +
+        "\n",
+    );
+  }
+  // 2 = the write landed but the instance does not reflect it (or it was not
+  // captured), which must not read as success to a script.
   if (result.status === "failed") return 2;
   if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
   return 0;
@@ -1527,6 +1625,11 @@ async function runHostAssets(flags: Record<string, string>): Promise<number> {
  *   --confirm               Send for real. WITHOUT it the command is a DRY-RUN.
  *   --dry-run               Force a dry-run even with --confirm.
  *   --json                  Emit the structured InvokeRestResult.
+ *   --out <file>            Also write the full structured result to a file
+ *                           (pretty JSON, atomic temp+rename, OVERWRITES an
+ *                           existing file; parent dir must exist). The reliable
+ *                           channel for large response bodies - piped stdout is
+ *                           flush-guarded but a file needs no downstream reader.
  *
  * Invoke an arbitrary authenticated REST operation (Scripted REST included).
  * Dry-run by default; --confirm sends and returns { httpStatus, ok, body } with
@@ -1576,6 +1679,18 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     params.body = body;
   }
   var result = await invokeRest(params);
+  if (flags.out) {
+    try {
+      writeInvokeRestResultFile(flags.out, result);
+    } catch (err) {
+      process.stderr.write(
+        "invoke-rest: --out write failed: " +
+          (err instanceof Error ? err.message : String(err)) +
+          "\n",
+      );
+      return 1;
+    }
+  }
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
@@ -1609,6 +1724,115 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     return 2;
   }
   return 0;
+}
+
+/**
+ * dove-sn publish-app:
+ *   --app <scope|sys_id|name>   Required. The sys_app to publish.
+ *   --version <v>               Required. Version to publish (e.g. 6.0.20260716).
+ *   --target store|repo|both    Required. STORE PUBLISH IS EXTERNALLY VISIBLE.
+ *   [--dev-notes <text>]        Optional developer notes.
+ *   [--store-user <email>]      Store account email (else SN_STORE_USERNAME).
+ *                               The password comes ONLY from SN_STORE_PASSWORD —
+ *                               there is no flag for it, ever.
+ *   [--timeout-ms <n>]          Progress-poll budget (default 120000).
+ *   [--dry-run] [--json] [--confirm]
+ *
+ * DRY-RUN unless --confirm: without it the resolved plan is printed and the
+ * command exits 1 (a deliberate refusal, not success). --target both publishes
+ * store then repo sequentially with the same version and short-circuits if the
+ * store leg fails; --json emits an array of per-target results.
+ * Exit codes: 0 published/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
+ */
+async function runPublishApp(flags: Record<string, string>): Promise<number> {
+  var app = flags.app;
+  var version = flags.version;
+  var target = flags.target;
+  if (!app || !version || !target) {
+    process.stderr.write(
+      "publish-app: --app, --version and --target store|repo|both are required\n",
+    );
+    return 1;
+  }
+  if (target !== "store" && target !== "repo" && target !== "both") {
+    process.stderr.write(
+      "publish-app: --target must be store, repo or both (got '" +
+        target +
+        "')\n",
+    );
+    return 1;
+  }
+  var targets: Array<PublishTarget> =
+    target === "both" ? ["store", "repo"] : [target as PublishTarget];
+  var dryRun = flags["dry-run"] === "true";
+  var confirmed = flags.confirm === "true";
+  var client = createClient({});
+
+  var results: Array<PublishAppResult> = [];
+  var exitCode = 0;
+  for (var i = 0; i < targets.length; i += 1) {
+    var params: PublishAppParams = {
+      client: client,
+      app: app,
+      version: version,
+      target: targets[i],
+      confirm: confirmed,
+      dryRun: dryRun,
+    };
+    if (flags["dev-notes"]) params.devNotes = flags["dev-notes"];
+    if (flags["store-user"]) params.storeUsername = flags["store-user"];
+    if (flags["timeout-ms"]) {
+      // A NaN timeout would make the poll-loop budget check always false —
+      // an infinite loop. Validate here, exit 1 on garbage.
+      var timeoutMs = Number(flags["timeout-ms"]);
+      if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+        process.stderr.write(
+          "publish-app: --timeout-ms must be a positive integer (got '" +
+            flags["timeout-ms"] +
+            "')\n",
+        );
+        return 1;
+      }
+      params.timeoutMs = timeoutMs;
+    }
+    var result = await publishApp(params);
+    results.push(result);
+    if (flags.json !== "true") {
+      process.stdout.write(
+        "[" +
+          result.status +
+          "] " +
+          result.target +
+          " — " +
+          result.appName +
+          " (" +
+          result.appScope +
+          ") v" +
+          result.version +
+          (result.appLink ? " — " + result.appLink : "") +
+          (result.updateSetSysId
+            ? " — update set " + result.updateSetSysId
+            : "") +
+          "\n" +
+          result.note +
+          "\n",
+      );
+    }
+    if (result.status === "failed" || result.status === "timeout") {
+      exitCode = 2;
+      break; // Short-circuit: never repo-publish after a failed store leg.
+    }
+  }
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(results, null, 2) + "\n");
+  }
+  if (exitCode === 0 && !dryRun && !confirmed) {
+    process.stderr.write(
+      "publish-app: refusing to publish without --confirm (the plan above is a dry-run).\n",
+    );
+    return 1;
+  }
+  return exitCode;
 }
 
 async function main(): Promise<number> {
@@ -1651,6 +1875,9 @@ async function main(): Promise<number> {
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
   }
+  if (parsed.command === "set-table") {
+    return await runSetTable(parsed.flags, parsed.bare);
+  }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);
   }
@@ -1685,6 +1912,9 @@ async function main(): Promise<number> {
     await runSetRelatedLists(parsed.flags);
     return 0;
   }
+  if (parsed.command === "publish-app") {
+    return await runPublishApp(parsed.flags);
+  }
   if (parsed.command === "mcp") {
     return await runMcp(parsed.flags);
   }
@@ -1699,9 +1929,54 @@ async function main(): Promise<number> {
   throw new Error("Unknown command: " + parsed.command);
 }
 
+// A closed downstream pipe (e.g. `dove-sn ... --json | head`) surfaces as an
+// EPIPE on stdout. Exit quietly with the code already set instead of crashing
+// with an unhandled stream error.
+process.stdout.on("error", function (err: NodeJS.ErrnoException) {
+  if (err && err.code === "EPIPE") {
+    process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+  }
+  throw err;
+});
+
+/**
+ * process.exit() discards buffered stdout/stderr - when stdout is a PIPE,
+ * anything past the OS pipe buffer (~64KB) is silently dropped, which is how
+ * `invoke-rest --json` used to truncate large bodies mid-string. Queue an
+ * empty chunk behind any pending data on each stream and exit only when both
+ * callbacks confirm the flush. The barrier is queued UNCONDITIONALLY (not
+ * gated on writableLength) so the exit never races stream internals about
+ * whether a prior write is still in flight.
+ */
+function exitAfterFlush(code: number): void {
+  process.exitCode = code;
+  var pending = 0;
+  var finish = function (): void {
+    pending -= 1;
+    if (pending <= 0) {
+      process.exit(code);
+    }
+  };
+  [process.stdout, process.stderr].forEach(function (stream) {
+    if (stream.destroyed || !stream.writable) {
+      return;
+    }
+    pending += 1;
+    try {
+      stream.write("", finish);
+    } catch (writeErr) {
+      // A stream that rejects the barrier write has nothing left to flush.
+      pending -= 1;
+    }
+  });
+  if (pending === 0) {
+    process.exit(code);
+  }
+}
+
 main()
   .then(function (code) {
-    process.exit(code);
+    exitAfterFlush(code);
   })
   .catch(function (err) {
     process.stderr.write(
@@ -1709,5 +1984,5 @@ main()
         (err && err.message ? err.message : String(err)) +
         "\n",
     );
-    process.exit(1);
+    exitAfterFlush(1);
   });

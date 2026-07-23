@@ -160,6 +160,8 @@ export {
   setColumn,
   resolveAttributes,
   toStoredValue,
+  setTable,
+  resolveTableAttributes,
 } from "./table";
 export type {
   CreateTableParams,
@@ -170,6 +172,9 @@ export type {
   SetColumnResult,
   ColumnAttributes,
   AttributeChange,
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,
@@ -188,3 +193,26 @@ export type { CreateRecordParams, CreateRecordResult } from "./createRecord";
 
 export { invokeRest, INVOKE_REST_METHODS } from "./invokeRest";
 export type { InvokeRestParams, InvokeRestResult } from "./invokeRest";
+
+export {
+  publishApp,
+  buildStartFields,
+  parseXmlAnswer,
+  parseProgressTree,
+  classifyProgress,
+  flattenSteps,
+  harvestProgressResults,
+  parseCicdPublishResponse,
+  parseCicdProgress,
+  DEFAULT_PUBLISH_TIMEOUT_MS,
+  PUBLISH_POLL_DELAYS_MS,
+} from "./publishApp";
+export type {
+  PublishAppParams,
+  PublishAppResult,
+  PublishTarget,
+  PublishStep,
+  ProgressNode,
+  CicdProgress,
+  PublishTransport,
+} from "./publishApp";

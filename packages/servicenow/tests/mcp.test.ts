@@ -5,7 +5,7 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 20 expected tools", function () {
+  it("registers exactly the 21 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -14,6 +14,7 @@ describe("MCP registry", function () {
       "action_view",
       "add_choices_to_field",
       "add_column",
+      "app_publish",
       "create_record",
       "create_table",
       "create_view",
@@ -30,8 +31,9 @@ describe("MCP registry", function () {
       "set_form_layout",
       "set_list_layout",
       "set_related_lists",
+      "set_table",
     ]);
-    expect(TOOL_NAMES).toHaveLength(20);
+    expect(TOOL_NAMES).toHaveLength(22);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -109,6 +111,57 @@ describe("MCP registry", function () {
     expect(result.verified).toBe(true);
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
     expect(ctx.calls.pushWithUpdateSet[0].record_sys_id).toBe("rec1");
+  });
+
+  it("set_table handler sets audit on the collection row via the injected client", async function () {
+    var ctxRef: { calls?: { pushWithUpdateSet: Array<any> } } = {};
+    var ctx = makeMockClient({
+      query: async function (table: string, query?: string) {
+        if (table === "sys_update_set") return [{ sys_id: "us1", name: "S", state: "in progress" }];
+        if (table === "sys_dictionary") {
+          // Read-back reflects the write: audit is "false" until the push lands, "true" after.
+          var wrote = Boolean(ctxRef.calls && ctxRef.calls.pushWithUpdateSet.length);
+          return [{ sys_id: "dict1", name: "x_t", element: "", internal_type: "collection", audit: wrote ? "true" : "false" }];
+        }
+        if (table === "sys_update_xml") return [{ sys_id: "UX1", name: query }];
+        return [];
+      },
+    });
+    ctxRef.calls = ctx.calls;
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var setTableTool = descriptors.filter(function (d) {
+      return d.name === "set_table";
+    })[0];
+    var result = await setTableTool.handler({
+      table: "x_t",
+      attributes: { audit: true },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+    expect(result.verified).toBe(true);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+    expect(ctx.calls.pushWithUpdateSet[0].table).toBe("sys_dictionary");
+    expect(ctx.calls.pushWithUpdateSet[0].fields).toEqual({ audit: "true" });
+  });
+
+  it("set_table schema passes unknown keys through so the redirect can reject them", async function () {
+    // Regression: z.object() strips unknown keys by default, which would silently drop a
+    // column attribute before resolveTableAttributes could redirect it to set_column.
+    var ctx = makeMockClient({
+      query: async function (table: string) {
+        if (table === "sys_update_set") return [{ sys_id: "us1", name: "S", state: "in progress" }];
+        return [];
+      },
+    });
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var setTableTool = descriptors.filter(function (d) {
+      return d.name === "set_table";
+    })[0];
+    await expect(
+      setTableTool.handler({ table: "x_t", attributes: { label: "Nope" }, updateSetSysId: "us1" }),
+    ).rejects.toThrow(/Use set-column/);
+    // The bad request must never reach a write.
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 
   it("create_record handler inserts via the injected client and verifies", async function () {
@@ -221,7 +274,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (20)");
+    expect(out).toContain("Registered tools (22)");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");
@@ -279,6 +332,7 @@ describe("MCP registry — annotations", function () {
       "host_assets",
       "set_field",
       "set_column",
+      "set_table",
     ].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);

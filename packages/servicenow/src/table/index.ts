@@ -41,6 +41,7 @@ export {
   parseFormInputs,
   postForm,
   scrapeCk,
+  decodeHtmlEntities,
 } from "./formSession";
 export type {
   FormAuth,
@@ -65,3 +66,10 @@ export type {
   AttributeChange,
   TruncationRisk,
 } from "./setColumn";
+
+export { setTable, resolveTableAttributes } from "./setTable";
+export type {
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
+} from "./setTable";
