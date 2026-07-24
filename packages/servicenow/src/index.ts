@@ -6,6 +6,20 @@
  */
 
 export { createClient } from "./client";
+
+export {
+  resolveExecutionContext,
+  isCiEnvironment,
+  evaluateWriteGate,
+  assertWriteAllowed,
+} from "./executionContext";
+export type {
+  ExecutionContext,
+  ResolveContextInput,
+  MergeSignal,
+  WriteGateInput,
+  GateDecision,
+} from "./executionContext";
 export {
   createClientFromEnvFile,
   resolveConfigFromEnvFile,
@@ -163,6 +177,8 @@ export {
   setColumn,
   resolveAttributes,
   toStoredValue,
+  setTable,
+  resolveTableAttributes,
 } from "./table";
 export type {
   CreateTableParams,
@@ -173,6 +189,9 @@ export type {
   SetColumnResult,
   ColumnAttributes,
   AttributeChange,
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,

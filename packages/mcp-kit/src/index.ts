@@ -14,7 +14,8 @@ export {
   WRITE_ADDITIVE_IDEMPOTENT,
   WRITE_CREATE,
   WRITE_OVERWRITE,
-  WRITE_EXECUTE
+  WRITE_EXECUTE,
+  WRITE_DESTRUCTIVE
 } from "./annotations";
 
 export type { KitToolDescriptor } from "./descriptor";
