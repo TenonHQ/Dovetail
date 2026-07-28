@@ -871,8 +871,20 @@ export const refreshAllFiles = async (
         // metadataOnly refreshes what is already checked out. A record the
         // instance has but this branch does not is left alone — pulling it in
         // would be a content change, which is exactly what this mode excludes.
-        if (metadataOnly && !(await fUtils.isDirectory(recPath))) {
+        // pathExists, NOT isDirectory: isDirectory stats unguarded and REJECTS
+        // on ENOENT, and processBatched propagates, so a single absent record
+        // would abort the whole scope — the common case, since "the instance
+        // has records this branch doesn't" is precisely what we're skipping.
+        if (metadataOnly && !(await fUtils.pathExists(recPath))) {
           skippedAbsentCount++;
+          // Drop the downloaded content for skipped records too — filesToProcess
+          // accumulates across every chunk, so holding it would grow unbounded
+          // across a large scope.
+          rec.files = rec.files.map(function(file) {
+            var copy = Object.assign({}, file);
+            delete copy.content;
+            return copy;
+          });
           progress.tick();
           return;
         }

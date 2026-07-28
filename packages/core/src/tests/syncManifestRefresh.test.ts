@@ -362,6 +362,12 @@ describe("syncManifest — --metadata-only rewrites metadata and nothing else", 
   test("skips records that are not checked out locally (no orphan directories)", async function () {
     // Writing metaData for a record with no directory would leave a folder
     // holding a lone metaData.json and zero field files.
+    //
+    // The absent-record check MUST NOT throw. syncManifest swallows errors into
+    // logger.error, so an exception here would abort the whole scope while this
+    // test's file assertions still passed — "no directory, no metaData" is
+    // trivially true when nothing ran. The logger.error assertion is what makes
+    // this test real: it caught fUtils.isDirectory rejecting on ENOENT.
     mockClient.getManifest.mockResolvedValue(
       setupScope([{ record: "NotOnDisk", name: "script", type: "js", content: "" }]),
     );
@@ -372,8 +378,62 @@ describe("syncManifest — --metadata-only rewrites metadata and nothing else", 
 
     await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
 
+    expect(mockLogger.error).not.toHaveBeenCalled();
     expect(fs.existsSync(path.join(tmpRoot, "sys_script_include", "NotOnDisk"))).toBe(false);
     expect(readLocal("NotOnDisk", "metaData", "json")).toBeNull();
+  });
+
+  test("an absent record does not stop the records that ARE checked out", async function () {
+    // The real shape of a metadata-only run: the instance holds records this
+    // branch never pulled, interleaved with ones it did. An abort on the first
+    // absent record would silently settle only part of the mirror.
+    writeLocal("OnDisk", "script", "js", "var x = 1;");
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([
+        { record: "Absent", name: "script", type: "js", content: "" },
+        { record: "OnDisk", name: "script", type: "js", content: "" },
+      ]),
+    );
+    mockClient.getMissingFiles.mockResolvedValue({
+      sys_script_include: {
+        records: {
+          Absent: {
+            name: "Absent",
+            sys_id: "sysid_Absent",
+            files: [
+              { name: "script", type: "js", content: "// only on the instance" },
+              { name: "metaData", type: "json", content: JSON.stringify({ sys_id: { value: "a" } }) },
+            ],
+          },
+          OnDisk: {
+            name: "OnDisk",
+            sys_id: "sysid_OnDisk",
+            files: [
+              { name: "script", type: "js", content: "var x = 1;" },
+              {
+                name: "metaData",
+                type: "json",
+                content: JSON.stringify({
+                  sys_id: { value: "b" },
+                  _record_link: "https://tenonworkstudio.service-now.com/x.do?sys_id=b",
+                }),
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    // The absent one stayed absent...
+    expect(fs.existsSync(path.join(tmpRoot, "sys_script_include", "Absent"))).toBe(false);
+    // ...and the present one was still settled.
+    var meta = readLocal("OnDisk", "metaData", "json");
+    expect(meta).not.toBeNull();
+    expect(JSON.parse(meta as string)._record_link).toBe("/x.do?sys_id=b");
   });
 
   test("does not persist the manifest", async function () {
