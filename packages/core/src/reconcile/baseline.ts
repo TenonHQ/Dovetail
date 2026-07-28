@@ -2,9 +2,9 @@
 // records the {sys_id -> sys_updated_on} the instance was known to hold at the
 // last reconcile (or refresh), namespaced by instance host. It MUST live
 // outside the git tree: after a `git checkout`, the on-disk
-// `metaData._lastUpdatedOn` is the *committer's* refresh time, not this
-// developer's instance state, so the branch files cannot answer "did the dev
-// change the instance since we last synced?". The baseline can.
+// `metaData.sys_updated_on` is whatever the *committer's* instance held, not
+// this developer's instance state, so the branch files cannot answer "did the
+// dev change the instance since we last synced?". The baseline can.
 //
 // Phase 1 only READS the baseline (to disambiguate deletes and surface drift).
 // `writeBaseline` / `baselineFromLive` are the apply-phase write path and the

@@ -125,6 +125,14 @@ export function configureCli(cli: Argv): Argv {
             default: false,
             describe: "Overwrite local files even when content matches the instance",
           },
+          "metadata-only": {
+            type: "boolean",
+            default: false,
+            describe:
+              "Rewrite only each record's metaData.json — no field file is written, no " +
+              "record directory is created, and the manifest is left untouched. Records " +
+              "not already checked out locally are skipped. Cannot be combined with --force.",
+          },
           scope: {
             alias: "s",
             type: "string",
@@ -150,6 +158,8 @@ export function configureCli(cli: Argv): Argv {
       async (args: TSFIXME) => {
         await refreshCommand(args as Sinc.SharedCmdArgs & {
           force?: boolean;
+          // yargs' camel-case expansion surfaces `--metadata-only` here.
+          metadataOnly?: boolean;
           scope?: string;
           benchmark?: boolean;
           table?: string | string[];

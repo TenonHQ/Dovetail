@@ -1,7 +1,7 @@
 // Field-comparison rules for reconcile. A record's on-disk representation is a
 // directory of per-field files plus a `metaData.json` snapshot. metaData is
-// Dovetail bookkeeping — it carries `_lastUpdatedOn`, a host-stripped
-// `_record_link`, and a full field dump, and it is re-stamped on every touch —
+// Dovetail bookkeeping — it carries a host-stripped `_record_link` and a full
+// field dump including volatile audit columns (sys_updated_on, sys_mod_count) —
 // so including it in a content comparison would make every record read as
 // modified. Excluding it leaves the genuine, content-bearing field files
 // (script.js, etc.), which is exactly what `dove refresh` writes verbatim from

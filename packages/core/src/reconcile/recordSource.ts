@@ -22,9 +22,12 @@ import { ReconcileRecord } from "./types";
 // REST payload cap.
 const BULK_DOWNLOAD_TABLE_CHUNK_SIZE = 5;
 
-// Pull `sys_updated_on` out of a metaData.json blob. The instance side carries
-// `sys_updated_on: { value }`; the on-disk side carries the stamped
-// `_lastUpdatedOn`. Either resolves the baseline timestamp; missing -> "".
+// Pull `sys_updated_on` out of a metaData.json blob. Both sides carry
+// `sys_updated_on: { value }` — that is the primary source. `_lastUpdatedOn` is
+// a legacy fallback: Dovetail no longer writes it (it duplicated
+// `sys_updated_on.value` and its no-sys_updated_on branch stamped a wall-clock
+// that churned every pull), but a branch checked out before that change still
+// has it on disk, so keep reading it. Neither present -> "".
 function extractUpdatedOn(metaContent: string | undefined): string {
   if (!metaContent) {
     return "";

@@ -280,3 +280,203 @@ describe("syncManifest — refresh pulls instance edits down", function () {
     expect(Object.keys(missingArg.sys_script_include).sort()).toEqual(["sysid_RecA", "sysid_RecB"]);
   });
 });
+
+/**
+ * `--metadata-only` exists so a mirror can be settled after a change to the
+ * metadata writer without the source churn `--force` produces. The guarantee it
+ * has to make is narrow and total: the resulting diff is metaData.json and
+ * nothing else — no field file, no manifest, no new record directory.
+ */
+describe("syncManifest — --metadata-only rewrites metadata and nothing else", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sinc-metaonly-test-"));
+    mockConfig.getSourcePathForScope.mockReturnValue(tmpRoot);
+    mockConfig.getSourcePath.mockReturnValue(tmpRoot);
+  });
+
+  afterEach(function () {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (e) {}
+  });
+
+  function respondWith(record: string, files: any[]) {
+    var records: Record<string, any> = {};
+    records[record] = { name: record, sys_id: "sysid_" + record, files: files };
+    mockClient.getMissingFiles.mockResolvedValue({
+      sys_script_include: { records: records },
+    });
+  }
+
+  test("rewrites metaData.json even though no field file changed", async function () {
+    var identical = "var same = true;";
+    writeLocal("Rec", "script", "js", identical);
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([{ record: "Rec", name: "script", type: "js", content: "" }]),
+    );
+    respondWith("Rec", [
+      { name: "script", type: "js", content: identical },
+      {
+        name: "metaData",
+        type: "json",
+        content: JSON.stringify({
+          sys_updated_on: { value: "2026-04-29 14:38:51", display_value: "2026-04-29 07:38:51" },
+          _record_link: "https://tenonworkstudio.service-now.com/sys_script_include.do?sys_id=1",
+          _lastUpdatedOn: "2026-04-29 14:38:51",
+        }),
+      },
+    ]);
+
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    var meta = readLocal("Rec", "metaData", "json");
+    expect(meta).not.toBeNull();
+    var parsed = JSON.parse(meta as string);
+    // Normalized on the way in — the whole reason to regenerate.
+    expect(parsed._record_link).toBe("/sys_script_include.do?sys_id=1");
+    expect(parsed._lastUpdatedOn).toBeUndefined();
+    expect(meta).not.toContain("display_value");
+  });
+
+  test("does not touch field files, even when the instance content differs", async function () {
+    writeLocal("Rec", "script", "js", "var local = 1;");
+    var beforeMtime = statMtime("Rec", "script", "js");
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([{ record: "Rec", name: "script", type: "js", content: "" }]),
+    );
+    respondWith("Rec", [
+      { name: "script", type: "js", content: "var fromInstance = 2;" },
+      { name: "metaData", type: "json", content: JSON.stringify({ sys_id: { value: "1" } }) },
+    ]);
+
+    await new Promise(function (r) { setTimeout(r, 10); });
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    // Unchanged on disk AND untouched — a rewrite with identical bytes would
+    // still be a write, and this mode promises none.
+    expect(readLocal("Rec", "script", "js")).toBe("var local = 1;");
+    expect(statMtime("Rec", "script", "js")).toBe(beforeMtime);
+  });
+
+  test("skips records that are not checked out locally (no orphan directories)", async function () {
+    // Writing metaData for a record with no directory would leave a folder
+    // holding a lone metaData.json and zero field files.
+    //
+    // The absent-record check MUST NOT throw. syncManifest swallows errors into
+    // logger.error, so an exception here would abort the whole scope while this
+    // test's file assertions still passed — "no directory, no metaData" is
+    // trivially true when nothing ran. The logger.error assertion is what makes
+    // this test real: it caught fUtils.isDirectory rejecting on ENOENT.
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([{ record: "NotOnDisk", name: "script", type: "js", content: "" }]),
+    );
+    respondWith("NotOnDisk", [
+      { name: "script", type: "js", content: "// new on the instance" },
+      { name: "metaData", type: "json", content: JSON.stringify({ sys_id: { value: "1" } }) },
+    ]);
+
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(tmpRoot, "sys_script_include", "NotOnDisk"))).toBe(false);
+    expect(readLocal("NotOnDisk", "metaData", "json")).toBeNull();
+  });
+
+  test("an absent record does not stop the records that ARE checked out", async function () {
+    // The real shape of a metadata-only run: the instance holds records this
+    // branch never pulled, interleaved with ones it did. An abort on the first
+    // absent record would silently settle only part of the mirror.
+    writeLocal("OnDisk", "script", "js", "var x = 1;");
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([
+        { record: "Absent", name: "script", type: "js", content: "" },
+        { record: "OnDisk", name: "script", type: "js", content: "" },
+      ]),
+    );
+    mockClient.getMissingFiles.mockResolvedValue({
+      sys_script_include: {
+        records: {
+          Absent: {
+            name: "Absent",
+            sys_id: "sysid_Absent",
+            files: [
+              { name: "script", type: "js", content: "// only on the instance" },
+              { name: "metaData", type: "json", content: JSON.stringify({ sys_id: { value: "a" } }) },
+            ],
+          },
+          OnDisk: {
+            name: "OnDisk",
+            sys_id: "sysid_OnDisk",
+            files: [
+              { name: "script", type: "js", content: "var x = 1;" },
+              {
+                name: "metaData",
+                type: "json",
+                content: JSON.stringify({
+                  sys_id: { value: "b" },
+                  _record_link: "https://tenonworkstudio.service-now.com/x.do?sys_id=b",
+                }),
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    expect(mockLogger.error).not.toHaveBeenCalled();
+    // The absent one stayed absent...
+    expect(fs.existsSync(path.join(tmpRoot, "sys_script_include", "Absent"))).toBe(false);
+    // ...and the present one was still settled.
+    var meta = readLocal("OnDisk", "metaData", "json");
+    expect(meta).not.toBeNull();
+    expect(JSON.parse(meta as string)._record_link).toBe("/x.do?sys_id=b");
+  });
+
+  test("does not persist the manifest", async function () {
+    writeLocal("Rec", "script", "js", "var x = 1;");
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([{ record: "Rec", name: "script", type: "js", content: "" }]),
+    );
+    respondWith("Rec", [
+      { name: "script", type: "js", content: "var x = 1;" },
+      { name: "metaData", type: "json", content: JSON.stringify({ sys_id: { value: "1" } }) },
+    ]);
+
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    // A manifest write would put record adds/drops/renames into a diff that is
+    // supposed to be metaData.json only.
+    expect(mockConfig.updateManifest).not.toHaveBeenCalled();
+  });
+
+  test("a plain refresh still persists the manifest (the gate is scoped)", async function () {
+    writeLocal("Rec", "script", "js", "var x = 1;");
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([{ record: "Rec", name: "script", type: "js", content: "" }]),
+    );
+    respondWith("Rec", [{ name: "script", type: "js", content: "var x = 1;" }]);
+
+    await AppUtils.syncManifest("x_cadso_core");
+
+    expect(mockConfig.updateManifest).toHaveBeenCalled();
+  });
+
+  test("writes the deterministic placeholder when the server sends no metadata", async function () {
+    writeLocal("Rec", "script", "js", "var x = 1;");
+
+    mockClient.getManifest.mockResolvedValue(
+      setupScope([{ record: "Rec", name: "script", type: "js", content: "" }]),
+    );
+    respondWith("Rec", [{ name: "script", type: "js", content: "var x = 1;" }]);
+
+    await AppUtils.syncManifest("x_cadso_core", { metadataOnly: true });
+
+    expect(readLocal("Rec", "metaData", "json")).toBe(AppUtils.EMPTY_METADATA_CONTENT);
+  });
+});
