@@ -245,12 +245,31 @@ function generateUpdateSetDescription(taskName, taskDescription) {
   return desc;
 }
 
-// Read active task from persistence file
+// Read active task from persistence file.
+//
+// Never throws. A truncated or hand-edited task file used to take down every
+// endpoint that reads it (/api/scopes, /api/update-sets, the activate and
+// create paths) with a 500 from JSON.parse — so a malformed file degrades to
+// "no active task" instead. The shape is checked too: JSON.parse legitimately
+// yields null / a string / an array for a valid-but-wrong file, and callers
+// dot into this as an object (activeTask.devInitials, .customId, .taskName).
 function readActiveTask() {
-  if (fs.existsSync(ACTIVE_TASK_FILE)) {
-    return JSON.parse(fs.readFileSync(ACTIVE_TASK_FILE, "utf8"));
+  try {
+    if (!fs.existsSync(ACTIVE_TASK_FILE)) return null;
+    var parsed = JSON.parse(fs.readFileSync(ACTIVE_TASK_FILE, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    console.warn(
+      "[dashboard] ignoring unreadable active-task file " +
+        ACTIVE_TASK_FILE +
+        ": " +
+        (e && e.message ? e.message : e),
+    );
+    return null;
   }
-  return null;
 }
 
 // Write active task to persistence file
@@ -315,11 +334,20 @@ app.get("/api/scopes", async (req, res) => {
       saved = JSON.parse(fs.readFileSync(UPDATE_SET_CONFIG, "utf8"));
     }
 
+    // When a task is active, precompute the scope-qualified update-set name for
+    // each scope (same generator the Start Task / quick-create path uses) so the
+    // create UI never prefills a scope-less name that would collide across scopes.
+    // readActiveTask() is non-throwing and returns null for a malformed file, so
+    // a bad active task degrades to "no suggestion" rather than a 500 here.
+    const activeTaskForNames = readActiveTask();
     const scopes = scopeKeys.map((key) => ({
       scope: key,
       sys_id: scopeMap[key] ? scopeMap[key].sys_id : null,
       display_name: scopeMap[key] ? scopeMap[key].name : key,
       selected_update_set: saved[key] || null,
+      suggested_update_set_name: activeTaskForNames
+        ? buildScopedUpdateSetName(activeTaskForNames, scopeLabel(key))
+        : "",
     }));
 
     res.json({ scopes });
