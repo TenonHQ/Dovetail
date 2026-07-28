@@ -510,10 +510,16 @@ export const syncManifest = async (
       const refreshTableCount = Object.keys(newManifest.tables).length;
       fileLogger.debug("Refreshed manifest for " + scope + ": " + refreshTableCount + " tables");
 
-      // The manifest is always written in FULL. Narrowing it to the --table
-      // subset would drop every other table from dove.manifest.<scope>.json and
-      // break push/watch, so the filter applies only to the file download below.
-      await fUtils.writeScopeManifest(scope, newManifest);
+      // The manifest is written in FULL. Narrowing it to the --table subset
+      // would drop every other table from dove.manifest.<scope>.json and break
+      // push/watch, so the filter applies only to the file download below.
+      //
+      // metadataOnly skips the write entirely: this mode's contract is that the
+      // diff is metaData.json and nothing else, and the manifest carries record
+      // adds, drops and renames that belong in a real refresh.
+      if (!options.metadataOnly) {
+        await fUtils.writeScopeManifest(scope, newManifest);
+      }
 
       // --table gate: refresh file content for only the requested tables. Any
       // table outside this scope's `_tables` whitelist was already dropped above,
