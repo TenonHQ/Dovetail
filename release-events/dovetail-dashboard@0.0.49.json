@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.49",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.49",
+  "prev_version": "0.0.48",
+  "published_at": "2026-07-28T22:02:02.782Z",
+  "git": {
+    "sha": "5980d774696267f3557cc07b7f143dca1d52fc0d",
+    "tag": "dovetail-dashboard@0.0.49"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "5980d7746",
+      "subject": "fix(dashboard): scope-qualify update-set names in the create UI (#245)",
+      "pr": 245
+    },
+    {
+      "sha": "619cf397b",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.48 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

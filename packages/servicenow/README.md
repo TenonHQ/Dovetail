@@ -93,13 +93,6 @@ npx dove-sn add-choices \
 
 # JSON payload form (recommended for >5 choices)
 npx dove-sn add-choices --from-json ./choices.json
-
-# Retire values — a SOFT delete (sets inactive=true), never a row drop
-npx dove-sn remove-choices \
-  --table x_cadso_core_event \
-  --column state \
-  --update-set 0083c3bb33d003507b18bc534d5c7b6d \
-  --values "expired,failed"
 ```
 
 JSON payload shape:
@@ -117,37 +110,10 @@ JSON payload shape:
 }
 ```
 
-`remove-choices` takes the same `--from-json` form, with a `values` array in
-place of `choices`.
-
-### Removal semantics
-
-- **Soft delete.** Sets `sys_choice.inactive = true`; the row is retained and
-  the operation is reversible by re-adding the value. `sys_dictionary.choice` is
-  left alone — retiring values does not un-make the column a choice field.
-- **Idempotent.** `deactivated` (a live row was flipped) / `unchanged` (already
-  inactive) / `missing` (no such value on the field). Re-running writes nothing.
-- **Duplicates.** `sys_choice` has no uniqueness constraint on
-  `(name, element, value, language)`, so a field can hold several live rows for
-  one value. Every live row is deactivated, and `sysIds` lists all of them — a
-  length above 1 is your signal the field needs cleaning up.
-- **Inherited choices are not covered.** Matching is scoped to
-  `sys_choice.name = <table>`, so a value defined on a *parent* table reports
-  `missing` rather than being deactivated. Hiding one on a child table needs an
-  override row this verb does not write.
-- **Promotion.** ServiceNow captures the change as a single `Choice list` record
-  for the whole column, not one per value — so promoting the update set moves
-  the entire choice-list state for that column.
-
 ## Programmatic
 
 ```ts
-import {
-  createClient,
-  addChoicesToField,
-  removeChoicesFromField,
-  ChoiceWriteError,
-} from "@tenonhq/dovetail-servicenow";
+import { createClient, addChoicesToField } from "@tenonhq/dovetail-servicenow";
 
 var client = createClient({});
 var result = await addChoicesToField(client, { /* ... */ });
@@ -157,32 +123,6 @@ console.log(result.choices);
 //   { value: "delivered", label: "Delivered", sysId: "...", action: "created" },
 //   { value: "failed",    label: "Failed",    sysId: "...", action: "created" }
 // ]
-
-var removed = await removeChoicesFromField(client, {
-  table: "x_cadso_core_event",
-  column: "state",
-  updateSetSysId: "0083c3bb33d003507b18bc534d5c7b6d",
-  values: ["expired"],
-});
-// removed.choices[0] -> { value: "expired", sysId: "...", sysIds: ["..."], action: "deactivated" }
-```
-
-Both verbs write one value at a time. If a write fails partway through they
-throw a **`ChoiceWriteError`** carrying `completed` (the values that already
-landed, in result shape), `failedValue` (the one that threw — its state on the
-instance is unknown), and `cause` (the original error). Catch it rather than
-re-querying the instance to work out how far the run got:
-
-```ts
-try {
-  await removeChoicesFromField(client, params);
-} catch (e) {
-  if (e instanceof ChoiceWriteError) {
-    console.error("already deactivated:", e.completed.map((r) => r.value));
-    console.error("verify by hand:", e.failedValue);
-  }
-  throw e;
-}
 ```
 
 ## Form, list & view layouts

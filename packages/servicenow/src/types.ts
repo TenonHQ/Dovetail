@@ -61,25 +61,7 @@ export interface UpdateSetRecord {
 export interface ChoiceActionResult {
   value: string;
   label: string;
-  /**
-   * The FIRST row matching this value — `sysIds[0]`. On "created" it is the new row;
-   * on "updated" a duplicate that was already correct is left untouched, so this is
-   * not necessarily a row that was written. `sysIds` is the complete picture.
-   */
   sysId: string;
-  /**
-   * EVERY sys_choice row that matched this language::value — not only the ones written.
-   * Normally one, but sys_choice has no uniqueness constraint, so a field can hold
-   * duplicates; on "updated" only the rows that actually differ are written, and any
-   * duplicate that already matched the spec is left alone. A length > 1 is the caller's
-   * signal that the field needs cleaning up.
-   *
-   * OPTIONAL only for backwards compatibility: this type ships in a published package,
-   * and a required field would break any consumer that constructs or mocks one. The
-   * runtime always populates it — treat a missing value as "an older build produced
-   * this", not as a state addChoicesToField can return.
-   */
-  sysIds?: Array<string>;
   action: "created" | "updated" | "unchanged";
 }
 
@@ -95,61 +77,6 @@ export interface AddChoicesResult {
     name: string;
   };
   choices: Array<ChoiceActionResult>;
-}
-
-export interface RemoveChoicesParams {
-  /** Target table, e.g. "x_cadso_core_event". */
-  table: string;
-  /** Target column, e.g. "state". */
-  column: string;
-  /** Choice values to soft-delete (deactivate). */
-  values: Array<string>;
-  /** Language of the choices to deactivate. Defaults to "en". */
-  language?: string;
-  /** Update set sys_id that will capture every write. Required — no default. */
-  updateSetSysId: string;
-}
-
-export interface ChoiceRemovalResult {
-  value: string;
-  /**
-   * The FIRST row matching this value — `sysIds[0]`, or "" when the value was not
-   * found. Not necessarily a row that was written: when one duplicate is already
-   * inactive and another is live, only the live one is touched. `sysIds` is the
-   * complete picture.
-   */
-  sysId: string;
-  /**
-   * EVERY sys_choice row that matched this language::value; [] when missing. A field
-   * can hold more than one row for a value (sys_choice has no uniqueness constraint),
-   * and all live ones are deactivated — acting on just the first would leave the
-   * choice selectable while reporting success.
-   *
-   * Required, unlike its counterpart on ChoiceActionResult: this type is new in the
-   * remove-choices verb and has never shipped, so there is no consumer to break, and
-   * the formatter can read it without an existence guard.
-   */
-  sysIds: Array<string>;
-  /**
-   * deactivated — was active, now inactive=true.
-   * unchanged   — already inactive; nothing written (idempotent).
-   * missing     — no such value on this field.language; nothing written.
-   */
-  action: "deactivated" | "unchanged" | "missing";
-}
-
-export interface RemoveChoicesResult {
-  field: {
-    table: string;
-    column: string;
-    language: string;
-    dictionarySysId: string;
-  };
-  updateSet: {
-    sysId: string;
-    name: string;
-  };
-  choices: Array<ChoiceRemovalResult>;
 }
 
 /* ─── Form / list / view layout tooling ─────────────────────────────────── */

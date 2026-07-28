@@ -4,7 +4,7 @@
 >
 > Audience: a Claude Code session (or the developer reading over its shoulder). For *building/contributing* to Dovetail, see [`../ONBOARDING.md`](../ONBOARDING.md). For the platform design, see [`dovetail-platform-spec.md`](dovetail-platform-spec.md).
 
-Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**64 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
+Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**41 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
 
 ---
 
@@ -13,8 +13,8 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 | Server | Package | Tools | Posture | When you reach for it |
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
-| **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 25 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, manage prompt drafts, build a session handoff |
-| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 23 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
+| **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 20 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, build a session handoff |
+| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 5 | All writes, update-set-captured, `dryRun`-capable | Declaratively author SN views, list/form layouts, related lists, and field choices |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
 
@@ -101,66 +101,17 @@ Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders 
 
 ---
 
-## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 23 tools (SN authoring writes)
+## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 5 tools (SN authoring writes)
 
-Source: `packages/servicenow/src/mcp/registry.ts` — the registry is the source of
-truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug.
+Source: `packages/servicenow/src/mcp/registry.ts`. **All writes**, all **captured in the update set you pass**, all support `dryRun` to preview without writing, all **idempotent**.
 
-Writes are **captured in the update set you pass** and are **idempotent** (re-running
-reports every record unchanged).
-
-> **`dryRun` is NOT universal.** 13 of the 23 accept it; the other 10 write (or read)
-> immediately. Notably **neither choice verb supports `dryRun`** — `remove_choices_from_field`
-> is a soft delete and reversible by re-adding, but it is not previewable. Check the
-> tool's own schema before assuming you can plan a write.
-
-### Layouts & views
-
-| Tool | What it does | `dryRun` |
-|---|---|---|
-| `create_view` | Create a custom view (`sys_ui_view`); existing same-name view returned unchanged | no |
-| `set_list_layout` | Declaratively set a list layout's columns + order for table+view. `prune` (default true) removes columns not in the spec | yes |
-| `set_form_layout` | Declaratively set form sections + fields. First section is primary (omit its caption). `prune` default true | yes |
-| `set_related_lists` | Set which related lists appear on a form. IDs: `"<table>.<field>"` or `"REL:<sys_relationship>"` | yes |
-
-### Choices
-
-| Tool | What it does | `dryRun` |
-|---|---|---|
-| `add_choices_to_field` | Upsert `sys_choice` values and optionally flip `sys_dictionary.choice` to render as a dropdown | no |
-| `remove_choices_from_field` | **Soft**-delete choice values (`inactive=true`); the row is retained and re-adding reverses it. Deactivates every duplicate live row for a value. Leaves `sys_dictionary.choice` alone | no |
-
-### Schema & records
-
-| Tool | What it does | `dryRun` |
-|---|---|---|
-| `create_table` | Create a scoped table | yes |
-| `add_column` | Add a column to a table | yes |
-| `set_column` | Update a column's dictionary definition | yes |
-| `set_table` | Update a table's definition | yes |
-| `set_field` | Update a field value on a record | yes |
-| `create_record` | Create a record in a given scope + update set | yes |
-
-### Flows & actions
-
-| Tool | What it does | `dryRun` |
-|---|---|---|
-| `flow_view` | Read a flow/subflow's compiled step graph | n/a (read) |
-| `action_view` | Read a custom action type's definition | n/a (read) |
-| `action_edit` | Patch an action type's steps | no |
-| `flow_publish` | Publish a flow | no |
-| `flow_copy` | Copy a flow | no |
-| `flow_create` | Author a new flow | yes |
-| `flow_test` | Validate / execute a flow | no |
-| `flow_edit` | Patch + republish a flow step | no |
-
-### Platform
-
-| Tool | What it does | `dryRun` |
-|---|---|---|
-| `host_assets` | Host static assets on the instance | yes |
-| `invoke_rest` | Call an instance REST endpoint | yes |
-| `app_publish` | Publish an app to the store / company repo | yes |
+| Tool | What it does |
+|---|---|
+| `create_view` | Create a custom view (`sys_ui_view`); existing same-name view returned unchanged |
+| `set_list_layout` | Declaratively set a list layout's columns + order for table+view. `prune` (default true) removes columns not in the spec |
+| `set_form_layout` | Declaratively set form sections + fields. First section is primary (omit its caption). `prune` default true |
+| `set_related_lists` | Set which related lists appear on a form. IDs: `"<table>.<field>"` or `"REL:<sys_relationship>"` |
+| `add_choices_to_field` | Upsert `sys_choice` values and optionally flip `sys_dictionary.choice` to render as a dropdown |
 
 Same operations are available from the `dove-sn` CLI (§5) for scripted/CI use.
 
@@ -240,7 +191,7 @@ Use `--force` to overwrite existing copies.
 
 - **ClickUp writes (dovetail-mcp):** set `SINC_MCP_WRITES_ENABLE=1`; every write is a dry-run preview unless `confirm:true`.
 - **SN writes always go through an update set.** Pass `--update-set` (CLI) or the update-set arg (MCP). Never write scoped SN records via the raw Table API — a Table API POST adopts the API user's session scope and lands in the wrong app. (Dovetail's REST endpoints + `dove createUpdateSet` keep scope correct — see the repo `CLAUDE.md` → Server-Side REST API.)
-- **SN `dryRun` first — where it exists.** Most `dove-sn` write tools preview before writing; use it. But it is not universal (§4), and in particular the choice verbs have no preview, so check the tool's schema rather than assuming a dry run happened.
+- **SN `dryRun` first.** The `dove-sn` MCP write tools and CLI commands all preview before writing — use it.
 - **Plans before presenting.** Push every plan/proposal via `push_plan` with artifacts.
 
 ---

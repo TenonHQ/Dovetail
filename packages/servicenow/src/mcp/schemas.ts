@@ -67,14 +67,6 @@ export var addChoicesToFieldSchema = z.object({
     .optional(),
 });
 
-export var removeChoicesFromFieldSchema = z.object({
-  table: z.string().min(1),
-  column: z.string().min(1),
-  values: z.array(z.string().min(1)).min(1),
-  language: z.string().min(1).optional(),
-  updateSetSysId: z.string().min(1),
-});
-
 export var viewFlowSchema = z.object({
   sysId: z.string().min(1),
   raw: z.boolean().optional(),
