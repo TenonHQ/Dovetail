@@ -26,7 +26,7 @@ import { createView } from "../layout/views";
 import { setListLayout } from "../layout/listLayout";
 import { setFormLayout } from "../layout/formLayout";
 import { setRelatedLists } from "../layout/relatedLists";
-import { addChoicesToField } from "../choices";
+import { addChoicesToField, removeChoicesFromField } from "../choices";
 import { readFlow } from "../flowDesigner/readFlow";
 import { readActionType } from "../flowDesigner/readActionType";
 import { publishFlow } from "../flowDesigner/publishFlow";
@@ -49,6 +49,7 @@ import {
   setFormLayoutSchema,
   setRelatedListsSchema,
   addChoicesToFieldSchema,
+  removeChoicesFromFieldSchema,
   viewFlowSchema,
   viewActionSchema,
   editActionSchema,
@@ -74,6 +75,7 @@ export var TOOL_NAMES = [
   "set_form_layout",
   "set_related_lists",
   "add_choices_to_field",
+  "remove_choices_from_field",
   "flow_view",
   "action_view",
   "action_edit",
@@ -177,6 +179,29 @@ export function buildDescriptors(
       shape: addChoicesToFieldSchema.shape,
       handler: async function (args: any) {
         return addChoicesToField(client(), addChoicesToFieldSchema.parse(args));
+      },
+    },
+    {
+      name: "remove_choices_from_field",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Soft-delete sys_choice values for a ServiceNow table.column by setting inactive=true " +
+        "(the row is kept, so it is reversible and historical values still resolve). Never a " +
+        "hard delete. Idempotent: an already-inactive value is 'unchanged', an absent value is " +
+        "'missing', and a value repeated in the request causes no extra writes — it collapses " +
+        "to one result row. A single value CAN write more than once when the field holds " +
+        "duplicate rows for it; every live one is deactivated. sys_dictionary.choice is left " +
+        "alone. Matching is scoped by LANGUAGE (defaults to 'en'), so a value that exists only " +
+        "in another language reports 'missing' and is left untouched — pass `language` to target " +
+        "it. Matching is also scoped to this table, so a choice INHERITED from a parent table " +
+        "reports 'missing' rather than being deactivated. Writes are captured in the supplied " +
+        "update set.",
+      shape: removeChoicesFromFieldSchema.shape,
+      handler: async function (args: any) {
+        return removeChoicesFromField(
+          client(),
+          removeChoicesFromFieldSchema.parse(args),
+        );
       },
     },
     {
