@@ -335,7 +335,8 @@ describe("syncManifest — --metadata-only rewrites metadata and nothing else", 
     // Normalized on the way in — the whole reason to regenerate.
     expect(parsed._record_link).toBe("/sys_script_include.do?sys_id=1");
     expect(parsed._lastUpdatedOn).toBeUndefined();
-    expect(meta).not.toContain("display_value");
+    // datetime display_value is the puller's local timezone — dropped.
+    expect(parsed.sys_updated_on).toEqual({ value: "2026-04-29 14:38:51" });
   });
 
   test("does not touch field files, even when the instance content differs", async function () {

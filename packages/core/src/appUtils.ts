@@ -49,26 +49,73 @@ const getUpdateSetConfig = (): UpdateSetConfig => readUpdateSetConfig();
 const stripRecordLinkHost = (link: string): string =>
   link.replace(/^https?:\/\/[^/]+\.service-now\.com/i, "");
 
-// Strip the derived `display_value` from every field pair, keeping only `value`.
-// A ServiceNow field is serialized as a { value, display_value } pair. The
-// display_value is the *current* display name of the field's value — for a
-// reference field, the referenced record's name, resolved live on the server at
-// pull time. That makes it non-deterministic on disk: rename a referenced record
-// on the instance and every metaData.json pointing at it re-churns its
-// display_value on the next pull, even though the pointing record is unchanged.
-// `value` (the sys_id / raw value) is the stable identity; display_value is a
-// convenience the mirror does not need. Reconcile already ignores metaData.json
-// content and pushes key off `value` / the manifest, so no consumer depends on
-// the persisted display_value. Dropping it keeps re-pulls byte-identical.
+// A ServiceNow field is serialized as a { value, display_value } pair, where
+// display_value is rendered live server-side at pull time. Some of those
+// renderings are worth persisting and some are pure churn, so this is a
+// selective drop rather than a blanket one — an earlier blanket strip threw away
+// the readable sys_id -> name mapping that `Documentation/Dovetail-Development.md`
+// documents grepping to walk the record graph.
+//
+// Measured over 43,990 pairs in the servicenow-files mirror:
+//
+//   DROPPED
+//     identical (62.1%, ~4.5 MB) — display_value === value carries zero
+//       information by construction, at any size. The heavy ones are the large
+//       text fields (script, props, label_cache, composition, operation_script):
+//       619 pairs, but ~3.7 MB of the total.
+//     datetime (3.9%) — `value` is UTC; `display_value` is rendered in the
+//       TIMEZONE OF WHOEVER RAN THE PULL. Measured 1,706 shifted out of 1,706,
+//       zero exceptions. Same instance, same record, a colleague's laptop ->
+//       different bytes. Machine-dependent output cannot live in a shared repo.
+//     sys_scope / sys_package — present in ~0.95 records per file, so renaming
+//       the app once rewrites the entire mirror. The scope is already obvious
+//       from the folder path (src/Work/, src/Core/), so the value is low and
+//       the blast radius is the whole tree.
+//
+//   KEPT
+//     boolean (21.1%) "0" -> "false", choice/class labels (6.5%) e.g.
+//     sys_class_name -> "Access Control", and every other reference (5.6%)
+//     sys_id -> record name. These are stable, small (~420 KB combined), and
+//     they are the reason a human can read the file at all. A reference
+//     display_value still churns if someone renames its target, but that is
+//     real instance state changing — not the puller's machine.
+//
+// No consumer reads display_value: reconcile ignores metaData.json content
+// entirely and push keys off `value` / the manifest.
+const SYS_DATETIME_RE = /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/;
+
+// References carried by nearly every record — one rename churns the whole tree.
+const WHOLE_TREE_REFERENCE_KEYS = ["sys_scope", "sys_package"];
+
+// Normalize for comparison: the server uses null and "" interchangeably across
+// the two halves of a pair, and String(null) would otherwise read as "null".
+const displayNorm = (v: unknown): string =>
+  v === null || v === undefined ? "" : String(v);
+
+const shouldDropDisplayValue = (
+  key: string,
+  value: unknown,
+  displayValue: unknown,
+): boolean => {
+  if (displayNorm(value) === displayNorm(displayValue)) return true;
+  if (SYS_DATETIME_RE.test(displayNorm(value))) return true;
+  if (WHOLE_TREE_REFERENCE_KEYS.indexOf(key) !== -1) return true;
+  return false;
+};
+
 const stripFieldDisplayValues = (metadata: Record<string, unknown>): void => {
   for (const key of Object.keys(metadata)) {
     const field = metadata[key];
     if (
       field !== null &&
       typeof field === "object" &&
+      !Array.isArray(field) &&
       "display_value" in field
     ) {
-      delete (field as { display_value?: unknown }).display_value;
+      const pair = field as { value?: unknown; display_value?: unknown };
+      if (shouldDropDisplayValue(key, pair.value, pair.display_value)) {
+        delete pair.display_value;
+      }
     }
   }
 };
