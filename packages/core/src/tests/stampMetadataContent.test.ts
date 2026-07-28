@@ -1,17 +1,25 @@
 // Tests for stampMetadataContent — the writer that finalizes each record's
 // metaData.json before it lands on disk.
 //
-// Two on-disk-stability concerns are covered:
-//   1. _lastUpdatedOn is sourced from the record's sys_updated_on (stable across
-//      re-pulls) rather than a fresh wall-clock stamp.
+// The contract is determinism: the same record must produce the same bytes on
+// any instance, from any machine, on every pull. Three on-disk-stability
+// concerns are covered:
+//   1. No generation-time value survives. `_lastUpdatedOn` is deleted outright —
+//      it duplicated sys_updated_on.value exactly, and its no-sys_updated_on
+//      branch stamped a wall-clock that rewrote the file on every pull.
 //   2. _record_link is rewritten to an instance-relative path. The CADSO metadata
 //      endpoint returns an absolute URL (https://<instance>.service-now.com/...);
 //      persisting the host makes the artifact instance-bound and dirties every
 //      file on a re-pull from a different instance. Stripping any *.service-now.com
 //      host keeps the diff to genuine schema changes.
+//   3. display_value is stripped — it is resolved live server-side, so renaming
+//      a referenced record re-churns every file pointing at it.
 
 import { SN } from "@tenonhq/dovetail-types";
-import { stampMetadataContent } from "../appUtils";
+import { EMPTY_METADATA_CONTENT, stampMetadataContent } from "../appUtils";
+
+// Matches an ISO-8601 wall-clock stamp (what `new Date().toISOString()` emits).
+const ISO_STAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 
 const metaFile = (content: object): SN.File => ({
   name: "metaData",
@@ -65,7 +73,7 @@ describe("stampMetadataContent — _record_link host stripping", () => {
     expect(parse(out)._record_link).toBeNull();
   });
 
-  it("still sources _lastUpdatedOn from sys_updated_on while stripping the host", () => {
+  it("strips the host while leaving the record's own sys_updated_on intact", () => {
     const out = stampMetadataContent(
       metaFile({
         sys_updated_on: { value: "2025-08-21 17:09:02" },
@@ -73,13 +81,74 @@ describe("stampMetadataContent — _record_link host stripping", () => {
       }),
     );
     const parsed = parse(out);
-    expect(parsed._lastUpdatedOn).toBe("2025-08-21 17:09:02");
+    expect(parsed.sys_updated_on).toEqual({ value: "2025-08-21 17:09:02" });
     expect(parsed._record_link).toBe("/incident.do?sys_id=1");
   });
 
   it("passes through non-metaData files verbatim", () => {
     const script: SN.File = { name: "script", type: "js", content: "var x = 1;" };
     expect(stampMetadataContent(script)).toEqual(script);
+  });
+});
+
+describe("stampMetadataContent — no generation-time values", () => {
+  it("never writes _lastUpdatedOn, even when sys_updated_on is present", () => {
+    const out = stampMetadataContent(
+      metaFile({ sys_updated_on: { value: "2025-08-21 17:09:02" } }),
+    );
+    expect(parse(out)._lastUpdatedOn).toBeUndefined();
+  });
+
+  it("deletes a pre-existing _lastUpdatedOn so a re-stamp settles legacy content", () => {
+    // A branch pulled before this change carries the key on disk. Re-stamping
+    // has to remove it, otherwise the stale value persists forever and the
+    // mirror never converges.
+    const out = stampMetadataContent(
+      metaFile({
+        sys_updated_on: { value: "2025-08-21 17:09:02" },
+        _lastUpdatedOn: "2025-08-21 17:09:02",
+        _record_link: "/incident.do?sys_id=1",
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed._lastUpdatedOn).toBeUndefined();
+    expect(parsed._record_link).toBe("/incident.do?sys_id=1");
+  });
+
+  it("emits no wall-clock stamp when sys_updated_on is absent", () => {
+    // The old fallback stamped new Date().toISOString() here, which is what
+    // made every pull dirty the record.
+    const out = stampMetadataContent(metaFile({ name: { value: "no audit columns" } }));
+    expect(out.content).not.toMatch(ISO_STAMP);
+    expect(parse(out)._lastUpdatedOn).toBeUndefined();
+  });
+
+  it("writes the deterministic placeholder for empty content", () => {
+    const out = stampMetadataContent({ name: "metaData", type: "json", content: "" });
+    expect(out.content).toBe(EMPTY_METADATA_CONTENT);
+    expect(out.content).not.toMatch(ISO_STAMP);
+  });
+
+  it("produces identical bytes across repeated runs (the whole point)", () => {
+    const server = {
+      sys_updated_on: { value: "2025-08-21 17:09:02", display_value: "2025-08-21 10:09:02" },
+      action: { value: "abc", display_value: "Some Record Name" },
+      _record_link: "https://tenonworkstudio.service-now.com/incident.do?sys_id=1",
+      _lastUpdatedOn: "2025-08-21 17:09:02",
+    };
+    // Two independent pulls of an unchanged record, one re-stamp of the result.
+    const first = stampMetadataContent(metaFile(server));
+    const second = stampMetadataContent(metaFile(server));
+    const restamped = stampMetadataContent(first);
+    expect(second.content).toBe(first.content);
+    expect(restamped.content).toBe(first.content);
+  });
+
+  it("leaves non-object JSON alone rather than throwing", () => {
+    const bare: SN.File = { name: "metaData", type: "json", content: '"just a string"' };
+    expect(stampMetadataContent(bare)).toEqual(bare);
+    const arr: SN.File = { name: "metaData", type: "json", content: "[1,2,3]" };
+    expect(stampMetadataContent(arr)).toEqual(arr);
   });
 });
 

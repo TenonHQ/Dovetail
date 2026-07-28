@@ -98,9 +98,18 @@ export async function processManifestForScope(
 
         // Process each file in the record
         for (const file of record.files || []) {
-          const filePath = path.join(recordPath, `${file.name}.${file.type}`);
-          const fileContent = file.content || "";
-          
+          // Normalize metaData.json through the shared stamper before it hits
+          // disk. Without this the all-scopes path persisted the server's raw
+          // metadata — an absolute https://<instance>.service-now.com
+          // _record_link plus every field's live display_value — so a record
+          // written here churned against the same record written by `refresh`,
+          // and re-pulling from a different instance rewrote every file.
+          // stampMetadataContent is a no-op on non-metaData files and idempotent
+          // on already-normalized content.
+          const stamped = AppUtils.stampMetadataContent(file);
+          const filePath = path.join(recordPath, `${stamped.name}.${stamped.type}`);
+          const fileContent = stamped.content || "";
+
           const fileDir = path.dirname(filePath);
           await fsp.mkdir(fileDir, { recursive: true });
 
@@ -111,17 +120,15 @@ export async function processManifestForScope(
             throw writeError;
           }
         }
-        
-        // If no metadata from server, create a basic one
+
+        // If no metadata from server, write the deterministic placeholder. The
+        // previous stub stamped `_generatedAt: new Date().toISOString()`, which
+        // rewrote the file on every single run and read as a change downstream.
         if (!hasMetadataFromServer) {
           const metadataFilePath = path.join(recordPath, "metaData.json");
-          const metadataContent = {
-            _generatedAt: new Date().toISOString(),
-            _note: "Generated locally - metadata not provided by server"
-          };
-          
+
           try {
-            await fsp.writeFile(metadataFilePath, JSON.stringify(metadataContent, null, 2), "utf8");
+            await fsp.writeFile(metadataFilePath, AppUtils.EMPTY_METADATA_CONTENT, "utf8");
           } catch (metaError) {
             logger.error("Failed to write metadata: " + metadataFilePath);
           }
