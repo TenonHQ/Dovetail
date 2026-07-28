@@ -1,7 +1,33 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-07-28T06:17:01.139Z",
+  "generated_at": "2026-07-28T06:44:03.536Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.117",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.117",
+      "prev_version": "0.0.116",
+      "published_at": "2026-07-28T06:44:03.528Z",
+      "git": {
+        "sha": "47199bcf436db3be5b8fd6728265444e72a96bc0",
+        "tag": "dovetail-core@0.0.117"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "47199bcf4",
+          "subject": "fix(core): keep informative display_value, drop only the churning kinds (#250)",
+          "pr": 250
+        },
+        {
+          "sha": "afd387889",
+          "subject": "chore(release): @tenonhq/dovetail-core@0.0.116 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-core@0.0.116",
@@ -1224,32 +1250,6 @@
         {
           "sha": "de9d77971",
           "subject": "chore(release): publish 14 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.21",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.21",
-      "prev_version": "0.0.20",
-      "published_at": "2026-06-15T17:59:30.698Z",
-      "git": {
-        "sha": "51e4e4592d491cd337f5bc1aa93d04f582f555a1",
-        "tag": "dovetail-servicenow@0.0.21"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "51e4e4592",
-          "subject": "feat(mcp): per-call instance retarget for servicenow_query_table (#180)",
-          "pr": 180
-        },
-        {
-          "sha": "c5d9106c4",
-          "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
       "exports_delta": null,
