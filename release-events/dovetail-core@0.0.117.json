@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.117",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.117",
+  "prev_version": "0.0.116",
+  "published_at": "2026-07-28T06:44:03.528Z",
+  "git": {
+    "sha": "47199bcf436db3be5b8fd6728265444e72a96bc0",
+    "tag": "dovetail-core@0.0.117"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "47199bcf4",
+      "subject": "fix(core): keep informative display_value, drop only the churning kinds (#250)",
+      "pr": 250
+    },
+    {
+      "sha": "afd387889",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.116 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

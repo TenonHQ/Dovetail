@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.116",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.116",
+  "prev_version": "0.0.115",
+  "published_at": "2026-07-28T06:17:01.130Z",
+  "git": {
+    "sha": "ab33183076fdb0eb18a8fc1c8e79b607af3893c4",
+    "tag": "dovetail-core@0.0.116"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "ab3318307",
+      "subject": "fix(core): --metadata-only must not write the scope manifest (#249)",
+      "pr": 249
+    },
+    {
+      "sha": "f77cab2e5",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.115 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

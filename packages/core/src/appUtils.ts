@@ -49,46 +49,137 @@ const getUpdateSetConfig = (): UpdateSetConfig => readUpdateSetConfig();
 const stripRecordLinkHost = (link: string): string =>
   link.replace(/^https?:\/\/[^/]+\.service-now\.com/i, "");
 
-// Strip the derived `display_value` from every field pair, keeping only `value`.
-// A ServiceNow field is serialized as a { value, display_value } pair. The
-// display_value is the *current* display name of the field's value — for a
-// reference field, the referenced record's name, resolved live on the server at
-// pull time. That makes it non-deterministic on disk: rename a referenced record
-// on the instance and every metaData.json pointing at it re-churns its
-// display_value on the next pull, even though the pointing record is unchanged.
-// `value` (the sys_id / raw value) is the stable identity; display_value is a
-// convenience the mirror does not need. Reconcile already ignores metaData.json
-// content and pushes key off `value` / the manifest, so no consumer depends on
-// the persisted display_value. Dropping it keeps re-pulls byte-identical.
+// A ServiceNow field is serialized as a { value, display_value } pair, where
+// display_value is rendered live server-side at pull time. Some of those
+// renderings are worth persisting and some are pure churn, so this is a
+// selective drop rather than a blanket one — an earlier blanket strip threw away
+// the readable sys_id -> name mapping that `Documentation/Dovetail-Development.md`
+// documents grepping to walk the record graph.
+//
+// Measured over 43,990 pairs in the servicenow-files mirror:
+//
+//   DROPPED
+//     identical (62.1%, ~4.5 MB) — display_value === value carries zero
+//       information by construction, at any size. The heavy ones are the large
+//       text fields (script, props, label_cache, composition, operation_script):
+//       619 pairs, but ~3.7 MB of the total.
+//     datetime (3.9%) — `value` is UTC; `display_value` is rendered in the
+//       TIMEZONE OF WHOEVER RAN THE PULL. Measured 1,706 shifted out of 1,706,
+//       zero exceptions. Same instance, same record, a colleague's laptop ->
+//       different bytes. Machine-dependent output cannot live in a shared repo.
+//     sys_scope / sys_package — present in ~0.95 records per file, so renaming
+//       the app once rewrites the entire mirror. The scope is already obvious
+//       from the folder path (src/Work/, src/Core/), so the value is low and
+//       the blast radius is the whole tree.
+//
+//   KEPT
+//     boolean (21.1%) "0" -> "false", choice/class labels (6.5%) e.g.
+//     sys_class_name -> "Access Control", and every other reference (5.6%)
+//     sys_id -> record name. These are stable, small (~420 KB combined), and
+//     they are the reason a human can read the file at all. A reference
+//     display_value still churns if someone renames its target, but that is
+//     real instance state changing — not the puller's machine.
+//
+// No consumer reads display_value: reconcile ignores metaData.json content
+// entirely and push keys off `value` / the manifest.
+const SYS_DATETIME_RE = /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/;
+
+// References carried by nearly every record — one rename churns the whole tree.
+const WHOLE_TREE_REFERENCE_KEYS = new Set(["sys_scope", "sys_package"]);
+
+// Normalize a half of the pair for comparison. Returns null for anything that
+// is not a primitive: String({}) collapses every object to "[object Object]",
+// so two structurally different values would compare equal and silently lose a
+// display_value. A non-primitive is treated as "not comparable" instead.
+// null and "" are deliberately folded together — the server uses them
+// interchangeably across the two halves, and String(null) would read as "null".
+const displayNorm = (v: unknown): string | null => {
+  if (v === null || v === undefined) return "";
+  const t = typeof v;
+  if (t === "string" || t === "number" || t === "boolean") return String(v);
+  return null;
+};
+
+const shouldDropDisplayValue = (
+  key: string,
+  value: unknown,
+  displayValue: unknown,
+): boolean => {
+  const normValue = displayNorm(value);
+  const normDisplay = displayNorm(displayValue);
+  // Identical -> the display_value carries no information, at any size.
+  if (normValue !== null && normValue === normDisplay) return true;
+  // Datetime -> display_value is rendered in the PULLER's timezone.
+  if (normValue !== null && SYS_DATETIME_RE.test(normValue)) return true;
+  // Present in ~every record -> one rename rewrites the whole mirror.
+  if (WHOLE_TREE_REFERENCE_KEYS.has(key)) return true;
+  return false;
+};
+
 const stripFieldDisplayValues = (metadata: Record<string, unknown>): void => {
   for (const key of Object.keys(metadata)) {
     const field = metadata[key];
     if (
       field !== null &&
       typeof field === "object" &&
+      !Array.isArray(field) &&
       "display_value" in field
     ) {
-      delete (field as { display_value?: unknown }).display_value;
+      const pair = field as { value?: unknown; display_value?: unknown };
+      if (shouldDropDisplayValue(key, pair.value, pair.display_value)) {
+        delete pair.display_value;
+      }
     }
   }
 };
 
-// Merge _lastUpdatedOn into the server-provided metadata content. Preserves all
-// record fields (sys_id, sys_scope, field value/display_value pairs, etc.) so
-// the local metaData.json is a full snapshot of the record, not just a stub.
+// The deterministic placeholder written when the server returns a record with no
+// metadata at all. Every record directory still gets a metaData.json, but the
+// file carries no generation-time value — the previous stub stamped
+// `new Date().toISOString()`, so every run rewrote it and the record read as
+// changed on a pull that changed nothing.
+export const EMPTY_METADATA_CONTENT = JSON.stringify(
+  {
+    _localOnly: true,
+    _description: "No metadata provided by server",
+  },
+  null,
+  2,
+);
+
+export const emptyMetadataFile = (): SN.File => ({
+  name: "metaData",
+  type: "json",
+  content: EMPTY_METADATA_CONTENT,
+});
+
+// Finalize a record's metaData.json so its on-disk bytes are a pure function of
+// the record — same record, same file, on any instance, from any machine, on
+// every write path. Three things are normalized:
+//   1. `_record_link` loses its instance host (stripRecordLinkHost).
+//   2. Every field loses its live `display_value` (stripFieldDisplayValues).
+//   3. `_lastUpdatedOn` is DELETED, not rewritten. It duplicated
+//      `sys_updated_on.value` exactly, and its no-sys_updated_on fallback was a
+//      wall-clock stamp that churned on every pull. Its only reader,
+//      extractUpdatedOn (reconcile/recordSource.ts), already prefers
+//      `sys_updated_on` and tolerates its absence.
+// All record fields (sys_id, sys_scope, the value pairs) are preserved, so the
+// file stays a full snapshot of the record rather than a stub.
 export const stampMetadataContent = (file: SN.File): SN.File => {
   if (file.name !== "metaData" || file.type !== "json") return file;
-  const stamp = new Date().toISOString();
   if (!file.content) {
-    return { ...file, content: JSON.stringify({ _lastUpdatedOn: stamp }, null, 2) };
+    return { ...file, content: EMPTY_METADATA_CONTENT };
   }
   try {
     const metadata = JSON.parse(file.content);
-    if (metadata.sys_updated_on && metadata.sys_updated_on.value) {
-      metadata._lastUpdatedOn = metadata.sys_updated_on.value;
-    } else {
-      metadata._lastUpdatedOn = stamp;
+    // Guard against non-object JSON (a bare string/number/array parses fine but
+    // has no keys to normalize) — writing it back verbatim is the safe default.
+    if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+      return file;
     }
+    // Drop the key outright, including from legacy content that already carries
+    // it, so a re-stamp settles the file instead of preserving the stale stamp.
+    delete metadata._lastUpdatedOn;
     if (typeof metadata._record_link === "string") {
       metadata._record_link = stripRecordLinkHost(metadata._record_link);
     }
@@ -112,15 +203,10 @@ const processFilesInManRec = async (
 
   const fileWrite = fUtils.writeSNFileCurry(forceWrite);
 
-  // If the server did not provide a metadata file, fall back to a timestamp-only
+  // If the server did not provide a metadata file, fall back to a deterministic
   // stub so the record directory always has a metaData.json.
   if (!hasServerMetadata(rec.files)) {
-    const stubMetadata: SN.File = {
-      name: "metaData",
-      type: "json",
-      content: JSON.stringify({ _lastUpdatedOn: new Date().toISOString() }, null, 2),
-    };
-    await fileWrite(stubMetadata, recPath);
+    await fileWrite(emptyMetadataFile(), recPath);
   }
 
   const writeResults = await allSettledBatched(
@@ -313,6 +399,12 @@ export const processManifest = async (
 export interface SyncManifestOptions {
   force?: boolean;
   benchmark?: boolean;
+  // Rewrite ONLY each record's metaData.json — no field file is written, no
+  // record directory is created, and the persisted manifest is left untouched.
+  // The resulting git diff is metaData.json and nothing else, which is what
+  // makes "settle the mirror after a metadata-writer change" a safe, reviewable
+  // operation instead of `--force` plus a hand-revert of the source churn.
+  metadataOnly?: boolean;
   // Narrow the FILE refresh to these tables (a subset of the scope's `_tables`
   // whitelist). The manifest itself is still written in full — narrowing it
   // would drop every other table from dove.manifest.<scope>.json and break
@@ -478,10 +570,16 @@ export const syncManifest = async (
       const refreshTableCount = Object.keys(newManifest.tables).length;
       fileLogger.debug("Refreshed manifest for " + scope + ": " + refreshTableCount + " tables");
 
-      // The manifest is always written in FULL. Narrowing it to the --table
-      // subset would drop every other table from dove.manifest.<scope>.json and
-      // break push/watch, so the filter applies only to the file download below.
-      await fUtils.writeScopeManifest(scope, newManifest);
+      // The manifest is written in FULL. Narrowing it to the --table subset
+      // would drop every other table from dove.manifest.<scope>.json and break
+      // push/watch, so the filter applies only to the file download below.
+      //
+      // metadataOnly skips the write entirely: this mode's contract is that the
+      // diff is metaData.json and nothing else, and the manifest carries record
+      // adds, drops and renames that belong in a real refresh.
+      if (!options.metadataOnly) {
+        await fUtils.writeScopeManifest(scope, newManifest);
+      }
 
       // --table gate: refresh file content for only the requested tables. Any
       // table outside this scope's `_tables` whitelist was already dropped above,
@@ -532,11 +630,15 @@ export const syncManifest = async (
       if (collector) collector.startScope(scope);
       await refreshAllFiles(refreshManifest, scopeSourcePath, {
         force: options.force,
+        metadataOnly: options.metadataOnly,
         benchmarkCollector: collector,
       });
 
-      // Update the in-memory manifest for this scope
-      if (ConfigManager.isMultiScopeManifest(curManifest)) {
+      // Update the in-memory manifest for this scope. Skipped under
+      // metadataOnly: persisting the manifest would put record adds, drops and
+      // renames into a diff that is supposed to contain metaData.json only. A
+      // normal `dove refresh` is what reconciles the manifest.
+      if (!options.metadataOnly && ConfigManager.isMultiScopeManifest(curManifest)) {
         (curManifest as any)[scope] = newManifest;
         ConfigManager.updateManifest(curManifest as any);
       }
@@ -546,6 +648,7 @@ export const syncManifest = async (
       // scopes that leaked in before the whitelist gate existed.
       var childOptions: SyncManifestOptions = {
         force: options.force,
+        metadataOnly: options.metadataOnly,
         tables: options.tables,
         _benchmarkCollector: collector,
       };
@@ -739,11 +842,22 @@ const buildAllFilesMap = (manifest: SN.AppManifest): SN.MissingFileTableMap => {
  *
  * @param options.force — when true, always overwrite local files even if their
  * content matches the instance. Use for deliberate "reset local to instance".
+ *
+ * @param options.metadataOnly — when true, rewrite every existing record's
+ * metaData.json and touch nothing else: no field file is written, and a record
+ * with no directory on disk is skipped entirely (writing one would leave an
+ * orphan directory holding a lone metaData.json and no fields). Use to settle a
+ * mirror after a change to the metadata writer, without the source churn
+ * `--force` produces.
  */
 export const refreshAllFiles = async (
   newManifest: SN.AppManifest,
   sourcePath?: string,
-  options: { force?: boolean; benchmarkCollector?: BenchmarkCollector } = {},
+  options: {
+    force?: boolean;
+    metadataOnly?: boolean;
+    benchmarkCollector?: BenchmarkCollector;
+  } = {},
 ): Promise<void> => {
   try {
     const allFiles = buildAllFilesMap(newManifest);
@@ -751,7 +865,8 @@ export const refreshAllFiles = async (
     if (tableNames.length === 0) return;
 
     fileLogger.debug(
-      "Refreshing file content for " + tableNames.length + " tables (force=" + !!options.force + ")",
+      "Refreshing file content for " + tableNames.length + " tables (force=" + !!options.force +
+      ", metadataOnly=" + !!options.metadataOnly + ")",
     );
 
     const { tableOptions = {} } = ConfigManager.getConfig();
@@ -790,7 +905,10 @@ export const refreshAllFiles = async (
 
     var writtenCount = 0;
     var unchangedCount = 0;
+    var skippedAbsentCount = 0;
+    var metadataWrittenCount = 0;
     const forceWrite = !!options.force;
+    const metadataOnly = !!options.metadataOnly;
     const forceWriter = fUtils.writeSNFileCurry(false);
 
     const processedTableNames = Object.keys(filesToProcess);
@@ -798,22 +916,48 @@ export const refreshAllFiles = async (
       var tablePath = path.join(basePath, tableName);
       var recs = filesToProcess[tableName].records;
       var recKeys = Object.keys(recs);
-      await Promise.all(recKeys.map(function(k) {
-        // toSafeFolderName, not raw recs[k].name: the bulkDownload response
-        // carries the unmodified ServiceNow display name, which may be
-        // filesystem-unsafe (e.g. a `<table>.*` ACL). Without this, refresh
-        // recreates Windows-illegal folders that normalizeManifestKeys
-        // already removed from the manifest.
-        return fUtils.createDirRecursively(path.join(tablePath, toSafeFolderName(recs[k])));
-      }));
+      // metadataOnly never materializes a record directory — it refreshes the
+      // metadata of records already on disk. Creating dirs here would leave an
+      // orphan folder holding a lone metaData.json with no field files.
+      if (!metadataOnly) {
+        await Promise.all(recKeys.map(function(k) {
+          // toSafeFolderName, not raw recs[k].name: the bulkDownload response
+          // carries the unmodified ServiceNow display name, which may be
+          // filesystem-unsafe (e.g. a `<table>.*` ACL). Without this, refresh
+          // recreates Windows-illegal folders that normalizeManifestKeys
+          // already removed from the manifest.
+          return fUtils.createDirRecursively(path.join(tablePath, toSafeFolderName(recs[k])));
+        }));
+      }
 
       await processBatched(recKeys, CONCURRENCY_RECORDS, async function(recKey) {
         var rec = recs[recKey];
         var recPath = path.join(tablePath, toSafeFolderName(rec));
 
+        // metadataOnly refreshes what is already checked out. A record the
+        // instance has but this branch does not is left alone — pulling it in
+        // would be a content change, which is exactly what this mode excludes.
+        // isExistingDirectory, not isDirectory (which REJECTS on ENOENT, and
+        // processBatched propagates, so one absent record aborted the whole
+        // scope) and not pathExists (which is true for a regular file too, so a
+        // stray file at a record path would pass and fail at write time).
+        if (metadataOnly && !(await fUtils.isExistingDirectory(recPath))) {
+          skippedAbsentCount++;
+          // Drop the downloaded content for skipped records too — filesToProcess
+          // accumulates across every chunk, so holding it would grow unbounded
+          // across a large scope.
+          rec.files = rec.files.map(function(file) {
+            var copy = Object.assign({}, file);
+            delete copy.content;
+            return copy;
+          });
+          progress.tick();
+          return;
+        }
+
         // Split server-provided metadata off from the regular files so we can
         // track whether any regular file actually changed — metaData shouldn't
-        // be the trigger for "this record changed" since we stamp it on every
+        // be the trigger for "this record changed" since we rewrite it on every
         // touch.
         var metadataFiles: SN.File[] = [];
         var regularFiles: SN.File[] = [];
@@ -826,13 +970,17 @@ export const refreshAllFiles = async (
           }
         }
 
-        var results = await allSettledBatched(regularFiles, CONCURRENCY_FILES, async function(file) {
-          if (forceWrite) {
-            await forceWriter(file, recPath);
-            return true;
-          }
-          return fUtils.writeSNFileIfDifferent(file, recPath);
-        });
+        // metadataOnly writes no field file at all, so there is nothing to
+        // diff and the download result is discarded for regular files.
+        var results = metadataOnly
+          ? []
+          : await allSettledBatched(regularFiles, CONCURRENCY_FILES, async function(file) {
+              if (forceWrite) {
+                await forceWriter(file, recPath);
+                return true;
+              }
+              return fUtils.writeSNFileIfDifferent(file, recPath);
+            });
 
         var anyChanged = false;
         for (var f = 0; f < results.length; f++) {
@@ -850,22 +998,20 @@ export const refreshAllFiles = async (
         }
 
         // Only touch metaData when at least one regular file in the record
-        // actually changed. Avoids rewriting _lastUpdatedOn for records that
-        // were already in sync with the instance. Prefer the server-provided
+        // actually changed — otherwise a record already in sync with the
+        // instance would be rewritten for nothing. `force` and `metadataOnly`
+        // both mean "rewrite it regardless". Prefer the server-provided
         // metadata (full field snapshot) over a stub; fall back to a stub only
         // when the server didn't send metadata at all.
-        if (anyChanged || forceWrite) {
+        if (anyChanged || forceWrite || metadataOnly) {
           let metadataFile: SN.File;
           if (metadataFiles.length > 0 && metadataFiles[0].content) {
             metadataFile = stampMetadataContent(metadataFiles[0]);
           } else {
-            metadataFile = {
-              name: "metaData",
-              type: "json",
-              content: JSON.stringify({ _lastUpdatedOn: new Date().toISOString() }, null, 2),
-            };
+            metadataFile = emptyMetadataFile();
           }
           await forceWriter(metadataFile, recPath);
+          metadataWrittenCount++;
         }
 
         // Strip content from manifest entries to keep memory bounded.
@@ -880,9 +1026,19 @@ export const refreshAllFiles = async (
     });
 
     fileLogger.debug(
-      "Refresh complete: " + writtenCount + " written, " + unchangedCount + " unchanged",
+      "Refresh complete: " + writtenCount + " written, " + unchangedCount + " unchanged, " +
+      metadataWrittenCount + " metaData written, " + skippedAbsentCount + " records absent locally",
     );
-    if (writtenCount > 0) {
+    if (metadataOnly) {
+      // writtenCount is always 0 here — no field file is written — so report the
+      // metadata counts instead of the misleading "no changes detected".
+      logger.info(
+        "Rewrote metaData.json for " + metadataWrittenCount + " record(s)" +
+        (skippedAbsentCount > 0
+          ? " (" + skippedAbsentCount + " skipped — not checked out locally)"
+          : ""),
+      );
+    } else if (writtenCount > 0) {
       logger.info(
         "Refreshed " + writtenCount + " file(s) from instance" +
         (unchangedCount > 0 ? " (" + unchangedCount + " already in sync)" : ""),
@@ -892,7 +1048,13 @@ export const refreshAllFiles = async (
     }
 
     if (options.benchmarkCollector) {
-      options.benchmarkCollector.endScope(writtenCount, unchangedCount);
+      // metadataOnly writes no field file, so writtenCount is always 0 — report
+      // the metaData writes instead, or `--benchmark --metadata-only` would show
+      // a scope that did thousands of writes as having done nothing.
+      options.benchmarkCollector.endScope(
+        metadataOnly ? metadataWrittenCount : writtenCount,
+        metadataOnly ? skippedAbsentCount : unchangedCount,
+      );
     }
   } catch (e) {
     if (options.benchmarkCollector) {
