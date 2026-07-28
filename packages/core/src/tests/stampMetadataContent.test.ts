@@ -223,6 +223,18 @@ describe("stampMetadataContent — display_value DROPPED where it is churn", () 
     );
     expect(parse(out).controlled_by_refs).toEqual({ value: null });
   });
+
+  it("does not treat two different objects as identical", () => {
+    // String({}) collapses every object to "[object Object]", so a naive
+    // stringify-and-compare would call these equal and drop a display_value
+    // that carries real information. Non-primitives are simply not comparable.
+    const out = stampMetadataContent(
+      metaFile({
+        weird: { value: { a: 1 }, display_value: { b: 2 } },
+      }),
+    );
+    expect(parse(out).weird.display_value).toEqual({ b: 2 });
+  });
 });
 
 describe("stampMetadataContent — display_value KEPT where it is information", () => {

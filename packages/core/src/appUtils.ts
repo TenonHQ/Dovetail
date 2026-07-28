@@ -85,21 +85,34 @@ const stripRecordLinkHost = (link: string): string =>
 const SYS_DATETIME_RE = /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/;
 
 // References carried by nearly every record — one rename churns the whole tree.
-const WHOLE_TREE_REFERENCE_KEYS = ["sys_scope", "sys_package"];
+const WHOLE_TREE_REFERENCE_KEYS = new Set(["sys_scope", "sys_package"]);
 
-// Normalize for comparison: the server uses null and "" interchangeably across
-// the two halves of a pair, and String(null) would otherwise read as "null".
-const displayNorm = (v: unknown): string =>
-  v === null || v === undefined ? "" : String(v);
+// Normalize a half of the pair for comparison. Returns null for anything that
+// is not a primitive: String({}) collapses every object to "[object Object]",
+// so two structurally different values would compare equal and silently lose a
+// display_value. A non-primitive is treated as "not comparable" instead.
+// null and "" are deliberately folded together — the server uses them
+// interchangeably across the two halves, and String(null) would read as "null".
+const displayNorm = (v: unknown): string | null => {
+  if (v === null || v === undefined) return "";
+  const t = typeof v;
+  if (t === "string" || t === "number" || t === "boolean") return String(v);
+  return null;
+};
 
 const shouldDropDisplayValue = (
   key: string,
   value: unknown,
   displayValue: unknown,
 ): boolean => {
-  if (displayNorm(value) === displayNorm(displayValue)) return true;
-  if (SYS_DATETIME_RE.test(displayNorm(value))) return true;
-  if (WHOLE_TREE_REFERENCE_KEYS.indexOf(key) !== -1) return true;
+  const normValue = displayNorm(value);
+  const normDisplay = displayNorm(displayValue);
+  // Identical -> the display_value carries no information, at any size.
+  if (normValue !== null && normValue === normDisplay) return true;
+  // Datetime -> display_value is rendered in the PULLER's timezone.
+  if (normValue !== null && SYS_DATETIME_RE.test(normValue)) return true;
+  // Present in ~every record -> one rename rewrites the whole mirror.
+  if (WHOLE_TREE_REFERENCE_KEYS.has(key)) return true;
   return false;
 };
 
@@ -924,11 +937,11 @@ export const refreshAllFiles = async (
         // metadataOnly refreshes what is already checked out. A record the
         // instance has but this branch does not is left alone — pulling it in
         // would be a content change, which is exactly what this mode excludes.
-        // pathExists, NOT isDirectory: isDirectory stats unguarded and REJECTS
-        // on ENOENT, and processBatched propagates, so a single absent record
-        // would abort the whole scope — the common case, since "the instance
-        // has records this branch doesn't" is precisely what we're skipping.
-        if (metadataOnly && !(await fUtils.pathExists(recPath))) {
+        // isExistingDirectory, not isDirectory (which REJECTS on ENOENT, and
+        // processBatched propagates, so one absent record aborted the whole
+        // scope) and not pathExists (which is true for a regular file too, so a
+        // stray file at a record path would pass and fail at write time).
+        if (metadataOnly && !(await fUtils.isExistingDirectory(recPath))) {
           skippedAbsentCount++;
           // Drop the downloaded content for skipped records too — filesToProcess
           // accumulates across every chunk, so holding it would grow unbounded
@@ -1035,7 +1048,13 @@ export const refreshAllFiles = async (
     }
 
     if (options.benchmarkCollector) {
-      options.benchmarkCollector.endScope(writtenCount, unchangedCount);
+      // metadataOnly writes no field file, so writtenCount is always 0 — report
+      // the metaData writes instead, or `--benchmark --metadata-only` would show
+      // a scope that did thousands of writes as having done nothing.
+      options.benchmarkCollector.endScope(
+        metadataOnly ? metadataWrittenCount : writtenCount,
+        metadataOnly ? skippedAbsentCount : unchangedCount,
+      );
     }
   } catch (e) {
     if (options.benchmarkCollector) {
