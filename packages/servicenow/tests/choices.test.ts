@@ -1,4 +1,4 @@
-import { addChoicesToField, removeChoicesFromField } from "../src/choices";
+import { addChoicesToField, removeChoicesFromField, ChoiceWriteError } from "../src/choices";
 import type { ChoiceActionResult } from "../src/types";
 import { makeMockClient as makeClient } from "./mockClient";
 
@@ -662,5 +662,167 @@ describe("removeChoicesFromField", function () {
 
     expect(result.choices[0].action).toBe("deactivated");
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+  });
+});
+
+describe("ChoiceWriteError — partial progress survives a mid-loop failure", function () {
+  var dictRow = {
+    sys_id: "dict1",
+    name: "x_cadso_core_event",
+    element: "state",
+    choice: "3",
+    sys_scope: "scope_core"
+  };
+  var updateSetRow = {
+    sys_id: "us1",
+    name: "Tenon - Core - Sinch DLR Tables",
+    state: "in progress",
+    application: "scope_core"
+  };
+
+  function clientWithChoices(choiceRows: Array<any>) {
+    return makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [dictRow];
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_choice") return choiceRows;
+        return [];
+      }
+    });
+  }
+
+  // Make the Nth write (1-based) blow up, leaving the earlier ones applied.
+  function failOnWriteNumber(ctx: any, n: number, message: string) {
+    var original = ctx.client.claude.pushWithUpdateSet;
+    var seen = 0;
+    ctx.client.claude.pushWithUpdateSet = async function (params: any) {
+      seen += 1;
+      if (seen === n) throw new Error(message);
+      return original(params);
+    };
+  }
+
+  it("remove-choices reports which values were already deactivated", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "a", label: "A", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "ch2", value: "b", label: "B", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "ch3", value: "c", label: "C", sequence: "", language: "en", inactive: "false" }
+    ]);
+    failOnWriteNumber(ctx, 3, "ACL exception on sys_choice");
+
+    var err: any = null;
+    try {
+      await removeChoicesFromField(ctx.client, {
+        table: "x_cadso_core_event",
+        column: "state",
+        values: ["a", "b", "c"],
+        updateSetSysId: "us1"
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(ChoiceWriteError);
+    expect(err.name).toBe("ChoiceWriteError");
+    // a and b landed before the failure; c is the one that threw.
+    expect(err.completed.map(function (r: any) { return r.value; })).toEqual(["a", "b"]);
+    expect(err.completed.every(function (r: any) { return r.action === "deactivated"; })).toBe(true);
+    expect(err.failedValue).toBe("c");
+    // The failing value must NOT be reported as completed — its state is unknown.
+    expect(err.completed.map(function (r: any) { return r.value; })).not.toContain("c");
+    // The original failure is preserved, not swallowed.
+    expect(err.cause).toBeInstanceOf(Error);
+    expect(err.cause.message).toBe("ACL exception on sys_choice");
+    // The message names both what landed and what to go check.
+    expect(err.message).toContain("a [deactivated]");
+    expect(err.message).toContain("b [deactivated]");
+    expect(err.message).toContain('"c"');
+  });
+
+  it("reports 'none' when the very first write fails", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "a", label: "A", sequence: "", language: "en", inactive: "false" }
+    ]);
+    failOnWriteNumber(ctx, 1, "instance unreachable");
+
+    var err: any = null;
+    try {
+      await removeChoicesFromField(ctx.client, {
+        table: "x_cadso_core_event",
+        column: "state",
+        values: ["a"],
+        updateSetSysId: "us1"
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(ChoiceWriteError);
+    expect(err.completed).toEqual([]);
+    expect(err.failedValue).toBe("a");
+    expect(err.message).toContain("none");
+  });
+
+  it("add-choices reports the sys_ids it already created", async function () {
+    var ctx = clientWithChoices([]);
+    var originalCreate = ctx.client.claude.createRecord;
+    var seen = 0;
+    ctx.client.claude.createRecord = async function (params: any) {
+      seen += 1;
+      if (seen === 2) throw new Error("duplicate key");
+      return originalCreate(params);
+    };
+
+    var err: any = null;
+    try {
+      await addChoicesToField(ctx.client, {
+        table: "x_cadso_core_event",
+        column: "state",
+        updateSetSysId: "us1",
+        choices: [
+          { value: "a", label: "A" },
+          { value: "b", label: "B" }
+        ]
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(ChoiceWriteError);
+    expect(err.completed).toHaveLength(1);
+    expect(err.completed[0].value).toBe("a");
+    expect(err.completed[0].action).toBe("created");
+    // The created row's sys_id survives — without it the caller cannot clean up.
+    expect(err.completed[0].sysIds).toEqual(["new_1"]);
+    expect(err.failedValue).toBe("b");
+  });
+
+  it("a value that needed no write is still counted as completed", async function () {
+    // "unchanged" rows never reach a write, so they must not be lost either —
+    // they are part of the picture of what the run had established.
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "a", label: "A", sequence: "", language: "en", inactive: "true" },
+      { sys_id: "ch2", value: "b", label: "B", sequence: "", language: "en", inactive: "false" }
+    ]);
+    failOnWriteNumber(ctx, 1, "boom");
+
+    var err: any = null;
+    try {
+      await removeChoicesFromField(ctx.client, {
+        table: "x_cadso_core_event",
+        column: "state",
+        values: ["a", "b"],
+        updateSetSysId: "us1"
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(ChoiceWriteError);
+    expect(err.completed).toHaveLength(1);
+    expect(err.completed[0].value).toBe("a");
+    expect(err.completed[0].action).toBe("unchanged");
+    expect(err.failedValue).toBe("b");
   });
 });

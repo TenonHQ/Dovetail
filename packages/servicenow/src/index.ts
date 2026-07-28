@@ -35,7 +35,11 @@ export type {
   NowInvokeResponse,
 } from "./client";
 
-export { addChoicesToField, removeChoicesFromField } from "./choices";
+export {
+  addChoicesToField,
+  removeChoicesFromField,
+  ChoiceWriteError,
+} from "./choices";
 
 export {
   hostAssets,

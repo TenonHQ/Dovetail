@@ -22,6 +22,64 @@ import type {
   UpdateSetRecord,
 } from "./types";
 
+/**
+ * Thrown when a choices write fails partway through the value loop.
+ *
+ * Both verbs write one value at a time. Without this, a throw on value 3 of 5
+ * unwound the whole call and took the local `results` array with it — the
+ * caller could not tell which values had already been deactivated (or which
+ * sys_choice rows had already been created on the add path) without going and
+ * querying the instance. That is the worst possible moment to lose the record:
+ * the writes already landed and are already captured in the update set.
+ *
+ * `completed` holds the values that finished before the failure, in order, in
+ * exactly the shape they would have had in a successful result. `failedValue`
+ * is the value being processed when the write threw, and is NOT in `completed`
+ * — its state on the instance is unknown (the row may or may not have been
+ * written before the error), so it needs checking by hand.
+ */
+export class ChoiceWriteError extends Error {
+  public readonly completed: Array<ChoiceActionResult | ChoiceRemovalResult>;
+  public readonly failedValue: string;
+  public readonly cause: unknown;
+
+  constructor(
+    verb: string,
+    failedValue: string,
+    completed: Array<ChoiceActionResult | ChoiceRemovalResult>,
+    cause: unknown,
+  ) {
+    var detail =
+      cause instanceof Error
+        ? cause.message
+        : String(cause == null ? "" : cause);
+    super(
+      verb +
+        ' failed on value "' +
+        failedValue +
+        '" after completing ' +
+        completed.length +
+        " value(s): " +
+        detail +
+        "\nAlready written (captured in the update set): " +
+        (completed.length === 0
+          ? "none"
+          : completed
+              .map(function (r) {
+                return r.value + " [" + r.action + "]";
+              })
+              .join(", ")) +
+        '\nState of "' +
+        failedValue +
+        '" on the instance is unknown — verify it directly.',
+    );
+    this.name = "ChoiceWriteError";
+    this.completed = completed;
+    this.failedValue = failedValue;
+    this.cause = cause;
+  }
+}
+
 export function encodeQueryValue(v: string): string {
   // ServiceNow encoded-query values: commas/carets/equals are special. We
   // don't expect them in table/column/value/language inputs, but keep this
@@ -373,13 +431,17 @@ export async function addChoicesToField(
       if (choice.sequence != null) {
         updFields.sequence = String(choice.sequence);
       }
-      for (var s = 0; s < stale.length; s += 1) {
-        await client.claude.pushWithUpdateSet({
-          update_set_sys_id: params.updateSetSysId,
-          table: "sys_choice",
-          record_sys_id: stale[s].sys_id,
-          fields: updFields,
-        });
+      try {
+        for (var s = 0; s < stale.length; s += 1) {
+          await client.claude.pushWithUpdateSet({
+            update_set_sys_id: params.updateSetSysId,
+            table: "sys_choice",
+            record_sys_id: stale[s].sys_id,
+            fields: updFields,
+          });
+        }
+      } catch (e) {
+        throw new ChoiceWriteError("add-choices", choice.value, results, e);
       }
       results.push({
         value: choice.value,
@@ -390,17 +452,22 @@ export async function addChoicesToField(
       });
       continue;
     }
-    var created = await client.claude.createRecord({
-      table: "sys_choice",
-      fields: buildChoiceFields(
-        params.table,
-        params.column,
-        choice,
-        dict.sys_scope,
-      ),
-      scope: scopeName,
-      update_set_sys_id: params.updateSetSysId,
-    });
+    var created;
+    try {
+      created = await client.claude.createRecord({
+        table: "sys_choice",
+        fields: buildChoiceFields(
+          params.table,
+          params.column,
+          choice,
+          dict.sys_scope,
+        ),
+        scope: scopeName,
+        update_set_sys_id: params.updateSetSysId,
+      });
+    } catch (e) {
+      throw new ChoiceWriteError("add-choices", choice.value, results, e);
+    }
     results.push({
       value: choice.value,
       label: choice.label,
@@ -439,8 +506,10 @@ export async function addChoicesToField(
  * exists to catch. sys_dictionary.choice is left alone on purpose: removing values
  * does not un-make the column a choice field.
  *
- * Repeated values are collapsed before the loop, so `["a", "a"]` is one write and one
- * result row — an idempotent verb must not depend on the caller de-duplicating first.
+ * Repeated values are collapsed before the loop, so `["a", "a"]` costs no more than
+ * `["a"]` and yields one result row — an idempotent verb must not depend on the caller
+ * de-duplicating first. (That is "no EXTRA writes from repeats", not "exactly one
+ * write": a single value still takes one write per live duplicate row on the field.)
  *
  * LIMITATION — inherited choices. Matching is scoped to `sys_choice.name = <table>`, so
  * a value defined on a PARENT table (task.state inherited by a child) reports "missing"
@@ -507,13 +576,17 @@ export async function removeChoicesFromField(
       });
       continue;
     }
-    for (var a = 0; a < active.length; a += 1) {
-      await client.claude.pushWithUpdateSet({
-        update_set_sys_id: params.updateSetSysId,
-        table: "sys_choice",
-        record_sys_id: active[a].sys_id,
-        fields: { inactive: "true" },
-      });
+    try {
+      for (var a = 0; a < active.length; a += 1) {
+        await client.claude.pushWithUpdateSet({
+          update_set_sys_id: params.updateSetSysId,
+          table: "sys_choice",
+          record_sys_id: active[a].sys_id,
+          fields: { inactive: "true" },
+        });
+      }
+    } catch (e) {
+      throw new ChoiceWriteError("remove-choices", value, results, e);
     }
     results.push({
       value: value,
