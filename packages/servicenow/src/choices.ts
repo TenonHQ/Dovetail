@@ -13,11 +13,72 @@ import type {
   AddChoicesParams,
   AddChoicesResult,
   ChoiceActionResult,
+  ChoiceRemovalResult,
   ChoiceType,
   ChoiceValue,
   DictionaryRecord,
+  RemoveChoicesParams,
+  RemoveChoicesResult,
   UpdateSetRecord,
 } from "./types";
+
+/**
+ * Thrown when a choices write fails partway through the value loop.
+ *
+ * Both verbs write one value at a time. Without this, a throw on value 3 of 5
+ * unwound the whole call and took the local `results` array with it — the
+ * caller could not tell which values had already been deactivated (or which
+ * sys_choice rows had already been created on the add path) without going and
+ * querying the instance. That is the worst possible moment to lose the record:
+ * the writes already landed and are already captured in the update set.
+ *
+ * `completed` holds the values that finished before the failure, in order, in
+ * exactly the shape they would have had in a successful result. `failedValue`
+ * is the value being processed when the write threw, and is NOT in `completed`
+ * — its state on the instance is unknown (the row may or may not have been
+ * written before the error), so it needs checking by hand.
+ */
+export class ChoiceWriteError extends Error {
+  public readonly completed: Array<ChoiceActionResult | ChoiceRemovalResult>;
+  public readonly failedValue: string;
+  public readonly cause: unknown;
+
+  constructor(
+    verb: string,
+    failedValue: string,
+    completed: Array<ChoiceActionResult | ChoiceRemovalResult>,
+    cause: unknown,
+  ) {
+    var detail =
+      cause instanceof Error
+        ? cause.message
+        : String(cause == null ? "" : cause);
+    super(
+      verb +
+        ' failed on value "' +
+        failedValue +
+        '" after completing ' +
+        completed.length +
+        " value(s): " +
+        detail +
+        "\nAlready written (captured in the update set): " +
+        (completed.length === 0
+          ? "none"
+          : completed
+              .map(function (r) {
+                return r.value + " [" + r.action + "]";
+              })
+              .join(", ")) +
+        '\nState of "' +
+        failedValue +
+        '" on the instance is unknown — verify it directly.',
+    );
+    this.name = "ChoiceWriteError";
+    this.completed = completed;
+    this.failedValue = failedValue;
+    this.cause = cause;
+  }
+}
 
 export function encodeQueryValue(v: string): string {
   // ServiceNow encoded-query values: commas/carets/equals are special. We
@@ -124,16 +185,126 @@ interface ExistingChoice {
   inactive: string;
 }
 
+var CHOICE_PAGE_LIMIT = 1000;
+
+/**
+ * Values per encoded-query batch. Keeps `valueIN a,b,c…` comfortably inside practical
+ * URL limits when a caller passes a long list.
+ */
+var CHOICE_QUERY_BATCH = 50;
+
+/**
+ * Read the existing sys_choice rows for JUST the values being acted on.
+ *
+ * Scoped rather than whole-field on purpose. Reading every row of the field means the
+ * result set grows with the field, not with the request, and `client.table.query` has no
+ * `sysparm_offset` — so a field with more choices than one page could only be handled by
+ * guessing at a truncated read (silently wrong: the add path inserts a duplicate, the
+ * remove path reports a live value as "missing") or by refusing outright, which would
+ * make both verbs unusable on large choice sets. Asking only for the requested values
+ * bounds the read by the request, so large fields stay editable and there is nothing to
+ * truncate.
+ *
+ * Note that values are interpolated into an encoded query, so `encodeQueryValue` rejects
+ * ones carrying `,` `^` `=`. Both CLI surfaces already split on those characters, so such
+ * values were never expressible there; the library paths now refuse them loudly rather
+ * than building a malformed query.
+ */
 async function fetchExistingChoices(
   client: ServiceNowClient,
   table: string,
   column: string,
+  values: Array<string>,
 ): Promise<Array<ExistingChoice>> {
-  return client.table.query<ExistingChoice>(
-    "sys_choice",
-    "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column),
-    1000,
-  );
+  var base =
+    "name=" + encodeQueryValue(table) + "^element=" + encodeQueryValue(column);
+  var out: Array<ExistingChoice> = [];
+  for (var i = 0; i < values.length; i += CHOICE_QUERY_BATCH) {
+    var batch = values.slice(i, i + CHOICE_QUERY_BATCH).map(encodeQueryValue);
+    // Ask for one MORE than the ceiling: requesting exactly it cannot distinguish "there
+    // are exactly that many" from "there are more and this is page 1".
+    var rows = await client.table.query<ExistingChoice>(
+      "sys_choice",
+      base + "^valueIN" + batch.join(","),
+      CHOICE_PAGE_LIMIT + 1,
+    );
+    // A backstop, not an everyday path: this batch asked for at most CHOICE_QUERY_BATCH
+    // values, so overflowing a page means one value has an absurd number of duplicate
+    // rows. Refuse rather than act on a read that may be incomplete.
+    if (rows.length > CHOICE_PAGE_LIMIT) {
+      throw new Error(
+        "Refusing to act on a truncated choice list: " +
+          table +
+          "." +
+          column +
+          " returned more than " +
+          CHOICE_PAGE_LIMIT +
+          " sys_choice rows for a single batch of requested values, so the read cannot " +
+          "be trusted to be complete.",
+      );
+    }
+    out = out.concat(rows);
+  }
+  return out;
+}
+
+/**
+ * Group the instance's rows by language::value, keeping EVERY row per key.
+ *
+ * sys_choice has no uniqueness constraint on (name, element, value, language), so a
+ * field can genuinely hold two live rows for one value. Indexing to a single row would
+ * act on one and silently leave the other — the tool reports success while the choice
+ * still renders in the dropdown.
+ */
+function groupExistingByKey(
+  rows: Array<ExistingChoice>,
+): Record<string, Array<ExistingChoice>> {
+  // Null-prototype: keys derive from record data, and Object.prototype members must not
+  // masquerade as existing entries. See dedupe() for the failure this avoids.
+  var byKey: Record<string, Array<ExistingChoice>> = Object.create(null);
+  rows.forEach(function (row) {
+    var key = (row.language || "en") + "::" + row.value;
+    if (!byKey[key]) byKey[key] = [];
+    byKey[key].push(row);
+  });
+  return byKey;
+}
+
+/**
+ * Collapse choices that target the same language::value. Position is first-seen, but
+ * the LAST spec wins, so `[{a,"Old"},{a,"New"}]` upserts the label the caller asked for
+ * most recently rather than silently writing both.
+ */
+function dedupeChoices(choices: Array<ChoiceValue>): Array<ChoiceValue> {
+  var byKey: Record<string, ChoiceValue> = Object.create(null);
+  var order: Array<string> = [];
+  choices.forEach(function (c) {
+    var key = (c.language || "en") + "::" + c.value;
+    if (!byKey[key]) order.push(key);
+    byKey[key] = c;
+  });
+  return order.map(function (key) {
+    return byKey[key];
+  });
+}
+
+/**
+ * Preserve first-seen order while dropping repeats.
+ *
+ * The lookup is a null-prototype map because the keys are raw choice values: on a plain
+ * `{}`, `seen["constructor"]` / `["toString"]` / `["__proto__"]` are already truthy via
+ * Object.prototype, so a value with one of those names would be treated as a repeat and
+ * silently dropped from the request — never written, never even reported.
+ */
+function dedupe(values: Array<string>): Array<string> {
+  var seen: Record<string, boolean> = Object.create(null);
+  var out: Array<string> = [];
+  values.forEach(function (v) {
+    if (seen[v]) return;
+    seen[v] = true;
+    out.push(v);
+  });
+  return out;
 }
 
 function buildChoiceFields(
@@ -209,32 +380,49 @@ export async function addChoicesToField(
     choiceNow = targetChoiceType;
   }
 
+  // Collapse repeats on language::value, last spec wins. Without this a value listed
+  // twice is created twice — the cache is read once up front, so the second pass still
+  // sees "not present" and inserts a genuine duplicate sys_choice row.
+  var choices = dedupeChoices(params.choices);
+
+  // Read only the values being upserted — see fetchExistingChoices on why the read is
+  // scoped to the request rather than the whole field.
   var existing = await fetchExistingChoices(
     client,
     params.table,
     params.column,
+    dedupe(
+      choices.map(function (c) {
+        return c.value;
+      }),
+    ),
   );
-  var existingByValue: Record<string, ExistingChoice> = {};
-  existing.forEach(function (row) {
-    var key = (row.language || "en") + "::" + row.value;
-    existingByValue[key] = row;
-  });
+  var existingByValue = groupExistingByKey(existing);
 
   var results: Array<ChoiceActionResult> = [];
-  for (var i = 0; i < params.choices.length; i += 1) {
-    var choice = params.choices[i];
+  for (var i = 0; i < choices.length; i += 1) {
+    var choice = choices[i];
     var key = (choice.language || "en") + "::" + choice.value;
-    var match = existingByValue[key];
-    if (match && isUnchanged(match, choice)) {
+    var matches = existingByValue[key] || [];
+    var matchSysIds = matches.map(function (row) {
+      return row.sys_id;
+    });
+    // Every live row for this value, not just one: a field can already hold duplicates,
+    // and updating one would leave the other showing the old label in the dropdown.
+    var stale = matches.filter(function (row) {
+      return !isUnchanged(row, choice);
+    });
+    if (matches.length > 0 && stale.length === 0) {
       results.push({
         value: choice.value,
         label: choice.label,
-        sysId: match.sys_id,
+        sysId: matchSysIds[0],
+        sysIds: matchSysIds,
         action: "unchanged",
       });
       continue;
     }
-    if (match) {
+    if (matches.length > 0) {
       var updFields: Record<string, any> = {
         label: choice.label,
         language: choice.language || "en",
@@ -243,35 +431,48 @@ export async function addChoicesToField(
       if (choice.sequence != null) {
         updFields.sequence = String(choice.sequence);
       }
-      await client.claude.pushWithUpdateSet({
-        update_set_sys_id: params.updateSetSysId,
-        table: "sys_choice",
-        record_sys_id: match.sys_id,
-        fields: updFields,
-      });
+      try {
+        for (var s = 0; s < stale.length; s += 1) {
+          await client.claude.pushWithUpdateSet({
+            update_set_sys_id: params.updateSetSysId,
+            table: "sys_choice",
+            record_sys_id: stale[s].sys_id,
+            fields: updFields,
+          });
+        }
+      } catch (e) {
+        throw new ChoiceWriteError("add-choices", choice.value, results, e);
+      }
       results.push({
         value: choice.value,
         label: choice.label,
-        sysId: match.sys_id,
+        sysId: matchSysIds[0],
+        sysIds: matchSysIds,
         action: "updated",
       });
       continue;
     }
-    var created = await client.claude.createRecord({
-      table: "sys_choice",
-      fields: buildChoiceFields(
-        params.table,
-        params.column,
-        choice,
-        dict.sys_scope,
-      ),
-      scope: scopeName,
-      update_set_sys_id: params.updateSetSysId,
-    });
+    var created;
+    try {
+      created = await client.claude.createRecord({
+        table: "sys_choice",
+        fields: buildChoiceFields(
+          params.table,
+          params.column,
+          choice,
+          dict.sys_scope,
+        ),
+        scope: scopeName,
+        update_set_sys_id: params.updateSetSysId,
+      });
+    } catch (e) {
+      throw new ChoiceWriteError("add-choices", choice.value, results, e);
+    }
     results.push({
       value: choice.value,
       label: choice.label,
       sysId: created.sys_id,
+      sysIds: [created.sys_id],
       action: "created",
     });
   }
@@ -282,6 +483,125 @@ export async function addChoicesToField(
       scope: dict.sys_scope,
       choiceWas: choiceWas,
       choiceNow: choiceNow,
+    },
+    updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
+    choices: results,
+  };
+}
+
+/**
+ * Soft-delete choice values for a field: set `inactive=true` on each matching
+ * sys_choice row via pushWithUpdateSet. NEVER a hard delete — the row stays, so the
+ * change is reversible and the historical value still resolves on records that
+ * already hold it. (A hard drop of sys_choice is deliberately deferred; see DEV-511.)
+ *
+ * Idempotent:
+ *   - active value     -> "deactivated" (every live row for it flipped to inactive —
+ *                         usually one write, but more when the field holds duplicates)
+ *   - already inactive -> "unchanged"  (no write)
+ *   - value not found  -> "missing"    (no write)
+ *
+ * The dictionary row is fetched only to PROVE the field exists — without that guard a
+ * mistyped column reports every value as "missing", the silent-failure this family
+ * exists to catch. sys_dictionary.choice is left alone on purpose: removing values
+ * does not un-make the column a choice field.
+ *
+ * Repeated values are collapsed before the loop, so `["a", "a"]` costs no more than
+ * `["a"]` and yields one result row — an idempotent verb must not depend on the caller
+ * de-duplicating first. (That is "no EXTRA writes from repeats", not "exactly one
+ * write": a single value still takes one write per live duplicate row on the field.)
+ *
+ * LIMITATION — inherited choices. Matching is scoped to `sys_choice.name = <table>`, so
+ * a value defined on a PARENT table (task.state inherited by a child) reports "missing"
+ * rather than being deactivated. Hiding an inherited choice on a child table needs an
+ * override row on the child, which this verb does not write. For the x_cadso_* tables
+ * this family targets that case does not arise; on extended OOB tables, treat a
+ * surprising "missing" as a signal to check the parent.
+ */
+export async function removeChoicesFromField(
+  client: ServiceNowClient,
+  params: RemoveChoicesParams,
+): Promise<RemoveChoicesResult> {
+  if (!params.updateSetSysId) {
+    throw new Error(
+      "updateSetSysId is required — every write must be captured in a named update set.",
+    );
+  }
+  if (!params.values || params.values.length === 0) {
+    throw new Error("values must be a non-empty array.");
+  }
+  var language = params.language || "en";
+
+  // fetchDictionary throws a clear error when the field does not exist; fetchUpdateSet
+  // throws unless the set is in progress. Both mirror the add path's guards.
+  var dict = await fetchDictionary(client, params.table, params.column);
+  var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
+
+  // Collapse repeats: without this a duplicated value writes twice and is counted
+  // twice in the summary, which contradicts the idempotency contract.
+  var values = dedupe(params.values);
+
+  // Read only the values being removed — see fetchExistingChoices on why the read is
+  // scoped to the request rather than the whole field.
+  var existing = await fetchExistingChoices(
+    client,
+    params.table,
+    params.column,
+    values,
+  );
+  var existingByValue = groupExistingByKey(existing);
+
+  var results: Array<ChoiceRemovalResult> = [];
+  for (var i = 0; i < values.length; i += 1) {
+    var value = values[i];
+    var matches = existingByValue[language + "::" + value] || [];
+    if (matches.length === 0) {
+      results.push({ value: value, sysId: "", sysIds: [], action: "missing" });
+      continue;
+    }
+    var sysIds = matches.map(function (row) {
+      return row.sys_id;
+    });
+    // Deactivate EVERY live row for this value. A field can hold more than one, and
+    // stopping at the first leaves the choice selectable while reporting success.
+    var active = matches.filter(function (row) {
+      return row.inactive !== "true";
+    });
+    if (active.length === 0) {
+      results.push({
+        value: value,
+        sysId: sysIds[0],
+        sysIds: sysIds,
+        action: "unchanged",
+      });
+      continue;
+    }
+    try {
+      for (var a = 0; a < active.length; a += 1) {
+        await client.claude.pushWithUpdateSet({
+          update_set_sys_id: params.updateSetSysId,
+          table: "sys_choice",
+          record_sys_id: active[a].sys_id,
+          fields: { inactive: "true" },
+        });
+      }
+    } catch (e) {
+      throw new ChoiceWriteError("remove-choices", value, results, e);
+    }
+    results.push({
+      value: value,
+      sysId: sysIds[0],
+      sysIds: sysIds,
+      action: "deactivated",
+    });
+  }
+
+  return {
+    field: {
+      table: params.table,
+      column: params.column,
+      language: language,
+      dictionarySysId: dict.sys_id,
     },
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
     choices: results,
