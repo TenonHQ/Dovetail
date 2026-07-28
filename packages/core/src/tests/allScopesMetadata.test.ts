@@ -87,6 +87,11 @@ function serverMetadata(): string {
       value: "4e4449a5475c255085d19fd8036d43a0",
       display_value: "Tenon Marketing Work Management",
     },
+    // A plain reference — kept, so the sys_id -> name mapping survives.
+    action: {
+      value: "85de623c33ef2a107b18bc534d5c7b92",
+      display_value: "Parse hashes for to_addresses",
+    },
     _table: "sys_script_include",
     _sys_id: SYS_ID,
     _record_link:
@@ -138,19 +143,23 @@ describe("all-scopes writer — metaData.json is normalized, not written raw", f
     expect(readRecordFile("metaData.json")).not.toContain("service-now.com");
   });
 
-  test("strips every display_value, keeping value", async function () {
+  test("applies the selective display_value policy, same as the refresh path", async function () {
     await AllScopes.processManifestForScope(
       manifestWith([{ name: "metaData", type: "json", content: serverMetadata() }]),
       tmpRoot,
       true,
     );
 
-    var raw = readRecordFile("metaData.json");
-    var written = JSON.parse(raw);
-    expect(raw).not.toContain("display_value");
+    var written = JSON.parse(readRecordFile("metaData.json"));
+    // Dropped: identical, datetime (puller's timezone), sys_scope (whole-tree).
     expect(written.name).toEqual({ value: "UIFilterApiMS" });
     expect(written.sys_updated_on).toEqual({ value: "2026-04-29 14:38:51" });
     expect(written.sys_scope).toEqual({ value: "4e4449a5475c255085d19fd8036d43a0" });
+    // Kept: the readable reference name.
+    expect(written.action).toEqual({
+      value: "85de623c33ef2a107b18bc534d5c7b92",
+      display_value: "Parse hashes for to_addresses",
+    });
   });
 
   test("drops _lastUpdatedOn and writes no wall-clock value", async function () {

@@ -152,36 +152,123 @@ describe("stampMetadataContent — no generation-time values", () => {
   });
 });
 
-describe("stampMetadataContent — display_value stripping", () => {
-  it("drops display_value from field pairs, keeping value", () => {
+// display_value handling is SELECTIVE, not a blanket strip. The rule was chosen
+// from a measurement of 43,990 pairs in the real servicenow-files mirror; each
+// test below names the category and why it falls on the side it does.
+describe("stampMetadataContent — display_value DROPPED where it is churn", () => {
+  it("drops it when it is identical to value (zero information, any size)", () => {
     const out = stampMetadataContent(
       metaFile({
-        sys_updated_on: { value: "2025-08-21 17:09:02" },
+        name: { value: "UIFilterApiMS", display_value: "UIFilterApiMS" },
+      }),
+    );
+    expect(parse(out).name).toEqual({ value: "UIFilterApiMS" });
+  });
+
+  it("drops identical pairs on large text fields too (script, composition)", () => {
+    // 619 pairs but ~3.7 MB of the corpus — the bulk of the file weight.
+    const big = "var x = 1;\n".repeat(60);
+    const out = stampMetadataContent(
+      metaFile({ script: { value: big, display_value: big } }),
+    );
+    expect(parse(out).script).toEqual({ value: big });
+  });
+
+  it("drops it on datetime fields — display_value is the PULLER's timezone", () => {
+    // Measured 1,706 TZ-shifted out of 1,706. `value` is UTC; display_value is
+    // rendered in the local timezone of whoever ran the pull, so keeping it
+    // makes the bytes depend on which laptop synced.
+    const out = stampMetadataContent(
+      metaFile({
+        sys_updated_on: { value: "2026-04-29 14:38:51", display_value: "2026-04-29 07:38:51" },
+        sys_created_on: { value: "2026-04-29 14:38:51", display_value: "2026-04-29 07:38:51" },
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed.sys_updated_on).toEqual({ value: "2026-04-29 14:38:51" });
+    expect(parsed.sys_created_on).toEqual({ value: "2026-04-29 14:38:51" });
+  });
+
+  it("drops it on a date-only value as well", () => {
+    const out = stampMetadataContent(
+      metaFile({ start_date: { value: "2026-04-29", display_value: "29-04-2026" } }),
+    );
+    expect(parse(out).start_date).toEqual({ value: "2026-04-29" });
+  });
+
+  it("drops it on sys_scope / sys_package — one app rename churns the whole tree", () => {
+    // Present in ~0.95 records per file. The scope is already obvious from the
+    // folder path (src/Work/, src/Core/), so the value is low and the blast
+    // radius is every file in the mirror.
+    const out = stampMetadataContent(
+      metaFile({
+        sys_scope: {
+          value: "4e4449a5475c255085d19fd8036d43a0",
+          display_value: "Tenon Marketing Work Management",
+        },
+        sys_package: {
+          value: "4e4449a5475c255085d19fd8036d43a0",
+          display_value: "Tenon Marketing Work Management",
+        },
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed.sys_scope).toEqual({ value: "4e4449a5475c255085d19fd8036d43a0" });
+    expect(parsed.sys_package).toEqual({ value: "4e4449a5475c255085d19fd8036d43a0" });
+  });
+
+  it("treats null and \"\" as identical rather than writing \"null\"", () => {
+    const out = stampMetadataContent(
+      metaFile({ controlled_by_refs: { value: null, display_value: "" } }),
+    );
+    expect(parse(out).controlled_by_refs).toEqual({ value: null });
+  });
+});
+
+describe("stampMetadataContent — display_value KEPT where it is information", () => {
+  it("keeps a reference's human name (the sys_id -> name mapping)", () => {
+    // This is the readable mapping Documentation/Dovetail-Development.md
+    // documents grepping to walk the record graph. A blanket strip destroyed it.
+    const out = stampMetadataContent(
+      metaFile({
         action: {
           value: "85de623c33ef2a107b18bc534d5c7b92",
           display_value: "Parse hashes for to_addresses",
         },
       }),
     );
-    const parsed = parse(out);
-    expect(parsed.action).toEqual({
+    expect(parse(out).action).toEqual({
       value: "85de623c33ef2a107b18bc534d5c7b92",
+      display_value: "Parse hashes for to_addresses",
     });
-    expect(parsed.action.display_value).toBeUndefined();
   });
 
-  it("strips every field's display_value in one pass", () => {
+  it("keeps boolean renderings (0 -> false)", () => {
     const out = stampMetadataContent(
       metaFile({
-        a: { value: "1", display_value: "One" },
-        b: { value: "2", display_value: "Two" },
+        active: { value: "1", display_value: "true" },
+        client_callable: { value: "0", display_value: "false" },
       }),
     );
     const parsed = parse(out);
-    expect(parsed.a).toEqual({ value: "1" });
-    expect(parsed.b).toEqual({ value: "2" });
+    expect(parsed.active).toEqual({ value: "1", display_value: "true" });
+    expect(parsed.client_callable).toEqual({ value: "0", display_value: "false" });
   });
 
+  it("keeps choice / class labels", () => {
+    const out = stampMetadataContent(
+      metaFile({
+        sys_class_name: { value: "sys_security_acl", display_value: "Access Control" },
+        access: { value: "package_private", display_value: "This application scope only" },
+      }),
+    );
+    const parsed = parse(out);
+    expect(parsed.sys_class_name.display_value).toBe("Access Control");
+    expect(parsed.access.display_value).toBe("This application scope only");
+  });
+});
+
+describe("stampMetadataContent — display_value determinism", () => {
   it("leaves value-only fields and string keys untouched", () => {
     const out = stampMetadataContent(
       metaFile({
@@ -196,14 +283,31 @@ describe("stampMetadataContent — display_value stripping", () => {
     expect(parsed._record_link).toBe("/incident.do?sys_id=1");
   });
 
-  it("is idempotent — a display-value-free record stays byte-identical", () => {
-    const clean = {
-      sys_updated_on: { value: "2025-08-21 17:09:02" },
-      action: { value: "abc" },
-      _record_link: "/incident.do?sys_id=1",
+  it("is idempotent across a full mixed record — kept pairs survive a re-stamp", () => {
+    // The failure mode this guards: a rule that keeps a pair on pass 1 but drops
+    // it on pass 2 would churn forever. Run a record carrying every category.
+    const mixed = {
+      sys_updated_on: { value: "2026-04-29 14:38:51", display_value: "2026-04-29 07:38:51" },
+      sys_scope: { value: "4e4449a5", display_value: "Tenon Marketing Work Management" },
+      sys_class_name: { value: "sys_security_acl", display_value: "Access Control" },
+      active: { value: "1", display_value: "true" },
+      action: { value: "85de623c", display_value: "Parse hashes" },
+      name: { value: "same", display_value: "same" },
+      _record_link: "https://tenonworkstudio.service-now.com/incident.do?sys_id=1",
     };
-    const first = stampMetadataContent(metaFile(clean));
+    const first = stampMetadataContent(metaFile(mixed));
     const second = stampMetadataContent(first);
+    const third = stampMetadataContent(second);
     expect(second.content).toBe(first.content);
+    expect(third.content).toBe(first.content);
+
+    // And the kept set is exactly what we intend.
+    const parsed = parse(first);
+    expect(parsed.sys_updated_on.display_value).toBeUndefined();
+    expect(parsed.sys_scope.display_value).toBeUndefined();
+    expect(parsed.name.display_value).toBeUndefined();
+    expect(parsed.sys_class_name.display_value).toBe("Access Control");
+    expect(parsed.active.display_value).toBe("true");
+    expect(parsed.action.display_value).toBe("Parse hashes");
   });
 });
