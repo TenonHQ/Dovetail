@@ -1,22 +1,34 @@
 /**
- * dove-sn publish-app — publish a scoped application to the ServiceNow Store
- * and/or the company Application Repository, headlessly, then poll the
- * publish's progress tracker until it terminates.
+ * dove-sn publish-app — publish a scoped application to the ServiceNow Store,
+ * the company Application Repository, and/or a new update set, headlessly, then
+ * poll each publish's progress tracker until it terminates.
  *
- * Two engines, one result shape:
+ * Three engines, one result shape:
  *
- *   STORE  — replays the sys_app form's "Publish to ServiceNow Store" flow
- *            (ground truth: HAR capture, 2026-07-16): a form-login session
- *            POSTs /xmlhttp.do with sysparm_processor=
- *            sn_appauthor.ScopedAppUploaderAJAX & sysparm_name=start (plus the
- *            Store account credentials), then polls AJAXProgressStatusChecker/
- *            getStatus with the returned execution sys_id. Basic auth alone
- *            NO-OPS on xmlhttp.do — the form session + X-UserToken is required
- *            (proven by the sn-undo-default-push headless revert).
+ *   UPLOADER — replays the sys_app form's upload flow (ground truth: HAR
+ *            captures 2026-07-16 and 2026-07-29): a form-login session POSTs
+ *            /xmlhttp.do with sysparm_processor=
+ *            sn_appauthor.ScopedAppUploaderAJAX & sysparm_name=start, then polls
+ *            AJAXProgressStatusChecker/getStatus with the returned execution
+ *            sys_id. Basic auth alone NO-OPS on xmlhttp.do — the form session +
+ *            X-UserToken is required (proven by the sn-undo-default-push
+ *            headless revert). Serves BOTH the "store" target
+ *            (sysparm_publish_to_store=true, plus Store credentials) and the
+ *            "repo-ui" target (=false, no credentials) — the destination is one
+ *            flag apart.
  *
  *   REPO   — uses the supported CI/CD REST API: POST /api/sn_cicd/app_repo/publish
  *            (basic auth via the shared client), then polls
  *            GET /api/sn_cicd/progress/{id}. Requires the sn_cicd role (or admin).
+ *            NOTE: the plugin is absent on some instances (tenonworkshop has no
+ *            sn_cicd scope and no app_repo service) — use "repo-ui" there.
+ *
+ *   UPDATE-SET — replays the "Publish to Update Set" dialog: two POSTs to
+ *            /xmlhttp.do against com.snc.apps.AppsAjaxProcessor —
+ *            sysparm_function=createUpdateSet (answers the new sys_update_set
+ *            sys_id), then =publishToUpdateSet (answers a progress worker id) —
+ *            polled through the same AJAXProgressStatusChecker as the uploader.
+ *            There is no REST equivalent for this operation.
  *
  * STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store — the verb
  * refuses to run either engine without confirm:true (dry-run is the default).
@@ -37,7 +49,68 @@ import {
 } from "./table";
 import type { FormAuth, FormSession, PostResult } from "./table";
 
-export type PublishTarget = "store" | "repo";
+/**
+ * - "store"      — ServiceNow Store, via ScopedAppUploaderAJAX (UI replay).
+ * - "repo"       — company app repository, via the sn_cicd CI/CD REST API.
+ * - "repo-ui"    — company app repository, via ScopedAppUploaderAJAX (UI replay).
+ *                  Use when the CI/CD plugin is absent: tenonworkshop has no
+ *                  sn_cicd scope and no app_repo service, so "repo" 404s there
+ *                  while the UI path (HAR-proven) works.
+ * - "update-set" — publish the app INTO a new update set, via the two-call
+ *                  com.snc.apps.AppsAjaxProcessor flow. No REST equivalent.
+ */
+export type PublishTarget = "store" | "repo" | "repo-ui" | "update-set";
+
+export var PUBLISH_TARGETS: ReadonlyArray<string> = [
+  "store",
+  "repo",
+  "repo-ui",
+  "update-set",
+];
+
+/**
+ * Expand a CLI --target value into an ordered target list.
+ *
+ * "both" stays an alias for store,repo (back-compat). Anything else may be a
+ * comma-separated list, so one invocation can publish to the app repository AND
+ * capture the app into an update set — the order given is the order run.
+ * Returns { targets } on success or { error } with a caller-printable message;
+ * never throws, so the CLI can exit 1 cleanly on bad input.
+ */
+export function parsePublishTargets(raw: string): {
+  targets: Array<PublishTarget>;
+  error: string;
+} {
+  var value = String(raw || "").trim();
+  if (value === "both") {
+    return { targets: ["store", "repo"], error: "" };
+  }
+  var parts = value
+    .split(",")
+    .map(function (s) {
+      return s.trim();
+    })
+    .filter(function (s) {
+      return s.length > 0;
+    });
+  if (parts.length === 0) {
+    return { targets: [], error: "--target is empty" };
+  }
+  for (var i = 0; i < parts.length; i += 1) {
+    if (PUBLISH_TARGETS.indexOf(parts[i]) === -1) {
+      return {
+        targets: [],
+        error:
+          "--target must be one of " +
+          PUBLISH_TARGETS.join(", ") +
+          ", 'both', or a comma-separated list of them (got '" +
+          parts[i] +
+          "')",
+      };
+    }
+  }
+  return { targets: parts as Array<PublishTarget>, error: "" };
+}
 
 export interface PublishTransport {
   openSession?: (auth: FormAuth) => Promise<FormSession>;
@@ -64,6 +137,24 @@ export interface PublishAppParams {
   storeUsername?: string;
   /** Test seam only — the CLI never passes this; env SN_STORE_PASSWORD is the real source. */
   storePassword?: string;
+  /**
+   * update-set target only — the name of the update set to create. Defaults to
+   * the app's name, which is exactly what the UI dialog submits (its app_name
+   * input is readonly), so the default reproduces the manual flow.
+   */
+  updateSetName?: string;
+  /**
+   * update-set target only — the update set's description. Tenon convention is
+   * the release date stamp (YYYYMMDD) so a whole release is one query:
+   * sys_update_set where description=<stamp>.
+   */
+  updateSetDescription?: string;
+  /**
+   * update-set target only — the dialog's "Include demo data" checkbox. The
+   * checkbox renders checked, but the captured HAR sent an EMPTY string, so the
+   * default here reproduces the observed wire value rather than the markup.
+   */
+  includeData?: boolean;
   instance?: string;
   user?: string;
   password?: string;
@@ -102,11 +193,20 @@ export interface PublishAppResult {
   versionBefore: string;
   /** The version that was (or would be) published. */
   version: string;
-  /** Store: the progress-tracker sys_id. Repo: the CI/CD progress id. */
+  /**
+   * Store/repo-ui/update-set: the progress-tracker sys_id (the update-set leg's
+   * <workerid>). Repo: the CI/CD progress id.
+   */
   executionSysId: string;
-  /** Store leg only — root result["sys_update_set.sys_id"]; "" when absent. */
+  /**
+   * Store: harvested from root result["sys_update_set.sys_id"].
+   * update-set: the sys_update_set created by createUpdateSet — the whole point
+   * of the call, so it is set BEFORE the publish is polled and survives a
+   * failure (the set exists on the instance either way, and the caller needs
+   * the sys_id to clean up). "" when absent.
+   */
   updateSetSysId: string;
-  /** Store: tpp.servicenow.com editapplication URL. Repo: "". */
+  /** Store: tpp.servicenow.com editapplication URL. Everything else: "". */
   appLink: string;
   steps: Array<PublishStep>;
   polls: number;
@@ -165,6 +265,77 @@ export function buildStartFields(p: {
   return fields;
 }
 
+var APPS_AJAX_PROCESSOR = "com.snc.apps.AppsAjaxProcessor";
+
+/**
+ * Field map for AppsAjaxProcessor.createUpdateSet — call 1 of the two-call
+ * "Publish to Update Set" flow (HAR ground truth). The answer attribute is the
+ * new sys_update_set sys_id.
+ *
+ * The app sys_id rides as `sysparm_appid` HERE but as `sysparm_sys_id` in call
+ * 2 (and `sysparm_app_id` in the version validator). The platform spells it
+ * differently per function and they are NOT interchangeable.
+ */
+export function buildCreateUpdateSetFields(p: {
+  appSysId: string;
+  updateSetName: string;
+  description: string;
+}): Record<string, string> {
+  return {
+    sysparm_processor: APPS_AJAX_PROCESSOR,
+    sysparm_scope: "global",
+    sysparm_want_session_messages: "true",
+    sysparm_function: "createUpdateSet",
+    sysparm_name: p.updateSetName,
+    sysparm_appid: p.appSysId,
+    sysparm_description: p.description,
+    // "false" = create the set but do NOT adopt it as the session's current
+    // update set. A batch that flipped the session set would silently capture
+    // unrelated writes into the last app's set.
+    sysparm_current: "false",
+    "ni.nolog.x_referer": "ignore",
+    x_referer: "sys_app.do?sys_id=" + p.appSysId,
+  };
+}
+
+/**
+ * Field map for AppsAjaxProcessor.publishToUpdateSet — call 2. The answer
+ * attribute is the progress-worker sys_id (echoed as a <workerid> element).
+ *
+ * `sysparm_name` is the literal "start", NOT a name: the dialog composes an
+ * "<app> - <version>" label, but the generic progress viewer overwrites
+ * sysparm_name with "start" before the request leaves the browser, so the
+ * composed label never reaches the wire. The set keeps the name call 1 gave it.
+ */
+export function buildPublishToUpdateSetFields(p: {
+  appSysId: string;
+  updateSetSysId: string;
+  version: string;
+  description: string;
+  includeData: boolean;
+}): Record<string, string> {
+  return {
+    sysparm_processor: APPS_AJAX_PROCESSOR,
+    sysparm_scope: "global",
+    sysparm_want_session_messages: "true",
+    sysparm_function: "publishToUpdateSet",
+    sysparm_update_set_id: p.updateSetSysId,
+    sysparm_sys_id: p.appSysId,
+    sysparm_name: "start",
+    sysparm_version: p.version,
+    sysparm_description: p.description,
+    // The captured HAR sent an EMPTY string here even though the "Include demo
+    // data" checkbox renders checked — empty is the observed wire default and
+    // "true" is the explicit opt-in.
+    sysparm_include_data: p.includeData ? "true" : "",
+    sysparm_progress_name: "Publishing application",
+    sysparm_ajax_processor: APPS_AJAX_PROCESSOR,
+    sysparm_show_done_button: "true",
+    "ni.nolog.x_referer": "ignore",
+    x_referer: "sys_app.do?sys_id=" + p.appSysId,
+  };
+}
+
 /**
  * Extract the `answer` attribute from an xmlhttp.do response envelope
  * (`<xml answer="..." .../>`) and entity-decode it. A missing/empty answer is
@@ -178,8 +349,7 @@ export function parseXmlAnswer(xml: string): { answer: string; error: string } {
   if (!m) {
     return {
       answer: "",
-      error:
-        "no answer attribute in xmlhttp.do response: " + xml.slice(0, 200),
+      error: "no answer attribute in xmlhttp.do response: " + xml.slice(0, 200),
     };
   }
   return { answer: decodeHtmlEntities(m[1]), error: "" };
@@ -471,12 +641,140 @@ function resolveStoreCreds(params: PublishAppParams): {
   return { username: username, password: password };
 }
 
-async function publishToStore(
+/**
+ * Resolve the update set's name and description.
+ *
+ * The name defaults to the app's name because the dialog's `app_name` input is
+ * READONLY — the bare app name is what the UI submits, and the live record
+ * confirms it (HAR createUpdateSet answer 2d368e8f… → sys_update_set named
+ * "@tenon/ui-side-modal"). The description defaults to empty; callers wanting
+ * the release-query convention pass the YYYYMMDD stamp.
+ */
+export function resolveUpdateSetNaming(p: {
+  updateSetName?: string;
+  updateSetDescription?: string;
+  appName: string;
+}): { name: string; description: string } {
+  var name = typeof p.updateSetName === "string" ? p.updateSetName.trim() : "";
+  if (!name) name = String(p.appName || "").trim();
+  if (!name) {
+    throw new Error(
+      "publish-app: the update-set target needs an update set name, and the " +
+        "resolved app has no name — pass updateSetName explicitly.",
+    );
+  }
+  var description =
+    typeof p.updateSetDescription === "string" ? p.updateSetDescription : "";
+  return { name: name, description: description };
+}
+
+/**
+ * Poll AJAXProgressStatusChecker until the tracker reaches a terminal state.
+ *
+ * Mutates `result` (polls / status / message / note / steps) and returns the
+ * terminal progress tree — or `null` when the caller should return immediately
+ * because the outcome is already written onto `result` (timeout, transport
+ * failure, or an unparseable answer).
+ *
+ * Shared by every UI-replay target: the Store upload, the app-repo upload, and
+ * the update-set publish all report through this one tracker endpoint.
+ */
+async function pollAjaxProgress(p: {
+  result: PublishAppResult;
+  auth: FormAuth;
+  session: FormSession;
+  post: NonNullable<PublishTransport["post"]>;
+  sleepFn: NonNullable<PublishTransport["sleep"]>;
+  appSysId: string;
+  timeoutMs: number;
+}): Promise<ProgressNode | null> {
+  var result = p.result;
+  var startedAt = Date.now();
+  var pollIndex = 0;
+  while (true) {
+    var delay =
+      PUBLISH_POLL_DELAYS_MS[
+        Math.min(pollIndex, PUBLISH_POLL_DELAYS_MS.length - 1)
+      ];
+    if (Date.now() - startedAt + delay > p.timeoutMs) {
+      result.status = "timeout";
+      result.note =
+        "publish-app: progress tracker " +
+        result.executionSysId +
+        " did not terminate within " +
+        p.timeoutMs +
+        "ms after " +
+        result.polls +
+        " poll(s). Check /sys_execution_tracker.do?sys_id=" +
+        result.executionSysId +
+        " on the instance.";
+      return null;
+    }
+    await p.sleepFn(delay);
+    pollIndex += 1;
+    result.polls += 1;
+
+    var pollRes = await p.post(p.auth, p.session, "/xmlhttp.do", {
+      sysparm_processor: "AJAXProgressStatusChecker",
+      sysparm_name: "getStatus",
+      sysparm_scope: "global",
+      sysparm_want_session_messages: "true",
+      sysparm_execution_id: result.executionSysId,
+      "ni.nolog.x_referer": "ignore",
+      x_referer: "sys_app.do?sys_id=" + p.appSysId,
+    });
+    if (pollRes.status < 200 || pollRes.status >= 300) {
+      result.message = "getStatus returned HTTP " + pollRes.status;
+      result.note =
+        "publish-app: progress poll failed (HTTP " +
+        pollRes.status +
+        ") — tracker " +
+        result.executionSysId +
+        " may still be running on the instance.";
+      return null;
+    }
+    var pollAnswer = parseXmlAnswer(pollRes.body);
+    if (pollAnswer.error) {
+      result.message = pollAnswer.error;
+      result.note =
+        "publish-app: could not read the progress answer — " + pollAnswer.error;
+      return null;
+    }
+    var tree: ProgressNode;
+    try {
+      tree = parseProgressTree(pollAnswer.answer);
+    } catch (e) {
+      result.message = e instanceof Error ? e.message : String(e);
+      result.note = result.message;
+      return null;
+    }
+    if (!classifyProgress(tree).terminal) continue;
+
+    result.steps = flattenSteps(tree);
+    result.message = tree.message || "";
+    return tree;
+  }
+}
+
+/**
+ * ScopedAppUploaderAJAX upload — the engine behind BOTH the Store publish and
+ * the company-app-repo publish. The two differ only by
+ * `sysparm_publish_to_store` and whether Store credentials are attached; the
+ * session, the start call, and the progress tracker are identical.
+ */
+async function publishViaUploader(
   params: PublishAppParams,
   app: ResolvedApp,
+  target: "store" | "repo-ui",
 ): Promise<PublishAppResult> {
-  var result = baseResult("store", app, params.version);
-  var creds = resolveStoreCreds(params);
+  var result = baseResult(target, app, params.version);
+  // repo-ui never carries Store credentials: publish_to_store=false makes the
+  // processor ignore them, and requiring SN_STORE_* would block an internal
+  // publish on a Store account it does not need.
+  var creds =
+    target === "store"
+      ? resolveStoreCreds(params)
+      : { username: "", password: "" };
   var transport = params.transport || {};
   var openSession = transport.openSession || openFormSession;
   var post = transport.post || postForm;
@@ -495,7 +793,7 @@ async function publishToStore(
     appSysId: app.sysId,
     version: params.version,
     devNotes: params.devNotes || "",
-    target: "store",
+    target: target,
     storeUsername: creds.username,
     storePassword: creds.password,
   });
@@ -514,104 +812,199 @@ async function publishToStore(
     result.message = startAnswer.error || "answer is not a sys_id";
     result.note =
       "publish-app: the start call did not return an execution sys_id — " +
-      (startAnswer.error ||
-        "got '" + startAnswer.answer.slice(0, 64) + "'") +
+      (startAnswer.error || "got '" + startAnswer.answer.slice(0, 64) + "'") +
       ". The upload never started.";
     return result;
   }
   result.executionSysId = startAnswer.answer;
 
-  var startedAt = Date.now();
-  var pollIndex = 0;
-  while (true) {
-    var delay =
-      PUBLISH_POLL_DELAYS_MS[
-        Math.min(pollIndex, PUBLISH_POLL_DELAYS_MS.length - 1)
-      ];
-    if (Date.now() - startedAt + delay > timeoutMs) {
-      result.status = "timeout";
-      result.note =
-        "publish-app: progress tracker " +
-        result.executionSysId +
-        " did not terminate within " +
-        timeoutMs +
-        "ms after " +
-        result.polls +
-        " poll(s). Check /sys_execution_tracker.do?sys_id=" +
-        result.executionSysId +
-        " on the instance.";
-      return result;
-    }
-    await sleepFn(delay);
-    pollIndex += 1;
-    result.polls += 1;
+  var tree = await pollAjaxProgress({
+    result: result,
+    auth: auth,
+    session: session,
+    post: post,
+    sleepFn: sleepFn,
+    appSysId: app.sysId,
+    timeoutMs: timeoutMs,
+  });
+  if (!tree) return result;
 
-    var pollRes = await post(auth, session, "/xmlhttp.do", {
-      sysparm_processor: "AJAXProgressStatusChecker",
-      sysparm_name: "getStatus",
-      sysparm_scope: "global",
-      sysparm_want_session_messages: "true",
-      sysparm_execution_id: result.executionSysId,
-      "ni.nolog.x_referer": "ignore",
-      x_referer: "sys_app.do?sys_id=" + app.sysId,
-    });
-    if (pollRes.status < 200 || pollRes.status >= 300) {
-      result.message = "getStatus returned HTTP " + pollRes.status;
-      result.note =
-        "publish-app: progress poll failed (HTTP " +
-        pollRes.status +
-        ") — tracker " +
-        result.executionSysId +
-        " may still be running on the instance.";
-      return result;
-    }
-    var pollAnswer = parseXmlAnswer(pollRes.body);
-    if (pollAnswer.error) {
-      result.message = pollAnswer.error;
-      result.note =
-        "publish-app: could not read the progress answer — " + pollAnswer.error;
-      return result;
-    }
-    var tree: ProgressNode;
-    try {
-      tree = parseProgressTree(pollAnswer.answer);
-    } catch (e) {
-      result.message = e instanceof Error ? e.message : String(e);
-      result.note = result.message;
-      return result;
-    }
-    var state = classifyProgress(tree);
-    if (!state.terminal) continue;
+  var harvested = harvestProgressResults(tree);
+  result.appLink = harvested.appLink;
+  result.updateSetSysId = harvested.updateSetSysId;
+  if (classifyProgress(tree).success) {
+    result.status = "published";
+    result.note =
+      "Published " +
+      app.name +
+      " v" +
+      params.version +
+      " to " +
+      (target === "store"
+        ? "the ServiceNow Store"
+        : "the company application repository") +
+      (result.appLink ? " — " + result.appLink : "") +
+      " (" +
+      result.polls +
+      " poll(s)).";
+  } else {
+    result.status = "failed";
+    result.note =
+      "publish-app: " +
+      (target === "store" ? "store" : "app-repo") +
+      " publish terminated in state " +
+      tree.state +
+      (result.message ? " — " + result.message : "") +
+      ". Tracker " +
+      result.executionSysId +
+      ".";
+  }
+  return result;
+}
 
-    result.steps = flattenSteps(tree);
-    result.message = tree.message || "";
-    var harvested = harvestProgressResults(tree);
-    result.appLink = harvested.appLink;
-    result.updateSetSysId = harvested.updateSetSysId;
-    if (state.success) {
-      result.status = "published";
-      result.note =
-        "Published " +
-        app.name +
-        " v" +
-        params.version +
-        " to the ServiceNow Store" +
-        (result.appLink ? " — " + result.appLink : "") +
-        " (" +
-        result.polls +
-        " poll(s)).";
-    } else {
-      result.status = "failed";
-      result.note =
-        "publish-app: store publish terminated in state " +
-        tree.state +
-        (result.message ? " — " + result.message : "") +
-        ". Tracker " +
-        result.executionSysId +
-        ".";
-    }
+/**
+ * "Publish to Update Set" — the two-call AppsAjaxProcessor flow, replayed over
+ * the same form session. Call 1 creates the sys_update_set; call 2 publishes
+ * the app into it under a progress worker.
+ *
+ * `updateSetSysId` is recorded the moment call 1 answers, BEFORE the publish is
+ * polled: if call 2 or the worker fails, the set still exists on the instance
+ * and the caller needs its sys_id to inspect or delete it.
+ */
+async function publishToUpdateSet(
+  params: PublishAppParams,
+  app: ResolvedApp,
+): Promise<PublishAppResult> {
+  var result = baseResult("update-set", app, params.version);
+  var naming = resolveUpdateSetNaming({
+    updateSetName: params.updateSetName,
+    updateSetDescription: params.updateSetDescription,
+    appName: app.name,
+  });
+  var transport = params.transport || {};
+  var openSession = transport.openSession || openFormSession;
+  var post = transport.post || postForm;
+  var sleepFn = transport.sleep || realSleep;
+  var timeoutMs =
+    params.timeoutMs != null ? params.timeoutMs : DEFAULT_PUBLISH_TIMEOUT_MS;
+
+  var auth = resolveFormAuth({
+    instance: params.instance,
+    user: params.user,
+    password: params.password,
+  });
+  var session = await openSession(auth);
+
+  // --- call 1: createUpdateSet ---
+  var createRes = await post(
+    auth,
+    session,
+    "/xmlhttp.do",
+    buildCreateUpdateSetFields({
+      appSysId: app.sysId,
+      updateSetName: naming.name,
+      description: naming.description,
+    }),
+  );
+  if (createRes.status < 200 || createRes.status >= 300) {
+    result.message = "createUpdateSet returned HTTP " + createRes.status;
+    result.note =
+      "publish-app: createUpdateSet failed (HTTP " +
+      createRes.status +
+      "): " +
+      (createRes.body || "").slice(0, 200) +
+      ". No update set was created.";
     return result;
   }
+  var createAnswer = parseXmlAnswer(createRes.body);
+  if (createAnswer.error || !SYS_ID_RE.test(createAnswer.answer)) {
+    result.message = createAnswer.error || "answer is not a sys_id";
+    result.note =
+      "publish-app: createUpdateSet did not return an update set sys_id — " +
+      (createAnswer.error || "got '" + createAnswer.answer.slice(0, 64) + "'") +
+      ". Nothing was published.";
+    return result;
+  }
+  result.updateSetSysId = createAnswer.answer;
+
+  // --- call 2: publishToUpdateSet ---
+  var publishRes = await post(
+    auth,
+    session,
+    "/xmlhttp.do",
+    buildPublishToUpdateSetFields({
+      appSysId: app.sysId,
+      updateSetSysId: result.updateSetSysId,
+      version: params.version,
+      description: naming.description,
+      includeData: params.includeData === true,
+    }),
+  );
+  if (publishRes.status < 200 || publishRes.status >= 300) {
+    result.message = "publishToUpdateSet returned HTTP " + publishRes.status;
+    result.note =
+      "publish-app: publishToUpdateSet failed (HTTP " +
+      publishRes.status +
+      "): " +
+      (publishRes.body || "").slice(0, 200) +
+      ". Update set " +
+      result.updateSetSysId +
+      " was created but is EMPTY.";
+    return result;
+  }
+  var publishAnswer = parseXmlAnswer(publishRes.body);
+  if (publishAnswer.error || !SYS_ID_RE.test(publishAnswer.answer)) {
+    result.message = publishAnswer.error || "answer is not a sys_id";
+    result.note =
+      "publish-app: publishToUpdateSet did not return a worker sys_id — " +
+      (publishAnswer.error ||
+        "got '" + publishAnswer.answer.slice(0, 64) + "'") +
+      ". Update set " +
+      result.updateSetSysId +
+      " was created but is EMPTY.";
+    return result;
+  }
+  result.executionSysId = publishAnswer.answer;
+
+  var tree = await pollAjaxProgress({
+    result: result,
+    auth: auth,
+    session: session,
+    post: post,
+    sleepFn: sleepFn,
+    appSysId: app.sysId,
+    timeoutMs: timeoutMs,
+  });
+  if (!tree) return result;
+
+  if (classifyProgress(tree).success) {
+    result.status = "published";
+    result.note =
+      "Published " +
+      app.name +
+      " v" +
+      params.version +
+      " into update set '" +
+      naming.name +
+      "' (" +
+      result.updateSetSysId +
+      (naming.description ? ", description '" + naming.description + "'" : "") +
+      ") (" +
+      result.polls +
+      " poll(s)).";
+  } else {
+    result.status = "failed";
+    result.note =
+      "publish-app: update-set publish terminated in state " +
+      tree.state +
+      (result.message ? " — " + result.message : "") +
+      ". Tracker " +
+      result.executionSysId +
+      ". Update set " +
+      result.updateSetSysId +
+      " exists and may be incomplete.";
+  }
+  return result;
 }
 
 async function publishToRepo(
@@ -690,10 +1083,12 @@ async function publishToRepo(
 
     var progRes = await client.now.invoke({
       method: "GET",
-      path: "/api/sn_cicd/progress/" + encodeURIComponent(result.executionSysId),
+      path:
+        "/api/sn_cicd/progress/" + encodeURIComponent(result.executionSysId),
     });
     if (progRes.status < 200 || progRes.status >= 300) {
-      result.message = "HTTP " + progRes.status + " from the CI/CD progress API";
+      result.message =
+        "HTTP " + progRes.status + " from the CI/CD progress API";
       result.note =
         "publish-app: CI/CD progress poll failed (HTTP " +
         progRes.status +
@@ -769,6 +1164,46 @@ function maskedPreview(
       : "(MISSING — set SN_STORE_PASSWORD)";
     return fields;
   }
+  if (target === "repo-ui") {
+    // No credentials are involved at all — publish_to_store=false.
+    return buildStartFields({
+      appSysId: app.sysId,
+      version: params.version,
+      devNotes: params.devNotes || "",
+      target: "repo-ui",
+      storeUsername: "",
+      storePassword: "",
+    });
+  }
+  if (target === "update-set") {
+    var naming = resolveUpdateSetNaming({
+      updateSetName: params.updateSetName,
+      updateSetDescription: params.updateSetDescription,
+      appName: app.name,
+    });
+    // Two calls, so the preview is flattened with a call-N prefix — the second
+    // call's real sysparm_update_set_id is only known at run time.
+    var flat: Record<string, string> = {};
+    var create = buildCreateUpdateSetFields({
+      appSysId: app.sysId,
+      updateSetName: naming.name,
+      description: naming.description,
+    });
+    Object.keys(create).forEach(function (k) {
+      flat["1." + k] = create[k];
+    });
+    var publish = buildPublishToUpdateSetFields({
+      appSysId: app.sysId,
+      updateSetSysId: "(sys_id returned by call 1)",
+      version: params.version,
+      description: naming.description,
+      includeData: params.includeData === true,
+    });
+    Object.keys(publish).forEach(function (k) {
+      flat["2." + k] = publish[k];
+    });
+    return flat;
+  }
   var preview: Record<string, string> = {
     method: "POST",
     path:
@@ -779,6 +1214,14 @@ function maskedPreview(
   };
   if (params.devNotes) preview.dev_notes = params.devNotes;
   return preview;
+}
+
+/** Human phrase for a target — used in dry-run notes and CLI output. */
+export function describeTarget(target: PublishTarget): string {
+  if (target === "store") return "ServiceNow Store (EXTERNALLY VISIBLE)";
+  if (target === "repo") return "application repository (CI/CD REST API)";
+  if (target === "repo-ui") return "company application repository (UI replay)";
+  return "new update set";
 }
 
 export async function publishApp(
@@ -793,9 +1236,15 @@ export async function publishApp(
   if (!params.version) {
     throw new Error("publish-app: version is required.");
   }
-  if (params.target !== "store" && params.target !== "repo") {
+  if (
+    params.target !== "store" &&
+    params.target !== "repo" &&
+    params.target !== "repo-ui" &&
+    params.target !== "update-set"
+  ) {
     throw new Error(
-      "publish-app: target must be 'store' or 'repo' (got '" +
+      "publish-app: target must be 'store', 'repo', 'repo-ui', or " +
+        "'update-set' (got '" +
         String(params.target) +
         "').",
     );
@@ -839,15 +1288,16 @@ export async function publishApp(
       ") as v" +
       params.version +
       " to the " +
-      (params.target === "store"
-        ? "ServiceNow Store (EXTERNALLY VISIBLE)"
-        : "application repository") +
+      describeTarget(params.target) +
       ". Re-run with confirm to publish.";
     return dry;
   }
 
-  if (params.target === "store") {
-    return publishToStore(params, app);
+  if (params.target === "store" || params.target === "repo-ui") {
+    return publishViaUploader(params, app, params.target);
+  }
+  if (params.target === "update-set") {
+    return publishToUpdateSet(params, app);
   }
   return publishToRepo(params, app, client);
 }

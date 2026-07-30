@@ -653,18 +653,24 @@ export function buildDescriptors(
       name: "app_publish",
       annotations: WRITE_EXECUTE,
       description:
-        "Publish a scoped ServiceNow application to ONE target per call — the ServiceNow Store " +
-        "(target 'store') or the company Application Repository (target 'repo'); call twice to " +
-        "publish to both — then poll the publish to completion. STORE PUBLISH IS EXTERNALLY " +
-        "VISIBLE on the ServiceNow Store — treat it as a release. DRY-RUN BY DEFAULT: without " +
-        "confirm:true the resolved plan (app, current version, target) is returned and nothing is " +
-        "published. target 'store' replays the sys_app form's upload flow over a form-login session " +
-        "and requires SN_STORE_USERNAME/SN_STORE_PASSWORD in the server's env file — credentials " +
-        "never transit tool arguments. target 'repo' uses the supported CI/CD REST API " +
-        "(/api/sn_cicd/app_repo/publish) and requires the sn_cicd role. app is a scope name, " +
+        "Publish a scoped ServiceNow application to ONE target per call, then poll the publish to " +
+        "completion; call repeatedly to hit several targets. STORE PUBLISH IS EXTERNALLY VISIBLE " +
+        "on the ServiceNow Store — treat it as a release. DRY-RUN BY DEFAULT: without confirm:true " +
+        "the resolved plan (app, current version, target) is returned and nothing is published. " +
+        "Targets: 'store' replays the sys_app form's upload flow over a form-login session and " +
+        "requires SN_STORE_USERNAME/SN_STORE_PASSWORD in the server's env file — credentials never " +
+        "transit tool arguments. 'repo' publishes to the company Application Repository via the " +
+        "supported CI/CD REST API (/api/sn_cicd/app_repo/publish) and requires the sn_cicd plugin " +
+        "and role. 'repo-ui' reaches the SAME company repository over the UI uploader instead — use " +
+        "it on instances without sn_cicd, where 'repo' 404s. 'update-set' publishes the app INTO a " +
+        "newly created update set via the two-call AppsAjaxProcessor flow (no REST equivalent " +
+        "exists); updateSetName defaults to the app's name and updateSetDescription is conventionally " +
+        "the release date stamp (YYYYMMDD) so a whole release is one sys_update_set query. " +
+        "includeData (default false) is the dialog's 'Include demo data' box. app is a scope name, " +
         "sys_app sys_id, or app name; version must be above the currently published version. The " +
         "result carries the progress-tracker id, per-step states, the Store appLink, and the " +
-        "publish's update-set sys_id where the instance reports one.",
+        "update-set sys_id (for 'update-set' this is set as soon as the set is created, so it " +
+        "survives a later failure).",
       shape: publishAppSchema.shape,
       handler: async function (args: any) {
         var p = publishAppSchema.parse(args);
@@ -673,6 +679,9 @@ export function buildDescriptors(
           version: p.version,
           target: p.target,
           devNotes: p.devNotes,
+          updateSetName: p.updateSetName,
+          updateSetDescription: p.updateSetDescription,
+          includeData: p.includeData,
           confirm: p.confirm,
           dryRun: p.dryRun,
           timeoutMs: p.timeoutMs,

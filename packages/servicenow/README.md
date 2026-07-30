@@ -466,11 +466,11 @@ Programmatic: `invokeRest({ method, path, body, confirm })` is exported, and the
 client gained `now.put` / `now.delete` / `now.invoke` (the latter returns
 `{ status, body }` verbatim) alongside the existing `now.get` / `now.post`.
 
-### Publish an app to the Store / application repository
+### Publish an app to the Store / application repository / an update set
 
 Publish a scoped application to the **ServiceNow Store**, the **company
-application repository**, or both — headlessly, with the publish's progress
-tracker polled to completion.
+application repository**, and/or **into a new update set** — headlessly, with
+each publish's progress tracker polled to completion.
 
 ```bash
 # Dry-run — the DEFAULT: resolves the app, prints the plan, publishes NOTHING
@@ -479,15 +479,21 @@ npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260716 --target bot
 # Publish for real (store, then repo, same version)
 npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260716 \
   --target both --dev-notes "July release" --confirm --json
+
+# Release flow on an instance WITHOUT the sn_cicd plugin: publish to the company
+# repository over the UI uploader, then capture the app into a dated update set.
+npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260729 \
+  --target repo-ui,update-set --update-set-description 20260729 --confirm --json
 ```
 
 **Store publish is EXTERNALLY VISIBLE on the ServiceNow Store — treat
 `--target store --confirm` as a release.** `publish-app` is dry-run by default:
 without `--confirm` it prints the resolved plan and exits `1` (a deliberate
-refusal). `--target both` runs store then repo sequentially and short-circuits
-if the store leg fails.
+refusal). `--target` takes one target, a comma-separated list, or `both` (an
+alias for `store,repo`); targets run **in the order given** and short-circuit on
+the first failure.
 
-The two targets ride different transports:
+The targets ride different transports:
 
 - **store** replays the `sys_app` form's upload flow (`xmlhttp.do` +
   `sn_appauthor.ScopedAppUploaderAJAX`) over a form-login session — basic auth
@@ -497,13 +503,33 @@ The two targets ride different transports:
 - **repo** uses the supported CI/CD REST API (`POST /api/sn_cicd/app_repo/publish`
   + `GET /api/sn_cicd/progress/{id}`) over basic auth. The API user needs the
   `sn_cicd` role (or admin).
+- **repo-ui** reaches the *same* company repository as `repo`, but over the UI
+  uploader (`sysparm_publish_to_store=false`) instead of REST. Use it when the
+  instance has no CI/CD plugin — `tenonworkshop`, for instance, has no `sn_cicd`
+  scope and no `app_repo` service, so `repo` 404s there while `repo-ui` works.
+  It needs no Store credentials.
+- **update-set** publishes the app *into a newly created update set* via the
+  two-call `com.snc.apps.AppsAjaxProcessor` flow (`createUpdateSet` →
+  `publishToUpdateSet`). There is no REST equivalent. `--update-set-name`
+  defaults to the app's name (the dialog's field is readonly, so that is what
+  the UI submits); `--update-set-description` is conventionally the release date
+  stamp `YYYYMMDD`, which makes a whole release one query
+  (`sys_update_set` where `description=20260729`). `--include-data` maps to the
+  dialog's "Include demo data" box and defaults **off**, matching the value the
+  UI actually puts on the wire.
+
+Ordering matters when you combine them: the repo publish is what bumps
+`sys_app.version`, so put it **before** `update-set` if you want the set
+captured at the new version.
 
 `--app` accepts a scope name, `sys_app` sys_id, or app name; `--version` must be
 above the currently published version. The result carries the progress-tracker
 id, per-step states ("Packaging application", "Uploading application"), the
-Store `appLink`, and the publish's update-set sys_id where the instance reports
-one. Exit codes: `0` published or dry-run, `1` bad args/unconfirmed, `2`
-failed/timeout. Programmatic: `publishApp({ app, version, target, confirm })`.
+Store `appLink`, and the update-set sys_id — for the `update-set` target that is
+recorded as soon as the set is created, so it survives a later failure and you
+can always find (or delete) the set. Exit codes: `0` published or dry-run, `1`
+bad args/unconfirmed, `2` failed/timeout. Programmatic:
+`publishApp({ app, version, target, confirm })`.
 
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
