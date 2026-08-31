@@ -1,7 +1,386 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-07-28T22:07:08.748Z",
+  "generated_at": "2026-08-31T21:34:20.985Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-types@0.0.21",
+      "package": "@tenonhq/dovetail-types",
+      "version": "0.0.21",
+      "prev_version": "0.0.20",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-types@0.0.21"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-babel-plugin@0.0.13",
+      "package": "@tenonhq/dovetail-babel-plugin",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-babel-plugin@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-babel-plugin-remove-modules@0.0.13",
+      "package": "@tenonhq/dovetail-babel-plugin-remove-modules",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-babel-plugin-remove-modules@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-babel-preset-servicenow@0.0.13",
+      "package": "@tenonhq/dovetail-babel-preset-servicenow",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-babel-preset-servicenow@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-schema@0.0.13",
+      "package": "@tenonhq/dovetail-schema",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-schema@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "4bc78bc61",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "c82439b30",
+          "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
+          "pr": 183
+        },
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.119",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.119",
+      "prev_version": "0.0.118",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-core@0.0.119"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "025e4eb4d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "2d43ef9f1",
+          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.49 [skip ci]"
+        },
+        {
+          "sha": "9476dceb0",
+          "subject": "chore(release): @tenonhq/dovetail-core@0.0.118 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-dashboard@0.0.50",
+      "package": "@tenonhq/dovetail-dashboard",
+      "version": "0.0.50",
+      "prev_version": "0.0.49",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-dashboard@0.0.50"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "025e4eb4d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "2d43ef9f1",
+          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.49 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-eslint-plugin@0.0.15",
+      "package": "@tenonhq/dovetail-eslint-plugin",
+      "version": "0.0.15",
+      "prev_version": "0.0.14",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-eslint-plugin@0.0.15"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.36",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.36",
+      "prev_version": "0.0.35",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-servicenow@0.0.36"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "025e4eb4d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "2d43ef9f1",
+          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.49 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.33",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.33",
+      "prev_version": "0.0.32",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-mcp@0.0.33"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "025e4eb4d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-prettier-plugin@0.0.13",
+      "package": "@tenonhq/dovetail-prettier-plugin",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-prettier-plugin@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-sass-plugin@0.0.13",
+      "package": "@tenonhq/dovetail-sass-plugin",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-sass-plugin@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-sawmill@0.0.9",
+      "package": "@tenonhq/dovetail-sawmill",
+      "version": "0.0.9",
+      "prev_version": "0.0.8",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-sawmill@0.0.9"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "4bc78bc61",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "c82439b30",
+          "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
+          "pr": 183
+        },
+        {
+          "sha": "958f4fcd7",
+          "subject": "chore(release): publish 3 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-typescript-plugin@0.0.13",
+      "package": "@tenonhq/dovetail-typescript-plugin",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-typescript-plugin@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-webpack-plugin@0.0.12",
+      "package": "@tenonhq/dovetail-webpack-plugin",
+      "version": "0.0.12",
+      "prev_version": "0.0.11",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-webpack-plugin@0.0.12"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "17624b238",
+          "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.35",
@@ -902,354 +1281,6 @@
         {
           "sha": "9035f969b",
           "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.18",
-      "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.18",
-      "prev_version": "0.0.17",
-      "published_at": "2026-06-19T08:59:45.509Z",
-      "git": {
-        "sha": "073dad48a5d534f489a0906db083e97462ec76fe",
-        "tag": "dovetail-mcp@0.0.18"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "4bc78bc61",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        },
-        {
-          "sha": "c82439b30",
-          "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
-          "pr": 183
-        },
-        {
-          "sha": "092e176fc",
-          "subject": "chore(release): publish 3 packages [skip ci]"
-        },
-        {
-          "sha": "82924d15c",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-claude-plans@0.0.26",
-      "package": "@tenonhq/dovetail-claude-plans",
-      "version": "0.0.26",
-      "prev_version": "0.0.25",
-      "published_at": "2026-06-18T06:28:59.910Z",
-      "git": {
-        "sha": "2bca2a07378185911d3b141f3be781bfa9720b2e",
-        "tag": "dovetail-claude-plans@0.0.26"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "2bca2a073",
-          "subject": "feat: named pipelines in claude-plans state machine (grain panel backend) (#189)",
-          "pr": 189
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.43",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.43",
-      "prev_version": "0.0.42",
-      "published_at": "2026-06-18T06:28:59.910Z",
-      "git": {
-        "sha": "2bca2a07378185911d3b141f3be781bfa9720b2e",
-        "tag": "dovetail-dashboard@0.0.43"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "3dbfd795c",
-          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.42 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.42",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.42",
-      "prev_version": "0.0.41",
-      "published_at": "2026-06-17T00:36:24.117Z",
-      "git": {
-        "sha": "81da56249cdf05ab663ee93ae1d7e1fef5510205",
-        "tag": "dovetail-dashboard@0.0.42"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "81da56249",
-          "subject": "fix(dashboard): stop mermaid multi-line node labels clipping (#187)",
-          "pr": 187
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-types@0.0.20",
-      "package": "@tenonhq/dovetail-types",
-      "version": "0.0.20",
-      "prev_version": "0.0.19",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-types@0.0.20"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "6ddaaf257",
-          "subject": "fix: dove push honors the activated update set via routing file (#182) (#184)",
-          "pr": 182
-        },
-        {
-          "sha": "9332fdf7a",
-          "subject": "chore(release): publish 20 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-babel-plugin@0.0.12",
-      "package": "@tenonhq/dovetail-babel-plugin",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-babel-plugin@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "092e176fc",
-          "subject": "chore(release): publish 3 packages [skip ci]"
-        },
-        {
-          "sha": "82924d15c",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-babel-plugin-remove-modules@0.0.12",
-      "package": "@tenonhq/dovetail-babel-plugin-remove-modules",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-babel-plugin-remove-modules@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "092e176fc",
-          "subject": "chore(release): publish 3 packages [skip ci]"
-        },
-        {
-          "sha": "82924d15c",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-babel-preset-servicenow@0.0.12",
-      "package": "@tenonhq/dovetail-babel-preset-servicenow",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-babel-preset-servicenow@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "092e176fc",
-          "subject": "chore(release): publish 3 packages [skip ci]"
-        },
-        {
-          "sha": "82924d15c",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-schema@0.0.12",
-      "package": "@tenonhq/dovetail-schema",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-schema@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "de9d77971",
-          "subject": "chore(release): publish 14 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-core@0.0.107",
-      "package": "@tenonhq/dovetail-core",
-      "version": "0.0.107",
-      "prev_version": "0.0.106",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-core@0.0.107"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "6ddaaf257",
-          "subject": "fix: dove push honors the activated update set via routing file (#182) (#184)",
-          "pr": 182
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-eslint-plugin@0.0.14",
-      "package": "@tenonhq/dovetail-eslint-plugin",
-      "version": "0.0.14",
-      "prev_version": "0.0.13",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-eslint-plugin@0.0.14"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "d9ffb6f9a",
-          "subject": "chore(release): @tenonhq/dovetail-eslint-plugin@0.0.13 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-prettier-plugin@0.0.12",
-      "package": "@tenonhq/dovetail-prettier-plugin",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-prettier-plugin@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "de9d77971",
-          "subject": "chore(release): publish 14 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-sass-plugin@0.0.12",
-      "package": "@tenonhq/dovetail-sass-plugin",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-sass-plugin@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "de9d77971",
-          "subject": "chore(release): publish 14 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-typescript-plugin@0.0.12",
-      "package": "@tenonhq/dovetail-typescript-plugin",
-      "version": "0.0.12",
-      "prev_version": "0.0.11",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-typescript-plugin@0.0.12"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "de9d77971",
-          "subject": "chore(release): publish 14 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-webpack-plugin@0.0.11",
-      "package": "@tenonhq/dovetail-webpack-plugin",
-      "version": "0.0.11",
-      "prev_version": "0.0.10",
-      "published_at": "2026-06-16T01:30:04.619Z",
-      "git": {
-        "sha": "6ddaaf257ed5aee1d64a19a44bd96c12c8e63a4e",
-        "tag": "dovetail-webpack-plugin@0.0.11"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "de9d77971",
-          "subject": "chore(release): publish 14 packages [skip ci]"
         }
       ],
       "exports_delta": null,

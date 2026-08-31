@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-webpack-plugin",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "engines": {
     "node": ">=22"
   },
@@ -33,7 +33,7 @@
     "webpack": "^5.88.2"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "~0.0.20",
+    "@tenonhq/dovetail-types": "~0.0.21",
     "@types/memory-fs": "^0.3.4",
     "@types/webpack": "^5.28.3"
   }

@@ -1,0 +1,21 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-babel-plugin@0.0.13",
+  "package": "@tenonhq/dovetail-babel-plugin",
+  "version": "0.0.13",
+  "prev_version": "0.0.12",
+  "published_at": "2026-08-31T21:34:20.896Z",
+  "git": {
+    "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+    "tag": "dovetail-babel-plugin@0.0.13"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "17624b238",
+      "subject": "chore(release): publish 11 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
