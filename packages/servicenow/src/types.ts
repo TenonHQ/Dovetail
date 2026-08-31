@@ -5,9 +5,16 @@
 export interface ServiceNowClientConfig {
   /** Instance host, e.g. "tenonworkstudio.service-now.com". Defaults to SN_INSTANCE env var. */
   instance?: string;
-  /** Basic-auth user. Defaults to SN_USER env var. */
+  /**
+   * Inbound REST API key, sent as the `x-sn-apikey` header. Defaults to the
+   * SN_API_KEY env var. When a key is present it is the default auth mode and
+   * basic auth is not sent. Requires matching REST API access policies on the
+   * instance — an API without a key-enabled policy ignores the header (401).
+   */
+  apiKey?: string;
+  /** Basic-auth user. Defaults to SN_USER env var. Fallback when no API key is configured. */
   user?: string;
-  /** Basic-auth password. Defaults to SN_PASSWORD env var. */
+  /** Basic-auth password. Defaults to SN_PASSWORD env var. Fallback when no API key is configured. */
   password?: string;
   /** Min gap between requests (ms). Defaults to SN_REQUEST_INTERVAL_MS or 20. */
   requestIntervalMs?: number;

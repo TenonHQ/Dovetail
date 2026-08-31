@@ -52,7 +52,21 @@ function resolveInstance(cfg: ServiceNowClientConfig): string {
   return normalizeHost(raw);
 }
 
-function resolveAuth(cfg: ServiceNowClientConfig): { user: string; password: string } {
+/** Resolved auth mode: inbound API key (x-sn-apikey header) or basic auth. */
+export type ResolvedAuth =
+  | { mode: "apiKey"; apiKey: string }
+  | { mode: "basic"; user: string; password: string };
+
+function resolveAuth(cfg: ServiceNowClientConfig): ResolvedAuth {
+  // Explicit config wins over the environment, and within each layer an API
+  // key is the default over basic credentials. A cfg that names user/password
+  // (e.g. one resolved from an --env file) deliberately pins basic auth even
+  // when the surrounding process.env carries SN_API_KEY — an env-file retarget
+  // must be fully determined by its file.
+  if (cfg.apiKey) {
+    return { mode: "apiKey", apiKey: cfg.apiKey };
+  }
+  var cfgWantsBasic = Boolean(cfg.user || cfg.password);
   var user = cfg.user
     || process.env.SN_USER
     || process.env.SN_DEV_USERNAME
@@ -63,13 +77,22 @@ function resolveAuth(cfg: ServiceNowClientConfig): { user: string; password: str
     || process.env.SN_DEV_PASSWORD
     || process.env.SN_PROD_PASSWORD
     || "";
+  if (!cfgWantsBasic) {
+    var envApiKey = process.env.SN_API_KEY
+      || process.env.SN_DEV_API_KEY
+      || process.env.SN_PROD_API_KEY
+      || "";
+    if (envApiKey) {
+      return { mode: "apiKey", apiKey: envApiKey };
+    }
+  }
   if (!user || !password) {
     throw new Error(
-      "ServiceNow credentials missing — set SN_USER/SN_PASSWORD (preferred) " +
-      "or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
+      "ServiceNow credentials missing — set SN_API_KEY (inbound API key, preferred), " +
+      "or SN_USER/SN_PASSWORD, or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
     );
   }
-  return { user: user, password: password };
+  return { mode: "basic", user: user, password: password };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -241,10 +264,19 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     ? config.maxRetries5xx
     : Number(process.env.SN_MAX_RETRIES_5XX) || 3;
 
+  var baseHeaders: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json"
+  };
+  if (creds.mode === "apiKey") {
+    baseHeaders["x-sn-apikey"] = creds.apiKey;
+  }
   var http: AxiosInstance = axios.create({
     baseURL: "https://" + host,
-    auth: { username: creds.user, password: creds.password },
-    headers: { accept: "application/json", "content-type": "application/json" },
+    auth: creds.mode === "basic"
+      ? { username: creds.user, password: creds.password }
+      : undefined,
+    headers: baseHeaders,
     validateStatus: function () { return true; }
   });
 

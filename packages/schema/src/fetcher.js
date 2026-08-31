@@ -19,16 +19,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
         const baseURL = options.instance.startsWith("https://")
             ? options.instance
             : `https://${options.instance}`;
+        // An inbound API key is the default auth mode when present: the
+        // x-sn-apikey header replaces basic auth entirely.
+        const headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        };
+        if (options.apiKey) {
+            headers["x-sn-apikey"] = options.apiKey;
+        }
         return axios_1.default.create({
             baseURL: baseURL.endsWith("/") ? baseURL : baseURL + "/",
-            auth: {
-                username: options.username,
-                password: options.password,
-            },
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            auth: options.apiKey
+                ? undefined
+                : {
+                    username: options.username,
+                    password: options.password,
+                },
+            headers,
         });
     }
     async function getTablesForScope(options) {
@@ -115,6 +123,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
             instance: options.instance,
             username: options.username,
             password: options.password,
+            apiKey: options.apiKey,
         });
         console.log(chalk_1.default.blue(`Fetching table schemas for ${scopes.length} scopes...\n`));
         const schema = {};
