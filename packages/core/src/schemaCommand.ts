@@ -29,16 +29,24 @@ interface Creds {
   SN_USER: string;
   SN_PASSWORD: string;
   SN_INSTANCE: string;
+  SN_API_KEY: string;
 }
 
 function requireCreds(): Creds {
-  const { SN_USER = "", SN_PASSWORD = "", SN_INSTANCE = "" } = process.env;
-  if (!SN_USER || !SN_PASSWORD || !SN_INSTANCE) {
+  const {
+    SN_USER = "",
+    SN_PASSWORD = "",
+    SN_INSTANCE = "",
+    SN_API_KEY = "",
+  } = process.env;
+  // SN_USER stays required even in API-key mode (acting-user resolution);
+  // the password becomes optional once an inbound API key is set.
+  if (!SN_USER || !SN_INSTANCE || (!SN_PASSWORD && !SN_API_KEY)) {
     throw new Error(
-      "Missing ServiceNow credentials. Ensure SN_INSTANCE, SN_USER, and SN_PASSWORD are set in your .env file or environment."
+      "Missing ServiceNow credentials. Ensure SN_INSTANCE, SN_USER, and SN_PASSWORD (or SN_API_KEY) are set in your .env file or environment."
     );
   }
-  return { SN_USER, SN_PASSWORD, SN_INSTANCE };
+  return { SN_USER, SN_PASSWORD, SN_INSTANCE, SN_API_KEY };
 }
 
 function normalizeInstance(instance: string): string {
@@ -70,7 +78,7 @@ function outputDirFor(args: SchemaCommandArgs): string {
 }
 
 export async function schemaPullCommand(args: SchemaCommandArgs) {
-  const { SN_USER, SN_PASSWORD, SN_INSTANCE } = requireCreds();
+  const { SN_USER, SN_PASSWORD, SN_INSTANCE, SN_API_KEY } = requireCreds();
   const scopes = resolveScopes(args);
   const outputDir = outputDirFor(args);
 
@@ -79,6 +87,7 @@ export async function schemaPullCommand(args: SchemaCommandArgs) {
       instance: SN_INSTANCE,
       username: SN_USER,
       password: SN_PASSWORD,
+      apiKey: SN_API_KEY,
       outputDir,
       scopes,
     });
@@ -127,6 +136,7 @@ async function resolveRefDir(options: {
       instance: creds.SN_INSTANCE,
       username: creds.SN_USER,
       password: creds.SN_PASSWORD,
+      apiKey: creds.SN_API_KEY,
       outputDir: tmpDir,
       scopes,
     });

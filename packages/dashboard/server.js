@@ -30,6 +30,7 @@ const claudePlansLimiter = RateLimit({
   max: 60,
 });
 const SN_PASSWORD = process.env.SN_PASSWORD || "";
+const SN_API_KEY = process.env.SN_API_KEY || "";
 const BASE_URL = `https://${SN_INSTANCE}`;
 
 // Resolve an artifact path, preferring the dove.* name and falling back to the
@@ -94,14 +95,20 @@ app.use(express.static(path.join(__dirname, "public")));
 // Session-persistent ServiceNow client — cookie jar ensures scope changes
 // (changeScope) persist across subsequent requests in the same session.
 var snCookieJar = new CookieJar();
+// An inbound API key is the default auth mode when present: the x-sn-apikey
+// header replaces basic auth entirely.
+var snBaseHeaders = {
+  "Content-Type": "application/json",
+  Accept: "application/json",
+};
+if (SN_API_KEY) {
+  snBaseHeaders["x-sn-apikey"] = SN_API_KEY;
+}
 var snClient = wrapper(
   axios.create({
     baseURL: BASE_URL,
-    auth: { username: SN_USER, password: SN_PASSWORD },
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    auth: SN_API_KEY ? undefined : { username: SN_USER, password: SN_PASSWORD },
+    headers: snBaseHeaders,
     jar: snCookieJar,
     withCredentials: true,
   })
