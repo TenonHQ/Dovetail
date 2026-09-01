@@ -6,6 +6,15 @@ const { CookieJar } = require("tough-cookie");
 const fs = require("fs");
 const { execFile } = require("child_process");
 const RateLimit = require("express-rate-limit");
+const {
+  buildScopedUpdateSetName,
+  extractDuplicateNumber,
+  generateUpdateSetDescription,
+  generateUpdateSetName,
+  readActiveTask: readActiveTaskFile,
+  sanitizeTaskName,
+  scopeLabel,
+} = require("./lib/helpers");
 
 // Everything resolves from CWD — run this from your Dovetail project directory
 const PROJECT_ROOT = process.cwd();
@@ -194,103 +203,15 @@ function clickupApi(method, endpoint, data) {
   });
 }
 
-// Scope -> "App" label used in generated update-set names. Mirrors the
-// override table in .claude/skills/sn-move-update-set so both tools agree.
-var SCOPE_LABEL_OVERRIDES = {
-  x_cadso_journey: "Journey",
-  x_cadso_core: "Core",
-  x_cadso_automate: "Automate",
-  x_cadso_text_spoke: "Text",
-  x_cadso_email_spok: "Email",
-};
-
-function scopeLabel(scope) {
-  if (SCOPE_LABEL_OVERRIDES[scope]) return SCOPE_LABEL_OVERRIDES[scope];
-  var stripped = scope.replace(/^x_cadso_/, "");
-  return stripped
-    .split(/[_-]/)
-    .filter(Boolean)
-    .map(function (w) {
-      return w.charAt(0).toUpperCase() + w.slice(1);
-    })
-    .join(" ");
-}
-
-function sanitizeTaskName(taskName) {
-  return taskName.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim();
-}
-
-// Task-level base name (no App segment yet — that's added per-scope by
-// buildScopedUpdateSetName, since one task can span multiple scopes/apps).
-function generateUpdateSetName(devInitials, taskId, shortDesc) {
-  var parts = [];
-  if (devInitials) parts.push(devInitials);
-  parts.push(taskId);
-  parts.push(shortDesc);
-  return parts.join(" | ").substring(0, 80);
-}
-
-// Full per-scope update-set name: {DEVINITIALS} | {DEV-ID} | {App} | {Short Desc}
-function buildScopedUpdateSetName(activeTask, appLabel) {
-  var parts = [];
-  if (activeTask.devInitials) parts.push(activeTask.devInitials);
-  parts.push(activeTask.customId || activeTask.taskId);
-  parts.push(appLabel);
-  parts.push(activeTask.shortDesc || activeTask.taskName);
-  return parts.join(" | ").substring(0, 80);
-}
-
-// Generate update set description from task
-function generateUpdateSetDescription(taskName, taskDescription) {
-  var desc = taskName;
-  if (taskDescription) {
-    var firstSentence = taskDescription.split(/[.!\n]/)[0].trim();
-    if (firstSentence) {
-      desc += " — " + firstSentence.substring(0, 150);
-    }
-  }
-  return desc;
-}
-
-// Read active task from persistence file.
-//
-// Never throws. A truncated or hand-edited task file used to take down every
-// endpoint that reads it (/api/scopes, /api/update-sets, the activate and
-// create paths) with a 500 from JSON.parse — so a malformed file degrades to
-// "no active task" instead. The shape is checked too: JSON.parse legitimately
-// yields null / a string / an array for a valid-but-wrong file, and callers
-// dot into this as an object (activeTask.devInitials, .customId, .taskName).
+// Keep persistence paths in the server while the parsing logic remains a pure,
+// importable helper for package-local tests.
 function readActiveTask() {
-  try {
-    if (!fs.existsSync(ACTIVE_TASK_FILE)) return null;
-    var parsed = JSON.parse(fs.readFileSync(ACTIVE_TASK_FILE, "utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-    return parsed;
-  } catch (e) {
-    console.warn(
-      "[dashboard] ignoring unreadable active-task file " +
-        ACTIVE_TASK_FILE +
-        ": " +
-        (e && e.message ? e.message : e),
-    );
-    return null;
-  }
+  return readActiveTaskFile(ACTIVE_TASK_FILE);
 }
 
 // Write active task to persistence file
 function writeActiveTask(task) {
   fs.writeFileSync(ACTIVE_TASK_FILE, JSON.stringify(task, null, 2));
-}
-
-// Extract duplicate number from ServiceNow auto-numbered name
-// "CU-abc — Name" => -1, "CU-abc — Name 1" => 1, "CU-abc — Name 2" => 2
-function extractDuplicateNumber(name, baseName) {
-  if (name === baseName) return -1;
-  var suffix = name.substring(baseName.length).trim();
-  var num = parseInt(suffix, 10);
-  return isNaN(num) ? -1 : num;
 }
 
 // Find the best matching update set (highest duplicate number)
