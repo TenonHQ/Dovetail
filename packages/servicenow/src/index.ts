@@ -218,6 +218,12 @@ export type { InvokeRestParams, InvokeRestResult } from "./invokeRest";
 export {
   publishApp,
   buildStartFields,
+  buildCreateUpdateSetFields,
+  buildPublishToUpdateSetFields,
+  resolveUpdateSetNaming,
+  describeTarget,
+  parsePublishTargets,
+  PUBLISH_TARGETS,
   parseXmlAnswer,
   parseProgressTree,
   classifyProgress,
