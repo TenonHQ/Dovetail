@@ -162,6 +162,8 @@ reports every record unchanged).
 | `host_assets` | Host static assets on the instance | yes |
 | `invoke_rest` | Call an instance REST endpoint | yes |
 | `app_publish` | Publish an app to the store / company repo | yes |
+| `update_set_export` | Export an update set to importable XML, secrets replaced with a sentinel | yes (read-only in assemble mode) |
+| `app_export` | Publish an app into a new update set and export it, secrets stripped | yes |
 
 Same operations are available from the `dove-sn` CLI (§5) for scripted/CI use.
 

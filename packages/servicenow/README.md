@@ -555,6 +555,71 @@ Store `appLink`, and the publish's update-set sys_id where the instance reports
 one. Exit codes: `0` published or dry-run, `1` bad args/unconfirmed, `2`
 failed/timeout. Programmatic: `publishApp({ app, version, target, confirm })`.
 
+### Export an update set (or a whole app) to importable XML
+
+Produce the `<unload>` document the implementation team imports on a customer
+instance — with every secret value replaced by `__SET_DURING_INSTALL__`.
+
+```bash
+# An update set. assemble mode is READ-ONLY: nothing on the instance changes.
+npx dove-sn export-update-set --update-set 0123456789abcdef0123456789abcdef \
+  --out ./tenon-core.xml
+
+# A whole app: publish into a new set, then export it. Dry-run first (default).
+npx dove-sn export-app --app x_cadso_automate --out ./automate.xml
+npx dove-sn export-app --app x_cadso_automate --out ./automate.xml --confirm
+
+# A document exported some other way
+npx dove-sn strip-secrets --in ./exported.xml --out ./safe.xml
+npx dove-sn strip-secrets --in ./exported.xml --report      # what would be stripped
+```
+
+**Secret stripping is not optional.** There is no `--no-strip` flag on any of
+these verbs, and no field in the MCP schemas that disables it. This matters
+because an unload carries field *values*: on tenonworkstudio, completed update
+sets hold filled-in values for `password2` system properties and
+`oauth_entity.client_secret`, several of them in sets that shipped to a
+customer. A field is exempted only by a reviewed entry in the rules file.
+
+The rule is enumerable, in four layers:
+
+| Layer | Covers |
+|---|---|
+| L1 type | `password` / `password2` fields, restricted to tables an update set can capture (`update_synch=true`), resolved through `super_class`. Refreshed from the live dictionary per run, with a committed baseline as the fallback. |
+| L2 conditional / explicit | `sys_properties.value` when the property's `type` is a password type; named exceptions such as `x_cadso_core.google_translate_api_key`, which holds an API key in a *string* column. |
+| L3 JSON | secrets nested inside a JSON blob field, stripped in place. |
+| L4 heuristic | a field that merely *looks* secret. **Never stripped silently and never assumed safe** — the run fails and names it, until a human records it in the rules file as a strip rule or as `notSecret` with a reason. |
+
+Override the rules with `--rules <file>`; the JSON is merged over the built-ins,
+and the only subtractive key is `notSecret`, which requires a reason:
+
+```json
+{
+  "notSecret": [
+    { "table": "x_cadso_core_thing", "field": "webhook_token", "reason": "public identifier, not a credential" }
+  ],
+  "fieldRules": [
+    { "id": "thing-signing-key", "table": "x_cadso_core_thing", "field": "signing_key", "reason": "inbound webhook HMAC key" }
+  ]
+}
+```
+
+Two more things refuse to produce a file rather than produce a wrong one: a
+record count that does not match the set, and the documented **in-progress
+empty 200** from `export_update_set.do` (the servlet streams a document only for
+a *complete* set, and app-publish leaves the set in progress). After stripping,
+the output is re-read and verified; a secret that somehow survived fails the run.
+
+`export-update-set --mode complete` marks the set complete on the instance
+first — a real write, so it needs `--confirm`. `export-app` publishes ~1000+
+records into a new update set and is dry-run by default. Neither is the Store
+publish; that is `publish-app`, which is externally visible.
+
+Exit codes: `0` exported or dry-run, `1` bad args/unconfirmed, `2`
+failed/timeout. Programmatic: `exportUpdateSet({ updateSet, mode })`,
+`exportApp({ app, confirm })`, `stripSecrets(xml, rules)`. MCP:
+`update_set_export` (read-only in assemble mode) and `app_export`.
+
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
