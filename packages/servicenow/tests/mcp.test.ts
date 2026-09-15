@@ -5,7 +5,7 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 23 expected tools", function () {
+  it("registers exactly the 24 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -14,6 +14,7 @@ describe("MCP registry", function () {
       "action_view",
       "add_choices_to_field",
       "add_column",
+      "add_index",
       "app_publish",
       "create_record",
       "create_table",
@@ -34,7 +35,7 @@ describe("MCP registry", function () {
       "set_related_lists",
       "set_table",
     ]);
-    expect(TOOL_NAMES).toHaveLength(23);
+    expect(TOOL_NAMES).toHaveLength(24);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -265,6 +266,65 @@ describe("MCP registry", function () {
     ).rejects.toThrow();
   });
 
+  // --- add_index (Story 04 / US-002) -------------------------------------------------
+  // The CLI's two-phase gate (dry-run default, --confirm sends, --update-set required)
+  // has no test harness in this package — cli.ts exports nothing and no test spawns it —
+  // so the tool boundary is where that contract is mechanically checkable.
+
+  it("add_index handler refuses the live path without an update set, before any work", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var addIndexTool = descriptors.filter(function (d) {
+      return String(d.name) === "add_index";
+    })[0];
+    await expect(
+      addIndexTool.handler({
+        table: "x_cadso_journey_instance",
+        columns: ["occurrence_key"],
+        unique: true,
+      }),
+    ).rejects.toThrow(/updateSetSysId is required/);
+    // A tool-level error before any work beats a failure surfacing from deep inside.
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+    expect(ctx.calls.tableQuery).toHaveLength(0);
+  });
+
+  it("add_index handler plans with dryRun:true and writes nothing", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var addIndexTool = descriptors.filter(function (d) {
+      return String(d.name) === "add_index";
+    })[0];
+    var result = (await addIndexTool.handler({
+      table: "x_cadso_journey_instance",
+      columns: ["occurrence_key"],
+      unique: true,
+      dryRun: true,
+    })) as { status: string; unverified: Array<string> };
+    expect(result.status).toBe("dry-run");
+    // Uniqueness enforcement is never readable from v_db_index — it is unverified on
+    // every status, the dry-run plan included.
+    expect(result.unverified).toContain("uniqueness-enforced");
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
+  it("add_index handler refuses a composite column list at the tool boundary", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var addIndexTool = descriptors.filter(function (d) {
+      return String(d.name) === "add_index";
+    })[0];
+    await expect(
+      addIndexTool.handler({
+        table: "x_cadso_journey_instance",
+        columns: ["occurrence_key", "journey"],
+        unique: true,
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow();
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
   it("runSmoke lists every registered tool", async function () {
     var out = "";
     var spy = jest.spyOn(process.stdout, "write").mockImplementation(function (
@@ -275,7 +335,8 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (23)");
+    expect(out).toContain("Registered tools (24)");
+    expect(out).toContain("add_index");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
     expect(out).toContain("flow_view");
@@ -334,6 +395,7 @@ describe("MCP registry — annotations", function () {
       "set_field",
       "set_column",
       "set_table",
+      "add_index",
     ].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);

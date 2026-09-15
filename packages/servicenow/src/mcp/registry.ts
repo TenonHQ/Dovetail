@@ -35,7 +35,13 @@ import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable, addColumn, setColumn, setTable } from "../table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  setColumn,
+  setTable,
+} from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
@@ -60,6 +66,7 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
+  addIndexSchema,
   setColumnSchema,
   setTableSchema,
   setFieldSchema,
@@ -86,6 +93,7 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
+  "add_index",
   "set_column",
   "set_table",
   "set_field",
@@ -444,6 +452,72 @@ export function buildDescriptors(
           client: client(),
           table: p.table,
           column: p.column,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun,
+          debug: p.debug,
+        });
+      },
+    },
+    {
+      name: "add_index",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Create a single-column UNIQUE index on an EXISTING ServiceNow table, headless. The " +
+        "ONLY headless lever is sys_dictionary.unique — sys_index fails an API-LEVEL ACL (403) " +
+        "for every identity and sys_index_column does not exist — so this patches the column's " +
+        "dictionary row through the update-set-aware write path and lets the platform build the " +
+        "physical index off that flag, then READS IT BACK from the v_db_index view. columns is a " +
+        "list but exactly one entry is supported: unique is a PER-COLUMN flag, so a composite " +
+        "request is REFUSED rather than silently narrowed to a different index than the one asked " +
+        "for, and unique:false is refused too (there is no dictionary lever for a plain index) — " +
+        "both stay platform-UI work. Before writing, the column's values are scanned and the run " +
+        "ABORTS on duplicates, EMPTY included: a unique index cannot build over them, and the " +
+        "platform fails that ALTER SILENTLY, leaving a dictionary row claiming unique=true with no " +
+        "index behind it (the x_cadso_core_metric_point.idempotency_key trap). That scan is paged " +
+        "and capped, and a scan that hits the cap ABORTS TOO — an UNPROVEN scan is treated exactly " +
+        "like a proven collision, because writing on a partly-read column is how this verb would " +
+        "manufacture that trap on a table too big to have been checked. status is 'created' " +
+        "only when a matching v_db_index row was read back; a flag with no index is 'failed', and " +
+        "verified.indexPresent is null (UNKNOWN) when the view could not be read — never false, " +
+        "because a blind instrument is not evidence of absence. 'uniqueness-enforced' is ALWAYS " +
+        "reported in unverified: v_db_index carries no uniqueness field, so enforcement is provable " +
+        "only by a duplicate-insert test. updateSetSysId is required on the live path; dryRun:true " +
+        "returns the plan with no reads and no writes.",
+      shape: addIndexSchema.shape,
+      handler: async function (args: unknown) {
+        var p = addIndexSchema.parse(args);
+        // The schema leaves updateSetSysId optional (dry-run doesn't need one), so
+        // enforce the live-path requirement HERE — a tool-level error before any
+        // work beats a failure surfacing from deep inside addIndex. Same pattern as
+        // add_column.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "add_index: updateSetSysId is required on the live path so the " +
+              "sys_dictionary change is captured in a known update set — " +
+              "set dryRun:true to plan without one.",
+          );
+        }
+        // `unique` is boolean at the boundary (unvalidated JSON arrives here), but only
+        // true is buildable — refuse it by name rather than let a caller believe a plain
+        // index was created.
+        var unique = p.unique;
+        if (unique !== true) {
+          throw new Error(
+            "add_index: only a unique index can be created headlessly — the sole " +
+              "lever is sys_dictionary.unique, which has no equivalent for a plain " +
+              "(non-unique) index. Pass unique:true, or create that index in the " +
+              "platform UI.",
+          );
+        }
+        return addIndex({
+          client: client(),
+          table: p.table,
+          columns: p.columns,
+          unique: unique,
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,

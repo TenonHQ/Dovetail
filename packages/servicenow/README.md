@@ -367,6 +367,56 @@ adds diagnostics (app-switch status, resolved column key, assigned sys_id) to th
 result note. Ground truth (the HAR dissection) lives in the CTO repo's create-table
 docs.
 
+### Add a unique index
+
+Create a **single-column UNIQUE index** on an existing table, then read it back.
+
+```bash
+# Dry-run (the DEFAULT) - prints the plan, writes nothing and reads nothing
+npx dove-sn add-index \
+  --table x_cadso_journey_instance --columns occurrence_key --unique \
+  --update-set <sys_id> --json
+
+# Send it
+npx dove-sn add-index \
+  --table x_cadso_journey_instance --columns occurrence_key --unique \
+  --update-set <sys_id> --confirm
+```
+
+The **only** headless lever for an index is `sys_dictionary.unique`. `sys_index` fails an
+API-LEVEL ACL (HTTP 403) for every identity - and an ACL that refuses `GET` refuses `POST` -
+while `sys_index_column` does not exist at all (HTTP 400 `Invalid table`). So `add-index`
+patches the column's dictionary row through the update-set-aware write path and lets the
+platform build the physical index off that flag.
+
+Three consequences, each reported rather than hidden:
+
+- **One column, unique only.** `unique` is a per-COLUMN flag, so a composite index has no
+  dictionary lever. A multi-column request is **refused**, never narrowed to its first
+  column - building a different index than the one asked for is the worst available
+  outcome. `--unique` is required for the same reason. Composite and plain indexes stay
+  platform-UI work.
+- **Duplicates abort the run BEFORE it writes.** A unique index cannot build over repeated
+  values, and ServiceNow fails that ALTER *silently* - leaving a dictionary row claiming
+  `unique=true` with no index behind it (which is exactly what
+  `x_cadso_core_metric_point.idempotency_key` looks like today). **EMPTY counts as a
+  value**: a freshly added column that is empty on every existing row is one collision per
+  row. Backfill first, index second. The scan is paged and capped, and a scan that hits
+  that cap **aborts the same way** - an UNPROVEN scan is treated exactly like a proven
+  collision, because writing on a column that was only read part-way is how this verb
+  would manufacture that trap on a table too big for anyone to have checked.
+- **Success is read back; uniqueness never is.** `status` is `created` only when a matching
+  row was read back from the `v_db_index` view; a flag with no index is `failed`.
+  `verified.indexPresent` is `null` - UNKNOWN, not `false` - when the view could not be
+  read, because a blind instrument is not evidence of absence. And `v_db_index` carries no
+  uniqueness field (every row reads `btree`, unique or not), so **`uniqueness-enforced` is
+  listed in `unverified` on every status, success included**: only a duplicate-insert test
+  proves enforcement.
+
+`--update-set` is required on the live path and is checked before a client is built or a
+single request goes out. Exit codes: `0` created / skipped / dry-run, `1` bad args, `2`
+failed (the lying-row case included).
+
 ### Set a field on a record
 
 Set scalar field value(s) on an **existing** data record, capture the change into
@@ -576,7 +626,9 @@ console.log(formatLayoutResult("form layout", result));
 `dove-sn mcp` runs a self-contained MCP stdio server exposing the tools to
 Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, the schema verbs `create_table` /
-`add_column`, the record-write verbs `set_field` (update scalar fields on an
+`add_column` / `add_index` (a single-column unique index via `sys_dictionary.unique`,
+read back from the `v_db_index` view - uniqueness enforcement is always reported
+unverified), the record-write verbs `set_field` (update scalar fields on an
 existing record) and `create_record` (insert one record) — both update-set-captured
 and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
