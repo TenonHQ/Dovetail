@@ -1,7 +1,54 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-08-31T21:34:20.985Z",
+  "generated_at": "2026-09-15T22:43:57.677Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.37",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.37",
+      "prev_version": "0.0.36",
+      "published_at": "2026-09-15T22:43:57.664Z",
+      "git": {
+        "sha": "420fbbb20842c3369ed85e9b3325fd1ead989540",
+        "tag": "dovetail-servicenow@0.0.37"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "420fbbb20",
+          "subject": "feat(servicenow): add-index — create a unique index on a scoped table via the dictionary unique flag (#275)",
+          "pr": 275
+        },
+        {
+          "sha": "4576c072f",
+          "subject": "chore(release): publish 15 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.34",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.34",
+      "prev_version": "0.0.33",
+      "published_at": "2026-09-15T22:43:57.664Z",
+      "git": {
+        "sha": "420fbbb20842c3369ed85e9b3325fd1ead989540",
+        "tag": "dovetail-mcp@0.0.34"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "4576c072f",
+          "subject": "chore(release): publish 15 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-types@0.0.21",
@@ -1220,67 +1267,6 @@
           "sha": "84fc7a200",
           "subject": "fix: clickup get_task resolves custom ids instead of a 401 (#208)",
           "pr": 208
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.44",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.44",
-      "prev_version": "0.0.43",
-      "published_at": "2026-06-23T19:16:43.126Z",
-      "git": {
-        "sha": "c7d7a3b73479d12a4119e4ebdd3cc1f540660ac4",
-        "tag": "dovetail-dashboard@0.0.44"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "c7d7a3b73",
-          "subject": "fix(dashboard): target dovetail_core Scripted REST API, not legacy dovetail (#192)",
-          "pr": 192
-        },
-        {
-          "sha": "4bc78bc61",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.22",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.22",
-      "prev_version": "0.0.21",
-      "published_at": "2026-06-19T08:59:45.509Z",
-      "git": {
-        "sha": "073dad48a5d534f489a0906db083e97462ec76fe",
-        "tag": "dovetail-servicenow@0.0.22"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "073dad48a",
-          "subject": "feat: headless add-column for existing scoped tables (dovetail-servicenow) (#191)",
-          "pr": 191
-        },
-        {
-          "sha": "4bc78bc61",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        },
-        {
-          "sha": "c82439b30",
-          "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
-          "pr": 183
-        },
-        {
-          "sha": "9035f969b",
-          "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
       "exports_delta": null,
