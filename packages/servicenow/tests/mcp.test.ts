@@ -5,7 +5,7 @@ import { makeMockClient } from "./mockClient";
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 24 expected tools", function () {
+  it("registers exactly the 26 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -15,6 +15,7 @@ describe("MCP registry", function () {
       "add_choices_to_field",
       "add_column",
       "add_index",
+      "app_export",
       "app_publish",
       "create_record",
       "create_table",
@@ -34,8 +35,9 @@ describe("MCP registry", function () {
       "set_list_layout",
       "set_related_lists",
       "set_table",
+      "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(24);
+    expect(TOOL_NAMES).toHaveLength(26);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -119,11 +121,22 @@ describe("MCP registry", function () {
     var ctxRef: { calls?: { pushWithUpdateSet: Array<any> } } = {};
     var ctx = makeMockClient({
       query: async function (table: string, query?: string) {
-        if (table === "sys_update_set") return [{ sys_id: "us1", name: "S", state: "in progress" }];
+        if (table === "sys_update_set")
+          return [{ sys_id: "us1", name: "S", state: "in progress" }];
         if (table === "sys_dictionary") {
           // Read-back reflects the write: audit is "false" until the push lands, "true" after.
-          var wrote = Boolean(ctxRef.calls && ctxRef.calls.pushWithUpdateSet.length);
-          return [{ sys_id: "dict1", name: "x_t", element: "", internal_type: "collection", audit: wrote ? "true" : "false" }];
+          var wrote = Boolean(
+            ctxRef.calls && ctxRef.calls.pushWithUpdateSet.length,
+          );
+          return [
+            {
+              sys_id: "dict1",
+              name: "x_t",
+              element: "",
+              internal_type: "collection",
+              audit: wrote ? "true" : "false",
+            },
+          ];
         }
         if (table === "sys_update_xml") return [{ sys_id: "UX1", name: query }];
         return [];
@@ -151,7 +164,8 @@ describe("MCP registry", function () {
     // column attribute before resolveTableAttributes could redirect it to set_column.
     var ctx = makeMockClient({
       query: async function (table: string) {
-        if (table === "sys_update_set") return [{ sys_id: "us1", name: "S", state: "in progress" }];
+        if (table === "sys_update_set")
+          return [{ sys_id: "us1", name: "S", state: "in progress" }];
         return [];
       },
     });
@@ -160,7 +174,11 @@ describe("MCP registry", function () {
       return d.name === "set_table";
     })[0];
     await expect(
-      setTableTool.handler({ table: "x_t", attributes: { label: "Nope" }, updateSetSysId: "us1" }),
+      setTableTool.handler({
+        table: "x_t",
+        attributes: { label: "Nope" },
+        updateSetSysId: "us1",
+      }),
     ).rejects.toThrow(/Use set-column/);
     // The bad request must never reach a write.
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
@@ -335,7 +353,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (24)");
+    expect(out).toContain("Registered tools (26)");
     expect(out).toContain("add_index");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");

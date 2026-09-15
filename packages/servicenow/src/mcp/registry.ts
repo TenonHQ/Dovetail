@@ -48,6 +48,10 @@ import { createRecord } from "../createRecord";
 import { invokeRest } from "../invokeRest";
 import type { InvokeRestParams } from "../invokeRest";
 import { publishApp } from "../publishApp";
+import { exportUpdateSet } from "../exportUpdateSet";
+import type { ExportUpdateSetParams } from "../exportUpdateSet";
+import { exportApp } from "../exportApp";
+import type { ExportAppParams } from "../exportApp";
 import type { PublishAppParams } from "../publishApp";
 import {
   createViewSchema,
@@ -74,6 +78,8 @@ import {
   hostAssetsSchema,
   invokeRestSchema,
   publishAppSchema,
+  exportUpdateSetSchema,
+  exportAppSchema,
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -101,6 +107,8 @@ export var TOOL_NAMES = [
   "host_assets",
   "invoke_rest",
   "app_publish",
+  "update_set_export",
+  "app_export",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -755,6 +763,73 @@ export function buildDescriptors(
           params.client = deps.client;
         }
         return publishApp(params);
+      },
+    },
+    {
+      name: "update_set_export",
+      annotations: READ_ONLY,
+      description:
+        "Export one update set to an importable <unload> XML document, with every secret value " +
+        "replaced by the __SET_DURING_INSTALL__ sentinel. Two modes. mode 'assemble' (the default) " +
+        "is READ-ONLY: it pages the set's sys_update_xml rows and builds the document, touching no " +
+        "instance state, which is what packaging work wants against a shared instance. mode " +
+        "'complete' marks the set complete on the instance (a REAL WRITE, so it needs confirm:true) " +
+        "and reads the export servlet instead — the servlet answers an in-progress set with an " +
+        "empty 200, which this handles rather than writing an empty file. The export REFUSES to " +
+        "produce a document when the row count does not match the set, or when a field looks " +
+        "secret and no rule covers it: adjudicate it in the rules file as a strip rule or as " +
+        "notSecret with a reason. Secret stripping cannot be disabled. The result carries the XML, " +
+        "the record count, and the table.field list of every value replaced, so the install runbook " +
+        "can list what to set afterwards.",
+      shape: exportUpdateSetSchema.shape,
+      handler: async function (args: any) {
+        var p = exportUpdateSetSchema.parse(args);
+        var params: ExportUpdateSetParams = {
+          updateSet: p.updateSet,
+          mode: p.mode,
+          rulesPath: p.rulesPath,
+          pageSize: p.pageSize,
+          maxRows: p.maxRows,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return exportUpdateSet(params);
+      },
+    },
+    {
+      name: "app_export",
+      annotations: WRITE_EXECUTE,
+      description:
+        "Publish a scoped application into a NEW update set and export that set to importable " +
+        "<unload> XML — the headless equivalent of the UI's Publish to Update Set then Export to " +
+        "XML. PUBLISHING IS A REAL SHARED-INSTANCE WRITE: it creates an update set and can add " +
+        "1000+ sys_update_xml rows, so DRY-RUN BY DEFAULT — without confirm:true the resolved plan " +
+        "is returned and nothing is published. This is NOT the Store publish (that is app_publish, " +
+        "which is externally visible); this one stays inside the instance. Secret values are always " +
+        "replaced with the __SET_DURING_INSTALL__ sentinel before the document is returned, with no " +
+        "opt-out. includeData ships table data as well as schema and is off by default. The result " +
+        "carries the update set sys_id, the record count, the XML, and every stripped table.field.",
+      shape: exportAppSchema.shape,
+      handler: async function (args: any) {
+        var p = exportAppSchema.parse(args);
+        var params: ExportAppParams = {
+          app: p.app,
+          version: p.version,
+          description: p.description,
+          includeData: p.includeData,
+          keepSet: p.keepSet,
+          rulesPath: p.rulesPath,
+          timeoutMs: p.timeoutMs,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return exportApp(params);
       },
     },
   ];

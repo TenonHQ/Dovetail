@@ -345,6 +345,32 @@ export var createRecordSchema = z.object({
 // application repository. Deliberately NO credential fields — the Store
 // account resolves from SN_STORE_USERNAME/SN_STORE_PASSWORD inside the verb,
 // so credentials never transit MCP arguments or telemetry.
+// update_set_export / app_export: the exported document always has its secret
+// values replaced with the __SET_DURING_INSTALL__ sentinel — there is deliberately
+// NO opt-out field here, so a caller cannot ask for an unredacted export. A field
+// that looks secret and no rule covers fails the call instead of shipping.
+export var exportUpdateSetSchema = z.object({
+  updateSet: z.string().min(1),
+  mode: z.union([z.literal("assemble"), z.literal("complete")]).optional(),
+  rulesPath: z.string().optional(),
+  pageSize: z.number().int().positive().optional(),
+  maxRows: z.number().int().positive().optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+export var exportAppSchema = z.object({
+  app: z.string().min(1),
+  version: z.string().optional(),
+  description: z.string().optional(),
+  includeData: z.boolean().optional(),
+  keepSet: z.boolean().optional(),
+  rulesPath: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
 export var publishAppSchema = z.object({
   app: z.string().min(1),
   version: z.string().min(1),
