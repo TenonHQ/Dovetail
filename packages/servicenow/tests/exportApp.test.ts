@@ -8,7 +8,11 @@
  * with real values.
  */
 
-import { exportApp, buildCreateSetFields, buildPublishFields } from "../src/exportApp";
+import {
+  exportApp,
+  buildCreateSetFields,
+  buildPublishFields,
+} from "../src/exportApp";
 import type { ExportAppParams } from "../src/exportApp";
 import { xmlEscape } from "../src/exportUpdateSet";
 import { SENTINEL } from "../src/secrets/secretRules";
@@ -40,8 +44,16 @@ function answerXml(answer: string): string {
 }
 
 function progressXml(state: string, message: string): string {
-  var json = JSON.stringify({ state: state, message: message, percent_complete: "100" });
-  return '<?xml version="1.0" encoding="UTF-8"?><xml answer="' + xmlEscape(json) + '"/>';
+  var json = JSON.stringify({
+    state: state,
+    message: message,
+    percent_complete: "100",
+  });
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?><xml answer="' +
+    xmlEscape(json) +
+    '"/>'
+  );
 }
 
 var UNLOAD =
@@ -56,7 +68,10 @@ var UNLOAD =
   "</payload></sys_update_xml></unload>";
 
 /** Client whose reads answer app/set lookups and the export's count call. */
-function mockClient(options: { appRows?: Array<Record<string, string>>; count?: number }) {
+function mockClient(options: {
+  appRows?: Array<Record<string, string>>;
+  count?: number;
+}) {
   var ctx = makeMockClient({
     query: async function (table: string) {
       if (table === "sys_app") {
@@ -68,10 +83,16 @@ function mockClient(options: { appRows?: Array<Record<string, string>>; count?: 
       return [];
     },
   });
-  ctx.client.now.invoke = async function (params: { method: string; path: string }) {
+  ctx.client.now.invoke = async function (params: {
+    method: string;
+    path: string;
+  }) {
     if (params.path.indexOf("/api/now/stats/") === 0) {
       var count = options.count === undefined ? 1 : options.count;
-      return { status: 200, body: { result: { stats: { count: String(count) } } } };
+      return {
+        status: 200,
+        body: { result: { stats: { count: String(count) } } },
+      };
     }
     return { status: 200, body: {} };
   } as ServiceNowClient["now"]["invoke"];
@@ -79,7 +100,11 @@ function mockClient(options: { appRows?: Array<Record<string, string>>; count?: 
 }
 
 /** Transport answering each xmlhttp.do POST from a queue. */
-function scriptedTransport(bodies: Array<string>, servletBody: string, servletStatus: number) {
+function scriptedTransport(
+  bodies: Array<string>,
+  servletBody: string,
+  servletStatus: number,
+) {
   var posts: Array<Record<string, string>> = [];
   var queue = bodies.slice();
   return {
@@ -119,7 +144,12 @@ function params(overrides: Partial<ExportAppParams>): ExportAppParams {
 }
 
 describe("field builders", function () {
-  var app = { sysId: APP_SYS_ID, scope: "x_cadso_automate", name: "App", version: "1.1.0" };
+  var app = {
+    sysId: APP_SYS_ID,
+    scope: "x_cadso_automate",
+    name: "App",
+    version: "1.1.0",
+  };
 
   it("builds the createUpdateSet call the UI sends", function () {
     var fields = buildCreateSetFields(app, "");
@@ -135,13 +165,18 @@ describe("field builders", function () {
     expect(off.sysparm_update_set_id).toBe(SET_SYS_ID);
     expect(off.sysparm_version).toBe("1.2.0");
     expect(off.sysparm_include_data).toBe("");
-    expect(buildPublishFields(app, SET_SYS_ID, "1.2.0", "notes", true).sysparm_include_data).toBe("true");
+    expect(
+      buildPublishFields(app, SET_SYS_ID, "1.2.0", "notes", true)
+        .sysparm_include_data,
+    ).toBe("true");
   });
 });
 
 describe("exportApp — validation and dry-run", function () {
   it("requires an app selector", async function () {
-    await expect(exportApp(params({ app: "" }))).rejects.toThrow(/app is required/);
+    await expect(exportApp(params({ app: "" }))).rejects.toThrow(
+      /app is required/,
+    );
   });
 
   it("rejects a nonsense timeout", async function () {
@@ -151,14 +186,16 @@ describe("exportApp — validation and dry-run", function () {
   });
 
   it("fails clearly when no app matches", async function () {
-    await expect(exportApp(params({ client: mockClient({ appRows: [] }) }))).rejects.toThrow(
-      /no application matches/,
-    );
+    await expect(
+      exportApp(params({ client: mockClient({ appRows: [] }) })),
+    ).rejects.toThrow(/no application matches/);
   });
 
   it("publishes nothing without confirm", async function () {
     var s = scriptedTransport([], "", 200);
-    var result = await exportApp(params({ client: mockClient({}), transport: s.transport }));
+    var result = await exportApp(
+      params({ client: mockClient({}), transport: s.transport }),
+    );
     expect(result.status).toBe("dry-run");
     expect(result.note).toContain("a real instance write");
     expect(s.posts).toEqual([]);
@@ -208,7 +245,11 @@ describe("exportApp — live publish", function () {
 
   it("reports a failed publish and names the set it left behind", async function () {
     var s = scriptedTransport(
-      [answerXml(SET_SYS_ID), answerXml(WORKER_ID), progressXml("3", "Publish failed")],
+      [
+        answerXml(SET_SYS_ID),
+        answerXml(WORKER_ID),
+        progressXml("3", "Publish failed"),
+      ],
       UNLOAD,
       200,
     );
@@ -246,7 +287,12 @@ describe("exportApp — live publish", function () {
       200,
     );
     var result = await exportApp(
-      params({ client: mockClient({}), confirm: true, transport: s.transport, timeoutMs: 1 }),
+      params({
+        client: mockClient({}),
+        confirm: true,
+        transport: s.transport,
+        timeoutMs: 1,
+      }),
     );
     expect(result.status).toBe("timeout");
     expect(result.note).toContain("export-update-set");
@@ -254,7 +300,11 @@ describe("exportApp — live publish", function () {
 
   it("surfaces an export failure after a successful publish", async function () {
     var s = scriptedTransport(
-      [answerXml(SET_SYS_ID), answerXml(WORKER_ID), progressXml("2", "Successfully published")],
+      [
+        answerXml(SET_SYS_ID),
+        answerXml(WORKER_ID),
+        progressXml("2", "Successfully published"),
+      ],
       "",
       200,
     );

@@ -124,7 +124,9 @@ export function readField(recordXml: string, field: string): string | null {
   if (selfClosing.test(recordXml)) {
     return "";
   }
-  var m = recordXml.match(new RegExp("<" + f + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + f + ">"));
+  var m = recordXml.match(
+    new RegExp("<" + f + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + f + ">"),
+  );
   if (!m) {
     return null;
   }
@@ -144,7 +146,10 @@ export function readRecordTable(recordXml: string): string {
   return inner ? inner[1] : "";
 }
 
-function whenMatches(recordXml: string, rule: SecretRules["fieldRules"][0]): boolean {
+function whenMatches(
+  recordXml: string,
+  rule: SecretRules["fieldRules"][0],
+): boolean {
   if (!rule.when) {
     return true;
   }
@@ -194,7 +199,10 @@ export function plannedStrips(
 
 function isExempt(rules: SecretRules, table: string, field: string): boolean {
   for (var i = 0; i < rules.notSecret.length; i += 1) {
-    if (rules.notSecret[i].table === table && rules.notSecret[i].field === field) {
+    if (
+      rules.notSecret[i].table === table &&
+      rules.notSecret[i].field === field
+    ) {
       return true;
     }
   }
@@ -216,16 +224,25 @@ export function stripField(
   var selfClosing = new RegExp("<" + f + "\\s*/>", "g");
   if (selfClosing.test(recordXml)) {
     return {
-      xml: recordXml.replace(selfClosing, "<" + field + ">" + sentinel + "</" + field + ">"),
+      xml: recordXml.replace(
+        selfClosing,
+        "<" + field + ">" + sentinel + "</" + field + ">",
+      ),
       stripped: true,
     };
   }
-  var paired = new RegExp("(<" + f + "(?:\\s[^>]*)?>)([\\s\\S]*?)(</" + f + ">)", "g");
+  var paired = new RegExp(
+    "(<" + f + "(?:\\s[^>]*)?>)([\\s\\S]*?)(</" + f + ">)",
+    "g",
+  );
   var hit = false;
-  var out = recordXml.replace(paired, function (_all, open: string, _body: string, close: string) {
-    hit = true;
-    return open + sentinel + close;
-  });
+  var out = recordXml.replace(
+    paired,
+    function (_all, open: string, _body: string, close: string) {
+      hit = true;
+      return open + sentinel + close;
+    },
+  );
   return { xml: out, stripped: hit };
 }
 
@@ -249,7 +266,9 @@ export function stripJsonValue(
   if (Array.isArray(value)) {
     var arr: Array<unknown> = [];
     for (var i = 0; i < value.length; i += 1) {
-      arr.push(stripJsonValue(value[i], keys, sentinel, path + "[" + i + "]", hits));
+      arr.push(
+        stripJsonValue(value[i], keys, sentinel, path + "[" + i + "]", hits),
+      );
     }
     return arr;
   }
@@ -286,7 +305,9 @@ function matchesKey(name: string, keys: Array<string>): boolean {
 export function recordFieldNames(recordXml: string): Array<string> {
   var body = recordXml.match(/<record_update[^>]*>([\s\S]*)<\/record_update>/);
   var scope = body ? body[1] : recordXml;
-  var inner = scope.match(/<[A-Za-z0-9_]+(?:\s[^>]*)?>([\s\S]*)<\/[A-Za-z0-9_]+>/);
+  var inner = scope.match(
+    /<[A-Za-z0-9_]+(?:\s[^>]*)?>([\s\S]*)<\/[A-Za-z0-9_]+>/,
+  );
   var fieldScope = inner ? inner[1] : scope;
   var out: Array<string> = [];
   var re = /<([A-Za-z0-9_]+)(?:\s[^>]*)?(?:\/>|>)/g;
@@ -324,79 +345,93 @@ export function stripSecrets(
   options: StripSecretsOptions = {},
 ): StripSecretsResult {
   if (typeof xml !== "string" || xml === "") {
-    throw new Error("strip-secrets: nothing to strip — the export document is empty");
+    throw new Error(
+      "strip-secrets: nothing to strip — the export document is empty",
+    );
   }
   var secretFields: Array<SecretField> = [];
   var reviewFindings: Array<ReviewFinding> = [];
   var scanned = 0;
   var heuristic = new RegExp(rules.heuristic.pattern, rules.heuristic.flags);
 
-  var out = xml.replace(PAYLOAD_RE, function (_all: string, rawPayload: string) {
-    scanned += 1;
-    var decoded = decodePayload(rawPayload);
-    var recordXml = decoded.text;
-    var table = readRecordTable(recordXml);
-    if (table === "") {
-      // A payload we cannot attribute to a table cannot be rule-checked, and a
-      // silent pass is exactly the failure this module exists to prevent.
-      throw new Error(
-        "strip-secrets: a payload has no resolvable record table — refusing to write a " +
-          "document that was not fully checked",
-      );
-    }
-    var recordName = readField(recordXml, "sys_id") || table;
+  var out = xml.replace(
+    PAYLOAD_RE,
+    function (_all: string, rawPayload: string) {
+      scanned += 1;
+      var decoded = decodePayload(rawPayload);
+      var recordXml = decoded.text;
+      var table = readRecordTable(recordXml);
+      if (table === "") {
+        // A payload we cannot attribute to a table cannot be rule-checked, and a
+        // silent pass is exactly the failure this module exists to prevent.
+        throw new Error(
+          "strip-secrets: a payload has no resolvable record table — refusing to write a " +
+            "document that was not fully checked",
+        );
+      }
+      var recordName = readField(recordXml, "sys_id") || table;
 
-    var planned = plannedStrips(recordXml, table, rules);
-    for (var p = 0; p < planned.length; p += 1) {
-      var res = stripField(recordXml, planned[p].field, rules.sentinel);
-      if (res.stripped) {
-        recordXml = res.xml;
-        secretFields.push({
-          table: table,
-          field: planned[p].field,
-          record: recordName,
-          sentinel: rules.sentinel,
-          reason: planned[p].reason,
-        });
-      }
-    }
-
-    var names = recordFieldNames(recordXml);
-    for (var n = 0; n < names.length; n += 1) {
-      var field = names[n];
-      if (wasStripped(secretFields, table, recordName, field)) {
-        continue;
-      }
-      var body = readField(recordXml, field);
-      if (body === null || body === "") {
-        continue;
-      }
-      if (looksLikeJson(body)) {
-        var jsonResult = stripJsonBlob(body, rules, heuristic, table, field, recordName);
-        if (jsonResult) {
-          recordXml = replaceFieldBody(recordXml, field, jsonResult.text);
-          for (var s = 0; s < jsonResult.secrets.length; s += 1) {
-            secretFields.push(jsonResult.secrets[s]);
-          }
-          for (var rv = 0; rv < jsonResult.reviews.length; rv += 1) {
-            reviewFindings.push(jsonResult.reviews[rv]);
-          }
-          continue;
+      var planned = plannedStrips(recordXml, table, rules);
+      for (var p = 0; p < planned.length; p += 1) {
+        var res = stripField(recordXml, planned[p].field, rules.sentinel);
+        if (res.stripped) {
+          recordXml = res.xml;
+          secretFields.push({
+            table: table,
+            field: planned[p].field,
+            record: recordName,
+            sentinel: rules.sentinel,
+            reason: planned[p].reason,
+          });
         }
       }
-      var match = field.match(heuristic);
-      if (match && !isExempt(rules, table, field)) {
-        reviewFindings.push({
-          table: table,
-          field: field,
-          record: recordName,
-          matched: match[0],
-        });
-      }
-    }
 
-    return "<payload>" + encodePayload(recordXml, decoded.cdata) + "</payload>";
-  });
+      var names = recordFieldNames(recordXml);
+      for (var n = 0; n < names.length; n += 1) {
+        var field = names[n];
+        if (wasStripped(secretFields, table, recordName, field)) {
+          continue;
+        }
+        var body = readField(recordXml, field);
+        if (body === null || body === "") {
+          continue;
+        }
+        if (looksLikeJson(body)) {
+          var jsonResult = stripJsonBlob(
+            body,
+            rules,
+            heuristic,
+            table,
+            field,
+            recordName,
+          );
+          if (jsonResult) {
+            recordXml = replaceFieldBody(recordXml, field, jsonResult.text);
+            for (var s = 0; s < jsonResult.secrets.length; s += 1) {
+              secretFields.push(jsonResult.secrets[s]);
+            }
+            for (var rv = 0; rv < jsonResult.reviews.length; rv += 1) {
+              reviewFindings.push(jsonResult.reviews[rv]);
+            }
+            continue;
+          }
+        }
+        var match = field.match(heuristic);
+        if (match && !isExempt(rules, table, field)) {
+          reviewFindings.push({
+            table: table,
+            field: field,
+            record: recordName,
+            matched: match[0],
+          });
+        }
+      }
+
+      return (
+        "<payload>" + encodePayload(recordXml, decoded.cdata) + "</payload>"
+      );
+    },
+  );
 
   if (reviewFindings.length > 0 && options.allowUnreviewed !== true) {
     throw new Error(
@@ -450,7 +485,11 @@ function stripJsonBlob(
   table: string,
   field: string,
   record: string,
-): { text: string; secrets: Array<SecretField>; reviews: Array<ReviewFinding> } | null {
+): {
+  text: string;
+  secrets: Array<SecretField>;
+  reviews: Array<ReviewFinding>;
+} | null {
   var parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -458,7 +497,13 @@ function stripJsonBlob(
     return null;
   }
   var hits: Array<string> = [];
-  var stripped = stripJsonValue(parsed, rules.jsonKeys, rules.sentinel, "", hits);
+  var stripped = stripJsonValue(
+    parsed,
+    rules.jsonKeys,
+    rules.sentinel,
+    "",
+    hits,
+  );
   var secrets: Array<SecretField> = [];
   for (var i = 0; i < hits.length; i += 1) {
     secrets.push({
@@ -492,7 +537,10 @@ function stripJsonBlob(
   return { text: JSON.stringify(stripped), secrets: secrets, reviews: reviews };
 }
 
-function collectJsonKeys(value: unknown, path: string): Array<{ name: string; path: string }> {
+function collectJsonKeys(
+  value: unknown,
+  path: string,
+): Array<{ name: string; path: string }> {
   var out: Array<{ name: string; path: string }> = [];
   if (Array.isArray(value)) {
     for (var i = 0; i < value.length; i += 1) {
@@ -512,12 +560,21 @@ function collectJsonKeys(value: unknown, path: string): Array<{ name: string; pa
   return out;
 }
 
-function replaceFieldBody(recordXml: string, field: string, body: string): string {
+function replaceFieldBody(
+  recordXml: string,
+  field: string,
+  body: string,
+): string {
   var f = escapeRegExp(field);
-  var paired = new RegExp("(<" + f + "(?:\\s[^>]*)?>)([\\s\\S]*?)(</" + f + ">)");
-  return recordXml.replace(paired, function (_all, open: string, _old: string, close: string) {
-    return open + encodeXmlText(body) + close;
-  });
+  var paired = new RegExp(
+    "(<" + f + "(?:\\s[^>]*)?>)([\\s\\S]*?)(</" + f + ">)",
+  );
+  return recordXml.replace(
+    paired,
+    function (_all, open: string, _old: string, close: string) {
+      return open + encodeXmlText(body) + close;
+    },
+  );
 }
 
 function describeFindings(findings: Array<ReviewFinding>): string {

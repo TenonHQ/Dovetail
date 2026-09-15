@@ -32,8 +32,16 @@ import { createClient } from "./client";
 import type { ServiceNowClient } from "./client";
 import { resolveFormAuth, openFormSession, getWithSession } from "./table";
 import type { FormAuth, FormSession, PostResult } from "./table";
-import { loadSecretRules, secretFieldsFromDictionary, isCapturable } from "./secrets/secretRules";
-import type { SecretRules, DictionaryRow, CapturableRow } from "./secrets/secretRules";
+import {
+  loadSecretRules,
+  secretFieldsFromDictionary,
+  isCapturable,
+} from "./secrets/secretRules";
+import type {
+  SecretRules,
+  DictionaryRow,
+  CapturableRow,
+} from "./secrets/secretRules";
 import { stripSecrets } from "./secrets/stripSecrets";
 import type { SecretField, ReviewFinding } from "./secrets/stripSecrets";
 
@@ -43,7 +51,11 @@ export type ExportMode = "assemble" | "complete";
 /** Injectable transport, so tests never touch the network. */
 export interface ExportTransport {
   openSession?: (auth: FormAuth) => Promise<FormSession>;
-  get?: (auth: FormAuth, session: FormSession, path: string) => Promise<PostResult>;
+  get?: (
+    auth: FormAuth,
+    session: FormSession,
+    path: string,
+  ) => Promise<PostResult>;
 }
 
 /** Inputs for exportUpdateSet. */
@@ -213,7 +225,11 @@ export function renderRemoteUpdateSet(
 }
 
 /** Wrap rendered rows in the `<unload>` envelope. */
-export function renderUnload(header: string, rows: Array<string>, unloadDate: string): string {
+export function renderUnload(
+  header: string,
+  rows: Array<string>,
+  unloadDate: string,
+): string {
   return (
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<unload unload_date="' +
@@ -246,18 +262,26 @@ async function resolveUpdateSet(
   var query = SYS_ID_RE.test(selector)
     ? "sys_id=" + selector
     : "name=" + selector;
-  var rows = await client.table.query<Record<string, unknown>>("sys_update_set", query, {
-    limit: 2,
-    fields: ["sys_id", "name", "application", "description", "state"],
-  });
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_update_set",
+    query,
+    {
+      limit: 2,
+      fields: ["sys_id", "name", "application", "description", "state"],
+    },
+  );
   if (!rows || rows.length === 0) {
     throw new Error(
-      "export-update-set: no update set matches '" + selector + "' — pass its sys_id or exact name.",
+      "export-update-set: no update set matches '" +
+        selector +
+        "' — pass its sys_id or exact name.",
     );
   }
   if (rows.length > 1) {
     throw new Error(
-      "export-update-set: '" + selector + "' matches more than one update set — pass the sys_id.",
+      "export-update-set: '" +
+        selector +
+        "' matches more than one update set — pass the sys_id.",
     );
   }
   return {
@@ -294,9 +318,16 @@ export async function countUpdateXml(
 export function parseStatsCount(body: unknown): number {
   var b = body as { result?: { stats?: { count?: string | number } } };
   var raw = b && b.result && b.result.stats ? b.result.stats.count : undefined;
-  var n = typeof raw === "string" ? parseInt(raw, 10) : typeof raw === "number" ? raw : NaN;
+  var n =
+    typeof raw === "string"
+      ? parseInt(raw, 10)
+      : typeof raw === "number"
+      ? raw
+      : NaN;
   if (!Number.isFinite(n) || n < 0) {
-    throw new Error("export-update-set: the instance returned an unreadable record count.");
+    throw new Error(
+      "export-update-set: the instance returned an unreadable record count.",
+    );
   }
   return n;
 }
@@ -319,7 +350,9 @@ export async function fetchUpdateXmlRows(
         "&sysparm_fields=" +
         encodeURIComponent(UPDATE_XML_FIELDS.join(",")) +
         "&sysparm_query=" +
-        encodeURIComponent("update_set=" + updateSetSysId + "^ORDERBYsys_recorded_at") +
+        encodeURIComponent(
+          "update_set=" + updateSetSysId + "^ORDERBYsys_recorded_at",
+        ) +
         "&sysparm_limit=" +
         String(pageSize) +
         "&sysparm_offset=" +
@@ -425,27 +458,42 @@ function baseResult(set: ResolvedSet, mode: ExportMode): ExportUpdateSetResult {
 export async function exportUpdateSet(
   params: ExportUpdateSetParams,
 ): Promise<ExportUpdateSetResult> {
-  if (!params || typeof params.updateSet !== "string" || params.updateSet.trim() === "") {
-    throw new Error("export-update-set: updateSet is required (a sys_id or the set's exact name).");
-  }
-  var mode: ExportMode = params.mode === "complete" ? "complete" : "assemble";
-  var pageSize = params.pageSize === undefined ? DEFAULT_PAGE_SIZE : params.pageSize;
-  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+  if (
+    !params ||
+    typeof params.updateSet !== "string" ||
+    params.updateSet.trim() === ""
+  ) {
     throw new Error(
-      "export-update-set: pageSize must be an integer between 1 and " + MAX_PAGE_SIZE + ".",
+      "export-update-set: updateSet is required (a sys_id or the set's exact name).",
     );
   }
-  var maxRows = params.maxRows === undefined ? DEFAULT_MAX_ROWS : params.maxRows;
+  var mode: ExportMode = params.mode === "complete" ? "complete" : "assemble";
+  var pageSize =
+    params.pageSize === undefined ? DEFAULT_PAGE_SIZE : params.pageSize;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+    throw new Error(
+      "export-update-set: pageSize must be an integer between 1 and " +
+        MAX_PAGE_SIZE +
+        ".",
+    );
+  }
+  var maxRows =
+    params.maxRows === undefined ? DEFAULT_MAX_ROWS : params.maxRows;
   if (!Number.isInteger(maxRows) || maxRows < 1) {
     throw new Error("export-update-set: maxRows must be a positive integer.");
   }
 
-  var live = params.dryRun !== true && (mode === "assemble" || params.confirm === true);
+  var live =
+    params.dryRun !== true && (mode === "assemble" || params.confirm === true);
   var client = params.client || createClient({});
   var set = await resolveUpdateSet(client, params.updateSet.trim());
   var result = baseResult(set, mode);
 
-  if (mode === "complete" && params.dryRun !== true && params.confirm !== true) {
+  if (
+    mode === "complete" &&
+    params.dryRun !== true &&
+    params.confirm !== true
+  ) {
     result.status = "dry-run";
     result.note =
       "dry-run: mode=complete marks update set '" +
@@ -487,7 +535,9 @@ export async function exportUpdateSet(
     result.status = "failed";
     result.message = "the update set has no records";
     result.note =
-      "export-update-set: update set '" + set.name + "' contains no records — nothing to export.";
+      "export-update-set: update set '" +
+      set.name +
+      "' contains no records — nothing to export.";
     return result;
   }
 
@@ -521,7 +571,8 @@ export async function exportUpdateSet(
     if (servlet.error !== "") {
       result.status = "failed";
       result.message = servlet.error;
-      result.note = "export-update-set: " + servlet.error + " Nothing was written.";
+      result.note =
+        "export-update-set: " + servlet.error + " Nothing was written.";
       return result;
     }
     raw = servlet.xml;
@@ -611,7 +662,10 @@ async function exportViaServlet(
       encodeURIComponent(session.ck),
   );
   if (res.status !== 200) {
-    return { xml: "", error: "the export servlet answered HTTP " + res.status + "." };
+    return {
+      xml: "",
+      error: "the export servlet answered HTTP " + res.status + ".",
+    };
   }
   if (res.body.indexOf("<unload") === -1) {
     // The documented in-progress behaviour: HTTP 200, empty body.

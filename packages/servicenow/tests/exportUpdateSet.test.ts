@@ -82,7 +82,9 @@ function scriptRow(sysId: string): Record<string, string> {
     name: "sys_script_include_" + sysId,
     payload: payload(
       "sys_script_include",
-      "<name>SettingsMS</name><script>var x = 1;</script><sys_id>" + sysId + "</sys_id>",
+      "<name>SettingsMS</name><script>var x = 1;</script><sys_id>" +
+        sysId +
+        "</sys_id>",
     ),
     target_name: "SettingsMS",
     type: "Script Include",
@@ -123,7 +125,10 @@ function harness(options: {
     },
   });
   var invokes: Array<string> = [];
-  ctx.client.now.invoke = async function (params: { method: string; path: string }) {
+  ctx.client.now.invoke = async function (params: {
+    method: string;
+    path: string;
+  }) {
     invokes.push(params.method + " " + params.path);
     if (params.path.indexOf("/api/now/stats/") === 0) {
       var count = options.count === undefined ? rows.length : options.count;
@@ -136,16 +141,27 @@ function harness(options: {
       if (options.pageStatus !== undefined) {
         return { status: options.pageStatus, body: {} };
       }
-      var limit = parseInt((params.path.match(/sysparm_limit=(\d+)/) || ["", "0"])[1], 10);
-      var offset = parseInt((params.path.match(/sysparm_offset=(\d+)/) || ["", "0"])[1], 10);
-      return { status: 200, body: { result: rows.slice(offset, offset + limit) } };
+      var limit = parseInt(
+        (params.path.match(/sysparm_limit=(\d+)/) || ["", "0"])[1],
+        10,
+      );
+      var offset = parseInt(
+        (params.path.match(/sysparm_offset=(\d+)/) || ["", "0"])[1],
+        10,
+      );
+      return {
+        status: 200,
+        body: { result: rows.slice(offset, offset + limit) },
+      };
     }
     return { status: 200, body: {} };
   } as ServiceNowClient["now"]["invoke"];
   return { client: ctx.client, invokes: invokes };
 }
 
-function params(overrides: Partial<ExportUpdateSetParams>): ExportUpdateSetParams {
+function params(
+  overrides: Partial<ExportUpdateSetParams>,
+): ExportUpdateSetParams {
   var base: ExportUpdateSetParams = { updateSet: SET_SYS_ID };
   return Object.assign(base, overrides) as ExportUpdateSetParams;
 }
@@ -160,23 +176,39 @@ describe("pure helpers", function () {
   });
 
   it("escapes values it renders", function () {
-    expect(renderUpdateXmlRow({ name: "a&b<c" })).toContain("<name>a&amp;b&lt;c</name>");
-  });
-
-  it("flattens a reference field to its value", function () {
-    expect(renderUpdateXmlRow({ application: { value: "x_cadso_core", link: "http://x" } })).toContain(
-      "<application>x_cadso_core</application>",
+    expect(renderUpdateXmlRow({ name: "a&b<c" })).toContain(
+      "<name>a&amp;b&lt;c</name>",
     );
   });
 
+  it("flattens a reference field to its value", function () {
+    expect(
+      renderUpdateXmlRow({
+        application: { value: "x_cadso_core", link: "http://x" },
+      }),
+    ).toContain("<application>x_cadso_core</application>");
+  });
+
   it("wraps rows in an unload envelope", function () {
-    var xml = renderUnload("<header/>", ["<sys_update_xml/>"], "2026-09-15 00:00:00");
-    expect(xml.indexOf('<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-09-15 00:00:00">')).toBe(0);
+    var xml = renderUnload(
+      "<header/>",
+      ["<sys_update_xml/>"],
+      "2026-09-15 00:00:00",
+    );
+    expect(
+      xml.indexOf(
+        '<?xml version="1.0" encoding="UTF-8"?><unload unload_date="2026-09-15 00:00:00">',
+      ),
+    ).toBe(0);
     expect(xml).toContain("</unload>");
   });
 
   it("counts records in an unload", function () {
-    expect(countUnloadRecords('<unload><sys_update_xml a="1"></sys_update_xml><sys_update_xml/></unload>')).toBe(2);
+    expect(
+      countUnloadRecords(
+        '<unload><sys_update_xml a="1"></sys_update_xml><sys_update_xml/></unload>',
+      ),
+    ).toBe(2);
     expect(countUnloadRecords("<unload/>")).toBe(0);
   });
 
@@ -188,13 +220,17 @@ describe("pure helpers", function () {
   });
 
   it("formats an instance-style timestamp", function () {
-    expect(formatUnloadDate(new Date(Date.UTC(2026, 8, 15, 18, 40, 2)))).toBe("2026-09-15 18:40:02");
+    expect(formatUnloadDate(new Date(Date.UTC(2026, 8, 15, 18, 40, 2)))).toBe(
+      "2026-09-15 18:40:02",
+    );
   });
 });
 
 describe("exportUpdateSet — validation", function () {
   it("requires an update set selector", async function () {
-    await expect(exportUpdateSet(params({ updateSet: "  " }))).rejects.toThrow(/updateSet is required/);
+    await expect(exportUpdateSet(params({ updateSet: "  " }))).rejects.toThrow(
+      /updateSet is required/,
+    );
   });
 
   it("rejects an out-of-range pageSize", async function () {
@@ -205,13 +241,17 @@ describe("exportUpdateSet — validation", function () {
 
   it("fails clearly when nothing matches", async function () {
     var h = harness({ setRows: [] });
-    await expect(exportUpdateSet(params({ client: h.client }))).rejects.toThrow(/no update set matches/);
+    await expect(exportUpdateSet(params({ client: h.client }))).rejects.toThrow(
+      /no update set matches/,
+    );
   });
 
   it("refuses an ambiguous name", async function () {
     var h = harness({ setRows: [SET_ROW, SET_ROW] });
     await expect(
-      exportUpdateSet(params({ updateSet: "Tenon - Automate - fixture", client: h.client })),
+      exportUpdateSet(
+        params({ updateSet: "Tenon - Automate - fixture", client: h.client }),
+      ),
     ).rejects.toThrow(/matches more than one update set/);
   });
 });
@@ -219,7 +259,9 @@ describe("exportUpdateSet — validation", function () {
 describe("exportUpdateSet — dry-run", function () {
   it("plans without reading records", async function () {
     var h = harness({ rows: [oauthRow("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")] });
-    var result = await exportUpdateSet(params({ client: h.client, dryRun: true }));
+    var result = await exportUpdateSet(
+      params({ client: h.client, dryRun: true }),
+    );
     expect(result.status).toBe("dry-run");
     expect(result.xml).toBeUndefined();
     expect(h.invokes).toEqual([]);
@@ -228,7 +270,9 @@ describe("exportUpdateSet — dry-run", function () {
 
   it("refuses complete mode without confirm and says why", async function () {
     var h = harness({ rows: [] });
-    var result = await exportUpdateSet(params({ client: h.client, mode: "complete" }));
+    var result = await exportUpdateSet(
+      params({ client: h.client, mode: "complete" }),
+    );
     expect(result.status).toBe("dry-run");
     expect(result.note).toContain("a real write");
     expect(h.invokes).toEqual([]);
@@ -238,7 +282,10 @@ describe("exportUpdateSet — dry-run", function () {
 describe("exportUpdateSet — assemble mode", function () {
   it("exports every record with secrets replaced", async function () {
     var h = harness({
-      rows: [oauthRow("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")],
+      rows: [
+        oauthRow("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+      ],
     });
     var result = await exportUpdateSet(params({ client: h.client }));
     expect(result.status).toBe("exported");
@@ -268,7 +315,9 @@ describe("exportUpdateSet — assemble mode", function () {
       scriptRow("cccccccccccccccccccccccccccccccc"),
     ];
     var h = harness({ rows: rows });
-    var result = await exportUpdateSet(params({ client: h.client, pageSize: 2 }));
+    var result = await exportUpdateSet(
+      params({ client: h.client, pageSize: 2 }),
+    );
     expect(result.status).toBe("exported");
     expect(result.recordCount).toBe(3);
     var pageCalls = h.invokes.filter(function (c: string) {
@@ -278,7 +327,10 @@ describe("exportUpdateSet — assemble mode", function () {
   });
 
   it("refuses to write when the row count does not match the set", async function () {
-    var h = harness({ rows: [scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")], count: 7 });
+    var h = harness({
+      rows: [scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")],
+      count: 7,
+    });
     var result = await exportUpdateSet(params({ client: h.client }));
     expect(result.status).toBe("failed");
     expect(result.xml).toBeUndefined();
@@ -304,13 +356,23 @@ describe("exportUpdateSet — assemble mode", function () {
   });
 
   it("fails when the count call fails", async function () {
-    var h = harness({ rows: [scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")], statsStatus: 403 });
-    await expect(exportUpdateSet(params({ client: h.client }))).rejects.toThrow(/could not count/);
+    var h = harness({
+      rows: [scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")],
+      statsStatus: 403,
+    });
+    await expect(exportUpdateSet(params({ client: h.client }))).rejects.toThrow(
+      /could not count/,
+    );
   });
 
   it("fails when a page read fails", async function () {
-    var h = harness({ rows: [scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")], pageStatus: 500 });
-    await expect(exportUpdateSet(params({ client: h.client }))).rejects.toThrow(/Nothing was written/);
+    var h = harness({
+      rows: [scriptRow("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")],
+      pageStatus: 500,
+    });
+    await expect(exportUpdateSet(params({ client: h.client }))).rejects.toThrow(
+      /Nothing was written/,
+    );
   });
 
   it("keeps the baseline rules when the dictionary cannot be read", async function () {
@@ -345,7 +407,9 @@ describe("exportUpdateSet — complete mode", function () {
     '<sys_update_xml action="INSERT_OR_UPDATE"><name>oauth_entity_a</name><payload>' +
     encodedPayload(
       "oauth_entity",
-      "<client_secret>" + SECRET_VALUE + "</client_secret><sys_id>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</sys_id>",
+      "<client_secret>" +
+        SECRET_VALUE +
+        "</client_secret><sys_id>aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</sys_id>",
     ) +
     "</payload></sys_update_xml></unload>";
 
@@ -365,7 +429,9 @@ describe("exportUpdateSet — complete mode", function () {
     expect(result.status).toBe("exported");
     expect(result.xml).not.toContain(SECRET_VALUE);
     expect(result.recordCount).toBe(1);
-    expect(s.gets[0]).toContain("/export_update_set.do?sysparm_sys_id=" + SET_SYS_ID);
+    expect(s.gets[0]).toContain(
+      "/export_update_set.do?sysparm_sys_id=" + SET_SYS_ID,
+    );
     expect(s.gets[0]).toContain("sysparm_delete_when_done=false");
     var puts = s.h.invokes.filter(function (c: string) {
       return c.indexOf("PUT ") === 0;

@@ -36,7 +36,10 @@ import * as fs from "fs";
 export var SENTINEL = "__SET_DURING_INSTALL__";
 
 /** sys_dictionary internal_types that mark a column as secret-bearing. */
-export var SECRET_INTERNAL_TYPES: ReadonlyArray<string> = ["password", "password2"];
+export var SECRET_INTERNAL_TYPES: ReadonlyArray<string> = [
+  "password",
+  "password2",
+];
 
 /** A rule that applies to one field, optionally only when a sibling field matches. */
 export interface FieldRule {
@@ -153,7 +156,8 @@ var BASELINE_JSON_KEYS: Array<string> = [
 ];
 
 var BASELINE_HEURISTIC = {
-  pattern: "(secret|token|passw(or)?d|api_?key|private_?key|passphrase|signing|bearer)",
+  pattern:
+    "(secret|token|passw(or)?d|api_?key|private_?key|passphrase|signing|bearer)",
   flags: "i",
 };
 
@@ -166,11 +170,16 @@ export function defaultSecretRules(): SecretRules {
     fieldRules: BASELINE_FIELD_RULES.slice(),
     notSecret: [],
     jsonKeys: BASELINE_JSON_KEYS.slice(),
-    heuristic: { pattern: BASELINE_HEURISTIC.pattern, flags: BASELINE_HEURISTIC.flags },
+    heuristic: {
+      pattern: BASELINE_HEURISTIC.pattern,
+      flags: BASELINE_HEURISTIC.flags,
+    },
   };
 }
 
-function cloneFieldMap(src: Record<string, Array<string>>): Record<string, Array<string>> {
+function cloneFieldMap(
+  src: Record<string, Array<string>>,
+): Record<string, Array<string>> {
   var out: Record<string, Array<string>> = {};
   var tables = Object.keys(src);
   for (var i = 0; i < tables.length; i += 1) {
@@ -191,7 +200,9 @@ function asStringArray(v: unknown, label: string): Array<string> {
   var out: Array<string> = [];
   for (var i = 0; i < v.length; i += 1) {
     if (typeof v[i] !== "string" || v[i] === "") {
-      throw new Error("secret-rules: " + label + "[" + i + "] must be a non-empty string");
+      throw new Error(
+        "secret-rules: " + label + "[" + i + "] must be a non-empty string",
+      );
     }
     out.push(v[i] as string);
   }
@@ -204,7 +215,10 @@ function asStringArray(v: unknown, label: string): Array<string> {
  * which is how a reviewed false positive gets exempted, with its reason on the
  * record.
  */
-export function mergeSecretRules(base: SecretRules, override: unknown): SecretRules {
+export function mergeSecretRules(
+  base: SecretRules,
+  override: unknown,
+): SecretRules {
   if (override === undefined || override === null) {
     return base;
   }
@@ -220,7 +234,9 @@ export function mergeSecretRules(base: SecretRules, override: unknown): SecretRu
   }
   if (override.typeFields !== undefined) {
     if (!isRecordObject(override.typeFields)) {
-      throw new Error("secret-rules: typeFields must be an object of table -> fields");
+      throw new Error(
+        "secret-rules: typeFields must be an object of table -> fields",
+      );
     }
     var tables = Object.keys(override.typeFields);
     for (var i = 0; i < tables.length; i += 1) {
@@ -228,7 +244,10 @@ export function mergeSecretRules(base: SecretRules, override: unknown): SecretRu
         (override.typeFields as Record<string, unknown>)[tables[i]],
         "typeFields." + tables[i],
       );
-      out.typeFields[tables[i]] = mergeUnique(out.typeFields[tables[i]] || [], fields);
+      out.typeFields[tables[i]] = mergeUnique(
+        out.typeFields[tables[i]] || [],
+        fields,
+      );
     }
   }
   if (override.fieldRules !== undefined) {
@@ -248,15 +267,24 @@ export function mergeSecretRules(base: SecretRules, override: unknown): SecretRu
     }
   }
   if (override.jsonKeys !== undefined) {
-    out.jsonKeys = mergeUnique(out.jsonKeys, asStringArray(override.jsonKeys, "jsonKeys"));
+    out.jsonKeys = mergeUnique(
+      out.jsonKeys,
+      asStringArray(override.jsonKeys, "jsonKeys"),
+    );
   }
   if (override.heuristic !== undefined) {
-    if (!isRecordObject(override.heuristic) || typeof override.heuristic.pattern !== "string") {
+    if (
+      !isRecordObject(override.heuristic) ||
+      typeof override.heuristic.pattern !== "string"
+    ) {
       throw new Error("secret-rules: heuristic must be { pattern, flags }");
     }
     out.heuristic = {
       pattern: override.heuristic.pattern,
-      flags: typeof override.heuristic.flags === "string" ? override.heuristic.flags : "i",
+      flags:
+        typeof override.heuristic.flags === "string"
+          ? override.heuristic.flags
+          : "i",
     };
   }
   return out;
@@ -274,33 +302,50 @@ function mergeUnique(a: Array<string>, b: Array<string>): Array<string> {
 
 function parseFieldRule(raw: unknown, index: number): FieldRule {
   if (!isRecordObject(raw)) {
-    throw new Error("secret-rules: fieldRules[" + index + "] must be an object");
+    throw new Error(
+      "secret-rules: fieldRules[" + index + "] must be an object",
+    );
   }
   if (typeof raw.table !== "string" || raw.table === "") {
-    throw new Error("secret-rules: fieldRules[" + index + "].table is required");
+    throw new Error(
+      "secret-rules: fieldRules[" + index + "].table is required",
+    );
   }
   if (typeof raw.field !== "string" || raw.field === "") {
-    throw new Error("secret-rules: fieldRules[" + index + "].field is required");
+    throw new Error(
+      "secret-rules: fieldRules[" + index + "].field is required",
+    );
   }
   if (typeof raw.reason !== "string" || raw.reason === "") {
     throw new Error(
-      "secret-rules: fieldRules[" + index + "].reason is required — say why the field is secret",
+      "secret-rules: fieldRules[" +
+        index +
+        "].reason is required — say why the field is secret",
     );
   }
   var rule: FieldRule = {
-    id: typeof raw.id === "string" && raw.id !== "" ? raw.id : "custom-" + index,
+    id:
+      typeof raw.id === "string" && raw.id !== "" ? raw.id : "custom-" + index,
     table: raw.table,
     field: raw.field,
     reason: raw.reason,
   };
   if (raw.when !== undefined) {
     if (!isRecordObject(raw.when) || typeof raw.when.field !== "string") {
-      throw new Error("secret-rules: fieldRules[" + index + "].when must be { field, equals|in }");
+      throw new Error(
+        "secret-rules: fieldRules[" +
+          index +
+          "].when must be { field, equals|in }",
+      );
     }
     var when: FieldRule["when"] = { field: raw.when.field };
     if (raw.when.equals !== undefined) {
       if (typeof raw.when.equals !== "string") {
-        throw new Error("secret-rules: fieldRules[" + index + "].when.equals must be a string");
+        throw new Error(
+          "secret-rules: fieldRules[" +
+            index +
+            "].when.equals must be a string",
+        );
       }
       when.equals = raw.when.equals;
     }
@@ -308,7 +353,9 @@ function parseFieldRule(raw: unknown, index: number): FieldRule {
       when.in = asStringArray(raw.when.in, "fieldRules[" + index + "].when.in");
     }
     if (when.equals === undefined && when.in === undefined) {
-      throw new Error("secret-rules: fieldRules[" + index + "].when needs equals or in");
+      throw new Error(
+        "secret-rules: fieldRules[" + index + "].when needs equals or in",
+      );
     }
     rule.when = when;
   }
@@ -320,7 +367,9 @@ function parseNotSecret(raw: unknown, index: number): NotSecretRule {
     throw new Error("secret-rules: notSecret[" + index + "] must be an object");
   }
   if (typeof raw.table !== "string" || typeof raw.field !== "string") {
-    throw new Error("secret-rules: notSecret[" + index + "] needs table and field");
+    throw new Error(
+      "secret-rules: notSecret[" + index + "] needs table and field",
+    );
   }
   if (typeof raw.reason !== "string" || raw.reason === "") {
     throw new Error(
@@ -397,7 +446,11 @@ export function secretFieldsFromDictionary(
   var out: Record<string, Array<string>> = {};
   for (var i = 0; i < rows.length; i += 1) {
     var row = rows[i];
-    if (!row || typeof row.name !== "string" || typeof row.element !== "string") {
+    if (
+      !row ||
+      typeof row.name !== "string" ||
+      typeof row.element !== "string"
+    ) {
       continue;
     }
     if (row.element === "" || row.name.indexOf("var__") === 0) {

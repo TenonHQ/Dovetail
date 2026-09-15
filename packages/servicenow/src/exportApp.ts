@@ -27,7 +27,12 @@
 
 import { createClient } from "./client";
 import type { ServiceNowClient } from "./client";
-import { resolveFormAuth, openFormSession, postForm, decodeHtmlEntities } from "./table";
+import {
+  resolveFormAuth,
+  openFormSession,
+  postForm,
+  decodeHtmlEntities,
+} from "./table";
 import type { FormAuth, FormSession, PostResult } from "./table";
 import {
   parseXmlAnswer,
@@ -107,7 +112,10 @@ interface ResolvedApp {
   version: string;
 }
 
-async function resolveApp(client: ServiceNowClient, selector: string): Promise<ResolvedApp> {
+async function resolveApp(
+  client: ServiceNowClient,
+  selector: string,
+): Promise<ResolvedApp> {
   var fields = ["sys_id", "scope", "name", "version"];
   var queries: Array<string> = [];
   if (SYS_ID_RE.test(selector)) {
@@ -117,10 +125,14 @@ async function resolveApp(client: ServiceNowClient, selector: string): Promise<R
     queries.push("name=" + selector);
   }
   for (var i = 0; i < queries.length; i += 1) {
-    var rows = await client.table.query<Record<string, string>>("sys_app", queries[i], {
-      limit: 2,
-      fields: fields,
-    });
+    var rows = await client.table.query<Record<string, string>>(
+      "sys_app",
+      queries[i],
+      {
+        limit: 2,
+        fields: fields,
+      },
+    );
     if (rows.length === 1) {
       return {
         sysId: rows[0].sys_id || "",
@@ -131,12 +143,16 @@ async function resolveApp(client: ServiceNowClient, selector: string): Promise<R
     }
     if (rows.length > 1) {
       throw new Error(
-        "export-app: '" + selector + "' matches more than one application — pass the sys_id.",
+        "export-app: '" +
+          selector +
+          "' matches more than one application — pass the sys_id.",
       );
     }
   }
   throw new Error(
-    "export-app: no application matches '" + selector + "' — pass its sys_id, scope, or name.",
+    "export-app: no application matches '" +
+      selector +
+      "' — pass its sys_id, scope, or name.",
   );
 }
 
@@ -151,7 +167,10 @@ function realSleep(ms: number): Promise<void> {
  * space when the description box is empty — mirrored here so the processor sees
  * what it sees from a browser.
  */
-export function buildCreateSetFields(app: ResolvedApp, description: string): Record<string, string> {
+export function buildCreateSetFields(
+  app: ResolvedApp,
+  description: string,
+): Record<string, string> {
   return {
     sysparm_processor: "com.snc.apps.AppsAjaxProcessor",
     sysparm_function: "createUpdateSet",
@@ -204,19 +223,26 @@ function baseResult(app: ResolvedApp, version: string): ExportAppResult {
  * Remote failures are RETURNED as a failed/timeout result; only caller errors
  * (bad selector, bad timeout) throw.
  */
-export async function exportApp(params: ExportAppParams): Promise<ExportAppResult> {
+export async function exportApp(
+  params: ExportAppParams,
+): Promise<ExportAppResult> {
   if (!params || typeof params.app !== "string" || params.app.trim() === "") {
     throw new Error("export-app: app is required (a sys_id, scope, or name).");
   }
   var timeoutMs =
-    params.timeoutMs === undefined ? DEFAULT_EXPORT_APP_TIMEOUT_MS : params.timeoutMs;
+    params.timeoutMs === undefined
+      ? DEFAULT_EXPORT_APP_TIMEOUT_MS
+      : params.timeoutMs;
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
-    throw new Error("export-app: timeoutMs must be a positive integer of milliseconds.");
+    throw new Error(
+      "export-app: timeoutMs must be a positive integer of milliseconds.",
+    );
   }
 
   var client = params.client || createClient({});
   var app = await resolveApp(client, params.app.trim());
-  var version = params.version && params.version !== "" ? params.version : app.version;
+  var version =
+    params.version && params.version !== "" ? params.version : app.version;
   var description = params.description === undefined ? "" : params.description;
   var result = baseResult(app, version);
 
@@ -249,7 +275,12 @@ export async function exportApp(params: ExportAppParams): Promise<ExportAppResul
   });
   var session = await openSession(auth);
 
-  var created = await post(auth, session, "/xmlhttp.do", buildCreateSetFields(app, description));
+  var created = await post(
+    auth,
+    session,
+    "/xmlhttp.do",
+    buildCreateSetFields(app, description),
+  );
   var createdAnswer = parseXmlAnswer(created.body);
   if (createdAnswer.error !== "" || !SYS_ID_RE.test(createdAnswer.answer)) {
     result.status = "failed";
@@ -292,7 +323,9 @@ export async function exportApp(params: ExportAppParams): Promise<ExportAppResul
   var pollIndex = 0;
   while (true) {
     var delay =
-      PUBLISH_POLL_DELAYS_MS[Math.min(pollIndex, PUBLISH_POLL_DELAYS_MS.length - 1)];
+      PUBLISH_POLL_DELAYS_MS[
+        Math.min(pollIndex, PUBLISH_POLL_DELAYS_MS.length - 1)
+      ];
     if (Date.now() - startedAt + delay > timeoutMs) {
       result.status = "timeout";
       result.message = "publish did not finish in time";
@@ -321,7 +354,8 @@ export async function exportApp(params: ExportAppParams): Promise<ExportAppResul
     if (answer.error !== "") {
       result.status = "failed";
       result.message = answer.error;
-      result.note = "export-app: reading publish progress failed (" + answer.error + ").";
+      result.note =
+        "export-app: reading publish progress failed (" + answer.error + ").";
       return result;
     }
     var tree;
@@ -330,7 +364,10 @@ export async function exportApp(params: ExportAppParams): Promise<ExportAppResul
     } catch (e) {
       result.status = "failed";
       result.message = e instanceof Error ? e.message : String(e);
-      result.note = "export-app: publish progress could not be read (" + result.message + ").";
+      result.note =
+        "export-app: publish progress could not be read (" +
+        result.message +
+        ").";
       return result;
     }
     var verdict = classifyProgress(tree);
@@ -391,7 +428,9 @@ export async function exportApp(params: ExportAppParams): Promise<ExportAppResul
     " into update set " +
     result.updateSetSysId +
     " (" +
-    (params.keepSet === false ? "delete it on the instance when done" : "kept") +
+    (params.keepSet === false
+      ? "delete it on the instance when done"
+      : "kept") +
     ") and exported " +
     result.recordCount +
     " record(s); " +
