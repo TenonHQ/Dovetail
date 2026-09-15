@@ -38,6 +38,7 @@ export {
   setCurrentApplication,
   getRecordForm,
   getNewRecordForm,
+  getWithSession,
   parseFormInputs,
   postForm,
   scrapeCk,
