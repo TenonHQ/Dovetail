@@ -1111,7 +1111,9 @@ function printHelp(): void {
       "                     as does a plain (non-unique) index. The run ABORTS before writing\n" +
       "                     when the column holds duplicate values (EMPTY counts): a unique\n" +
       "                     index cannot build over them and the platform fails that ALTER\n" +
-      "                     SILENTLY, leaving unique=true with no index behind it. Success is\n" +
+      "                     SILENTLY, leaving unique=true with no index behind it. It aborts\n" +
+      "                     the same way when that scan hits its row cap — an UNPROVEN scan\n" +
+      "                     is treated exactly like a proven collision. Success is\n" +
       "                     read back from v_db_index; that view has no uniqueness field, so\n" +
       "                     ENFORCEMENT is always reported unverified.\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +

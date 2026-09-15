@@ -36,6 +36,12 @@
  *    column first and ABORTS BEFORE WRITING when values repeat. EMPTY counts as a
  *    value: a newly added column that is empty on all 498 existing rows is 498
  *    collisions, which is the single most likely way this verb would be used wrong.
+ *    AN UNPROVEN SCAN IS TREATED EXACTLY LIKE A PROVEN COLLISION. The scan is paged
+ *    and capped (SCAN_MAX_PAGES x SCAN_PAGE_SIZE rows); if it hits that cap the run
+ *    ABORTS TOO. Writing on a scan that only got part-way would risk manufacturing
+ *    the very lying row above — on a table too big to have been checked — and there
+ *    is no headless way back from it, because writing "true" over "true" fires no
+ *    ALTER. "Not proven clean" is not "clean".
  *
  * `verified.indexPresent` is deliberately three-valued: `true` (a matching row was
  * read back), `false` (the view WAS read and holds no such row) and `null` (the view
@@ -227,7 +233,10 @@ export interface DuplicateScan {
   duplicates: Array<DuplicateValue>;
   /** Rows actually read. */
   scanned: number;
-  /** True when the scan hit its page cap — "no duplicates seen" is then not "none exist". */
+  /**
+   * True when the scan hit its page cap — "no duplicates seen" is then not "none exist",
+   * so the live path REFUSES to write on it rather than downgrading it to a caveat.
+   */
   incomplete: boolean;
 }
 
@@ -693,16 +702,32 @@ export async function addIndex(
         debugNote,
     );
   }
+  // The scan is capped. A capped scan proves NOTHING about the rows it never read, and
+  // writing on "no duplicates in the part I saw" is how this verb would manufacture the
+  // lying row it exists to prevent — on a table too big for anyone to have checked, with
+  // no headless way back (writing "true" over "true" fires no ALTER). So an unproven scan
+  // aborts exactly like a proven collision does.
   if (scan.incomplete) {
-    state.extraUnverified.push(
-      "duplicate-free-beyond-" + scan.scanned + "-scanned-rows",
+    return finish(
+      state,
+      "failed",
+      "Refusing to write: the duplicate scan could not read the whole column. It " +
+        "stopped after " +
+        scan.scanned +
+        " rows of " +
+        resolved.name +
+        "." +
+        column +
+        ", so freedom from duplicates is UNPROVEN beyond that depth — and a unique " +
+        "index that meets a collision fails its ALTER SILENTLY, leaving sys_dictionary " +
+        "claiming unique=true with NO index behind it (the " +
+        "x_cadso_core_metric_point.idempotency_key trap) and no headless way back, " +
+        "because writing 'true' over 'true' fires no ALTER. Nothing was written — " +
+        "prove the column is duplicate-free by another route (EMPTY counts as a value) " +
+        "and build this index in the platform UI." +
+        debugNote,
     );
   }
-  var scanNote = scan.incomplete
-    ? " NOTE: the duplicate scan stopped after " +
-      scan.scanned +
-      " rows, so freedom from duplicates was checked only that far."
-    : "";
 
   try {
     await client.claude.pushWithUpdateSet({
@@ -774,6 +799,6 @@ export async function addIndex(
     true,
     resolved.name,
     column,
-    " Captured into update set " + updateSetSysId + "." + scanNote + debugNote,
+    " Captured into update set " + updateSetSysId + "." + debugNote,
   );
 }

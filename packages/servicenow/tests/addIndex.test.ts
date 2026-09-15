@@ -47,6 +47,10 @@ import type { ServiceNowClient } from "../src/client";
 
 var TABLE = "x_cadso_journey_instance";
 var COLUMN = "occurrence_key";
+// Mirrors addIndex.ts's own SCAN_PAGE_SIZE / SCAN_MAX_PAGES. The duplicate scan pages the
+// target table and gives up at the cap; what it does THEN is the contract these pin.
+var SCAN_PAGE_SIZE = 1000;
+var SCAN_MAX_PAGES = 10;
 // Deliberately NOT the table name — a scope assertion must fail if addIndex ever passes
 // the table name where the resolved scope name belongs.
 var SCOPE_NAME = "x_cadso_journey_app";
@@ -167,6 +171,12 @@ interface LiveOpts {
   columnMissing?: boolean;
   /** Values the column holds on the target table, for the duplicate preflight. */
   dataValues?: Array<string>;
+  /**
+   * Serve this many FULL pages (SCAN_PAGE_SIZE distinct rows each) from the target table
+   * before it runs dry. Overrides `dataValues`. Drives the duplicate scan's page cap:
+   * SCAN_MAX_PAGES pages means the scan never reached the end of the column.
+   */
+  fullDataPages?: number;
 }
 
 /**
@@ -183,6 +193,7 @@ function liveClient(opts: LiveOpts): ServiceNowClient {
   var indexRows = opts.indexRows === undefined ? [okIndexRow()] : opts.indexRows;
   var dataValues = opts.dataValues === undefined ? [] : opts.dataValues;
   var dataServed = false;
+  var dataPagesServed = 0;
   var calls: IndexCalls = { queries: [], pushes: [], createRecords: [] };
 
   function currentUnique(): string {
@@ -232,6 +243,20 @@ function liveClient(opts: LiveOpts): ServiceNowClient {
       return indexRows as unknown as Array<Record<string, unknown>>;
     }
     if (table === TABLE) {
+      if (opts.fullDataPages !== undefined) {
+        if (dataPagesServed >= opts.fullDataPages) return [];
+        var offset = dataPagesServed * SCAN_PAGE_SIZE;
+        dataPagesServed += 1;
+        var page: Array<Record<string, unknown>> = [];
+        for (var n = 0; n < SCAN_PAGE_SIZE; n += 1) {
+          var pageRow: Record<string, unknown> = { sys_id: "ROW" + (offset + n) };
+          // Every value distinct: the rows that WERE read hold no collision, so the
+          // refusal under test is about the rows that were NOT read.
+          pageRow[COLUMN] = "k" + (offset + n);
+          page.push(pageRow);
+        }
+        return page;
+      }
       if (dataServed) return [];
       dataServed = true;
       return dataValues.map(function (v, i) {
@@ -492,6 +517,33 @@ describe("addIndex duplicate preflight", function () {
     var client = liveClient({ dataValues: ["k1", "k2", "k3"] });
     await addIndex(liveParams(client));
     expect(queriedTable(client, TABLE)).toBe(true);
+  });
+
+  it("aborts when the scan hits its page cap, without writing — unproven is not clean", async function () {
+    // SCAN_MAX_PAGES full pages: the scan gave up before the end of the column. Every
+    // value it DID read is distinct, and that is precisely the trap — "no duplicates
+    // seen" is not "none exist". Writing here is how add-index would manufacture the
+    // lying row it exists to prevent, on a table too big for anyone to have checked,
+    // with no headless way back (writing "true" over "true" fires no ALTER).
+    var client = liveClient({ fullDataPages: SCAN_MAX_PAGES });
+    var result: AddIndexResult = await addIndex(liveParams(client));
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/unproven/i);
+    expect(result.note).toContain(String(SCAN_MAX_PAGES * SCAN_PAGE_SIZE));
+    expect(callsOf(client).pushes).toEqual([]);
+    expect(callsOf(client).createRecords).toEqual([]);
+    expect(result.verified.dictionaryUnique).toBe(false);
+    expect(result.unverified).toContain("uniqueness-enforced");
+  });
+
+  it("does NOT treat an exactly-full final page as an incomplete scan", async function () {
+    // One page of exactly SCAN_PAGE_SIZE rows and then nothing: the scan DID reach the
+    // end of the column. Refusing here would make the verb unusable on every table whose
+    // row count happens to land on a page boundary.
+    var client = liveClient({ fullDataPages: 1 });
+    var result: AddIndexResult = await addIndex(liveParams(client));
+    expect(result.status).toBe("created");
+    expect(callsOf(client).pushes).toHaveLength(1);
   });
 });
 

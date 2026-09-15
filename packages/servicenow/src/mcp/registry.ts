@@ -474,7 +474,10 @@ export function buildDescriptors(
         "both stay platform-UI work. Before writing, the column's values are scanned and the run " +
         "ABORTS on duplicates, EMPTY included: a unique index cannot build over them, and the " +
         "platform fails that ALTER SILENTLY, leaving a dictionary row claiming unique=true with no " +
-        "index behind it (the x_cadso_core_metric_point.idempotency_key trap). status is 'created' " +
+        "index behind it (the x_cadso_core_metric_point.idempotency_key trap). That scan is paged " +
+        "and capped, and a scan that hits the cap ABORTS TOO — an UNPROVEN scan is treated exactly " +
+        "like a proven collision, because writing on a partly-read column is how this verb would " +
+        "manufacture that trap on a table too big to have been checked. status is 'created' " +
         "only when a matching v_db_index row was read back; a flag with no index is 'failed', and " +
         "verified.indexPresent is null (UNKNOWN) when the view could not be read — never false, " +
         "because a blind instrument is not evidence of absence. 'uniqueness-enforced' is ALWAYS " +

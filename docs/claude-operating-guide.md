@@ -4,7 +4,7 @@
 >
 > Audience: a Claude Code session (or the developer reading over its shoulder). For *building/contributing* to Dovetail, see [`../ONBOARDING.md`](../ONBOARDING.md). For the platform design, see [`dovetail-platform-spec.md`](dovetail-platform-spec.md).
 
-Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**64 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
+Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**65 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
 
 ---
 
@@ -14,7 +14,7 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
 | **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 25 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, manage prompt drafts, build a session handoff |
-| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 23 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
+| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 24 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
 
@@ -101,7 +101,7 @@ Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders 
 
 ---
 
-## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 23 tools (SN authoring writes)
+## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 24 tools (SN authoring writes)
 
 Source: `packages/servicenow/src/mcp/registry.ts` — the registry is the source of
 truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug.
@@ -109,7 +109,7 @@ truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug
 Writes are **captured in the update set you pass** and are **idempotent** (re-running
 reports every record unchanged).
 
-> **`dryRun` is NOT universal.** 13 of the 23 accept it; the other 10 write (or read)
+> **`dryRun` is NOT universal.** 14 of the 24 accept it; the other 10 write (or read)
 > immediately. Notably **neither choice verb supports `dryRun`** — `remove_choices_from_field`
 > is a soft delete and reversible by re-adding, but it is not previewable. Check the
 > tool's own schema before assuming you can plan a write.
@@ -136,6 +136,7 @@ reports every record unchanged).
 |---|---|---|
 | `create_table` | Create a scoped table | yes |
 | `add_column` | Add a column to a table | yes |
+| `add_index` | Create a **single-column UNIQUE** index via `sys_dictionary.unique` (the only headless lever — `sys_index` is ACL-403), read back from the `v_db_index` view. Composite and non-unique are refused, not narrowed; duplicate values — or a duplicate scan that hits its row cap — abort before any write; uniqueness *enforcement* is always reported unverified | yes |
 | `set_column` | Update a column's dictionary definition | yes |
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |

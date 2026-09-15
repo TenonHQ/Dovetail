@@ -401,7 +401,10 @@ Three consequences, each reported rather than hidden:
   `unique=true` with no index behind it (which is exactly what
   `x_cadso_core_metric_point.idempotency_key` looks like today). **EMPTY counts as a
   value**: a freshly added column that is empty on every existing row is one collision per
-  row. Backfill first, index second.
+  row. Backfill first, index second. The scan is paged and capped, and a scan that hits
+  that cap **aborts the same way** - an UNPROVEN scan is treated exactly like a proven
+  collision, because writing on a column that was only read part-way is how this verb
+  would manufacture that trap on a table too big for anyone to have checked.
 - **Success is read back; uniqueness never is.** `status` is `created` only when a matching
   row was read back from the `v_db_index` view; a flag with no index is `failed`.
   `verified.indexPresent` is `null` - UNKNOWN, not `false` - when the view could not be
