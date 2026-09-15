@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-servicenow",
-  "version": "0.0.38",
+  "version": "0.0.39",
   "engines": {
     "node": ">=22"
   },
