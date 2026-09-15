@@ -248,6 +248,24 @@ export var addColumnSchema = z.object({
   debug: z.boolean().optional(),
 });
 
+// add-index keeps a column LIST because an index is conceptually multi-column, but the
+// only headless lever (sys_dictionary.unique) is per-COLUMN — so addIndex REFUSES a list
+// longer than one rather than silently building a different index than the one asked for.
+// `unique` is a plain boolean here for the same reason `internalType` is accepted by
+// set-column: a caller who asks for a non-unique index earns the explanation of why it is
+// impossible instead of a schema error that reads like a typo. updateSetSysId is optional
+// because dryRun needs none; the live-path requirement is enforced at the tool boundary
+// (registry.ts), matching add_column.
+export var addIndexSchema = z.object({
+  table: z.string().min(1),
+  columns: z.array(z.string().min(1)).min(1),
+  unique: z.boolean(),
+  scope: z.string().optional(),
+  updateSetSysId: z.string().min(1).optional(),
+  dryRun: z.boolean().optional(),
+  debug: z.boolean().optional(),
+});
+
 // set-column takes a CLOSED attribute set, not an open field map: an unbounded write to
 // sys_dictionary lets a caller silently corrupt the schema. internalType and element are
 // listed but are NOT settable — ServiceNow honours neither on an existing column, and

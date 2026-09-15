@@ -54,6 +54,20 @@ export { addColumn, deriveElement } from "./addColumn";
 export type { AddColumnParams, AddColumnResult } from "./addColumn";
 
 export {
+  addIndex,
+  scanForDuplicates,
+  parseIndexColumns,
+  indexMatchesColumns,
+} from "./addIndex";
+export type {
+  AddIndexParams,
+  AddIndexResult,
+  AddIndexVerification,
+  DuplicateScan,
+  DuplicateValue,
+} from "./addIndex";
+
+export {
   setColumn,
   resolveAttributes,
   toStoredValue,

@@ -46,11 +46,18 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, setColumn, setTable } from "./table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  setColumn,
+  setTable,
+} from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
+  AddIndexParams,
   SetColumnParams,
   ColumnAttributes,
   SetTableParams,
@@ -1095,6 +1102,18 @@ function printHelp(): void {
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
       "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
       "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
+      "  add-index          Create a single-column UNIQUE index (sys_dictionary.unique), then verify\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--table <name|sys_id> --columns <column> --unique --update-set <sys_id>\n" +
+      "                      [--confirm] [--scope <s>] [--dry-run] [--debug] [--json])\n" +
+      "                     ONE column only: unique is a per-COLUMN dictionary flag, so a\n" +
+      "                     composite index is REFUSED, not narrowed — that stays UI work,\n" +
+      "                     as does a plain (non-unique) index. The run ABORTS before writing\n" +
+      "                     when the column holds duplicate values (EMPTY counts): a unique\n" +
+      "                     index cannot build over them and the platform fails that ALTER\n" +
+      "                     SILENTLY, leaving unique=true with no index behind it. Success is\n" +
+      "                     read back from v_db_index; that view has no uniqueness field, so\n" +
+      "                     ENFORCEMENT is always reported unverified.\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
@@ -1330,6 +1349,88 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
         (result.verified ? " — verified" : "") +
         "\n" +
         result.note +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
+ * dove-sn add-index:
+ *   --table x_cadso_journey_instance --columns occurrence_key --unique
+ *   --update-set <sys_id> [--confirm] [--scope x_cadso_journey] [--debug] [--json]
+ *
+ * DRY-RUN BY DEFAULT — nothing is written without --confirm (--dry-run forces a
+ * dry-run even with it). --update-set is required on the live path and is checked
+ * here, before a client is built or a single request goes out.
+ *
+ * Exit codes: 0 created / skipped / dry-run, 1 bad args, 2 failed (which includes
+ * "the dictionary flag is set but no index was read back" — the lying-row case).
+ */
+async function runAddIndex(flags: Record<string, string>): Promise<number> {
+  var table = flags.table;
+  var columns = (flags.columns || "")
+    .split(",")
+    .map(function (c) {
+      return c.trim();
+    })
+    .filter(function (c) {
+      return c.length > 0;
+    });
+  if (!table || columns.length === 0) {
+    process.stderr.write(
+      "add-index: --table and --columns <column> are required " +
+        "(--unique too, and --update-set unless this is a dry-run)\n",
+    );
+    return 1;
+  }
+  // The only headless lever is sys_dictionary.unique. Refuse a non-unique request by
+  // name instead of building something else and calling it done.
+  if (flags.unique !== "true") {
+    process.stderr.write(
+      "add-index: --unique is required — the only headless lever is " +
+        "sys_dictionary.unique, which has no equivalent for a plain (non-unique) " +
+        "index. Create that one in the platform UI.\n",
+    );
+    return 1;
+  }
+  // DRY-RUN BY DEFAULT: --confirm is what sends; --dry-run forces a plan even with it.
+  var dryRun = flags["dry-run"] === "true" || flags.confirm !== "true";
+  if (!dryRun && !flags["update-set"]) {
+    process.stderr.write(
+      "add-index: --update-set is required on the live path (only a dry-run works without one)\n",
+    );
+    return 1;
+  }
+
+  var params: AddIndexParams = {
+    client: createClient({}),
+    table: table,
+    columns: columns,
+    unique: true,
+    dryRun: dryRun,
+  };
+  if (flags.scope) params.scope = flags.scope;
+  if (flags["update-set"]) params.updateSetSysId = flags["update-set"];
+  if (flags.debug === "true") params.debug = true;
+
+  var result = await addIndex(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "." +
+        result.columns.join(",") +
+        (result.indexName ? " -> " + result.indexName : "") +
+        "\n" +
+        result.note +
+        "\nUNVERIFIED: " +
+        result.unverified.join(", ") +
         "\n",
     );
   }
@@ -2000,6 +2101,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
+  }
+  if (parsed.command === "add-index") {
+    return await runAddIndex(parsed.flags);
   }
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
