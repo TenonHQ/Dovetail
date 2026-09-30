@@ -336,11 +336,13 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
   }
 
   try {
-    // First check if we have environment variables set
+    // First check if we have environment variables set. SN_USER stays
+    // required even in API-key mode (acting-user resolution); the password
+    // is optional once an inbound SN_API_KEY is set.
     if (
       !process.env.SN_USER ||
-      !process.env.SN_PASSWORD ||
-      !process.env.SN_INSTANCE
+      !process.env.SN_INSTANCE ||
+      (!process.env.SN_PASSWORD && !process.env.SN_API_KEY)
     ) {
       try {
         let loginAnswers = await getLoginInfo();
@@ -351,11 +353,11 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
       }
       if (
         !process.env.SN_USER ||
-        !process.env.SN_PASSWORD ||
-        !process.env.SN_INSTANCE
+        !process.env.SN_INSTANCE ||
+        (!process.env.SN_PASSWORD && !process.env.SN_API_KEY)
       ) {
         logger.error(
-          "Missing ServiceNow credentials. Please ensure SN_USER, SN_PASSWORD, and SN_INSTANCE are set in your .env file",
+          "Missing ServiceNow credentials. Please ensure SN_USER, SN_INSTANCE, and SN_PASSWORD (or SN_API_KEY) are set in your .env file",
         );
         throw new Error("ServiceNow credentials not configured");
       }
@@ -431,15 +433,17 @@ export async function watchAllScopesCommand(args: Sinc.WatchCmdArgs) {
   var dashboardProcess: ChildProcess | null = null;
 
   try {
-    // First check if we have environment variables set
+    // First check if we have environment variables set. SN_USER stays
+    // required even in API-key mode; the password is optional once an
+    // inbound SN_API_KEY is set.
     if (
       !process.env.SN_USER ||
-      !process.env.SN_PASSWORD ||
-      !process.env.SN_INSTANCE
+      !process.env.SN_INSTANCE ||
+      (!process.env.SN_PASSWORD && !process.env.SN_API_KEY)
     ) {
       let loginAnswers = await getLoginInfo();
       logger.error(
-        "Missing ServiceNow credentials. Please ensure SN_USER, SN_PASSWORD, and SN_INSTANCE are set in your .env file",
+        "Missing ServiceNow credentials. Please ensure SN_USER, SN_INSTANCE, and SN_PASSWORD (or SN_API_KEY) are set in your .env file",
       );
       throw new Error("ServiceNow credentials not configured");
     }

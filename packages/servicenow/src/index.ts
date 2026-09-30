@@ -178,6 +178,9 @@ export {
   DEFAULT_SAVE_ACTION,
   addColumn,
   deriveElement,
+  addIndex,
+  parseIndexColumns,
+  indexMatchesColumns,
   setColumn,
   resolveAttributes,
   toStoredValue,
@@ -189,6 +192,9 @@ export type {
   CreateTableResult,
   AddColumnParams,
   AddColumnResult,
+  AddIndexParams,
+  AddIndexResult,
+  AddIndexVerification,
   SetColumnParams,
   SetColumnResult,
   ColumnAttributes,
@@ -237,3 +243,76 @@ export type {
   CicdProgress,
   PublishTransport,
 } from "./publishApp";
+
+export {
+  exportUpdateSet,
+  renderUpdateXmlRow,
+  renderRemoteUpdateSet,
+  renderUnload,
+  countUnloadRecords,
+  countUpdateXml,
+  fetchUpdateXmlRows,
+  refreshTypeFields,
+  parseStatsCount,
+  formatUnloadDate,
+  xmlEscape,
+  UPDATE_XML_FIELDS,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  DEFAULT_MAX_ROWS,
+} from "./exportUpdateSet";
+export type {
+  ExportUpdateSetParams,
+  ExportUpdateSetResult,
+  ExportMode,
+  ExportTransport,
+} from "./exportUpdateSet";
+
+export {
+  exportApp,
+  buildCreateSetFields,
+  buildPublishFields,
+  DEFAULT_EXPORT_APP_TIMEOUT_MS,
+} from "./exportApp";
+export type {
+  ExportAppParams,
+  ExportAppResult,
+  ExportAppTransport,
+} from "./exportApp";
+
+export {
+  stripSecrets,
+  verifyStripped,
+  readField,
+  readRecordTable,
+  recordFieldNames,
+  plannedStrips,
+  stripField,
+  stripJsonValue,
+  encodeXmlEntities,
+  encodeXmlText,
+  escapeRegExp,
+} from "./secrets/stripSecrets";
+export type {
+  StripSecretsResult,
+  StripSecretsOptions,
+  SecretField,
+  ReviewFinding,
+} from "./secrets/stripSecrets";
+
+export {
+  defaultSecretRules,
+  loadSecretRules,
+  mergeSecretRules,
+  secretFieldsFromDictionary,
+  isCapturable,
+  SENTINEL,
+  SECRET_INTERNAL_TYPES,
+} from "./secrets/secretRules";
+export type {
+  SecretRules,
+  FieldRule,
+  NotSecretRule,
+  DictionaryRow,
+  CapturableRow,
+} from "./secrets/secretRules";

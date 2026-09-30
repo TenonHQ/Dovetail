@@ -248,6 +248,24 @@ export var addColumnSchema = z.object({
   debug: z.boolean().optional(),
 });
 
+// add-index keeps a column LIST because an index is conceptually multi-column, but the
+// only headless lever (sys_dictionary.unique) is per-COLUMN — so addIndex REFUSES a list
+// longer than one rather than silently building a different index than the one asked for.
+// `unique` is a plain boolean here for the same reason `internalType` is accepted by
+// set-column: a caller who asks for a non-unique index earns the explanation of why it is
+// impossible instead of a schema error that reads like a typo. updateSetSysId is optional
+// because dryRun needs none; the live-path requirement is enforced at the tool boundary
+// (registry.ts), matching add_column.
+export var addIndexSchema = z.object({
+  table: z.string().min(1),
+  columns: z.array(z.string().min(1)).min(1),
+  unique: z.boolean(),
+  scope: z.string().optional(),
+  updateSetSysId: z.string().min(1).optional(),
+  dryRun: z.boolean().optional(),
+  debug: z.boolean().optional(),
+});
+
 // set-column takes a CLOSED attribute set, not an open field map: an unbounded write to
 // sys_dictionary lets a caller silently corrupt the schema. internalType and element are
 // listed but are NOT settable — ServiceNow honours neither on an existing column, and
@@ -327,6 +345,32 @@ export var createRecordSchema = z.object({
 // application repository. Deliberately NO credential fields — the Store
 // account resolves from SN_STORE_USERNAME/SN_STORE_PASSWORD inside the verb,
 // so credentials never transit MCP arguments or telemetry.
+// update_set_export / app_export: the exported document always has its secret
+// values replaced with the __SET_DURING_INSTALL__ sentinel — there is deliberately
+// NO opt-out field here, so a caller cannot ask for an unredacted export. A field
+// that looks secret and no rule covers fails the call instead of shipping.
+export var exportUpdateSetSchema = z.object({
+  updateSet: z.string().min(1),
+  mode: z.union([z.literal("assemble"), z.literal("complete")]).optional(),
+  rulesPath: z.string().optional(),
+  pageSize: z.number().int().positive().optional(),
+  maxRows: z.number().int().positive().optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+export var exportAppSchema = z.object({
+  app: z.string().min(1),
+  version: z.string().optional(),
+  description: z.string().optional(),
+  includeData: z.boolean().optional(),
+  keepSet: z.boolean().optional(),
+  rulesPath: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
 export var publishAppSchema = z.object({
   app: z.string().min(1),
   version: z.string().min(1),

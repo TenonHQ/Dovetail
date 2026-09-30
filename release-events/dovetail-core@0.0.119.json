@@ -1,0 +1,34 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.119",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.119",
+  "prev_version": "0.0.118",
+  "published_at": "2026-08-31T21:34:20.896Z",
+  "git": {
+    "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+    "tag": "dovetail-core@0.0.119"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "81ab50a4e",
+      "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+      "pr": 264
+    },
+    {
+      "sha": "025e4eb4d",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "2d43ef9f1",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.49 [skip ci]"
+    },
+    {
+      "sha": "9476dceb0",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.118 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

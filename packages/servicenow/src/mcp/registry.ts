@@ -35,13 +35,23 @@ import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable, addColumn, setColumn, setTable } from "../table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  setColumn,
+  setTable,
+} from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
 import { invokeRest } from "../invokeRest";
 import type { InvokeRestParams } from "../invokeRest";
 import { publishApp } from "../publishApp";
+import { exportUpdateSet } from "../exportUpdateSet";
+import type { ExportUpdateSetParams } from "../exportUpdateSet";
+import { exportApp } from "../exportApp";
+import type { ExportAppParams } from "../exportApp";
 import type { PublishAppParams } from "../publishApp";
 import {
   createViewSchema,
@@ -60,6 +70,7 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
+  addIndexSchema,
   setColumnSchema,
   setTableSchema,
   setFieldSchema,
@@ -67,6 +78,8 @@ import {
   hostAssetsSchema,
   invokeRestSchema,
   publishAppSchema,
+  exportUpdateSetSchema,
+  exportAppSchema,
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -86,6 +99,7 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
+  "add_index",
   "set_column",
   "set_table",
   "set_field",
@@ -93,6 +107,8 @@ export var TOOL_NAMES = [
   "host_assets",
   "invoke_rest",
   "app_publish",
+  "update_set_export",
+  "app_export",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -452,6 +468,72 @@ export function buildDescriptors(
       },
     },
     {
+      name: "add_index",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Create a single-column UNIQUE index on an EXISTING ServiceNow table, headless. The " +
+        "ONLY headless lever is sys_dictionary.unique — sys_index fails an API-LEVEL ACL (403) " +
+        "for every identity and sys_index_column does not exist — so this patches the column's " +
+        "dictionary row through the update-set-aware write path and lets the platform build the " +
+        "physical index off that flag, then READS IT BACK from the v_db_index view. columns is a " +
+        "list but exactly one entry is supported: unique is a PER-COLUMN flag, so a composite " +
+        "request is REFUSED rather than silently narrowed to a different index than the one asked " +
+        "for, and unique:false is refused too (there is no dictionary lever for a plain index) — " +
+        "both stay platform-UI work. Before writing, the column's values are scanned and the run " +
+        "ABORTS on duplicates, EMPTY included: a unique index cannot build over them, and the " +
+        "platform fails that ALTER SILENTLY, leaving a dictionary row claiming unique=true with no " +
+        "index behind it (the x_cadso_core_metric_point.idempotency_key trap). That scan is paged " +
+        "and capped, and a scan that hits the cap ABORTS TOO — an UNPROVEN scan is treated exactly " +
+        "like a proven collision, because writing on a partly-read column is how this verb would " +
+        "manufacture that trap on a table too big to have been checked. status is 'created' " +
+        "only when a matching v_db_index row was read back; a flag with no index is 'failed', and " +
+        "verified.indexPresent is null (UNKNOWN) when the view could not be read — never false, " +
+        "because a blind instrument is not evidence of absence. 'uniqueness-enforced' is ALWAYS " +
+        "reported in unverified: v_db_index carries no uniqueness field, so enforcement is provable " +
+        "only by a duplicate-insert test. updateSetSysId is required on the live path; dryRun:true " +
+        "returns the plan with no reads and no writes.",
+      shape: addIndexSchema.shape,
+      handler: async function (args: unknown) {
+        var p = addIndexSchema.parse(args);
+        // The schema leaves updateSetSysId optional (dry-run doesn't need one), so
+        // enforce the live-path requirement HERE — a tool-level error before any
+        // work beats a failure surfacing from deep inside addIndex. Same pattern as
+        // add_column.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "add_index: updateSetSysId is required on the live path so the " +
+              "sys_dictionary change is captured in a known update set — " +
+              "set dryRun:true to plan without one.",
+          );
+        }
+        // `unique` is boolean at the boundary (unvalidated JSON arrives here), but only
+        // true is buildable — refuse it by name rather than let a caller believe a plain
+        // index was created.
+        var unique = p.unique;
+        if (unique !== true) {
+          throw new Error(
+            "add_index: only a unique index can be created headlessly — the sole " +
+              "lever is sys_dictionary.unique, which has no equivalent for a plain " +
+              "(non-unique) index. Pass unique:true, or create that index in the " +
+              "platform UI.",
+          );
+        }
+        return addIndex({
+          client: client(),
+          table: p.table,
+          columns: p.columns,
+          unique: unique,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun,
+          debug: p.debug,
+        });
+      },
+    },
+    {
       name: "set_column",
       annotations: WRITE_OVERWRITE,
       description:
@@ -681,6 +763,73 @@ export function buildDescriptors(
           params.client = deps.client;
         }
         return publishApp(params);
+      },
+    },
+    {
+      name: "update_set_export",
+      annotations: READ_ONLY,
+      description:
+        "Export one update set to an importable <unload> XML document, with every secret value " +
+        "replaced by the __SET_DURING_INSTALL__ sentinel. Two modes. mode 'assemble' (the default) " +
+        "is READ-ONLY: it pages the set's sys_update_xml rows and builds the document, touching no " +
+        "instance state, which is what packaging work wants against a shared instance. mode " +
+        "'complete' marks the set complete on the instance (a REAL WRITE, so it needs confirm:true) " +
+        "and reads the export servlet instead — the servlet answers an in-progress set with an " +
+        "empty 200, which this handles rather than writing an empty file. The export REFUSES to " +
+        "produce a document when the row count does not match the set, or when a field looks " +
+        "secret and no rule covers it: adjudicate it in the rules file as a strip rule or as " +
+        "notSecret with a reason. Secret stripping cannot be disabled. The result carries the XML, " +
+        "the record count, and the table.field list of every value replaced, so the install runbook " +
+        "can list what to set afterwards.",
+      shape: exportUpdateSetSchema.shape,
+      handler: async function (args: any) {
+        var p = exportUpdateSetSchema.parse(args);
+        var params: ExportUpdateSetParams = {
+          updateSet: p.updateSet,
+          mode: p.mode,
+          rulesPath: p.rulesPath,
+          pageSize: p.pageSize,
+          maxRows: p.maxRows,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return exportUpdateSet(params);
+      },
+    },
+    {
+      name: "app_export",
+      annotations: WRITE_EXECUTE,
+      description:
+        "Publish a scoped application into a NEW update set and export that set to importable " +
+        "<unload> XML — the headless equivalent of the UI's Publish to Update Set then Export to " +
+        "XML. PUBLISHING IS A REAL SHARED-INSTANCE WRITE: it creates an update set and can add " +
+        "1000+ sys_update_xml rows, so DRY-RUN BY DEFAULT — without confirm:true the resolved plan " +
+        "is returned and nothing is published. This is NOT the Store publish (that is app_publish, " +
+        "which is externally visible); this one stays inside the instance. Secret values are always " +
+        "replaced with the __SET_DURING_INSTALL__ sentinel before the document is returned, with no " +
+        "opt-out. includeData ships table data as well as schema and is off by default. The result " +
+        "carries the update set sys_id, the record count, the XML, and every stripped table.field.",
+      shape: exportAppSchema.shape,
+      handler: async function (args: any) {
+        var p = exportAppSchema.parse(args);
+        var params: ExportAppParams = {
+          app: p.app,
+          version: p.version,
+          description: p.description,
+          includeData: p.includeData,
+          keepSet: p.keepSet,
+          rulesPath: p.rulesPath,
+          timeoutMs: p.timeoutMs,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return exportApp(params);
       },
     },
   ];

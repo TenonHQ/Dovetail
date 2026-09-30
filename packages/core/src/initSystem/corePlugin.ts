@@ -56,6 +56,15 @@ export const corePlugin: Sinc.InitPlugin = {
       },
       required: true,
     },
+    {
+      envKey: "SN_API_KEY",
+      prompt: {
+        type: "password",
+        message: "Inbound API key (optional, Enter to skip — becomes the default auth when set):",
+        mask: "*",
+      },
+      required: false,
+    },
   ],
 
   configure: [
@@ -64,7 +73,12 @@ export const corePlugin: Sinc.InitPlugin = {
       label: "Selecting ServiceNow applications",
       run: async (context: Sinc.InitContext): Promise<string[] | null> => {
         var baseUrl = instanceBaseUrl(context.env.SN_INSTANCE);
-        var client = snClient(baseUrl, context.env.SN_USER, context.env.SN_PASSWORD);
+        var client = snClient(
+          baseUrl,
+          context.env.SN_USER,
+          context.env.SN_PASSWORD,
+          context.env.SN_API_KEY,
+        );
 
         logger.info("Fetching application list...");
         var apps: SN.App[] = await unwrapSNResponse(client.getAppList());
@@ -284,8 +298,11 @@ export async function validateCoreLogin(context: Sinc.InitContext): Promise<true
   const instance = context.env.SN_INSTANCE;
   const user = context.env.SN_USER;
   const password = context.env.SN_PASSWORD;
+  const apiKey = context.env.SN_API_KEY;
 
-  if (!instance || !user || !password) {
+  // SN_USER stays required even in API-key mode — the client's user-preference
+  // logic (current app / update set pinning) resolves the acting user from it.
+  if (!instance || !user || (!password && !apiKey)) {
     return "Missing required credentials";
   }
 
@@ -293,7 +310,7 @@ export async function validateCoreLogin(context: Sinc.InitContext): Promise<true
   const baseUrl = instanceBaseUrl(instance);
 
   try {
-    const client = snClient(baseUrl, user, password);
+    const client = snClient(baseUrl, user, password, apiKey);
     await unwrapSNResponse(client.getAppList());
     context.env.SN_INSTANCE = instanceUrl;
     return true;
@@ -305,7 +322,7 @@ export async function validateCoreLogin(context: Sinc.InitContext): Promise<true
       return "Instance not found — check the URL (got: " + instanceUrl + ")";
     }
     if (status === 401 || msg.includes("401")) {
-      return "Invalid username or password.";
+      return "Invalid credentials — check the username/password (or the API key and its REST API access policies).";
     }
     if (status === 403 || msg.includes("403")) {
       return "Access denied — user may lack required roles.";

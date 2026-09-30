@@ -35,6 +35,11 @@ import { setFormLayout } from "./layout/formLayout";
 import { setRelatedLists } from "./layout/relatedLists";
 import { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
 import { runStdio, runSmoke } from "./mcp/server";
+import { exportUpdateSet } from "./exportUpdateSet";
+import type { ExportMode } from "./exportUpdateSet";
+import { exportApp } from "./exportApp";
+import { stripSecrets } from "./secrets/stripSecrets";
+import { loadSecretRules } from "./secrets/secretRules";
 import { removeChoicesFromFieldSchema } from "./mcp/schemas";
 import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
 import { formatBuildFlowResult } from "./flowDesigner-formatter";
@@ -46,11 +51,12 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, setColumn, setTable } from "./table";
+import { createTable, addColumn, addIndex, setColumn, setTable } from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
+  AddIndexParams,
   SetColumnParams,
   ColumnAttributes,
   SetTableParams,
@@ -1095,6 +1101,20 @@ function printHelp(): void {
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
       "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
       "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
+      "  add-index          Create a single-column UNIQUE index (sys_dictionary.unique), then verify\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--table <name|sys_id> --columns <column> --unique --update-set <sys_id>\n" +
+      "                      [--confirm] [--scope <s>] [--dry-run] [--debug] [--json])\n" +
+      "                     ONE column only: unique is a per-COLUMN dictionary flag, so a\n" +
+      "                     composite index is REFUSED, not narrowed — that stays UI work,\n" +
+      "                     as does a plain (non-unique) index. The run ABORTS before writing\n" +
+      "                     when the column holds duplicate values (EMPTY counts): a unique\n" +
+      "                     index cannot build over them and the platform fails that ALTER\n" +
+      "                     SILENTLY, leaving unique=true with no index behind it. It aborts\n" +
+      "                     the same way when that scan hits its row cap — an UNPROVEN scan\n" +
+      "                     is treated exactly like a proven collision. Success is\n" +
+      "                     read back from v_db_index; that view has no uniqueness field, so\n" +
+      "                     ENFORCEMENT is always reported unverified.\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
@@ -1152,10 +1172,29 @@ function printHelp(): void {
       "                      [--dry-run] [--json] [--confirm])\n" +
       "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
       "                     the password is never a flag. Repo publish needs the sn_cicd role.\n" +
+      "  export-update-set  Export an update set to importable <unload> XML, with secret\n" +
+      "                     values replaced by __SET_DURING_INSTALL__ (no opt-out).\n" +
+      "                     assemble mode is READ-ONLY; complete mode marks the set\n" +
+      "                     complete on the instance and needs --confirm.\n" +
+      "                     (--update-set <sys_id|name> --out <file>\n" +
+      "                      [--mode assemble|complete]\n" +
+      "                      [--rules <file>] [--page-size <n>] [--max-rows <n>]\n" +
+      "                      [--dry-run] [--json] [--confirm])\n" +
+      "  export-app         Publish a scoped app into a new update set and export it.\n" +
+      "                     PUBLISHING IS A REAL INSTANCE WRITE (~1000+ records).\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
+      "                     (--app <scope|sys_id|name> --out <file> [--version <v>]\n" +
+      "                      [--description <text>] [--include-data] [--rules <file>]\n" +
+      "                      [--timeout-ms <n>] [--dry-run] [--json] [--confirm])\n" +
+      "  strip-secrets      Strip secret values from an unload XML exported elsewhere\n" +
+      "                     (--in <file> [--out <file>] [--rules <file>] [--report] [--json])\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
       "\nGlobal flags:\n" +
-      "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
-      "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n",
+      "  --env <name|path>  Load credentials from a specific env file (also --env-file,\n" +
+      "                     or the DOVETAIL_ENV_FILE env var). A bare name like 'prod'\n" +
+      "                     resolves to .env.prod in the cwd. The file's SN_* connection\n" +
+      "                     vars replace any already exported; a missing or incomplete\n" +
+      "                     file is an error (no fallback). Default: .env in the cwd.\n",
   );
 }
 
@@ -1337,9 +1376,95 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn add-index:
+ *   --table x_cadso_journey_instance --columns occurrence_key --unique
+ *   --update-set <sys_id> [--confirm] [--scope x_cadso_journey] [--debug] [--json]
+ *
+ * DRY-RUN BY DEFAULT — nothing is written without --confirm (--dry-run forces a
+ * dry-run even with it). --update-set is required on the live path and is checked
+ * here, before a client is built or a single request goes out.
+ *
+ * Exit codes: 0 created / skipped / dry-run, 1 bad args, 2 failed (which includes
+ * "the dictionary flag is set but no index was read back" — the lying-row case).
+ */
+async function runAddIndex(flags: Record<string, string>): Promise<number> {
+  var table = flags.table;
+  var columns = (flags.columns || "")
+    .split(",")
+    .map(function (c) {
+      return c.trim();
+    })
+    .filter(function (c) {
+      return c.length > 0;
+    });
+  if (!table || columns.length === 0) {
+    process.stderr.write(
+      "add-index: --table and --columns <column> are required " +
+        "(--unique too, and --update-set unless this is a dry-run)\n",
+    );
+    return 1;
+  }
+  // The only headless lever is sys_dictionary.unique. Refuse a non-unique request by
+  // name instead of building something else and calling it done.
+  if (flags.unique !== "true") {
+    process.stderr.write(
+      "add-index: --unique is required — the only headless lever is " +
+        "sys_dictionary.unique, which has no equivalent for a plain (non-unique) " +
+        "index. Create that one in the platform UI.\n",
+    );
+    return 1;
+  }
+  // DRY-RUN BY DEFAULT: --confirm is what sends; --dry-run forces a plan even with it.
+  var dryRun = flags["dry-run"] === "true" || flags.confirm !== "true";
+  if (!dryRun && !flags["update-set"]) {
+    process.stderr.write(
+      "add-index: --update-set is required on the live path (only a dry-run works without one)\n",
+    );
+    return 1;
+  }
+
+  var params: AddIndexParams = {
+    client: createClient({}),
+    table: table,
+    columns: columns,
+    unique: true,
+    dryRun: dryRun,
+  };
+  if (flags.scope) params.scope = flags.scope;
+  if (flags["update-set"]) params.updateSetSysId = flags["update-set"];
+  if (flags.debug === "true") params.debug = true;
+
+  var result = await addIndex(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "." +
+        result.columns.join(",") +
+        (result.indexName ? " -> " + result.indexName : "") +
+        "\n" +
+        result.note +
+        "\nUNVERIFIED: " +
+        result.unverified.join(", ") +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
 /** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
  *  false. Anything else is rejected rather than quietly coerced to `true`. */
-function parseBoolFlag(name: string, raw: string, verb: string = "set-column"): boolean {
+function parseBoolFlag(
+  name: string,
+  raw: string,
+  verb: string = "set-column",
+): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(
@@ -1473,7 +1598,9 @@ async function runSetTable(
   for (var f = 0; f < stringFlags.length; f += 1) {
     if (bare[stringFlags[f]]) {
       process.stderr.write(
-        "set-table: --" + stringFlags[f] + " needs a value (it was given none).\n",
+        "set-table: --" +
+          stringFlags[f] +
+          " needs a value (it was given none).\n",
       );
       return 1;
     }
@@ -1962,6 +2089,277 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
   return exitCode;
 }
 
+/**
+ * dove-sn export-update-set:
+ *   --update-set <sys_id|name>  Required. The set to export.
+ *   [--mode assemble|complete]  assemble (default) is READ-ONLY; complete marks
+ *                               the set complete on the instance first, which is
+ *                               a real write and needs --confirm.
+ *   [--out <file>]              Write the XML here (default: stdout is NOT used —
+ *                               a document this size belongs in a file).
+ *   [--rules <file>]            JSON overrides for the secret rules.
+ *   [--page-size <n>] [--max-rows <n>]
+ *   [--dry-run] [--json] [--confirm]
+ *
+ * Secret values are ALWAYS replaced with __SET_DURING_INSTALL__; there is no
+ * opt-out flag. A field that looks secret and is covered by no rule fails the
+ * run, and nothing is written.
+ * Exit codes: 0 exported/dry-run, 1 bad args/unconfirmed, 2 failed.
+ */
+async function runExportUpdateSet(
+  flags: Record<string, string>,
+): Promise<number> {
+  var selector = flags["update-set"];
+  if (!selector) {
+    process.stderr.write(
+      "export-update-set: --update-set <sys_id|name> is required\n",
+    );
+    return 1;
+  }
+  var mode = flags.mode || "assemble";
+  if (mode !== "assemble" && mode !== "complete") {
+    process.stderr.write(
+      "export-update-set: --mode must be assemble or complete\n",
+    );
+    return 1;
+  }
+  var outPath = flags.out;
+  if (!outPath && flags["dry-run"] !== "true") {
+    process.stderr.write(
+      "export-update-set: --out <file> is required for a real export\n",
+    );
+    return 1;
+  }
+  var pageSize = undefined;
+  if (flags["page-size"]) {
+    pageSize = Number(flags["page-size"]);
+    if (!Number.isInteger(pageSize) || pageSize < 1) {
+      process.stderr.write(
+        "export-update-set: --page-size must be a positive integer\n",
+      );
+      return 1;
+    }
+  }
+  var maxRows = undefined;
+  if (flags["max-rows"]) {
+    maxRows = Number(flags["max-rows"]);
+    if (!Number.isInteger(maxRows) || maxRows < 1) {
+      process.stderr.write(
+        "export-update-set: --max-rows must be a positive integer\n",
+      );
+      return 1;
+    }
+  }
+
+  var result = await exportUpdateSet({
+    updateSet: selector,
+    mode: mode as ExportMode,
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    rulesPath: flags.rules,
+    pageSize: pageSize,
+    maxRows: maxRows,
+  });
+
+  if (result.status === "exported" && result.xml && outPath) {
+    fs.writeFileSync(path.resolve(outPath), result.xml, "utf8");
+  }
+  writeExportReceipt(flags, result, outPath);
+  if (result.status === "failed") {
+    return 2;
+  }
+  if (result.status === "dry-run" && flags["dry-run"] !== "true") {
+    return 1;
+  }
+  return 0;
+}
+
+/** Shared receipt for both export verbs. */
+function writeExportReceipt(
+  flags: Record<string, string>,
+  result: {
+    status: string;
+    note: string;
+    secretFields: Array<{ table: string; field: string }>;
+  },
+  outPath?: string,
+): void {
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  process.stdout.write(
+    "[" +
+      result.status +
+      "]" +
+      (outPath && result.status === "exported"
+        ? " " + path.resolve(outPath)
+        : "") +
+      "\n" +
+      result.note +
+      "\n",
+  );
+  if (result.secretFields.length > 0) {
+    process.stdout.write("Set these after loading the package:\n");
+    for (var i = 0; i < result.secretFields.length; i += 1) {
+      process.stdout.write(
+        "  " +
+          result.secretFields[i].table +
+          "." +
+          result.secretFields[i].field +
+          "\n",
+      );
+    }
+  }
+}
+
+/**
+ * dove-sn export-app:
+ *   --app <scope|sys_id|name>   Required. The sys_app to publish and export.
+ *   [--version <v>]             Publish version (default: the app's current one).
+ *   [--description <text>]      Recorded on the update set.
+ *   [--include-data]            Ship table DATA as well as schema (off by default).
+ *   --out <file>                Where to write the XML.
+ *   [--rules <file>] [--timeout-ms <n>]
+ *   [--dry-run] [--json] [--confirm]
+ *
+ * PUBLISHING IS A REAL INSTANCE WRITE — a new update set and ~1000+ records.
+ * DRY-RUN BY DEFAULT. Secret values are always stripped before the file lands.
+ * Exit codes: 0 exported/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
+ */
+async function runExportApp(flags: Record<string, string>): Promise<number> {
+  var app = flags.app;
+  if (!app) {
+    process.stderr.write("export-app: --app <scope|sys_id|name> is required\n");
+    return 1;
+  }
+  var outPath = flags.out;
+  if (!outPath && flags["dry-run"] !== "true") {
+    process.stderr.write(
+      "export-app: --out <file> is required for a real export\n",
+    );
+    return 1;
+  }
+  var timeoutMs = undefined;
+  if (flags["timeout-ms"]) {
+    timeoutMs = Number(flags["timeout-ms"]);
+    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+      process.stderr.write(
+        "export-app: --timeout-ms must be a positive integer\n",
+      );
+      return 1;
+    }
+  }
+
+  var result = await exportApp({
+    app: app,
+    version: flags.version,
+    description: flags.description,
+    includeData: flags["include-data"] === "true",
+    keepSet: flags["keep-set"] !== "false",
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    rulesPath: flags.rules,
+    timeoutMs: timeoutMs,
+  });
+
+  if (result.status === "exported" && result.xml && outPath) {
+    fs.writeFileSync(path.resolve(outPath), result.xml, "utf8");
+  }
+  writeExportReceipt(flags, result, outPath);
+  if (result.status === "failed" || result.status === "timeout") {
+    return 2;
+  }
+  if (result.status === "dry-run" && flags["dry-run"] !== "true") {
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * dove-sn strip-secrets:
+ *   --in <file>                 Required. An unload XML exported earlier.
+ *   --out <file>                Required unless --report.
+ *   [--rules <file>]            JSON overrides for the secret rules.
+ *   [--report]                  List what WOULD be stripped and what needs review;
+ *                               writes nothing.
+ *   [--json]
+ *
+ * Exists for documents produced outside these verbs. Exit codes: 0 clean,
+ * 1 bad args, 2 blocked (a field needs review, or a secret survived).
+ */
+async function runStripSecrets(flags: Record<string, string>): Promise<number> {
+  var inPath = flags.in;
+  if (!inPath) {
+    process.stderr.write("strip-secrets: --in <file> is required\n");
+    return 1;
+  }
+  var report = flags.report === "true";
+  var outPath = flags.out;
+  if (!report && !outPath) {
+    process.stderr.write(
+      "strip-secrets: --out <file> is required (or pass --report)\n",
+    );
+    return 1;
+  }
+  var xml = "";
+  try {
+    xml = fs.readFileSync(path.resolve(inPath), "utf8");
+  } catch (e) {
+    process.stderr.write("strip-secrets: cannot read " + inPath + "\n");
+    return 1;
+  }
+  var rules = loadSecretRules(flags.rules);
+  var result;
+  try {
+    result = stripSecrets(xml, rules, { allowUnreviewed: report });
+  } catch (e) {
+    process.stderr.write((e instanceof Error ? e.message : String(e)) + "\n");
+    return 2;
+  }
+  if (!report && outPath) {
+    fs.writeFileSync(path.resolve(outPath), result.xml, "utf8");
+  }
+  if (flags.json === "true") {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          recordsScanned: result.recordsScanned,
+          secretFields: result.secretFields,
+          reviewFindings: result.reviewFindings,
+          written: report ? null : path.resolve(outPath as string),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+  } else {
+    process.stdout.write(
+      "[" +
+        (report ? "report" : "stripped") +
+        "] " +
+        result.recordsScanned +
+        " record(s), " +
+        result.secretFields.length +
+        " secret value(s)" +
+        (report ? "" : " → " + path.resolve(outPath as string)) +
+        "\n",
+    );
+    for (var i = 0; i < result.reviewFindings.length; i += 1) {
+      process.stdout.write(
+        "  NEEDS REVIEW " +
+          result.reviewFindings[i].table +
+          "." +
+          result.reviewFindings[i].field +
+          " (matched '" +
+          result.reviewFindings[i].matched +
+          "')\n",
+      );
+    }
+  }
+  return report && result.reviewFindings.length > 0 ? 2 : 0;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -2000,6 +2398,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
+  }
+  if (parsed.command === "add-index") {
+    return await runAddIndex(parsed.flags);
   }
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
@@ -2043,6 +2444,15 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "publish-app") {
     return await runPublishApp(parsed.flags);
+  }
+  if (parsed.command === "export-update-set") {
+    return await runExportUpdateSet(parsed.flags);
+  }
+  if (parsed.command === "export-app") {
+    return await runExportApp(parsed.flags);
+  }
+  if (parsed.command === "strip-secrets") {
+    return await runStripSecrets(parsed.flags);
   }
   if (parsed.command === "mcp") {
     return await runMcp(parsed.flags);

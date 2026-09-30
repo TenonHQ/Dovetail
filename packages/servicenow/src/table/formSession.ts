@@ -319,6 +319,41 @@ export interface PostResult {
   body: string;
 }
 
+/**
+ * GET a `.do` path with the session cookie jar. Some servlets — notably
+ * `/export_update_set.do` — stream their document only to an authenticated
+ * session, and answer an in-progress request with an empty 200 rather than an
+ * error, so the caller must inspect the body. Never throws on a non-2xx: the
+ * status is returned for the caller to classify.
+ */
+export async function getWithSession(
+  auth: FormAuth,
+  session: FormSession,
+  path: string,
+): Promise<PostResult> {
+  var B = base(auth);
+  var res = await fetch(B + path, {
+    headers: {
+      Cookie: cookieHeader(session.jar),
+      "X-UserToken": session.ck,
+      Accept: "application/xml, text/xml, text/html, */*",
+    },
+    redirect: "manual",
+  });
+  jarFrom(res, session.jar);
+  var body = "";
+  try {
+    body = await res.text();
+  } catch (e) {
+    body = "";
+  }
+  return {
+    status: res.status,
+    location: res.headers.get("location") || "",
+    body: body,
+  };
+}
+
 /** POST a form-urlencoded field map to a `.do` path. Follows nothing — returns the 302. */
 export async function postForm(
   auth: FormAuth,

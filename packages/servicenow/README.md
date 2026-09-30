@@ -367,6 +367,56 @@ adds diagnostics (app-switch status, resolved column key, assigned sys_id) to th
 result note. Ground truth (the HAR dissection) lives in the CTO repo's create-table
 docs.
 
+### Add a unique index
+
+Create a **single-column UNIQUE index** on an existing table, then read it back.
+
+```bash
+# Dry-run (the DEFAULT) - prints the plan, writes nothing and reads nothing
+npx dove-sn add-index \
+  --table x_cadso_journey_instance --columns occurrence_key --unique \
+  --update-set <sys_id> --json
+
+# Send it
+npx dove-sn add-index \
+  --table x_cadso_journey_instance --columns occurrence_key --unique \
+  --update-set <sys_id> --confirm
+```
+
+The **only** headless lever for an index is `sys_dictionary.unique`. `sys_index` fails an
+API-LEVEL ACL (HTTP 403) for every identity - and an ACL that refuses `GET` refuses `POST` -
+while `sys_index_column` does not exist at all (HTTP 400 `Invalid table`). So `add-index`
+patches the column's dictionary row through the update-set-aware write path and lets the
+platform build the physical index off that flag.
+
+Three consequences, each reported rather than hidden:
+
+- **One column, unique only.** `unique` is a per-COLUMN flag, so a composite index has no
+  dictionary lever. A multi-column request is **refused**, never narrowed to its first
+  column - building a different index than the one asked for is the worst available
+  outcome. `--unique` is required for the same reason. Composite and plain indexes stay
+  platform-UI work.
+- **Duplicates abort the run BEFORE it writes.** A unique index cannot build over repeated
+  values, and ServiceNow fails that ALTER *silently* - leaving a dictionary row claiming
+  `unique=true` with no index behind it (which is exactly what
+  `x_cadso_core_metric_point.idempotency_key` looks like today). **EMPTY counts as a
+  value**: a freshly added column that is empty on every existing row is one collision per
+  row. Backfill first, index second. The scan is paged and capped, and a scan that hits
+  that cap **aborts the same way** - an UNPROVEN scan is treated exactly like a proven
+  collision, because writing on a column that was only read part-way is how this verb
+  would manufacture that trap on a table too big for anyone to have checked.
+- **Success is read back; uniqueness never is.** `status` is `created` only when a matching
+  row was read back from the `v_db_index` view; a flag with no index is `failed`.
+  `verified.indexPresent` is `null` - UNKNOWN, not `false` - when the view could not be
+  read, because a blind instrument is not evidence of absence. And `v_db_index` carries no
+  uniqueness field (every row reads `btree`, unique or not), so **`uniqueness-enforced` is
+  listed in `unverified` on every status, success included**: only a duplicate-insert test
+  proves enforcement.
+
+`--update-set` is required on the live path and is checked before a client is built or a
+single request goes out. Exit codes: `0` created / skipped / dry-run, `1` bad args, `2`
+failed (the lying-row case included).
+
 ### Set a field on a record
 
 Set scalar field value(s) on an **existing** data record, capture the change into
@@ -505,6 +555,71 @@ Store `appLink`, and the publish's update-set sys_id where the instance reports
 one. Exit codes: `0` published or dry-run, `1` bad args/unconfirmed, `2`
 failed/timeout. Programmatic: `publishApp({ app, version, target, confirm })`.
 
+### Export an update set (or a whole app) to importable XML
+
+Produce the `<unload>` document the implementation team imports on a customer
+instance — with every secret value replaced by `__SET_DURING_INSTALL__`.
+
+```bash
+# An update set. assemble mode is READ-ONLY: nothing on the instance changes.
+npx dove-sn export-update-set --update-set 0123456789abcdef0123456789abcdef \
+  --out ./tenon-core.xml
+
+# A whole app: publish into a new set, then export it. Dry-run first (default).
+npx dove-sn export-app --app x_cadso_automate --out ./automate.xml
+npx dove-sn export-app --app x_cadso_automate --out ./automate.xml --confirm
+
+# A document exported some other way
+npx dove-sn strip-secrets --in ./exported.xml --out ./safe.xml
+npx dove-sn strip-secrets --in ./exported.xml --report      # what would be stripped
+```
+
+**Secret stripping is not optional.** There is no `--no-strip` flag on any of
+these verbs, and no field in the MCP schemas that disables it. This matters
+because an unload carries field *values*: on tenonworkstudio, completed update
+sets hold filled-in values for `password2` system properties and
+`oauth_entity.client_secret`, several of them in sets that shipped to a
+customer. A field is exempted only by a reviewed entry in the rules file.
+
+The rule is enumerable, in four layers:
+
+| Layer | Covers |
+|---|---|
+| L1 type | `password` / `password2` fields, restricted to tables an update set can capture (`update_synch=true`), resolved through `super_class`. Refreshed from the live dictionary per run, with a committed baseline as the fallback. |
+| L2 conditional / explicit | `sys_properties.value` when the property's `type` is a password type; named exceptions such as `x_cadso_core.google_translate_api_key`, which holds an API key in a *string* column. |
+| L3 JSON | secrets nested inside a JSON blob field, stripped in place. |
+| L4 heuristic | a field that merely *looks* secret. **Never stripped silently and never assumed safe** — the run fails and names it, until a human records it in the rules file as a strip rule or as `notSecret` with a reason. |
+
+Override the rules with `--rules <file>`; the JSON is merged over the built-ins,
+and the only subtractive key is `notSecret`, which requires a reason:
+
+```json
+{
+  "notSecret": [
+    { "table": "x_cadso_core_thing", "field": "webhook_token", "reason": "public identifier, not a credential" }
+  ],
+  "fieldRules": [
+    { "id": "thing-signing-key", "table": "x_cadso_core_thing", "field": "signing_key", "reason": "inbound webhook HMAC key" }
+  ]
+}
+```
+
+Two more things refuse to produce a file rather than produce a wrong one: a
+record count that does not match the set, and the documented **in-progress
+empty 200** from `export_update_set.do` (the servlet streams a document only for
+a *complete* set, and app-publish leaves the set in progress). After stripping,
+the output is re-read and verified; a secret that somehow survived fails the run.
+
+`export-update-set --mode complete` marks the set complete on the instance
+first — a real write, so it needs `--confirm`. `export-app` publishes ~1000+
+records into a new update set and is dry-run by default. Neither is the Store
+publish; that is `publish-app`, which is externally visible.
+
+Exit codes: `0` exported or dry-run, `1` bad args/unconfirmed, `2`
+failed/timeout. Programmatic: `exportUpdateSet({ updateSet, mode })`,
+`exportApp({ app, confirm })`, `stripSecrets(xml, rules)`. MCP:
+`update_set_export` (read-only in assemble mode) and `app_export`.
+
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
 the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
@@ -576,7 +691,9 @@ console.log(formatLayoutResult("form layout", result));
 `dove-sn mcp` runs a self-contained MCP stdio server exposing the tools to
 Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, the schema verbs `create_table` /
-`add_column`, the record-write verbs `set_field` (update scalar fields on an
+`add_column` / `add_index` (a single-column unique index via `sys_dictionary.unique`,
+read back from the `v_db_index` view - uniqueness enforcement is always reported
+unverified), the record-write verbs `set_field` (update scalar fields on an
 existing record) and `create_record` (insert one record) — both update-set-captured
 and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
