@@ -466,7 +466,8 @@ describe("MCP action_clone", function () {
       ops: { setStepInputs: [{ step: "REST Step", input: "http_method", value: "post" }] },
     });
     expect(res.action).toBe("planned");
-    expect(res.plan.total).toBe(7);
+    // 7 graph records + 3 output mappings + 2 IO labels
+    expect(res.plan.total).toBe(12);
     expect(m.cap.creates).toHaveLength(0);
     expect(m.cap.posts).toHaveLength(0);
   });
@@ -488,7 +489,7 @@ describe("MCP action_clone", function () {
       updateSetSysId: CLONE_US, confirm: true,
     });
     expect(res.action).toBe("created");
-    expect(m.cap.creates).toHaveLength(7);
+    expect(m.cap.creates).toHaveLength(12);
     expect(m.cap.posts).toHaveLength(1);
     expect(res.verify.ok).toBe(true);
   });

@@ -16,6 +16,20 @@ export var S1 = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
 export var S2 = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2";
 export var EXT_IN_1 = "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3";
 export var EXT_OUT_2 = "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4";
+/** Live pill shape (tenonworkstudio 2026-09-30): step cid in brackets, output element after. */
+export var PILL_STATUS_CODE = "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}";
+export var ACTION_STATUS_JSON = "{\"code\":\"{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}\",\"message\":\"\"}";
+export var MAP_1 = "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1";
+export var MAP_2 = "e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2";
+export var MAP_3 = "e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3";
+export var DOC_IN = "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1";
+export var DOC_OUT = "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2";
+export var EXISTING_TARGET_DOC = "f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9";
+
+export function varTable(table: string, model: string): string {
+  return "var__m_" + table + "_" + model;
+}
+
 export var SCRIPT = "(function execute(inputs, outputs) {\n  outputs.body = inputs.responseBody;\n})(inputs, outputs);";
 
 export interface Cap {
@@ -25,6 +39,7 @@ export interface Cap {
   updateSets: Array<string>;
   gets: Array<string>;
   posts: Array<{ path: string; body: Record<string, unknown> }>;
+  pushes: Array<{ table: string; record_sys_id: string; fields: Record<string, unknown>; update_set_sys_id: string }>;
 }
 
 function sourceSteps(): Array<Record<string, unknown>> {
@@ -55,8 +70,26 @@ function sourceSteps(): Array<Record<string, unknown>> {
   ];
 }
 
-export function makeClient(opts: { existing?: boolean } = {}): { client: ServiceNowClient; cap: Cap } {
-  var cap: Cap = { tableQueries: [], buildAgentCalls: 0, creates: [], updateSets: [], gets: [], posts: [] };
+export interface ClientOpts {
+  existing?: boolean;
+  /** The target already has a sys_documentation row for the cloned input `endpoint` (platform auto-created). */
+  existingTargetLabel?: boolean;
+  /** Output mapping `field` the instance "loses" on read-back — verify must fail. */
+  dropMappingOnReadback?: string;
+}
+
+/** sys_element_mapping rows exactly as the live instance stores an action output wiring. */
+function sourceMappings(): Array<Record<string, unknown>> {
+  var table = varTable("sys_hub_action_output", SRC);
+  return [
+    { sys_id: MAP_1, id: SRC, table: table, field: "status_code", value: PILL_STATUS_CODE, sys_scope: { link: "l", value: SRC_SCOPE }, sys_mod_count: "0" },
+    { sys_id: MAP_2, id: SRC, table: table, field: "__action_status__", value: ACTION_STATUS_JSON, sys_scope: SRC_SCOPE },
+    { sys_id: MAP_3, id: SRC, table: table, field: "__dont_treat_as_error__", value: "false", sys_scope: SRC_SCOPE },
+  ];
+}
+
+export function makeClient(opts: ClientOpts = {}): { client: ServiceNowClient; cap: Cap } {
+  var cap: Cap = { tableQueries: [], buildAgentCalls: 0, creates: [], updateSets: [], gets: [], posts: [], pushes: [] };
   var lastPublishedSteps: Array<Record<string, unknown>> | null = null;
 
   var rowsFor = function (table: string, query: string): Array<Record<string, unknown>> {
@@ -90,10 +123,16 @@ export function makeClient(opts: { existing?: boolean } = {}): { client: Service
       return [];
     }
     if (table === "sys_hub_action_input" && query === "model_id=" + SRC) {
-      return [{ sys_id: "1".repeat(32), element: "endpoint", model_id: { link: "l", value: SRC }, sys_scope: SRC_SCOPE }];
+      return [{
+        sys_id: "1".repeat(32), element: "endpoint", label: "Endpoint", name: varTable("sys_hub_action_input", SRC),
+        model_id: { link: "l", value: SRC }, sys_scope: SRC_SCOPE,
+      }];
     }
     if (table === "sys_hub_action_output" && query === "model_id=" + SRC) {
-      return [{ sys_id: "2".repeat(32), element: "status", model_id: SRC, sys_scope: SRC_SCOPE }];
+      return [{
+        sys_id: "2".repeat(32), element: "status_code", label: "Status Code", name: varTable("sys_hub_action_output", SRC),
+        model_id: SRC, sys_scope: SRC_SCOPE,
+      }];
     }
     if (table === "sys_hub_step_instance" && query === "action=" + SRC) {
       return [
@@ -105,7 +144,40 @@ export function makeClient(opts: { existing?: boolean } = {}): { client: Service
       return [{ sys_id: EXT_IN_1, element: "payload", model_id: S1, sys_scope: SRC_SCOPE }];
     }
     if (table === "sys_hub_step_ext_output" && query === "model_id=" + S2) {
-      return [{ sys_id: EXT_OUT_2, element: "body", model_id: { link: "l", value: S2 }, sys_scope: SRC_SCOPE }];
+      return [{
+        sys_id: EXT_OUT_2, element: "body", name: varTable("sys_hub_step_ext_output", S2),
+        model_id: { link: "l", value: S2 }, sys_scope: SRC_SCOPE,
+      }];
+    }
+    if (table === "sys_element_mapping") {
+      var m = /^id=([0-9a-f]{32})\^tableSTARTSWITHvar__m_sys_hub_action_output_$/.exec(query);
+      if (!m) {
+        return [];
+      }
+      var modelId = m[1];
+      if (modelId === SRC) {
+        return sourceMappings();
+      }
+      // Read-back of the clone: what was written.
+      return cap.creates
+        .filter(function (c) {
+          return c.table === "sys_element_mapping" && c.fields.id === modelId && c.fields.field !== opts.dropMappingOnReadback;
+        })
+        .map(function (c) { return c.fields; });
+    }
+    if (table === "sys_documentation") {
+      if (query === "name=" + varTable("sys_hub_action_input", SRC)) {
+        return [{ sys_id: DOC_IN, name: varTable("sys_hub_action_input", SRC), element: "endpoint", label: "Endpoint", language: "en", sys_scope: SRC_SCOPE }];
+      }
+      if (query === "name=" + varTable("sys_hub_action_output", SRC)) {
+        return [
+          { sys_id: DOC_OUT, name: varTable("sys_hub_action_output", SRC), element: "status_code", label: "Status Code", plural: "Status Codes", language: "en", sys_scope: { link: "l", value: SRC_SCOPE } },
+        ];
+      }
+      if (opts.existingTargetLabel && /^name=var__m_sys_hub_action_input_[0-9a-f]{32}\^element=endpoint\^language=en$/.test(query)) {
+        return [{ sys_id: EXISTING_TARGET_DOC }];
+      }
+      return [];
     }
     return [];
   };
@@ -132,7 +204,7 @@ export function makeClient(opts: { existing?: boolean } = {}): { client: Service
         cap.creates.push(params);
         return { sys_id: String(params.sys_id) };
       },
-      pushWithUpdateSet: async function () { return { sys_id: "x" }; },
+      pushWithUpdateSet: async function (p: Cap["pushes"][number]) { cap.pushes.push(p); return { sys_id: p.record_sys_id }; },
       currentUpdateSet: async function () { return { sys_id: "u", name: "u" }; },
       changeUpdateSet: async function (p: { sysId: string }) { cap.updateSets.push(p.sysId); return {}; },
       deleteRecord: async function () { return {}; },
