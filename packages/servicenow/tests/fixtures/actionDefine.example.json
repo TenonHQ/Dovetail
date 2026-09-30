@@ -1,0 +1,123 @@
+{
+  "action": {
+    "access": "public"
+  },
+  "inputs": [
+    {
+      "name": "host",
+      "label": "host",
+      "type": "choice",
+      "mandatory": true,
+      "default": "api",
+      "choices": [
+        {
+          "value": "api",
+          "label": "API"
+        },
+        {
+          "value": "storage_us_east4",
+          "label": "US East 4"
+        },
+        {
+          "value": "storage_us_west1",
+          "label": "US West 1"
+        },
+        {
+          "value": "storage_europe_west1",
+          "label": "Europe West 1"
+        }
+      ]
+    },
+    {
+      "name": "path",
+      "label": "path",
+      "type": "string",
+      "mandatory": true
+    },
+    {
+      "name": "content_type",
+      "label": "content_type",
+      "type": "string",
+      "mandatory": false
+    },
+    {
+      "name": "body",
+      "label": "body",
+      "type": "string",
+      "mandatory": false
+    }
+  ],
+  "steps": [
+    {
+      "ref": "guard",
+      "type": "script",
+      "label": "Guard",
+      "match": "Gaurd",
+      "script": "(function execute(inputs, outputs) {\n  var HOSTS = {\n    api: \"https://api.mailgun.net\",\n    storage_us_east4: \"https://storage-us-east4.api.mailgun.net\",\n    storage_us_west1: \"https://storage-us-west1.api.mailgun.net\",\n    storage_europe_west1: \"https://storage-europe-west1.api.mailgun.net\"\n  };\n  outputs.base_url = \"\";\n  outputs.error = \"\";\n  var host = String(inputs.host_1 || \"\");\n  var path = String(inputs.path_1 || \"\");\n  if (!Object.prototype.hasOwnProperty.call(HOSTS, host)) {\n    outputs.error = \"invalid host\";\n    return;\n  }\n  if (!/^\\/(v1|v3)\\//.test(path) || path.indexOf(\"..\") !== -1 || /[\\r\\n]/.test(path) || /:\\/\\//.test(path) || path.indexOf(\"//\") !== -1) {\n    outputs.error = \"invalid path\";\n    return;\n  }\n  outputs.base_url = HOSTS[host];\n})(inputs, outputs);",
+      "inputs": {
+        "host_1": {
+          "value": "{{action.host}}",
+          "mandatory": true
+        },
+        "path_1": {
+          "value": "{{action.path}}",
+          "mandatory": true
+        }
+      },
+      "outputs": [
+        {
+          "name": "base_url",
+          "label": "Base URL",
+          "type": "string"
+        },
+        {
+          "name": "error",
+          "label": "Error",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "ref": "call",
+      "type": "rest",
+      "label": "Call email service",
+      "match": "REST step",
+      "errorHandling": "NEXT_STEP",
+      "values": {
+        "connection": "use_connection_alias",
+        "connection_alias": "956cc622c3ee4a1085b196c4e401317e",
+        "override_base_url": true,
+        "base_url": "{{steps.guard.base_url}}",
+        "resource_path": "{{action.path}}",
+        "http_method": "get",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "{{action.content_type}}"
+          }
+        ],
+        "connection_timeout": "25000"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "status_code",
+      "label": "Status Code",
+      "type": "string",
+      "value": "{{steps.call.status_code}}"
+    },
+    {
+      "name": "response_body",
+      "label": "Response Body",
+      "type": "string",
+      "value": "{{steps.call.response_body}}"
+    },
+    {
+      "name": "error",
+      "label": "Error",
+      "type": "string",
+      "value": "{{steps.call.error_message}}"
+    }
+  ]
+}

@@ -51,6 +51,8 @@ import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
 import { cloneActionType } from "./flowDesigner/cloneActionType";
+import { defineActionType } from "./flowDesigner/defineActionType";
+import type { DefineActionSpec, DefineActionTypeResult } from "./flowDesigner/defineActionType";
 import type { StepOps } from "./flowDesigner/stepOps";
 import { testFlow } from "./flowDesigner/testFlow";
 import { createTable, addColumn, addIndex, setColumn, setTable } from "./table";
@@ -1242,6 +1244,165 @@ async function runCloneAction(
   return 0;
 }
 
+/**
+ * dove-sn define-action:
+ *   --sys-id <sys_id>          Required. The sys_hub_action_type_definition to define (the shell must
+ *                              exist — make it with clone-action or the Flow Designer).
+ *   --scope <name|sys_id>      Required. The action's own scope (x_cadso_email_spok or a 32-hex sys_id).
+ *   --spec <spec.json>         Required. The definition — action inputs, outputs, steps (see below).
+ *   --update-set <sys_id>      Optional. Pin the REST session to this update set before the save/publish.
+ *   --publish                  With --confirm: also publish (snapshot) after the save.
+ *   --confirm                  Execute (PUT the model, verify, optionally publish). WITHOUT it: dry-run.
+ *   --dry-run                  Force a dry-run even with --confirm.
+ *   --json                     Emit the structured DefineActionTypeResult.
+ *
+ * Saves the action the way the Flow Designer's Save does: GET the model + the
+ * step graph, merge the spec, PUT the FULL model back to
+ * /api/now/processflow/action/action_types/{id}, read it back to verify.
+ * DRY-RUN BY DEFAULT: prints the planned diff, writes nothing. Idempotent: a
+ * spec already in effect is "unchanged" and makes no PUT.
+ *
+ * --spec shape (every part optional — incremental edits are fine):
+ *   {
+ *     "action":  { "name": "...", "description": "...", "access": "public" | "package_private" },
+ *     "inputs":  [{ "name": "host", "type": "choice", "mandatory": true, "default": "api",
+ *                   "choices": [{ "value": "api", "label": "API" }] }],      // upsert by name; "remove": true
+ *     "outputs": [{ "name": "status_code", "value": "{{steps.call.status_code}}" }],
+ *     "steps": [
+ *       { "ref": "guard", "type": "script", "label": "Guard", "scriptFile": "guard.js",
+ *         "inputs":  { "host_1": "{{action.host}}" }, "outputs": [{ "name": "base_url" }] },
+ *       { "ref": "call", "type": "rest", "label": "Call", "values": { "base_url": "{{steps.guard.base_url}}",
+ *         "http_method": "get", "headers": [{ "name": "Accept", "value": "application/json" }] } }
+ *     ]
+ *   }
+ * `scriptFile` (resolved relative to the spec file) is sugar for `script`.
+ */
+async function runDefineAction(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("define-action", bare, ["sys-id", "scope", "spec", "update-set"]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var sysId = flags["sys-id"] || flags.sysId;
+  var scope = flags.scope;
+  var specPath = flags.spec;
+  if (!sysId || !scope || !specPath) {
+    process.stderr.write(
+      "define-action: --sys-id <sys_id>, --scope <scope name|sys_id> and --spec <spec.json> are required\n",
+    );
+    return 1;
+  }
+  var rawSpec: unknown = JSON.parse(fs.readFileSync(specPath, "utf8"));
+  if (!rawSpec || typeof rawSpec !== "object" || Array.isArray(rawSpec)) {
+    process.stderr.write("define-action: --spec must contain a JSON object\n");
+    return 1;
+  }
+  resolveStepScriptFiles(rawSpec as Record<string, unknown>, specPath);
+
+  var result = await defineActionType({
+    client: createClient({}),
+    sysId: sysId,
+    scope: scope,
+    spec: rawSpec as DefineActionSpec,
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    publish: flags.publish === "true",
+    updateSetSysId: flags["update-set"],
+  });
+
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result.verify && !result.verify.ok ? 1 : 0;
+  }
+
+  var d = result.diff;
+  process.stdout.write(
+    "[" + result.status + "] " + result.after.action.name + " (" + result.sysId + ") in " +
+      result.scope.name + "\n",
+  );
+  d.action.forEach(function (c) {
+    process.stdout.write("  action." + c.field + ": '" + c.before + "' -> '" + c.after + "'\n");
+  });
+  var named = function (kind: string, part: DefineActionTypeResult["diff"]["inputs"]): void {
+    part.added.forEach(function (n) {
+      process.stdout.write("  + " + kind + " " + n + "\n");
+    });
+    part.changed.forEach(function (c) {
+      process.stdout.write(
+        "  ~ " + kind + " " + c.name + ": " +
+          c.changes.map(function (f) {
+            return f.field + " '" + f.before + "' -> '" + f.after + "'";
+          }).join(", ") + "\n",
+      );
+    });
+    part.removed.forEach(function (n) {
+      process.stdout.write("  - " + kind + " " + n + "\n");
+    });
+  };
+  named("input", d.inputs);
+  named("output", d.outputs);
+  var stepLine = function (sign: string, s: DefineActionTypeResult["diff"]["steps"]["added"][number]): void {
+    process.stdout.write(
+      "  " + sign + " step " + s.order + " '" + s.label + "' [" + s.type + "] " + s.cid +
+        (s.ref ? " (ref " + s.ref + (s.matchedBy ? ", matched by " + s.matchedBy : "") + ")" : "") + "\n",
+    );
+    s.changes.forEach(function (c) {
+      process.stdout.write("      " + c + "\n");
+    });
+  };
+  d.steps.added.forEach(function (s) { stepLine("+", s); });
+  d.steps.changed.forEach(function (s) { stepLine("~", s); });
+  d.steps.removed.forEach(function (s) { stepLine("-", s); });
+  if (d.empty) {
+    process.stdout.write("  no changes — the spec is already in effect\n");
+  }
+  result.warnings.forEach(function (w) {
+    process.stdout.write("  ! " + w + "\n");
+  });
+  if (result.status === "planned") {
+    process.stdout.write(
+      "\nDRY RUN — nothing written. Re-run with --confirm (and --publish to snapshot) to save.\n",
+    );
+    return 0;
+  }
+  if (result.verify) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n  " + (result.verify.ok ? "OK" : "FAILED") + "\n");
+    result.verify.notes.forEach(function (n) {
+      process.stdout.write("  " + (result.verify && result.verify.ok ? "+ " : "! ") + n + "\n");
+    });
+  }
+  if (result.publish) {
+    process.stdout.write(
+      "published (HTTP " + result.publish.httpStatus +
+        (result.publish.snapshotSysId ? ", snapshot " + result.publish.snapshotSysId : "") + ")\n",
+    );
+  }
+  return result.verify && !result.verify.ok ? 1 : 0;
+}
+
+/** Replace each step's `scriptFile` with `script`, read relative to the spec file. */
+function resolveStepScriptFiles(spec: Record<string, unknown>, specPath: string): void {
+  var steps = spec.steps;
+  if (!Array.isArray(steps)) {
+    return;
+  }
+  var specDir = path.dirname(path.resolve(specPath));
+  for (var i = 0; i < steps.length; i += 1) {
+    var step = steps[i];
+    if (!step || typeof step !== "object" || typeof step.scriptFile !== "string") {
+      continue;
+    }
+    if (typeof step.script === "string") {
+      throw new Error("define-action: step '" + String(step.ref) + "' sets both scriptFile and script — pick one.");
+    }
+    step.script = fs.readFileSync(path.resolve(specDir, step.scriptFile), "utf8");
+    delete step.scriptFile;
+  }
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -1365,6 +1526,13 @@ function printHelp(): void {
       "                      [--update-set <sys_id> (required with --confirm)] [--confirm] [--dry-run] [--json])\n" +
       "                     Idempotent on (name, scope). Publishes via the snapshot path and\n" +
       "                     reads the steps back to verify.\n" +
+      "  define-action      Define a Custom Action Type's inputs, outputs and steps (script + REST,\n" +
+      "                     data-pill wired) the way the Designer's Save does, then optionally publish\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--sys-id <sys_id> --scope <scope name|sys_id> --spec <spec.json>\n" +
+      "                      [--update-set <sys_id>] [--publish] [--confirm] [--dry-run] [--json])\n" +
+      "                     Idempotent: a spec already in effect makes no write. The action shell\n" +
+      "                     must exist (clone-action or the Designer).\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
       "  publish-app        Publish a scoped app to the ServiceNow Store, the company application\n" +
@@ -2656,6 +2824,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "clone-action") {
     return await runCloneAction(parsed.flags, parsed.bare);
+  }
+  if (parsed.command === "define-action") {
+    return await runDefineAction(parsed.flags, parsed.bare);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);

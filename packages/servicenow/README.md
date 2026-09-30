@@ -299,6 +299,11 @@ npx dove-sn clone-action --from <source_sys_id> --name "Send REST (Spoke)" \
   --scope x_cadso_email_spok --ops ops.json                                            # dry-run (plan)
 npx dove-sn clone-action --from <source_sys_id> --name "Send REST (Spoke)" \
   --scope x_cadso_email_spok --ops ops.json --update-set <id> --confirm                # write + publish + verify
+
+# Define an action type's inputs, outputs and steps (script + REST, pill-wired) like the Designer's Save
+npx dove-sn define-action --sys-id <id> --scope x_cadso_email_spok --spec spec.json      # dry-run (diff)
+npx dove-sn define-action --sys-id <id> --scope x_cadso_email_spok --spec spec.json \
+  --update-set <id> --confirm --publish                                                # save + verify + publish
 ```
 
 ### Cloning an action type (`clone-action` / `action_clone`)
@@ -353,6 +358,150 @@ The MCP tool **`action_clone`** takes the same inputs — `from`, `name`, `scope
 `internalName`, `description`, `updateSetSysId`, `ops` (inline object), `confirm`,
 `dryRun` — with the same dry-run-unless-`confirm:true` gate. `setStepInputs` is also
 accepted by `edit-action` / `action_edit`.
+
+### Defining an action type's body (`define-action` / `action_define`)
+
+`define-action` authors a Custom Action Type's **action inputs, outputs and steps** —
+script steps and REST steps, wired together with data pills — headlessly, the way
+the Flow Designer's **Save** button does, and optionally publishes it.
+
+```bash
+npx dove-sn define-action --sys-id <action_sys_id> --scope x_cadso_email_spok \
+  --spec spec.json                                                  # dry-run: the planned diff
+npx dove-sn define-action --sys-id <action_sys_id> --scope x_cadso_email_spok \
+  --spec spec.json --update-set <id> --confirm                      # save + verify
+npx dove-sn define-action --sys-id <action_sys_id> --scope x_cadso_email_spok \
+  --spec spec.json --update-set <id> --confirm --publish            # save + verify + publish
+```
+
+How it works (established from two captured Designer saves):
+
+1. `GET /api/now/processflow/action/action_types/{id}` — the model (43 keys; `steps` is null).
+2. `GET …/{id}/step_instances` — the real step graph.
+3. Merge the spec. Existing steps keep their `cid`; new steps are built from the
+   Designer's own step shape for that type (script / REST) with a fresh `cid`.
+4. `PUT …/{id}` with the **full** model — the Designer's save is not a delta. Each
+   step is sent in the Designer's 11-key shape (`DB_TYPE`, `cid`, `step_type_id`,
+   `section`, `label`, `action`, `order`, `inputs`, `extended_inputs`,
+   `extended_outputs`, `error_handling_type`).
+5. Read the model + steps back and compare them with the plan (a mismatch exits `1`).
+6. `--publish`: snapshot through the existing `publishActionType` path.
+
+**Dry-run by default** — without `--confirm` it prints the planned diff (inputs,
+outputs and steps added / changed / removed, with each step's input values) and makes
+no write. **Idempotent** — a spec that is already in effect is `unchanged` and makes no
+PUT. `--update-set` is optional; when given, the REST session is pinned to it before the
+save and the publish. Exit `0` on success (incl. dry-run / unchanged), `1` on error or a
+failed verify.
+
+**The action shell must already exist.** Creating a brand-new empty action headlessly is
+out of scope: make it with `clone-action` or in the Designer, then define its body here.
+
+#### Spec
+
+Every part is optional, so a spec can be a small incremental edit.
+
+| Key | Shape | Notes |
+|---|---|---|
+| `action` | `{ name?, description?, access?: "public" \| "package_private" }` | `name` sets `name` + `displayName` |
+| `inputs[]` | `{ name, label?, type?, mandatory?, choices?: [{value, label?}], default?, order?, maxLength?, remove? }` | Upsert by `name`. `type`: `string` (default) \| `choice` \| `boolean` \| `integer`. `choice` needs `choices`; `default` must be one of them. Changing an input's type makes ServiceNow mint a new variable record |
+| `outputs[]` | `{ name, label?, type?, value?, remove? }` | Upsert by `name`. `value` is the pill the output is wired to. System outputs (`__action_status__`, `__dont_treat_as_error__`) cannot be named |
+| `steps[]` | `{ ref, type: "script" \| "rest", label?, match?, remove?, errorHandling?, script?, inputs?, outputs?, values? }` | See below |
+
+Steps:
+
+- **Matching.** `match` (an existing step's cid or current label — use it to rename),
+  else `label`, else position (the spec's Nth step against the action's Nth step, same
+  type, flagged in the diff as `matched by order`). Unmatched steps are created and
+  placed before the next existing step the spec lists after them (else appended).
+  Existing steps are never reordered; `remove: true` deletes one.
+- **`script`** (script steps) — the script body. On the CLI, `scriptFile` (relative
+  to the spec file) is sugar for it.
+- **`inputs`** (script steps) — the step's own input variables (`extended_inputs`):
+  `{ "<name>": "<value or pill>" }` or `{ "<name>": { value?, type?, label?, mandatory?, remove? } }`.
+- **`outputs`** (script steps) — the step's own output variables (`extended_outputs`):
+  `[{ name, label?, type?, remove? }]`.
+- **`values`** — the step type's own inputs by name (unknown names are an error that
+  lists the valid ones). For a REST step: `connection` (`use_connection_alias`),
+  `connection_alias` (a `sys_alias` sys_id — its display name is looked up — or
+  `{ value, display }`), `override_base_url`, `base_url`, `resource_path`,
+  `http_method` (`get` / `post` / `put` / `delete` …), `headers` and `query_params`
+  (`[{ name, value }]` → the Designer's `ADV_NV` list), `body`, `request_type`,
+  `connection_timeout`, `retry_policy`, … Booleans take `true` / `false`.
+- **`errorHandling`** — `EVAL_ERRORS` (the default) or `NEXT_STEP` (continue on error).
+
+Pills (in `values`, script `inputs` and `outputs[].value`):
+
+| Pill | Means |
+|---|---|
+| `{{action.<input>}}` | an action input — must exist after the merge |
+| `{{steps.<ref>.<output>}}` | another spec step's output — resolved to `{{step[<cid>].<output>}}`. Inside a step it must point at an **earlier** step |
+| `{{step[<cid>].<output>}}` | the raw form — the cid must exist |
+
+REST steps expose `status_code`, `response_body`, `response_headers`, `error_message`,
+`error_code`, `response_stream`; a script step exposes its `outputs`. An **action
+output is wired by putting the pill in the output's own `value`** (the Designer also
+mirrors it into `display_value` and records the pill's label in `label_cache` — both
+handled for you). Everything is checked before any write: unknown keys, names with `^`
+or path characters (names must match `^[A-Za-z_][A-Za-z0-9_]*$`), an unknown step type,
+an unknown step ref / action input / step output in a pill, and any pill the spec would
+leave dangling (e.g. removing an input a step still reads).
+
+Example — the complete body of *Email Service Request GET*:
+
+```json
+{
+  "inputs": [
+    { "name": "host", "type": "choice", "mandatory": true, "default": "api",
+      "choices": [
+        { "value": "api", "label": "API" },
+        { "value": "storage_us_east4", "label": "US East 4" },
+        { "value": "storage_us_west1", "label": "US West 1" },
+        { "value": "storage_europe_west1", "label": "Europe West 1" }
+      ] },
+    { "name": "path", "type": "string", "mandatory": true },
+    { "name": "content_type", "type": "string", "mandatory": false },
+    { "name": "body", "type": "string", "mandatory": false }
+  ],
+  "steps": [
+    { "ref": "guard", "type": "script", "label": "Guard", "match": "Gaurd",
+      "scriptFile": "guard.js",
+      "inputs": {
+        "host_1": { "value": "{{action.host}}", "mandatory": true },
+        "path_1": { "value": "{{action.path}}", "mandatory": true }
+      },
+      "outputs": [
+        { "name": "base_url", "label": "Base URL", "type": "string" },
+        { "name": "error", "label": "Error", "type": "string" }
+      ] },
+    { "ref": "call", "type": "rest", "label": "Call email service", "match": "REST step",
+      "errorHandling": "NEXT_STEP",
+      "values": {
+        "connection": "use_connection_alias",
+        "connection_alias": "956cc622c3ee4a1085b196c4e401317e",
+        "override_base_url": true,
+        "base_url": "{{steps.guard.base_url}}",
+        "resource_path": "{{action.path}}",
+        "http_method": "get",
+        "headers": [{ "name": "Content-Type", "value": "{{action.content_type}}" }],
+        "connection_timeout": "25000"
+      } }
+  ],
+  "outputs": [
+    { "name": "status_code", "label": "Status Code", "type": "string", "value": "{{steps.call.status_code}}" },
+    { "name": "response_body", "label": "Response Body", "type": "string", "value": "{{steps.call.response_body}}" },
+    { "name": "error", "label": "Error", "type": "string", "value": "{{steps.call.error_message}}" }
+  ]
+}
+```
+
+The MCP tool **`action_define`** takes `sysId`, `scope`, `spec` (inline — `script`, not
+`scriptFile`), `updateSetSysId`, `publish`, `confirm`, `dryRun`, with the same
+dry-run-unless-`confirm:true` gate.
+
+Not yet covered (no Designer capture of the shape yet): step types other than script
+and REST, reference / object / array variable types, and the action's error-status
+conditions (`action_status_metadata`, which is carried through unchanged).
 
 ### Editing an action type's steps (`--from-json`)
 
@@ -813,6 +962,9 @@ type's model), `action_edit` (structurally edit a published action type — per-
 scripts, step-level inputs/outputs, data-pill wiring — dry-run by default, and the
 publish is read back and verified), `action_clone` (clone an action type — every step
 and its step IO — into a scope and publish + verify it; dry-run by default),
+`action_define` (define an existing action type's inputs, outputs and script/REST
+steps with data-pill wiring, the way the Designer's Save does; dry-run by default,
+idempotent, read back and verified, optional publish),
 `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
 (copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
 publish, grafting a template), `flow_test` (validate or run a flow), and
