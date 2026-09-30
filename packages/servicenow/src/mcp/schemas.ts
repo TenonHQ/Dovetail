@@ -221,6 +221,123 @@ export var cloneActionSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+/**
+ * action_define — define a Custom Action Type's inputs, outputs and steps the way
+ * the Designer's Save does. Mirrors dove-sn define-action; `spec` is the
+ * DefineActionSpec (strict — unknown keys are rejected here and again by the
+ * planner, which also refuses bad names and dangling / unknown pill references).
+ */
+var defineVarType = z.enum(["string", "choice", "boolean", "integer"]);
+var defineStepValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.object({ name: z.string().min(1), value: z.string() }).strict()),
+  z.object({ value: z.string(), display: z.string().optional() }).strict(),
+]);
+export var defineActionSpecSchema = z
+  .object({
+    action: z
+      .object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        access: z.enum(["public", "package_private"]).optional(),
+      })
+      .strict()
+      .optional(),
+    inputs: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            label: z.string().optional(),
+            type: defineVarType.optional(),
+            mandatory: z.boolean().optional(),
+            choices: z.array(z.object({ value: z.string().min(1), label: z.string().optional() }).strict()).optional(),
+            default: z.string().optional(),
+            order: z.number().optional(),
+            maxLength: z.number().positive().optional(),
+            remove: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    outputs: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            label: z.string().optional(),
+            type: defineVarType.optional(),
+            value: z.string().optional(),
+            remove: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    steps: z
+      .array(
+        z
+          .object({
+            ref: z.string().min(1),
+            type: z.enum(["script", "rest"]),
+            label: z.string().min(1).optional(),
+            match: z.string().min(1).optional(),
+            remove: z.boolean().optional(),
+            errorHandling: z.enum(["EVAL_ERRORS", "NEXT_STEP"]).optional(),
+            script: z.string().optional(),
+            inputs: z
+              .record(
+                z.union([
+                  z.string(),
+                  z
+                    .object({
+                      value: z.string().optional(),
+                      type: defineVarType.optional(),
+                      label: z.string().optional(),
+                      mandatory: z.boolean().optional(),
+                      remove: z.boolean().optional(),
+                    })
+                    .strict(),
+                ]),
+              )
+              .optional(),
+            outputs: z
+              .array(
+                z
+                  .object({
+                    name: z.string().min(1),
+                    label: z.string().optional(),
+                    type: defineVarType.optional(),
+                    remove: z.boolean().optional(),
+                  })
+                  .strict(),
+              )
+              .optional(),
+            values: z.record(defineStepValue).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
+export var defineActionSchema = z.object({
+  /** sys_hub_action_type_definition sys_id (the shell must already exist). */
+  sysId: z.string().regex(/^[0-9a-f]{32}$/, "sysId must be a 32-char sys_id"),
+  /** The action's scope — name (x_cadso_email_spok) or 32-hex sys_id. */
+  scope: z.string().min(1),
+  spec: defineActionSpecSchema,
+  /** Pin the REST session to this update set before the save/publish. */
+  updateSetSysId: z.string().optional(),
+  /** With confirm: also publish (snapshot) after the save. */
+  publish: z.boolean().optional(),
+  /** Default false — dry-run. Only true writes. */
+  confirm: z.boolean().optional(),
+  /** Forces a dry-run even with confirm. */
+  dryRun: z.boolean().optional(),
+});
+
 export var editFlowSchema = z.object({
   sysId: z.string().min(1),
   ops: z.object({

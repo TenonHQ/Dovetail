@@ -4,7 +4,7 @@
 >
 > Audience: a Claude Code session (or the developer reading over its shoulder). For *building/contributing* to Dovetail, see [`../ONBOARDING.md`](../ONBOARDING.md). For the platform design, see [`dovetail-platform-spec.md`](dovetail-platform-spec.md).
 
-Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**65 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
+Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**69 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
 
 ---
 
@@ -14,7 +14,7 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
 | **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 25 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, manage prompt drafts, build a session handoff |
-| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 24 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
+| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 28 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
 
@@ -101,7 +101,7 @@ Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders 
 
 ---
 
-## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 24 tools (SN authoring writes)
+## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 28 tools (SN authoring writes)
 
 Source: `packages/servicenow/src/mcp/registry.ts` — the registry is the source of
 truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug.
@@ -109,7 +109,7 @@ truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug
 Writes are **captured in the update set you pass** and are **idempotent** (re-running
 reports every record unchanged).
 
-> **`dryRun` is NOT universal.** 14 of the 24 accept it; the other 10 write (or read)
+> **`dryRun` is NOT universal.** 19 of the 28 accept it; the other 9 write (or read)
 > immediately. Notably **neither choice verb supports `dryRun`** — `remove_choices_from_field`
 > is a soft delete and reversible by re-adding, but it is not previewable. Check the
 > tool's own schema before assuming you can plan a write.
@@ -150,6 +150,7 @@ reports every record unchanged).
 | `action_view` | Read a custom action type's definition | n/a (read) |
 | `action_edit` | Patch an action type's steps | no |
 | `action_clone` | Clone an action type (all steps + step IO) into a scope, then publish + verify; dry-run unless `confirm:true` | yes |
+| `action_define` | Define an existing action type's inputs, outputs and steps (script + REST, data-pill wired) the way the Designer's Save does — one PUT of the full model, read back + verified; `publish:true` also snapshots. Dry-run (planned diff) unless `confirm:true`; idempotent (no PUT when already in effect). The shell comes from `action_clone` or the Designer | yes |
 | `flow_publish` | Publish a flow | no |
 | `flow_copy` | Copy a flow | no |
 | `flow_create` | Author a new flow | yes |
@@ -212,6 +213,7 @@ Source: `packages/servicenow/src/cli.ts`. Every write lands in `--update-set`; m
 | `set-form-layout` | Set form sections + fields (`--from-json`, nested spec) |
 | `set-related-lists` | Set a form's related lists (`--from-json` or `--related-lists`); `--prune` |
 | `build-flow` | Author Custom Action Types + Subflows from a JSON spec. Exit codes: `0` done/unchanged/dry-run, `2` needs UI publish, `3` verify-mismatch, `4` write-failed, `5` unrecoverable |
+| `define-action` | Define an action type's inputs/outputs/steps from a JSON spec (`--sys-id --scope --spec`), dry-run unless `--confirm`; `--publish` snapshots after the save |
 | `mcp` | Run the MCP stdio server (`--smoke` lists tools and exits) |
 
 > **`--env <path>` (alias `--env-file`, or the `DOVETAIL_ENV_FILE` env var)** selects which `.env` file `dove-sn` loads credentials from — applies to every subcommand including `mcp`. Default is `.env` in the cwd. Both `dovetail-mcp` (`dove-mcp`) and this server also read `DOVETAIL_ENV_FILE`, letting an MCP host point a server at a specific credential file.

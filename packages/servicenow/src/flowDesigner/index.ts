@@ -84,3 +84,29 @@ export {
 
 export { topoSort, executeWritePlan, WriteOrderError } from "./writeOrder";
 export type { WriteOp, WriteOpResult } from "./writeOrder";
+
+export {
+  defineActionType,
+  planActionDefinition,
+  validateDefineSpec,
+  viewAction,
+  diffViews,
+  toDesignerStep,
+  canonValue,
+} from "./defineActionType";
+export type {
+  DefineActionSpec,
+  DefineActionInputSpec,
+  DefineActionOutputSpec,
+  DefineStepSpec,
+  DefineStepVarSpec,
+  DefineStepOutputSpec,
+  DefineStepValue,
+  DefineActionTypeParams,
+  DefineActionTypeResult,
+  DefineActionDiff,
+  DefineActionPlan,
+  PlanActionDefinitionParams,
+  ActionView,
+  StepView,
+} from "./defineActionType";

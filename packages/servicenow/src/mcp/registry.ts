@@ -35,6 +35,8 @@ import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
 import { cloneActionType } from "../flowDesigner/cloneActionType";
+import { defineActionType } from "../flowDesigner/defineActionType";
+import type { DefineActionSpec } from "../flowDesigner/defineActionType";
 import { testFlow } from "../flowDesigner/testFlow";
 import {
   createTable,
@@ -65,6 +67,7 @@ import {
   viewActionSchema,
   editActionSchema,
   cloneActionSchema,
+  defineActionSchema,
   publishFlowSchema,
   copyFlowSchema,
   createFlowSchema,
@@ -95,6 +98,7 @@ export var TOOL_NAMES = [
   "action_view",
   "action_edit",
   "action_clone",
+  "action_define",
   "flow_publish",
   "flow_copy",
   "flow_create",
@@ -311,6 +315,42 @@ export function buildDescriptors(
           updateSetSysId: p.updateSetSysId,
           description: p.description,
           stepOps: p.ops,
+          confirm: p.confirm === true,
+          dryRun: p.dryRun === true,
+        });
+      },
+    },
+    {
+      name: "action_define",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Define a Custom Action Type's body — action inputs, outputs and steps (script and REST " +
+        "steps wired with data pills) — headlessly, the way the Flow Designer's Save does: GET the " +
+        "model + /step_instances, merge the spec, PUT the FULL model back to " +
+        "/api/now/processflow/action/action_types/{sysId}, read it back to verify; publish:true also " +
+        "snapshots it. spec: { action?: {name, description, access}, inputs?: [{name, type, mandatory, " +
+        "choices, default, remove}], outputs?: [{name, value: '{{steps.<ref>.<output>}}'}], steps?: [{ref, " +
+        "type: 'script'|'rest', label, match?, script?, inputs? (script vars, name -> value/pill), " +
+        "outputs? (script vars), values? (step-type inputs, e.g. REST base_url / http_method / headers " +
+        "[{name,value}] / connection_alias sys_id)}] }. Pills: {{action.<input>}}, " +
+        "{{steps.<ref>.<output>}} (resolved to {{step[<cid>].<output>}}). Steps match existing ones by " +
+        "match (cid/label), label, then position; new steps get fresh cids, existing cids are kept. " +
+        "Unknown keys, bad names and unknown/dangling pill references are refused before any write. " +
+        "DRY-RUN BY DEFAULT: without confirm:true it returns the planned diff (inputs/outputs/steps " +
+        "added/changed/removed, per-step input values) and writes nothing; dryRun:true forces a " +
+        "dry-run. Idempotent: a spec already in effect returns status 'unchanged' with no PUT. The " +
+        "action shell must already exist (action_clone or the Designer). sysId is the " +
+        "sys_hub_action_type_definition sys_id; scope is the action's scope name or sys_id.",
+      shape: defineActionSchema.shape,
+      handler: async function (args: any) {
+        var p = defineActionSchema.parse(args);
+        return defineActionType({
+          client: client(),
+          sysId: p.sysId,
+          scope: p.scope,
+          spec: p.spec as DefineActionSpec,
+          updateSetSysId: p.updateSetSysId,
+          publish: p.publish === true,
           confirm: p.confirm === true,
           dryRun: p.dryRun === true,
         });

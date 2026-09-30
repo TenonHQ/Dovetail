@@ -6,12 +6,13 @@ import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 27 expected tools", function () {
+  it("registers exactly the 28 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
     expect(names.slice().sort()).toEqual([
       "action_clone",
+      "action_define",
       "action_edit",
       "action_view",
       "add_choices_to_field",
@@ -39,7 +40,7 @@ describe("MCP registry", function () {
       "set_table",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(27);
+    expect(TOOL_NAMES).toHaveLength(28);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -355,7 +356,8 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (27)");
+    expect(out).toContain("Registered tools (28)");
+    expect(out).toContain("action_define");
     expect(out).toContain("action_clone");
     expect(out).toContain("add_index");
     expect(out).toContain("set_form_layout");
@@ -500,5 +502,74 @@ describe("MCP action_clone", function () {
       from: "not-a-sys-id", name: "X", scope: TARGET_SCOPE_NAME,
     })).rejects.toThrow();
     expect(m.cap.tableQueries).toHaveLength(0);
+  });
+});
+
+describe("MCP action_define", function () {
+  var ACTION = "69b1b09fc3274f10d4ddf1db05013193";
+  var SCOPE = "c44692d8c366425085b196c4e4013187";
+
+  function server() {
+    var fx = require("./fixtures/actionDefine.save1.json");
+    var model = JSON.parse(JSON.stringify(fx.response.result));
+    var steps = model.steps;
+    model.steps = null;
+    var cap = { puts: 0, posts: 0 };
+    var client = {
+      table: {
+        query: async function (table: string) {
+          return table === "sys_scope" ? [{ sys_id: SCOPE, scope: "x_cadso_email_spok" }] : [];
+        },
+      },
+      claude: { changeUpdateSet: async function () { return {}; } },
+      now: {
+        get: async function (p: string) {
+          return p.indexOf("/step_instances") !== -1 ? { result: { steps: steps } } : { result: model };
+        },
+        put: async function (p: string, body: any) {
+          cap.puts += 1;
+          steps = body.steps;
+          model = Object.assign({}, body, { steps: null });
+          return { result: body };
+        },
+        post: async function () { cap.posts += 1; return { result: {} }; },
+      },
+    };
+    return { client: client, cap: cap };
+  }
+  function defineTool(client: any) {
+    return buildDescriptors({ client: client }).filter(function (x) { return x.name === "action_define"; })[0];
+  }
+  var spec = { outputs: [{ name: "status_code", value: "{{steps.rest.status_code}}" }],
+    steps: [{ ref: "rest", type: "rest", label: "REST step" }] };
+
+  it("mirrors action_edit's annotations", function () {
+    var all = buildDescriptors();
+    var edit = all.filter(function (x) { return x.name === "action_edit"; })[0];
+    expect(defineTool(undefined).annotations).toEqual(edit.annotations);
+  });
+
+  it("is a dry-run without confirm:true — diff returned, nothing written", async function () {
+    var s = server();
+    var res = await defineTool(s.client).handler({ sysId: ACTION, scope: SCOPE, spec: spec });
+    expect(res.status).toBe("planned");
+    expect(res.diff.outputs.added).toEqual(["status_code"]);
+    expect(s.cap.puts).toBe(0);
+    expect(s.cap.posts).toBe(0);
+  });
+
+  it("confirm:true saves; publish:true also publishes", async function () {
+    var s = server();
+    var res = await defineTool(s.client).handler({ sysId: ACTION, scope: SCOPE, spec: spec, confirm: true, publish: true });
+    expect(res.status).toBe("saved");
+    expect(s.cap.puts).toBe(1);
+    expect(s.cap.posts).toBe(1);
+  });
+
+  it("rejects unknown spec keys and a non-sys_id sysId before any request", async function () {
+    var s = server();
+    await expect(defineTool(s.client).handler({ sysId: ACTION, scope: SCOPE, spec: { bogus: [] } })).rejects.toThrow();
+    await expect(defineTool(s.client).handler({ sysId: "nope", scope: SCOPE, spec: spec })).rejects.toThrow();
+    expect(s.cap.puts).toBe(0);
   });
 });
