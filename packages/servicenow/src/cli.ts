@@ -1190,8 +1190,11 @@ function printHelp(): void {
       "                     (--in <file> [--out <file>] [--rules <file>] [--report] [--json])\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
       "\nGlobal flags:\n" +
-      "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
-      "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n",
+      "  --env <name|path>  Load credentials from a specific env file (also --env-file,\n" +
+      "                     or the DOVETAIL_ENV_FILE env var). A bare name like 'prod'\n" +
+      "                     resolves to .env.prod in the cwd. The file's SN_* connection\n" +
+      "                     vars replace any already exported; a missing or incomplete\n" +
+      "                     file is an error (no fallback). Default: .env in the cwd.\n",
   );
 }
 
