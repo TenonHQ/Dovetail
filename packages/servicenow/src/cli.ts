@@ -70,7 +70,7 @@ import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
 import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
-import { publishApp } from "./publishApp";
+import { publishApp, parsePublishTargets, PUBLISH_TARGETS } from "./publishApp";
 import type {
   PublishAppParams,
   PublishAppResult,
@@ -1367,15 +1367,18 @@ function printHelp(): void {
       "                     reads the steps back to verify.\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-      "  publish-app        Publish a scoped app to the ServiceNow Store and/or the company\n" +
-      "                     application repository, then poll the publish to completion.\n" +
+      "  publish-app        Publish a scoped app to the ServiceNow Store, the company application\n" +
+      "                     repository, and/or a new update set, then poll each to completion.\n" +
       "                     STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store.\n" +
       "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
-      "                     (--app <scope|sys_id|name> --version <v> --target store|repo|both\n" +
+      "                     (--app <scope|sys_id|name> --version <v>\n" +
+      "                      --target store|repo|repo-ui|update-set|both (comma-separated ok)\n" +
       "                      [--dev-notes <text>] [--store-user <email>] [--timeout-ms <n>]\n" +
-      "                      [--dry-run] [--json] [--confirm])\n" +
+      "                      [--update-set-name <name>] [--update-set-description <text>]\n" +
+      "                      [--include-data] [--dry-run] [--json] [--confirm])\n" +
       "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
-      "                     the password is never a flag. Repo publish needs the sn_cicd role.\n" +
+      "                     the password is never a flag. 'repo' needs the sn_cicd plugin+role;\n" +
+      "                     'repo-ui' reaches the same repository over the UI uploader instead.\n" +
       "  export-update-set  Export an update set to importable <unload> XML, with secret\n" +
       "                     values replaced by __SET_DURING_INSTALL__ (no opt-out).\n" +
       "                     assemble mode is READ-ONLY; complete mode marks the set\n" +
@@ -2191,8 +2194,19 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
  * dove-sn publish-app:
  *   --app <scope|sys_id|name>   Required. The sys_app to publish.
  *   --version <v>               Required. Version to publish (e.g. 6.0.20260716).
- *   --target store|repo|both    Required. STORE PUBLISH IS EXTERNALLY VISIBLE.
- *   [--dev-notes <text>]        Optional developer notes.
+ *   --target <t[,t...]>         Required. store | repo | repo-ui | update-set |
+ *                               both (= store,repo). STORE IS EXTERNALLY VISIBLE.
+ *                               repo   = CI/CD REST API (needs the sn_cicd plugin)
+ *                               repo-ui= same destination over the UI uploader,
+ *                                        for instances without sn_cicd
+ *                               update-set = publish the app INTO a new update set
+ *   [--dev-notes <text>]        Optional developer notes (uploader targets).
+ *   [--update-set-name <name>]  update-set only. Defaults to the app's name.
+ *   [--update-set-description <text>]
+ *                               update-set only. Tenon convention is the release
+ *                               date stamp (YYYYMMDD) so a release is one query.
+ *   [--include-data]            update-set only. Include demo data (default off,
+ *                               matching the observed wire value).
  *   [--store-user <email>]      Store account email (else SN_STORE_USERNAME).
  *                               The password comes ONLY from SN_STORE_PASSWORD —
  *                               there is no flag for it, ever.
@@ -2200,9 +2214,9 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
  *   [--dry-run] [--json] [--confirm]
  *
  * DRY-RUN unless --confirm: without it the resolved plan is printed and the
- * command exits 1 (a deliberate refusal, not success). --target both publishes
- * store then repo sequentially with the same version and short-circuits if the
- * store leg fails; --json emits an array of per-target results.
+ * command exits 1 (a deliberate refusal, not success). Multiple targets run
+ * sequentially with the same version and short-circuit on the first failure;
+ * --json emits an array of per-target results.
  * Exit codes: 0 published/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
  */
 async function runPublishApp(flags: Record<string, string>): Promise<number> {
@@ -2211,20 +2225,18 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
   var target = flags.target;
   if (!app || !version || !target) {
     process.stderr.write(
-      "publish-app: --app, --version and --target store|repo|both are required\n",
+      "publish-app: --app, --version and --target <" +
+        PUBLISH_TARGETS.join("|") +
+        "|both> are required\n",
     );
     return 1;
   }
-  if (target !== "store" && target !== "repo" && target !== "both") {
-    process.stderr.write(
-      "publish-app: --target must be store, repo or both (got '" +
-        target +
-        "')\n",
-    );
+  var parsedTargets = parsePublishTargets(target);
+  if (parsedTargets.error) {
+    process.stderr.write("publish-app: " + parsedTargets.error + "\n");
     return 1;
   }
-  var targets: Array<PublishTarget> =
-    target === "both" ? ["store", "repo"] : [target as PublishTarget];
+  var targets: Array<PublishTarget> = parsedTargets.targets;
   var dryRun = flags["dry-run"] === "true";
   var confirmed = flags.confirm === "true";
   var client = createClient({});
@@ -2242,6 +2254,15 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
     };
     if (flags["dev-notes"]) params.devNotes = flags["dev-notes"];
     if (flags["store-user"]) params.storeUsername = flags["store-user"];
+    if (flags["update-set-name"]) {
+      params.updateSetName = flags["update-set-name"];
+    }
+    // Read with !== undefined, not truthiness: an intentionally empty
+    // description must stay empty rather than silently fall back.
+    if (flags["update-set-description"] !== undefined) {
+      params.updateSetDescription = flags["update-set-description"];
+    }
+    if (flags["include-data"] === "true") params.includeData = true;
     if (flags["timeout-ms"]) {
       // A NaN timeout would make the poll-loop budget check always false —
       // an infinite loop. Validate here, exit 1 on garbage.
