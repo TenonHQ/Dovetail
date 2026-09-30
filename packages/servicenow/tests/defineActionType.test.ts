@@ -512,3 +512,31 @@ describe("the documented example spec (Email Service Request GET)", function () 
     expect(again.diff.empty).toBe(true);
   });
 });
+
+describe("compareForVerify: server-defaulted fields", function () {
+  // Live-observed 2026-09-30: a new boolean input read back with maxLength 40
+  // although the spec never set it. That must not fail the verify; an
+  // explicitly specified maxLength that didn't land still must.
+  var { compareForVerify } = require("../src/flowDesigner/defineActionType");
+  function view(maxLength: string) {
+    return {
+      action: { name: "A", description: "", access: "package_private" },
+      inputs: [
+        { name: "flag", type: "boolean", label: "Flag", mandatory: false, order: 1, default: "", choices: "", maxLength: maxLength },
+      ],
+      outputs: [],
+      steps: [],
+    };
+  }
+
+  it("ignores a maxLength the server filled in when the spec left it blank", function () {
+    var res = compareForVerify(view(""), view("40"));
+    expect(res.ok).toBe(true);
+  });
+
+  it("still fails when an explicitly specified maxLength differs", function () {
+    var res = compareForVerify(view("100"), view("40"));
+    expect(res.ok).toBe(false);
+    expect(res.notes.join(" ")).toMatch(/maxLength '40' \(expected '100'\)/);
+  });
+});
