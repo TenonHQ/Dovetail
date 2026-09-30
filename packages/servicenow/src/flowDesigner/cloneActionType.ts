@@ -253,13 +253,20 @@ export async function resolveScope(
   return { sysId: sysId, name: name };
 }
 
-/** The step's record id in the /step_instances payload (`sys_id`, else `id`). */
+/**
+ * The step's record id in the /step_instances payload. The live processflow
+ * payload carries it as `step_id` (verified on tenonworkstudio 2026-09-30 — no
+ * `sys_id` key at all); `sys_id` / `id` are kept as fallbacks for other shapes.
+ */
 function stepRecordId(step: StepRecord): { key: string; id: string } {
-  var id = readString(step.sys_id);
-  if (id) {
-    return { key: "sys_id", id: id };
+  var keys = ["step_id", "sys_id", "id"];
+  for (var i = 0; i < keys.length; i++) {
+    var id = readString(step[keys[i]]);
+    if (id) {
+      return { key: keys[i], id: id };
+    }
   }
-  return { key: "id", id: readString(step.id) };
+  return { key: "step_id", id: "" };
 }
 
 /**
