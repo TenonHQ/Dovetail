@@ -1,15 +1,17 @@
 import { buildDescriptors, TOOL_NAMES } from "../src/mcp/registry";
 import { runSmoke } from "../src/mcp/server";
 import { makeMockClient } from "./mockClient";
+import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US as CLONE_US } from "./cloneActionFixture";
 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 26 expected tools", function () {
+  it("registers exactly the 27 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
     expect(names.slice().sort()).toEqual([
+      "action_clone",
       "action_edit",
       "action_view",
       "add_choices_to_field",
@@ -37,7 +39,7 @@ describe("MCP registry", function () {
       "set_table",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(26);
+    expect(TOOL_NAMES).toHaveLength(27);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -353,7 +355,8 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (26)");
+    expect(out).toContain("Registered tools (27)");
+    expect(out).toContain("action_clone");
     expect(out).toContain("add_index");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
@@ -434,5 +437,68 @@ describe("MCP registry — annotations", function () {
       expect(map[name].annotations.destructiveHint).toBe(true);
       expect(map[name].annotations.idempotentHint).toBe(false);
     });
+  });
+});
+
+describe("MCP action_clone", function () {
+  function cloneTool(client: any) {
+    var d = buildDescriptors({ client: client }).filter(function (x) {
+      return x.name === "action_clone";
+    })[0];
+    return d;
+  }
+
+  it("mirrors action_edit's annotations", function () {
+    var all = buildDescriptors();
+    var edit = all.filter(function (x) { return x.name === "action_edit"; })[0];
+    var clone = all.filter(function (x) { return x.name === "action_clone"; })[0];
+    expect(clone.annotations).toEqual(edit.annotations);
+  });
+
+  it("is a dry-run without confirm:true — plan returned, nothing written or published", async function () {
+    var m = makeCloneClient();
+    var res = await cloneTool(m.client).handler({
+      from: CLONE_SRC,
+      name: "MCP Dry",
+      scope: TARGET_SCOPE_NAME,
+      ops: { setStepInputs: [{ step: "REST Step", input: "http_method", value: "post" }] },
+    });
+    expect(res.action).toBe("planned");
+    expect(res.plan.total).toBe(7);
+    expect(m.cap.creates).toHaveLength(0);
+    expect(m.cap.posts).toHaveLength(0);
+  });
+
+  it("dryRun:true wins over confirm:true", async function () {
+    var m = makeCloneClient();
+    var res = await cloneTool(m.client).handler({
+      from: CLONE_SRC, name: "MCP Forced", scope: TARGET_SCOPE_NAME,
+      updateSetSysId: CLONE_US, confirm: true, dryRun: true,
+    });
+    expect(res.action).toBe("planned");
+    expect(m.cap.creates).toHaveLength(0);
+  });
+
+  it("confirm:true writes, publishes and verifies", async function () {
+    var m = makeCloneClient();
+    var res = await cloneTool(m.client).handler({
+      from: CLONE_SRC, name: "MCP Real", scope: TARGET_SCOPE_NAME,
+      updateSetSysId: CLONE_US, confirm: true,
+    });
+    expect(res.action).toBe("created");
+    expect(m.cap.creates).toHaveLength(7);
+    expect(m.cap.posts).toHaveLength(1);
+    expect(res.verify.ok).toBe(true);
+  });
+
+  it("rejects unknown ops keys and a non-sys_id from", async function () {
+    var m = makeCloneClient();
+    await expect(cloneTool(m.client).handler({
+      from: CLONE_SRC, name: "X", scope: TARGET_SCOPE_NAME, ops: { bogus: [] },
+    })).rejects.toThrow();
+    await expect(cloneTool(m.client).handler({
+      from: "not-a-sys-id", name: "X", scope: TARGET_SCOPE_NAME,
+    })).rejects.toThrow();
+    expect(m.cap.tableQueries).toHaveLength(0);
   });
 });

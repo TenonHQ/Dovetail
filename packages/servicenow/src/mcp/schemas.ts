@@ -126,6 +126,13 @@ export var stepInputPatchSchema = z.object({
 /** A step is addressed by its cid or its label. */
 var stepRefSchema = z.string().min(1);
 
+/** Set an EXISTING step input's value, e.g. a REST step's http_method. */
+var setStepInputSchema = z.object({
+  step: stepRefSchema,
+  input: z.string().min(1),
+  value: z.string(),
+});
+
 export var editActionSchema = z.object({
   sysId: z.string().min(1),
   scopeSysId: z.string().min(1),
@@ -145,6 +152,7 @@ export var editActionSchema = z.object({
         }),
       )
       .optional(),
+    setStepInputs: z.array(setStepInputSchema).optional(),
     addStepOutputs: z
       .array(
         z.object({
@@ -182,6 +190,35 @@ export var editActionSchema = z.object({
   /** Default false — dry-run. Only true republishes. */
   apply: z.boolean().optional(),
   updateSetSysId: z.string().optional(),
+});
+
+/**
+ * action_clone — clone a Custom Action Type into a scope and publish it.
+ * Mirrors the dove-sn clone-action flags; ops is the inline StepOps object.
+ */
+export var cloneActionSchema = z.object({
+  /** Source sys_hub_action_type_definition sys_id. */
+  from: z.string().regex(/^[0-9a-f]{32}$/, "from must be a 32-char sys_id"),
+  name: z.string().min(1),
+  /** Target scope name (x_cadso_email_spok) or 32-hex sys_id. */
+  scope: z.string().min(1),
+  internalName: z.string().min(1).optional(),
+  description: z.string().optional(),
+  /** Required when confirm is true. */
+  updateSetSysId: z.string().optional(),
+  ops: z
+    .object({
+      patchStepScripts: editActionSchema.shape.ops.shape.patchStepScripts,
+      setStepInputs: z.array(setStepInputSchema).optional(),
+      addStepOutputs: editActionSchema.shape.ops.shape.addStepOutputs,
+      addStepInputs: editActionSchema.shape.ops.shape.addStepInputs,
+    })
+    .strict()
+    .optional(),
+  /** Default false — dry-run. Only true writes + publishes. */
+  confirm: z.boolean().optional(),
+  /** Forces a dry-run even with confirm. */
+  dryRun: z.boolean().optional(),
 });
 
 export var editFlowSchema = z.object({

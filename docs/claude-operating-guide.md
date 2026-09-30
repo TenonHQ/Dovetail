@@ -149,6 +149,7 @@ reports every record unchanged).
 | `flow_view` | Read a flow/subflow's compiled step graph | n/a (read) |
 | `action_view` | Read a custom action type's definition | n/a (read) |
 | `action_edit` | Patch an action type's steps | no |
+| `action_clone` | Clone an action type (all steps + step IO) into a scope, then publish + verify; dry-run unless `confirm:true` | yes |
 | `flow_publish` | Publish a flow | no |
 | `flow_copy` | Copy a flow | no |
 | `flow_create` | Author a new flow | yes |

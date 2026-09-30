@@ -5,7 +5,7 @@
  * REST API so every change lands in the target update set and scope.
  */
 
-export { createClient } from "./client";
+export { createClient, resolveFlowAuth, isProcessflowPath, PROCESSFLOW_PATH_PREFIX } from "./client";
 
 export {
   resolveExecutionContext,
@@ -33,6 +33,7 @@ export type {
   NowInvokeMethod,
   NowInvokeParams,
   NowInvokeResponse,
+  ResolvedFlowAuth,
 } from "./client";
 
 export {
@@ -62,6 +63,10 @@ export {
   verifyArtifact,
   cloneSubflow,
   cloneActionType,
+  resolveScope,
+  slugInternalName,
+  fetchActionSteps,
+  findStepInput,
   triggerPublication,
   publishActionType,
   editActionType,
@@ -97,6 +102,8 @@ export type {
   CloneSubflowResult,
   CloneActionTypeParams,
   CloneActionTypeResult,
+  CloneActionTypePlan,
+  CloneActionTypeStepReport,
   TriggerPublicationParams,
   TriggerPublicationResult,
   PublishActionTypeParams,
@@ -109,6 +116,7 @@ export type {
   StepSummary,
   StepIoSummary,
   PatchStepScriptOp,
+  SetStepInputOp,
   AddStepOutputOp,
   AddStepInputOp,
   ApplyStepOpsResult,
