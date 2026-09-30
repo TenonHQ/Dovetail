@@ -5,7 +5,7 @@
  * default, idempotency, and publish + verify through the snapshot path.
  */
 
-import { cloneActionType, slugInternalName } from "../src/flowDesigner/cloneActionType";
+import { cloneActionType, remapClonedSteps, slugInternalName } from "../src/flowDesigner/cloneActionType";
 import {
   makeClient,
   SRC,
@@ -30,6 +30,48 @@ describe("slugInternalName", function () {
   it("lowercases, maps non-alphanumerics to _ and trims", function () {
     expect(slugInternalName("  Send SMS (v2) — Retry!  ")).toBe("send_sms_v2_retry");
     expect(slugInternalName("Get Engaged Audience Members")).toBe("get_engaged_audience_members");
+  });
+});
+
+describe("remapClonedSteps — live /step_instances shape", function () {
+  // Shape captured from tenonworkstudio 2026-09-30: the record id is `step_id`,
+  // there is NO `sys_id` key, and pills reference steps by `cid` (kept as-is).
+  var OLD_GUARD = "9d923813c3674f10d4ddf1db05013116";
+  var OLD_REST = "99923813c3674f10d4ddf1db05013132";
+  var NEW_GUARD = "a".repeat(32);
+  var NEW_REST = "b".repeat(32);
+  var NEW_PARENT = "c".repeat(32);
+  function liveSteps(): Array<Record<string, unknown>> {
+    return [
+      { label: "Gaurd", step_id: OLD_GUARD, action: "69b1b09fc3274f10d4ddf1db05013193", cid: "777e0dc1", order: 1, inputs: [] },
+      {
+        label: "REST step",
+        step_id: OLD_REST,
+        action: "69b1b09fc3274f10d4ddf1db05013193",
+        cid: "7d49315c",
+        order: 2,
+        inputs: [{ name: "base_url", value: "{{step[777e0dc1].base_url}}" }],
+      },
+    ];
+  }
+
+  it("remaps step_id and action onto the clone, leaving cid and pills untouched", function () {
+    var map: Record<string, string> = {};
+    map[OLD_GUARD] = NEW_GUARD;
+    map[OLD_REST] = NEW_REST;
+    var out = remapClonedSteps(liveSteps() as never, NEW_PARENT, map, {});
+    expect(out[0].step_id).toBe(NEW_GUARD);
+    expect(out[1].step_id).toBe(NEW_REST);
+    expect(out[0].action).toBe(NEW_PARENT);
+    expect(out[1].cid).toBe("7d49315c");
+    expect((out[1].inputs as Array<Record<string, unknown>>)[0].value).toBe("{{step[777e0dc1].base_url}}");
+    expect(Object.prototype.hasOwnProperty.call(out[0], "sys_id")).toBe(false);
+  });
+
+  it("still throws, naming the step, when a step_id has no cloned counterpart", function () {
+    expect(function () {
+      remapClonedSteps(liveSteps() as never, NEW_PARENT, {}, {});
+    }).toThrow(/Gaurd.*9d923813c3674f10d4ddf1db05013116.*no cloned/);
   });
 });
 
