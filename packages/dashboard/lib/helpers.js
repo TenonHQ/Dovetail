@@ -2,7 +2,7 @@ const fs = require("fs");
 
 // Scope -> "App" label used in generated update-set names. Mirrors the
 // override table in .claude/skills/sn-move-update-set so both tools agree.
-const SCOPE_LABEL_OVERRIDES = {
+var SCOPE_LABEL_OVERRIDES = {
   x_cadso_journey: "Journey",
   x_cadso_core: "Core",
   x_cadso_automate: "Automate",
@@ -12,12 +12,12 @@ const SCOPE_LABEL_OVERRIDES = {
 
 function scopeLabel(scope) {
   if (SCOPE_LABEL_OVERRIDES[scope]) return SCOPE_LABEL_OVERRIDES[scope];
-  const stripped = scope.replace(/^x_cadso_/, "");
+  var stripped = scope.replace(/^x_cadso_/, "");
   return stripped
     .split(/[_-]/)
     .filter(Boolean)
-    .map(function (word) {
-      return word.charAt(0).toUpperCase() + word.slice(1);
+    .map(function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
     })
     .join(" ");
 }
@@ -26,16 +26,19 @@ function sanitizeTaskName(taskName) {
   return taskName.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim();
 }
 
+// Task-level base name (no App segment yet — that's added per-scope by
+// buildScopedUpdateSetName, since one task can span multiple scopes/apps).
 function generateUpdateSetName(devInitials, taskId, shortDesc) {
-  const parts = [];
+  var parts = [];
   if (devInitials) parts.push(devInitials);
   parts.push(taskId);
   parts.push(shortDesc);
   return parts.join(" | ").substring(0, 80);
 }
 
+// Full per-scope update-set name: {DEVINITIALS} | {DEV-ID} | {App} | {Short Desc}
 function buildScopedUpdateSetName(activeTask, appLabel) {
-  const parts = [];
+  var parts = [];
   if (activeTask.devInitials) parts.push(activeTask.devInitials);
   parts.push(activeTask.customId || activeTask.taskId);
   parts.push(appLabel);
@@ -43,42 +46,52 @@ function buildScopedUpdateSetName(activeTask, appLabel) {
   return parts.join(" | ").substring(0, 80);
 }
 
+// Generate update set description from task
 function generateUpdateSetDescription(taskName, taskDescription) {
-  let description = taskName;
+  var desc = taskName;
   if (taskDescription) {
-    const firstSentence = taskDescription.split(/[.!\n]/)[0].trim();
+    var firstSentence = taskDescription.split(/[.!\n]/)[0].trim();
     if (firstSentence) {
-      description += " — " + firstSentence.substring(0, 150);
+      desc += " — " + firstSentence.substring(0, 150);
     }
   }
-  return description;
+  return desc;
 }
 
-// Never throws. Invalid or unreadable files degrade to "no active task".
+// Read active task from persistence file.
+//
+// Never throws. A truncated or hand-edited task file used to take down every
+// endpoint that reads it (/api/scopes, /api/update-sets, the activate and
+// create paths) with a 500 from JSON.parse — so a malformed file degrades to
+// "no active task" instead. The shape is checked too: JSON.parse legitimately
+// yields null / a string / an array for a valid-but-wrong file, and callers
+// dot into this as an object (activeTask.devInitials, .customId, .taskName).
 function readActiveTask(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    var parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return null;
     }
     return parsed;
-  } catch (error) {
+  } catch (e) {
     console.warn(
       "[dashboard] ignoring unreadable active-task file " +
         filePath +
         ": " +
-        (error && error.message ? error.message : error),
+        (e && e.message ? e.message : e),
     );
     return null;
   }
 }
 
+// Extract duplicate number from ServiceNow auto-numbered name
+// "CU-abc — Name" => -1, "CU-abc — Name 1" => 1, "CU-abc — Name 2" => 2
 function extractDuplicateNumber(name, baseName) {
   if (name === baseName) return -1;
-  const suffix = name.substring(baseName.length).trim();
-  const number = parseInt(suffix, 10);
-  return isNaN(number) ? -1 : number;
+  var suffix = name.substring(baseName.length).trim();
+  var num = parseInt(suffix, 10);
+  return isNaN(num) ? -1 : num;
 }
 
 module.exports = {
