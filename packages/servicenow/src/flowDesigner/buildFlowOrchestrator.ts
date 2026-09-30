@@ -20,7 +20,6 @@ import type { TriggerPublicationResult } from "./triggerPublication";
 import { publishFlow } from "./publishFlow";
 import { publishActionType } from "./publishActionType";
 import type { FlowKind } from "./listTemplates";
-import type { WriteOp } from "./writeOrder";
 
 export interface BuildFlowSpec {
   kind: FlowKind;
@@ -78,7 +77,7 @@ export interface BuildFlowResult {
   /** Filled when clone/create produced a new artifact. */
   artifact?: {
     sysId: string;
-    action: "created" | "unchanged" | "planned";
+    action: "created" | "unchanged";
     writtenCount: number;
   };
   verify?: VerifyReport;
@@ -89,18 +88,6 @@ export interface BuildFlowResult {
 }
 
 const RX_SYS_ID = /^[0-9a-f]{32}$/;
-
-/** The write plan of either clone result shape (subflow: WriteOp[]; action type: { ops }). */
-function planOps(result: CloneSubflowResult | CloneActionTypeResult): Array<WriteOp> {
-  var plan = result.plan;
-  if (!plan) {
-    return [];
-  }
-  if (Array.isArray(plan)) {
-    return plan;
-  }
-  return plan.ops;
-}
 
 function unrecoverable(spec: BuildFlowSpec, stage: string, message: string): BuildFlowResult {
   return {
@@ -238,8 +225,6 @@ export async function runBuildFlow(
         dryRun: opts.dryRun,
       });
     } else {
-      // cloneActionType is dry-run by default and publishes by default; the
-      // orchestrator owns both decisions (dryRun flag, publishArtifact below).
       cloneResult = await cloneActionType({
         client: client,
         sourceSysId: spec.sourceSysId as string,
@@ -247,9 +232,7 @@ export async function runBuildFlow(
         newScope: spec.newScope,
         updateSetSysId: spec.updateSetSysId,
         modifications: spec.modifications,
-        confirm: !opts.dryRun,
         dryRun: opts.dryRun,
-        publish: false,
       });
     }
   } catch (err: any) {
@@ -268,7 +251,7 @@ export async function runBuildFlow(
       exitCode: 0,
       spec: spec,
       artifact: { sysId: cloneResult.sysId, action: cloneResult.action, writtenCount: 0 },
-      plan: planOps(cloneResult).map(function (op) {
+      plan: (cloneResult.plan || []).map(function (op) {
         return { id: op.id, table: op.table, logicalName: op.logicalName };
       }),
     };

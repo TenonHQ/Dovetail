@@ -110,38 +110,6 @@ describe("loadEnvFile (dove-sn)", function () {
     expect(process.env.SN_API_KEY).toBeUndefined();
     expect(process.env.SN_DEV_INSTANCE).toBeUndefined();
   });
-
-  it("lists every SN_FLOW_* / SN_DEV_FLOW_* / SN_PROD_FLOW_* key as a connection key", function () {
-    [
-      "SN_FLOW_USER", "SN_FLOW_PASSWORD",
-      "SN_DEV_FLOW_USER", "SN_DEV_FLOW_PASSWORD",
-      "SN_PROD_FLOW_USER", "SN_PROD_FLOW_PASSWORD"
-    ].forEach(function (k) {
-      expect(SN_CONNECTION_KEYS).toContain(k);
-    });
-  });
-
-  it("replaces process flow creds with the selected file's", function () {
-    var envPath = path.join(tmpDir, "flow.env");
-    fs.writeFileSync(envPath, BASIC_FILE + "SN_FLOW_USER=fileflow\nSN_FLOW_PASSWORD=fileflowpass\n", "utf8");
-    process.env.SN_FLOW_USER = "processflow";
-    process.env.SN_FLOW_PASSWORD = "processflowpass";
-    loadEnvFile(envPath);
-    expect(process.env.SN_FLOW_USER).toBe("fileflow");
-    expect(process.env.SN_FLOW_PASSWORD).toBe("fileflowpass");
-  });
-
-  it("clears process flow creds when the selected file defines none", function () {
-    var envPath = path.join(tmpDir, "noflow.env");
-    fs.writeFileSync(envPath, BASIC_FILE, "utf8");
-    process.env.SN_FLOW_USER = "processflow";
-    process.env.SN_FLOW_PASSWORD = "processflowpass";
-    process.env.SN_DEV_FLOW_USER = "processdevflow";
-    loadEnvFile(envPath);
-    expect(process.env.SN_FLOW_USER).toBeUndefined();
-    expect(process.env.SN_FLOW_PASSWORD).toBeUndefined();
-    expect(process.env.SN_DEV_FLOW_USER).toBeUndefined();
-  });
 });
 
 describe("resolveEnvSelection", function () {

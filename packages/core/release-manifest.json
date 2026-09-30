@@ -1,7 +1,54 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-09-30T17:59:37.131Z",
+  "generated_at": "2026-09-30T18:06:28.587Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.40",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.40",
+      "prev_version": "0.0.39",
+      "published_at": "2026-09-30T18:06:28.574Z",
+      "git": {
+        "sha": "e36a85dc73cbec978794c19cb71f5b9a3811ca4f",
+        "tag": "dovetail-servicenow@0.0.40"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "e36a85dc7",
+          "subject": "feat(servicenow): publish-app update-set + repo-ui targets (#279)",
+          "pr": 279
+        },
+        {
+          "sha": "a9abae9b8",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.37",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.37",
+      "prev_version": "0.0.36",
+      "published_at": "2026-09-30T18:06:28.574Z",
+      "git": {
+        "sha": "e36a85dc73cbec978794c19cb71f5b9a3811ca4f",
+        "tag": "dovetail-mcp@0.0.37"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "a9abae9b8",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-dashboard@0.0.51",
@@ -1223,50 +1270,6 @@
         {
           "sha": "534f517e4",
           "subject": "chore(release): publish 3 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-deploy@0.0.2",
-      "package": "@tenonhq/dovetail-deploy",
-      "version": "0.0.2",
-      "prev_version": "0.0.1",
-      "published_at": "2026-07-10T18:41:37.089Z",
-      "git": {
-        "sha": "58c416a421d7b9eaff3483468601cc1eda753b20",
-        "tag": "dovetail-deploy@0.0.2"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "58c416a42",
-          "subject": "feat(deploy): dynamic per-developer promotion source (#211)",
-          "pr": 211
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.26",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.26",
-      "prev_version": "0.0.25",
-      "published_at": "2026-07-10T16:27:58.460Z",
-      "git": {
-        "sha": "9b3b58b8fb9aa53b32473c8c7711446f5a52a576",
-        "tag": "dovetail-servicenow@0.0.26"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "9b3b58b8f",
-          "subject": "feat: invoke arbitrary authenticated Scripted REST operations (invoke-rest) (#214)",
-          "pr": 214
         }
       ],
       "exports_delta": null,

@@ -24,7 +24,6 @@
  */
 
 import type { ServiceNowClient } from "../client";
-import { fetchActionSteps } from "./actionTypeApi";
 import {
   applyStepOps,
   hasStepOps,
@@ -35,7 +34,6 @@ import type {
   AddStepInputOp,
   AddStepOutputOp,
   PatchStepScriptOp,
-  SetStepInputOp,
   StepRecord,
   StepSummary,
   VerifyStepsResult
@@ -53,11 +51,6 @@ export interface EditActionTypeOps {
    * first match.
    */
   patchStepScripts?: Array<PatchStepScriptOp>;
-  /**
-   * Set the value of an EXISTING step input (e.g. a REST step's `http_method`),
-   * addressing the step by `cid` or `label`. Throws when the input does not exist.
-   */
-  setStepInputs?: Array<SetStepInputOp>;
   /**
    * Step-level outputs (`extended_outputs`) to add — the values one step exposes
    * to the steps after it. Idempotent: an output whose name is already present is
@@ -171,7 +164,7 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   if (!ops.patchScript && !ops.setScript && !(ops.mergeOutputs && ops.mergeOutputs.length > 0) && !stepOpsSupplied) {
     throw new Error(
       "editActionType: no ops — supply patchScript, setScript, mergeOutputs, "
-        + "patchStepScripts, setStepInputs, addStepOutputs, and/or addStepInputs."
+        + "patchStepScripts, addStepOutputs, and/or addStepInputs."
     );
   }
   if (stepOpsSupplied && (ops.patchScript || ops.setScript)) {
@@ -195,7 +188,8 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
   }
 
   // 2. GET the steps — the model's `steps` come back null.
-  var steps: Array<any> = await fetchActionSteps(client, sysId, scopeSysId);
+  var stepsResp = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "/step_instances")));
+  var steps: Array<any> = stepsResp && Array.isArray(stepsResp.steps) ? stepsResp.steps : [];
   if (steps.length === 0) {
     throw new Error("editActionType: /step_instances returned no steps for action type " + sysId);
   }
@@ -205,7 +199,6 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
     stepsBefore = summarizeSteps(steps as Array<StepRecord>);
     var applied = applyStepOps(steps as Array<StepRecord>, {
       patchStepScripts: ops.patchStepScripts,
-      setStepInputs: ops.setStepInputs,
       addStepOutputs: ops.addStepOutputs,
       addStepInputs: ops.addStepInputs
     });
@@ -322,7 +315,8 @@ export async function editActionType(params: EditActionTypeParams): Promise<Edit
     // to read back, so don't spend a round-trip proving we changed nothing.
     verified = { ok: true, notes: ["no step changed — nothing to verify"] };
   } else if (stepOpsSupplied && stepsAfter) {
-    var freshSteps: Array<StepRecord> = await fetchActionSteps(client, sysId, scopeSysId);
+    var freshResp = unwrap(await client.now.get<any>(actionTypePath(sysId, scopeSysId, "/step_instances")));
+    var freshSteps: Array<StepRecord> = freshResp && Array.isArray(freshResp.steps) ? freshResp.steps : [];
     if (freshSteps.length === 0) {
       verified = { ok: false, notes: ["read-back returned no steps — could not verify the publish"] };
     } else {

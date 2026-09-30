@@ -34,7 +34,6 @@ import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
-import { cloneActionType } from "../flowDesigner/cloneActionType";
 import { testFlow } from "../flowDesigner/testFlow";
 import {
   createTable,
@@ -64,7 +63,6 @@ import {
   viewFlowSchema,
   viewActionSchema,
   editActionSchema,
-  cloneActionSchema,
   publishFlowSchema,
   copyFlowSchema,
   createFlowSchema,
@@ -94,7 +92,6 @@ export var TOOL_NAMES = [
   "flow_view",
   "action_view",
   "action_edit",
-  "action_clone",
   "flow_publish",
   "flow_copy",
   "flow_create",
@@ -279,40 +276,6 @@ export function buildDescriptors(
           ops: p.ops,
           apply: p.apply === true,
           updateSetSysId: p.updateSetSysId,
-        });
-      },
-    },
-    {
-      name: "action_clone",
-      annotations: WRITE_OVERWRITE,
-      description:
-        "Clone a ServiceNow Custom Action Type (sys_hub_action_type_definition) into a scope and " +
-        "publish it headlessly — multi-step capable. Clones the parent, its inputs/outputs, every " +
-        "step instance and each step's ext inputs/outputs (fresh sys_ids, target scope), writes them " +
-        "through Dovetail createRecord pinned to updateSetSysId, then grafts the SOURCE's step graph " +
-        "(remapped onto the clone) onto the model and POSTs /snapshot, and reads the steps back to " +
-        "verify. Optional ops (inline StepOps) patch the cloned steps first: setStepInputs " +
-        "[{step, input, value}] sets an existing input (e.g. a REST step's http_method), plus " +
-        "patchStepScripts / addStepOutputs / addStepInputs as in action_edit. Idempotent: an existing " +
-        "(name, scope) returns action 'unchanged' with no writes. DRY-RUN BY DEFAULT: without " +
-        "confirm:true it reads everything and returns the plan (records per table, step summary, ops " +
-        "effects) and writes nothing; dryRun:true forces a dry-run even with confirm. from is the " +
-        "source sys_id; scope is the target scope name (e.g. x_cadso_email_spok) or sys_id; " +
-        "updateSetSysId is required with confirm.",
-      shape: cloneActionSchema.shape,
-      handler: async function (args: any) {
-        var p = cloneActionSchema.parse(args);
-        return cloneActionType({
-          client: client(),
-          sourceSysId: p.from,
-          newName: p.name,
-          internalName: p.internalName,
-          newScope: p.scope,
-          updateSetSysId: p.updateSetSysId,
-          description: p.description,
-          stepOps: p.ops,
-          confirm: p.confirm === true,
-          dryRun: p.dryRun === true,
         });
       },
     },

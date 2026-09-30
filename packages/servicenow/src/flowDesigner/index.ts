@@ -20,15 +20,8 @@ export type {
 export { cloneSubflow } from "./cloneSubflow";
 export type { CloneSubflowParams, CloneSubflowResult } from "./cloneSubflow";
 
-export { cloneActionType, resolveScope, slugInternalName, remapClonedSteps } from "./cloneActionType";
-export type {
-  CloneActionTypeParams,
-  CloneActionTypeResult,
-  CloneActionTypePlan,
-  CloneActionTypeStepReport,
-} from "./cloneActionType";
-
-export { fetchActionSteps, actionTypePath } from "./actionTypeApi";
+export { cloneActionType } from "./cloneActionType";
+export type { CloneActionTypeParams, CloneActionTypeResult } from "./cloneActionType";
 
 export { triggerPublication } from "./triggerPublication";
 export type { TriggerPublicationParams, TriggerPublicationResult } from "./triggerPublication";
@@ -39,14 +32,13 @@ export type { PublishActionTypeParams, PublishActionTypeResult } from "./publish
 export { editActionType } from "./editActionType";
 export type { EditActionTypeParams, EditActionTypeResult, EditActionTypeOps } from "./editActionType";
 
-export { applyStepOps, verifySteps, summarizeSteps, formatStepPill, findStep, findStepInput, hasStepOps } from "./stepOps";
+export { applyStepOps, verifySteps, summarizeSteps, formatStepPill, findStep, hasStepOps } from "./stepOps";
 export type {
   StepOps,
   StepRecord,
   StepSummary,
   StepIoSummary,
   PatchStepScriptOp,
-  SetStepInputOp,
   AddStepOutputOp,
   AddStepInputOp,
   ApplyStepOpsResult,

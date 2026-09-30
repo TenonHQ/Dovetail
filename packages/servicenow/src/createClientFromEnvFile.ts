@@ -51,29 +51,12 @@ export function resolveConfigFromEnvFile(envPath: string): ServiceNowClientConfi
       "set SN_INSTANCE (preferred) or SN_DEV_INSTANCE / SN_PROD_INSTANCE."
     );
   }
-  // Dedicated Flow Designer (processflow) identity — optional. Carried only
-  // when the file sets it, so a file without it resolves exactly as before.
-  // Because the returned config pins the main identity, createClient takes the
-  // flow identity from this config ONLY: a file without SN_FLOW_* never
-  // borrows the host process's flow credentials.
-  var flowUser = parsed.SN_FLOW_USER || parsed.SN_DEV_FLOW_USER || parsed.SN_PROD_FLOW_USER || "";
-  var flowPassword = parsed.SN_FLOW_PASSWORD || parsed.SN_DEV_FLOW_PASSWORD || parsed.SN_PROD_FLOW_PASSWORD || "";
-  var withFlow = function (cfg: ServiceNowClientConfig): ServiceNowClientConfig {
-    if (flowUser) {
-      cfg.flowUser = flowUser;
-    }
-    if (flowPassword) {
-      cfg.flowPassword = flowPassword;
-    }
-    return cfg;
-  };
-
   if (apiKey) {
     // Key is the default auth mode when the file defines one. Returning the
     // key WITHOUT user/password keeps the resolved config fully explicit —
     // resolveAuth treats a config that names user/password as a deliberate
     // basic-auth pin, so leaking them here would flip the mode.
-    return withFlow({ instance: instance, apiKey: apiKey });
+    return { instance: instance, apiKey: apiKey };
   }
   if (!user || !password) {
     throw new Error(
@@ -83,7 +66,7 @@ export function resolveConfigFromEnvFile(envPath: string): ServiceNowClientConfi
     );
   }
 
-  return withFlow({ instance: instance, user: user, password: password });
+  return { instance: instance, user: user, password: password };
 }
 
 /**
