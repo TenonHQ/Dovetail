@@ -130,6 +130,47 @@ describe("resolveConfigFromEnvFile", function () {
     });
   });
 
+  it("carries SN_FLOW_* into the config alongside an API key", function () {
+    var p = writeEnv(
+      ".env.keyflow",
+      "SN_INSTANCE=k.service-now.com\nSN_API_KEY=key-123\nSN_FLOW_USER=flow.bot\nSN_FLOW_PASSWORD=flowpass\n"
+    );
+    expect(resolveConfigFromEnvFile(p)).toEqual({
+      instance: "k.service-now.com",
+      apiKey: "key-123",
+      flowUser: "flow.bot",
+      flowPassword: "flowpass"
+    });
+  });
+
+  it("carries SN_DEV_FLOW_* / SN_PROD_FLOW_* fallbacks alongside basic creds", function () {
+    var p = writeEnv(
+      ".env.devflow",
+      "SN_INSTANCE=d\nSN_USER=u\nSN_PASSWORD=p\nSN_DEV_FLOW_USER=devflow\nSN_PROD_FLOW_PASSWORD=prodflowpass\n"
+    );
+    expect(resolveConfigFromEnvFile(p)).toEqual({
+      instance: "d",
+      user: "u",
+      password: "p",
+      flowUser: "devflow",
+      flowPassword: "prodflowpass"
+    });
+  });
+
+  it("a file without SN_FLOW_* resolves without flow keys and does not borrow them from process.env", function () {
+    process.env.SN_FLOW_USER = "leaked.flow";
+    process.env.SN_FLOW_PASSWORD = "leakedflowpass";
+    try {
+      var p = writeEnv(".env.noflow", "SN_INSTANCE=n\nSN_API_KEY=key-1\n");
+      var cfg = resolveConfigFromEnvFile(p);
+      expect(cfg).toEqual({ instance: "n", apiKey: "key-1" });
+      expect(cfg.flowUser).toBeUndefined();
+    } finally {
+      delete process.env.SN_FLOW_USER;
+      delete process.env.SN_FLOW_PASSWORD;
+    }
+  });
+
   it("throws an actionable error when the instance is missing", function () {
     var p = writeEnv(".env.noinst", "SN_USER=u\nSN_PASSWORD=p\n");
     expect(function () { resolveConfigFromEnvFile(p); }).toThrow(/does not define a ServiceNow instance/);

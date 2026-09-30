@@ -70,8 +70,19 @@ export interface AddStepInputOp {
   pillFrom: { step: string; output: string };
 }
 
+export interface SetStepInputOp {
+  /** Step holding the input — its `cid`, or its `label`/`name`. */
+  step: string;
+  /** Name of an EXISTING input on that step (e.g. a REST step's `http_method`). */
+  input: string;
+  /** New value. Also written to `display_value` when the input carries one. */
+  value: string;
+}
+
 export interface StepOps {
   patchStepScripts?: Array<PatchStepScriptOp>;
+  /** Set existing step input values (step `inputs`, else `extended_inputs`). Never creates an input. */
+  setStepInputs?: Array<SetStepInputOp>;
   addStepOutputs?: Array<AddStepOutputOp>;
   addStepInputs?: Array<AddStepInputOp>;
 }
@@ -143,7 +154,7 @@ export function readString(v: unknown): string {
  * Write `next` into a field, preserving its wrapped-vs-bare shape. Handles the
  * doubly-wrapped `{ value: { value: x } }` an input's `value` sometimes carries.
  */
-function writeField(holder: Record<string, unknown>, key: string, next: StepScalar): void {
+export function writeField(holder: Record<string, unknown>, key: string, next: StepScalar): void {
   var current = holder[key];
   if (isPlainObject(current) && Object.prototype.hasOwnProperty.call(current, "value")) {
     var inner = current.value;
@@ -248,6 +259,35 @@ function entryNamed(list: Array<IoEntry>, name: string): IoEntry | null {
     }
   }
   return null;
+}
+
+/**
+ * Find an EXISTING input on a step by name — the step's `inputs` first (where
+ * action-template inputs such as a REST step's `http_method` live), then its
+ * `extended_inputs`. Throws listing what IS there; never creates an input.
+ */
+export function findStepInput(step: StepRecord, name: string): IoEntry {
+  var lists: Array<"inputs" | "extended_inputs"> = ["inputs", "extended_inputs"];
+  var have: Array<string> = [];
+  for (var l = 0; l < lists.length; l += 1) {
+    var list = Array.isArray(step[lists[l]]) ? (step[lists[l]] as Array<IoEntry>) : [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (!isPlainObject(list[i])) {
+        continue;
+      }
+      var entryName = readString(list[i].name) || readString(list[i].element);
+      if (entryName === name) {
+        return list[i];
+      }
+      if (entryName) {
+        have.push(entryName);
+      }
+    }
+  }
+  throw new Error(
+    "stepOps: input '" + name + "' not found on step '" + stepIdentity(step).label + "'. "
+      + "Inputs on this step: " + (have.join(", ") || "<none>")
+  );
 }
 
 /** Read/create a step's `extended_inputs` / `extended_outputs` list in place. */
@@ -415,6 +455,35 @@ export function applyStepOps(steps: Array<StepRecord>, ops: StepOps): ApplyStepO
     writeField(input, "value", after);
     markTouched(step);
     changes.push("step '" + label + "': script " + before.length + " -> " + after.length + " chars");
+  }
+
+  // 1b. Set existing input values (e.g. a REST step's http_method).
+  var setOps = ops.setStepInputs || [];
+  for (var si = 0; si < setOps.length; si += 1) {
+    var setOp = setOps[si];
+    if (!setOp || typeof setOp !== "object") {
+      throw new Error("stepOps: setStepInputs[" + si + "] must be an object {step, input, value}.");
+    }
+    if (typeof setOp.input !== "string" || setOp.input.length === 0) {
+      throw new Error("stepOps: setStepInputs[" + si + "].input must be a non-empty input name.");
+    }
+    if (typeof setOp.value !== "string") {
+      throw new Error("stepOps: setStepInputs[" + si + "].value must be a string.");
+    }
+    var setStep = findStep(patched, setOp.step);
+    var setLabel = stepIdentity(setStep).label;
+    var target = findStepInput(setStep, setOp.input);
+    var previous = readString(target.value);
+    if (previous === setOp.value) {
+      warnings.push("step '" + setLabel + "': input '" + setOp.input + "' already '" + setOp.value + "' — skipped");
+      continue;
+    }
+    writeField(target, "value", setOp.value);
+    if (Object.prototype.hasOwnProperty.call(target, "display_value")) {
+      writeField(target, "display_value", setOp.value);
+    }
+    markTouched(setStep);
+    changes.push("step '" + setLabel + "': input '" + setOp.input + "' '" + previous + "' -> '" + setOp.value + "'");
   }
 
   // 2. Step-level outputs (before inputs — an input may pill from one of these).
@@ -585,6 +654,7 @@ export function verifySteps(
 export function hasStepOps(ops: StepOps): boolean {
   return Boolean(
     (ops.patchStepScripts && ops.patchStepScripts.length > 0)
+      || (ops.setStepInputs && ops.setStepInputs.length > 0)
       || (ops.addStepOutputs && ops.addStepOutputs.length > 0)
       || (ops.addStepInputs && ops.addStepInputs.length > 0)
   );

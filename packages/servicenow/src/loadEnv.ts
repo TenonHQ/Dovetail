@@ -24,6 +24,13 @@ export var SN_CONNECTION_KEYS = [
   "SN_DEV_PASSWORD",
   "SN_PROD_USERNAME",
   "SN_PROD_PASSWORD",
+  // Dedicated Flow Designer (processflow) identity — see ServiceNowClientConfig.flowUser.
+  "SN_FLOW_USER",
+  "SN_FLOW_PASSWORD",
+  "SN_DEV_FLOW_USER",
+  "SN_DEV_FLOW_PASSWORD",
+  "SN_PROD_FLOW_USER",
+  "SN_PROD_FLOW_PASSWORD",
 ];
 
 /**

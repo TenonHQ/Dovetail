@@ -55,6 +55,33 @@ Reads ServiceNow credentials from env vars in this order of precedence:
 | User     | `SN_USER`       | `SN_DEV_USERNAME`   | `SN_PROD_USERNAME`   |
 | Password | `SN_PASSWORD`   | `SN_DEV_PASSWORD`   | `SN_PROD_PASSWORD`   |
 
+### Flow Designer identity (`SN_FLOW_*`)
+
+`/api/now/processflow/*` — every Flow Designer authoring call (view/edit/clone/
+publish an action, create/copy/publish a flow) — **cannot carry a REST API access
+policy** on ServiceNow, so under API-key auth (`SN_API_KEY`) those calls 401. They
+authenticate instead with a dedicated basic-auth identity used **only** for
+processflow paths; every other path keeps the main identity:
+
+| Field    | Preferred          | Dev fallback           | Prod fallback           |
+|----------|--------------------|------------------------|-------------------------|
+| User     | `SN_FLOW_USER`     | `SN_DEV_FLOW_USER`     | `SN_PROD_FLOW_USER`     |
+| Password | `SN_FLOW_PASSWORD` | `SN_DEV_FLOW_PASSWORD` | `SN_PROD_FLOW_PASSWORD` |
+
+- **Key mode + flow identity** → processflow requests go out as basic auth with the
+  flow identity and **no** `x-sn-apikey` header; table/Dovetail requests keep the key.
+- **Basic mode, no flow identity** → unchanged: processflow uses the main `SN_USER`.
+- **Key mode, no flow identity** → a processflow call **throws before sending**, naming
+  `SN_FLOW_USER` / `SN_FLOW_PASSWORD` (it would only 401). A half-set pair also throws.
+- Programmatic: `createClient({ apiKey, flowUser, flowPassword })` — explicit config beats
+  env. A config that pins the main identity (apiKey or user/password — e.g. one resolved
+  from an `--env` file) takes the flow identity from the config only, never from
+  `process.env`, so a per-call retarget can't borrow another instance's flow creds.
+- `--env <file>` fully determines both identities: the `SN_FLOW_*` / `SN_DEV_FLOW_*` /
+  `SN_PROD_FLOW_*` keys are connection keys, replaced (or cleared) from the file.
+
+The flow password is never logged; errors name the variables, never their values.
+
 The dev/prod fallbacks match the names documented in the committed
 `Craftsman/.env.example`, so existing developer setups work out of the box.
 Bare instance names (e.g. `TenonWorkStudio`) get `.service-now.com` appended
@@ -266,7 +293,66 @@ npx dove-sn edit-action --sys-id <id> --scope <scope> --set-script ./script.js \
 npx dove-sn edit-action --sys-id <id> --scope <scope> --from-json ops.json             # dry-run
 npx dove-sn edit-action --sys-id <id> --scope <scope> --from-json ops.json \
   --apply --update-set <id>                                                            # publish + verify
+
+# Clone a Custom Action Type (every step + its step IO) into a scope and publish it
+npx dove-sn clone-action --from <source_sys_id> --name "Send REST (Spoke)" \
+  --scope x_cadso_email_spok --ops ops.json                                            # dry-run (plan)
+npx dove-sn clone-action --from <source_sys_id> --name "Send REST (Spoke)" \
+  --scope x_cadso_email_spok --ops ops.json --update-set <id> --confirm                # write + publish + verify
 ```
+
+### Cloning an action type (`clone-action` / `action_clone`)
+
+`clone-action` copies a Custom Action Type headlessly — **multi-step capable** — and
+publishes the copy:
+
+1. **Reads** (Table API only — `sn_build_agent` is never used) the parent
+   `sys_hub_action_type_definition`, its `sys_hub_action_input` / `sys_hub_action_output`
+   (`model_id` → parent), every `sys_hub_step_instance` (**`action`** → parent), and each
+   step's `sys_hub_step_ext_input` / `sys_hub_step_ext_output` (`model_id` → step).
+2. **Plans** fresh sys_ids for every record (old→new step map), the target scope,
+   `name` = `--name`, `internal_name` = `--internal-name` or the slug of the name
+   (lowercase, non-alphanumerics → `_`), `state = draft`, and strips system/snapshot
+   fields (`master_snapshot`, `latest_snapshot`, `sys_update_name`, audit fields, …).
+3. **Writes** the graph through Dovetail `createRecord`, pinned to `--update-set`, scope
+   set per record.
+4. **Publishes**: the SOURCE action's steps are fetched from
+   `/processflow/action/action_types/{source}/step_instances`, each step's `action` and
+   `sys_id` remapped onto the clone, `--ops` applied, then grafted onto the clone's model
+   and POSTed to `/snapshot` — no steps fixture needed.
+5. **Verifies** by reading the clone's steps back (script hash + step IO per step, plus
+   the step count). A mismatch exits `1`.
+
+`--scope` takes a scope **name** (resolved via `sys_scope`) or a 32-hex sys_id. The
+clone is **idempotent** on `(name, scope)`: an existing match returns `unchanged` and
+writes nothing. **Dry-run by default** — without `--confirm` it prints the plan (records
+per table, step summary, the effect of every op) and writes nothing; `--update-set` is
+required with `--confirm`. Exit `0` on success (incl. dry-run / unchanged), `1` on error.
+
+`--ops` takes the same step ops as `edit-action --from-json`, plus **`setStepInputs`** —
+set an **existing** step input's value (and its `display_value` when present), e.g. a
+REST step's HTTP method. An unknown input fails with the list of inputs on that step:
+
+```json
+{
+  "setStepInputs": [
+    { "step": "REST Step", "input": "http_method", "value": "post" }
+  ],
+  "patchStepScripts": [
+    { "step": "Parse Response", "patchScript": { "find": "v1", "replace": "v2" } }
+  ],
+  "addStepOutputs": [{ "step": "Parse Response", "name": "isRetryable", "type": "boolean" }],
+  "addStepInputs": [
+    { "step": "Handle Error", "name": "isRetryable", "type": "boolean",
+      "pillFrom": { "step": "Parse Response", "output": "isRetryable" } }
+  ]
+}
+```
+
+The MCP tool **`action_clone`** takes the same inputs — `from`, `name`, `scope`,
+`internalName`, `description`, `updateSetSysId`, `ops` (inline object), `confirm`,
+`dryRun` — with the same dry-run-unless-`confirm:true` gate. `setStepInputs` is also
+accepted by `edit-action` / `action_edit`.
 
 ### Editing an action type's steps (`--from-json`)
 
@@ -725,7 +811,9 @@ and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow D
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step
 scripts, step-level inputs/outputs, data-pill wiring — dry-run by default, and the
-publish is read back and verified), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
+publish is read back and verified), `action_clone` (clone an action type — every step
+and its step IO — into a scope and publish + verify it; dry-run by default),
+`flow_publish` (compile a flow/subflow snapshot), `flow_copy`
 (copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
 publish, grafting a template), `flow_test` (validate or run a flow), and
 `flow_edit` (patch a flow), plus `invoke_rest` (invoke an arbitrary authenticated

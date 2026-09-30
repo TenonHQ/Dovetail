@@ -1,28 +1,24 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-09-30T18:06:28.587Z",
+  "generated_at": "2026-09-30T18:11:44.240Z",
   "events": [
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.40",
+      "event_id": "dovetail-servicenow@0.0.41",
       "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.40",
-      "prev_version": "0.0.39",
-      "published_at": "2026-09-30T18:06:28.574Z",
+      "version": "0.0.41",
+      "prev_version": "0.0.40",
+      "published_at": "2026-09-30T18:11:44.228Z",
       "git": {
-        "sha": "e36a85dc73cbec978794c19cb71f5b9a3811ca4f",
-        "tag": "dovetail-servicenow@0.0.40"
+        "sha": "9b9ab2c74484de1a8192957732b9a86df8e19054",
+        "tag": "dovetail-servicenow@0.0.41"
       },
       "semver_bump": "patch",
       "commits": [
         {
-          "sha": "e36a85dc7",
-          "subject": "feat(servicenow): publish-app update-set + repo-ui targets (#279)",
-          "pr": 279
-        },
-        {
-          "sha": "a9abae9b8",
-          "subject": "chore(release): publish 2 packages [skip ci]"
+          "sha": "9b9ab2c74",
+          "subject": "feat(servicenow): processflow identity + dove-sn clone-action / action_clone (#280)",
+          "pr": 280
         }
       ],
       "exports_delta": null,
@@ -30,22 +26,17 @@
     },
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.37",
+      "event_id": "dovetail-mcp@0.0.38",
       "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.37",
-      "prev_version": "0.0.36",
-      "published_at": "2026-09-30T18:06:28.574Z",
+      "version": "0.0.38",
+      "prev_version": "0.0.37",
+      "published_at": "2026-09-30T18:11:44.228Z",
       "git": {
-        "sha": "e36a85dc73cbec978794c19cb71f5b9a3811ca4f",
-        "tag": "dovetail-mcp@0.0.37"
+        "sha": "9b9ab2c74484de1a8192957732b9a86df8e19054",
+        "tag": "dovetail-mcp@0.0.38"
       },
       "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "a9abae9b8",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
+      "commits": [],
       "exports_delta": null,
       "narrative": null
     },

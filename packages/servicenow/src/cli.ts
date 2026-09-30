@@ -50,6 +50,8 @@ import { copyFlow } from "./flowDesigner/copyFlow";
 import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
+import { cloneActionType } from "./flowDesigner/cloneActionType";
+import type { StepOps } from "./flowDesigner/stepOps";
 import { testFlow } from "./flowDesigner/testFlow";
 import { createTable, addColumn, addIndex, setColumn, setTable } from "./table";
 import type {
@@ -1047,6 +1049,199 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn clone-action:
+ *   --from <sys_id>            Required. Source sys_hub_action_type_definition sys_id.
+ *   --name <name>              Required. Display name of the clone (idempotency key with --scope).
+ *   --scope <name|sys_id>      Required. Target scope — a scope name (x_cadso_email_spok) or 32-hex sys_id.
+ *   --internal-name <name>     Optional. Default: slug of --name.
+ *   --description <text>       Optional.
+ *   --ops <path>               Optional. JSON StepOps applied to the cloned steps before publish:
+ *                              patchStepScripts / setStepInputs / addStepOutputs / addStepInputs.
+ *   --update-set <sys_id>      Required with --confirm. Every write + the publish land here.
+ *   --confirm                  Execute (write the graph, publish, verify). WITHOUT it: dry-run.
+ *   --dry-run                  Force a dry-run even with --confirm.
+ *   --json                     Emit the structured CloneActionTypeResult.
+ *
+ * Clones a Custom Action Type — parent, inputs, outputs, every step instance and
+ * its step-level ext inputs/outputs — into the target scope, then publishes it
+ * headlessly through the snapshot path (multi-step capable) and reads the steps
+ * back to verify. Idempotent on (name, scope). DRY-RUN BY DEFAULT.
+ *
+ * --ops shape:
+ *   {
+ *     "setStepInputs":    [{ "step": "REST Step", "input": "http_method", "value": "post" }],
+ *     "patchStepScripts": [{ "step": "Parse", "patchScript": { "find": "a", "replace": "b" } }],
+ *     "addStepOutputs":   [{ "step": "Parse", "name": "isRetryable", "type": "boolean" }],
+ *     "addStepInputs":    [{ "step": "Handle", "name": "isRetryable", "type": "boolean",
+ *                            "pillFrom": { "step": "Parse", "output": "isRetryable" } }]
+ *   }
+ * `step` is a step cid or label; `scriptFile` (resolved relative to the ops file)
+ * is sugar for `setScript` in patchStepScripts.
+ */
+var CLONE_OPS_KEYS = ["patchStepScripts", "setStepInputs", "addStepOutputs", "addStepInputs"];
+
+async function runCloneAction(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("clone-action", bare, [
+    "from",
+    "name",
+    "scope",
+    "internal-name",
+    "description",
+    "ops",
+    "update-set",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var from = flags.from;
+  var name = flags.name;
+  var scope = flags.scope;
+  if (!from || !name || !scope) {
+    process.stderr.write(
+      "clone-action: --from <sys_id>, --name <name> and --scope <scope name|sys_id> are required\n",
+    );
+    return 1;
+  }
+  var confirm = flags.confirm === "true";
+  var dryRun = flags["dry-run"] === "true";
+  var updateSet = flags["update-set"] || flags.updateSetSysId;
+  if (confirm && !dryRun && !updateSet) {
+    process.stderr.write(
+      "clone-action: --update-set <sys_id> is required with --confirm\n",
+    );
+    return 1;
+  }
+
+  var stepOps: Record<string, unknown> | undefined;
+  if (flags.ops) {
+    var parsedOps: unknown = JSON.parse(fs.readFileSync(flags.ops, "utf8"));
+    if (!parsedOps || typeof parsedOps !== "object" || Array.isArray(parsedOps)) {
+      process.stderr.write("clone-action: --ops must contain a StepOps object\n");
+      return 1;
+    }
+    var opsObj = parsedOps as Record<string, unknown>;
+    var opsKeys = Object.keys(opsObj);
+    for (var k = 0; k < opsKeys.length; k += 1) {
+      if (CLONE_OPS_KEYS.indexOf(opsKeys[k]) === -1) {
+        process.stderr.write(
+          "clone-action: unknown --ops key '" +
+            opsKeys[k] +
+            "' (allowed: " +
+            CLONE_OPS_KEYS.join(", ") +
+            ")\n",
+        );
+        return 1;
+      }
+    }
+    resolveScriptFiles(opsObj, flags.ops);
+    stepOps = opsObj;
+  }
+
+  var result = await cloneActionType({
+    client: createClient({}),
+    sourceSysId: from,
+    newName: name,
+    internalName: flags["internal-name"],
+    newScope: scope,
+    updateSetSysId: updateSet,
+    description: flags.description,
+    stepOps: stepOps as StepOps | undefined,
+    confirm: confirm,
+    dryRun: dryRun,
+  });
+
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result.verify && !result.verify.ok ? 1 : 0;
+  }
+
+  process.stdout.write(
+    "[" + result.action + "] " + name + " (" + result.internalName + ") -> " + result.sysId + "\n",
+  );
+  if (result.action === "unchanged") {
+    process.stdout.write(
+      "  an action with this name already exists in the target scope — nothing written\n",
+    );
+    return 0;
+  }
+  if (result.plan) {
+    process.stdout.write(
+      "  scope: " +
+        result.plan.scope.name +
+        " (" +
+        result.plan.scope.sysId +
+        ")  source scope: " +
+        result.plan.sourceScopeSysId +
+        "\n  records: " +
+        result.plan.total +
+        "\n",
+    );
+    var tables = Object.keys(result.plan.counts);
+    for (var t = 0; t < tables.length; t += 1) {
+      process.stdout.write("    " + tables[t] + ": " + result.plan.counts[tables[t]] + "\n");
+    }
+  }
+  if (result.steps) {
+    process.stdout.write("\n--- steps (as published) ---\n");
+    for (var si = 0; si < result.steps.after.length; si += 1) {
+      var step = result.steps.after[si];
+      process.stdout.write(
+        "  " +
+          step.label +
+          " (" +
+          step.cid +
+          ")" +
+          (step.scriptChars !== null ? " script " + step.scriptChars + " chars" : "") +
+          (step.extendedInputs.length ? " in:" + step.extendedInputs.length : "") +
+          (step.extendedOutputs.length ? " out:" + step.extendedOutputs.length : "") +
+          "\n",
+      );
+    }
+    for (var ci = 0; ci < result.steps.changes.length; ci += 1) {
+      process.stdout.write("  + " + result.steps.changes[ci] + "\n");
+    }
+    for (var wi = 0; wi < result.steps.warnings.length; wi += 1) {
+      process.stdout.write("  ! " + result.steps.warnings[wi] + "\n");
+    }
+  }
+  if (result.action === "planned") {
+    process.stdout.write(
+      "\nDRY RUN — nothing written. Re-run with --confirm --update-set <sys_id> to clone + publish.\n",
+    );
+    return 0;
+  }
+  process.stdout.write(
+    "\nwritten: " +
+      result.written.length +
+      " record(s)" +
+      (result.publish
+        ? "; published (HTTP " +
+          result.publish.httpStatus +
+          (result.publish.snapshotSysId ? ", snapshot " + result.publish.snapshotSysId : "") +
+          ")"
+        : "") +
+      "\n",
+  );
+  if (result.verify) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n");
+    process.stdout.write("  " + (result.verify.ok ? "OK" : "FAILED") + "\n");
+    for (var vi = 0; vi < result.verify.notes.length; vi += 1) {
+      process.stdout.write(
+        "  " + (result.verify.ok ? "+ " : "! ") + result.verify.notes[vi] + "\n",
+      );
+    }
+    if (!result.verify.ok) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -1161,6 +1356,15 @@ function printHelp(): void {
       "                                              (per-step scripts + step IO + data-pill wiring)\n" +
       '                      | --patch-script "<find>::<replace>" | --set-script <path> | --merge-outputs <path>\n' +
       "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
+      "  clone-action       Clone a Custom Action Type (all steps + step IO) into a scope and publish it\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--from <sys_id> --name <n> --scope <scope name|sys_id>\n" +
+      "                      [--internal-name <n>] [--description <d>]\n" +
+      "                      [--ops <ops.json>]  ops: setStepInputs / patchStepScripts /\n" +
+      "                                          addStepOutputs / addStepInputs\n" +
+      "                      [--update-set <sys_id> (required with --confirm)] [--confirm] [--dry-run] [--json])\n" +
+      "                     Idempotent on (name, scope). Publishes via the snapshot path and\n" +
+      "                     reads the steps back to verify.\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
       "  publish-app        Publish a scoped app to the ServiceNow Store, the company application\n" +
@@ -1197,7 +1401,10 @@ function printHelp(): void {
       "                     or the DOVETAIL_ENV_FILE env var). A bare name like 'prod'\n" +
       "                     resolves to .env.prod in the cwd. The file's SN_* connection\n" +
       "                     vars replace any already exported; a missing or incomplete\n" +
-      "                     file is an error (no fallback). Default: .env in the cwd.\n",
+      "                     file is an error (no fallback). Default: .env in the cwd.\n" +
+      "  Flow Designer auth /api/now/processflow/* can't carry an API access policy, so\n" +
+      "                     under SN_API_KEY those calls use a dedicated basic-auth identity:\n" +
+      "                     SN_FLOW_USER / SN_FLOW_PASSWORD (or SN_DEV_FLOW_* / SN_PROD_FLOW_*).\n",
   );
 }
 
@@ -2446,6 +2653,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "edit-action") {
     return await runEditAction(parsed.flags);
+  }
+  if (parsed.command === "clone-action") {
+    return await runCloneAction(parsed.flags, parsed.bare);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);
