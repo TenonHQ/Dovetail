@@ -1899,9 +1899,32 @@ async function resolveAliasDisplays(client: ServiceNowClient, ids: Array<string>
   return out;
 }
 
-function compareForVerify(expected: ActionView, actual: ActionView): DefineActionVerify {
+// Variable attributes the server assigns a default to on save when the spec left
+// them unset (live-observed 2026-09-30: a new boolean input came back with
+// maxLength 40). A blank expected value for one of these is "unspecified", not a
+// mismatch; an explicitly specified value is still verified.
+var SERVER_DEFAULTED_FIELDS = ["maxLength"];
+
+function dropServerDefaults<T extends { changes: Array<{ field: string; before: string; after: string }> }>(
+  changed: Array<T>,
+): Array<T> {
+  return changed
+    .map(function (c) {
+      var kept = c.changes.filter(function (f) {
+        return !(SERVER_DEFAULTED_FIELDS.indexOf(f.field) !== -1 && f.before === "");
+      });
+      return Object.assign({}, c, { changes: kept });
+    })
+    .filter(function (c) {
+      return c.changes.length > 0;
+    });
+}
+
+export function compareForVerify(expected: ActionView, actual: ActionView): DefineActionVerify {
   var notes: Array<string> = [];
   var d = diffViews(expected, actual, {});
+  d.inputs.changed = dropServerDefaults(d.inputs.changed);
+  d.outputs.changed = dropServerDefaults(d.outputs.changed);
   // Expected -> actual: any difference means the save did not land as planned.
   d.action.forEach(function (c) {
     notes.push("action." + c.field + " is '" + c.after + "', expected '" + c.before + "'");
@@ -1937,10 +1960,13 @@ function compareForVerify(expected: ActionView, actual: ActionView): DefineActio
   d.steps.changed.forEach(function (s) {
     notes.push("step '" + s.label + "': " + s.changes.join("; "));
   });
-  if (notes.length === 0) {
+  // ok is derived from the filtered notes, not d.empty: server-defaulted fields
+  // were dropped above and must not fail the verify.
+  var ok = notes.length === 0;
+  if (ok) {
     notes.push("read-back matches the planned definition");
   }
-  return { ok: d.empty, notes: notes };
+  return { ok: ok, notes: notes };
 }
 
 export async function defineActionType(params: DefineActionTypeParams): Promise<DefineActionTypeResult> {
