@@ -5,7 +5,12 @@
  * default, idempotency, and publish + verify through the snapshot path.
  */
 
-import { cloneActionType, remapClonedSteps, slugInternalName } from "../src/flowDesigner/cloneActionType";
+import {
+  cloneActionType,
+  remapClonedSteps,
+  slugInternalName,
+  verifyOutputMappings,
+} from "../src/flowDesigner/cloneActionType";
 import {
   makeClient,
   SRC,
@@ -17,6 +22,15 @@ import {
   S2,
   EXT_IN_1,
   EXT_OUT_2,
+  PILL_STATUS_CODE,
+  ACTION_STATUS_JSON,
+  MAP_1,
+  MAP_2,
+  MAP_3,
+  DOC_IN,
+  DOC_OUT,
+  EXISTING_TARGET_DOC,
+  varTable,
 } from "./cloneActionFixture";
 
 function valueOf(v: unknown): unknown {
@@ -90,8 +104,8 @@ describe("cloneActionType", function () {
 
     expect(res.action).toBe("created");
     expect(res.internalName).toBe("send_rest_copy");
-    // parent + 1 in + 1 out + 2 steps + 1 ext in + 1 ext out
-    expect(m.cap.creates).toHaveLength(7);
+    // parent + 1 in + 1 out + 2 steps + 1 ext in + 1 ext out + 3 output mappings + 2 labels
+    expect(m.cap.creates).toHaveLength(12);
 
     var parent = m.cap.creates[0];
     expect(parent.table).toBe("sys_hub_action_type_definition");
@@ -151,6 +165,8 @@ describe("cloneActionType", function () {
       sys_hub_step_instance: 2,
       sys_hub_step_ext_input: 1,
       sys_hub_step_ext_output: 1,
+      sys_element_mapping: 3,
+      sys_documentation: 2,
     });
   });
 
@@ -237,7 +253,7 @@ describe("cloneActionType", function () {
     expect(m.cap.posts).toHaveLength(0);
     expect(m.cap.updateSets).toHaveLength(0);
     expect(res.publish).toBeUndefined();
-    expect(res.plan && res.plan.total).toBe(7);
+    expect(res.plan && res.plan.total).toBe(12);
     expect(res.plan && res.plan.scope).toEqual({ sysId: TARGET_SCOPE, name: TARGET_SCOPE_NAME });
     expect(res.steps && res.steps.before).toHaveLength(2);
     expect(res.steps && res.steps.changes.join(" ")).toMatch(/http_method' 'get' -> 'put'/);
@@ -321,8 +337,210 @@ describe("cloneActionType", function () {
       updateSetSysId: US, confirm: true, publish: false,
     });
     expect(res.action).toBe("created");
-    expect(m.cap.creates).toHaveLength(7);
+    expect(m.cap.creates).toHaveLength(12);
     expect(m.cap.posts).toHaveLength(0);
     expect(res.publish).toBeUndefined();
+  });
+});
+
+describe("cloneActionType — output mappings, labels, var__m names", function () {
+  function byTable(creates: Array<{ table: string; fields: Record<string, unknown> }>, t: string) {
+    return creates.filter(function (c) { return c.table === t; });
+  }
+
+  it("clones every sys_element_mapping row onto the clone's var__m output table, field + pill unchanged", async function () {
+    var m = makeClient();
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Mapped", newScope: TARGET_SCOPE_NAME,
+      updateSetSysId: US, confirm: true,
+    });
+    expect(m.cap.tableQueries).toContainEqual({
+      table: "sys_element_mapping",
+      query: "id=" + SRC + "^tableSTARTSWITHvar__m_sys_hub_action_output_",
+    });
+    var maps = byTable(m.cap.creates, "sys_element_mapping");
+    expect(maps).toHaveLength(3);
+    var newTable = varTable("sys_hub_action_output", res.sysId);
+    var byField: Record<string, Record<string, unknown>> = {};
+    maps.forEach(function (c) {
+      expect(c.fields.id).toBe(res.sysId);
+      expect(c.fields.table).toBe(newTable);
+      expect(String(c.fields.sys_id)).toMatch(/^[0-9a-f]{32}$/);
+      expect([MAP_1, MAP_2, MAP_3]).not.toContain(c.fields.sys_id);
+      expect(c.fields.sys_mod_count).toBeUndefined();
+      byField[String(c.fields.field)] = c.fields;
+    });
+    expect(byField.status_code.value).toBe(PILL_STATUS_CODE);
+    expect(byField.__action_status__.value).toBe(ACTION_STATUS_JSON);
+    expect(JSON.parse(String(byField.__action_status__.value)).code).toBe(PILL_STATUS_CODE);
+    expect(byField.__dont_treat_as_error__.value).toBe("false");
+
+    // Scoped + pinned like every other write, and written after the parent and its output row.
+    var mapCreates = m.cap.creates.filter(function (c) { return c.table === "sys_element_mapping"; });
+    mapCreates.forEach(function (c) {
+      expect(c.scope).toBe(TARGET_SCOPE_NAME);
+      expect(c.update_set_sys_id).toBe(US);
+    });
+    var idxParent = m.cap.creates.findIndex(function (c) { return c.table === "sys_hub_action_type_definition"; });
+    var idxOutput = m.cap.creates.findIndex(function (c) { return c.table === "sys_hub_action_output"; });
+    var idxStatusMap = m.cap.creates.findIndex(function (c) {
+      return c.table === "sys_element_mapping" && c.fields.field === "status_code";
+    });
+    expect(idxParent).toBeLessThan(idxStatusMap);
+    expect(idxOutput).toBeLessThan(idxStatusMap);
+    var statusOp = res.plan ? res.plan.ops.filter(function (o) {
+      return o.table === "sys_element_mapping" && o.fields.field === "status_code";
+    })[0] : undefined;
+    expect(statusOp && statusOp.dependsOn).toEqual(["parent", "output:0"]);
+  });
+
+  it("rewrites `name` on cloned IO rows to the clone's var__m tables (never the source's)", async function () {
+    var m = makeClient();
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Named IO", newScope: TARGET_SCOPE_NAME,
+      updateSetSysId: US, confirm: true,
+    });
+    var stepMap = res.plan ? res.plan.stepIdMap : {};
+    var input = byTable(m.cap.creates, "sys_hub_action_input")[0];
+    var output = byTable(m.cap.creates, "sys_hub_action_output")[0];
+    var extOut = byTable(m.cap.creates, "sys_hub_step_ext_output")[0];
+    expect(input.fields.name).toBe(varTable("sys_hub_action_input", res.sysId));
+    expect(output.fields.name).toBe(varTable("sys_hub_action_output", res.sysId));
+    expect(extOut.fields.name).toBe(varTable("sys_hub_step_ext_output", stepMap[S2]));
+    // Labels on the dictionary rows themselves carry over as-is.
+    expect(input.fields.label).toBe("Endpoint");
+    expect(output.fields.label).toBe("Status Code");
+    m.cap.creates.forEach(function (c) {
+      expect(String(c.fields.name || "")).not.toContain(SRC);
+      expect(String(c.fields.table || "")).not.toContain(SRC);
+    });
+  });
+
+  it("clones IO label rows (sys_documentation) retargeted to the new var__m tables", async function () {
+    var m = makeClient();
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Labelled", newScope: TARGET_SCOPE_NAME,
+      updateSetSysId: US, confirm: true,
+    });
+    expect(m.cap.tableQueries).toContainEqual({
+      table: "sys_documentation", query: "name=" + varTable("sys_hub_action_input", SRC),
+    });
+    expect(m.cap.tableQueries).toContainEqual({
+      table: "sys_documentation", query: "name=" + varTable("sys_hub_action_output", SRC),
+    });
+    var docs = byTable(m.cap.creates, "sys_documentation");
+    expect(docs).toHaveLength(2);
+    var inDoc = docs.filter(function (d) { return d.fields.element === "endpoint"; })[0];
+    var outDoc = docs.filter(function (d) { return d.fields.element === "status_code"; })[0];
+    expect(inDoc.fields.name).toBe(varTable("sys_hub_action_input", res.sysId));
+    expect(inDoc.fields.label).toBe("Endpoint");
+    expect(inDoc.fields.language).toBe("en");
+    expect(outDoc.fields.name).toBe(varTable("sys_hub_action_output", res.sysId));
+    expect(outDoc.fields.label).toBe("Status Code");
+    expect(outDoc.fields.plural).toBe("Status Codes");
+    expect(outDoc.fields.sys_scope).toBe(TARGET_SCOPE);
+    [inDoc, outDoc].forEach(function (d) {
+      expect([DOC_IN, DOC_OUT]).not.toContain(d.fields.sys_id);
+    });
+    var docCreates = m.cap.creates.filter(function (c) { return c.table === "sys_documentation"; });
+    docCreates.forEach(function (c) {
+      expect(c.scope).toBe(TARGET_SCOPE_NAME);
+      expect(c.update_set_sys_id).toBe(US);
+    });
+    // Labels are written after every IO row.
+    var lastIo = Math.max(
+      m.cap.creates.findIndex(function (c) { return c.table === "sys_hub_action_input"; }),
+      m.cap.creates.findIndex(function (c) { return c.table === "sys_hub_action_output"; }),
+    );
+    expect(m.cap.creates.indexOf(docCreates[0])).toBeGreaterThan(lastIo);
+    expect(res.plan && res.plan.labelOpIds.sort()).toEqual(["label:input:0", "label:output:0"]);
+    var labelResults = res.written.filter(function (w) { return w.table === "sys_documentation"; });
+    expect(labelResults.map(function (w) { return w.action; })).toEqual(["created", "created"]);
+  });
+
+  it("updates the target label row instead of duplicating it when the platform already made one", async function () {
+    var m = makeClient({ existingTargetLabel: true });
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Upsert", newScope: TARGET_SCOPE_NAME,
+      updateSetSysId: US, confirm: true,
+    });
+    var docCreates = byTable(m.cap.creates, "sys_documentation");
+    expect(docCreates).toHaveLength(1);
+    expect(docCreates[0].fields.element).toBe("status_code");
+    expect(m.cap.pushes).toHaveLength(1);
+    expect(m.cap.pushes[0].table).toBe("sys_documentation");
+    expect(m.cap.pushes[0].record_sys_id).toBe(EXISTING_TARGET_DOC);
+    expect(m.cap.pushes[0].update_set_sys_id).toBe(US);
+    expect(m.cap.pushes[0].fields.label).toBe("Endpoint");
+    expect(m.cap.pushes[0].fields.name).toBe(varTable("sys_hub_action_input", res.sysId));
+    expect(m.cap.pushes[0].fields.sys_id).toBeUndefined();
+    var updated = res.written.filter(function (w) { return w.action === "updated"; });
+    expect(updated).toHaveLength(1);
+    expect(updated[0].sysId).toBe(EXISTING_TARGET_DOC);
+  });
+
+  it("dry-run plans the mappings + labels but makes zero writes", async function () {
+    var m = makeClient();
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Dry Map", newScope: TARGET_SCOPE_NAME,
+    });
+    expect(res.action).toBe("planned");
+    expect(m.cap.creates).toHaveLength(0);
+    expect(m.cap.pushes).toHaveLength(0);
+    expect(m.cap.posts).toHaveLength(0);
+    expect(m.cap.updateSets).toHaveLength(0);
+    expect(res.plan && res.plan.counts.sys_element_mapping).toBe(3);
+    expect(res.plan && res.plan.counts.sys_documentation).toBe(2);
+    var planned = res.plan ? res.plan.ops.filter(function (o) { return o.table === "sys_element_mapping"; }) : [];
+    expect(planned.map(function (o) { return o.fields.field; }).sort()).toEqual(
+      ["__action_status__", "__dont_treat_as_error__", "status_code"],
+    );
+    planned.forEach(function (o) {
+      expect(o.fields.table).toBe(varTable("sys_hub_action_output", res.sysId));
+      expect(o.fields.id).toBe(res.sysId);
+      expect(o.scope).toBe(TARGET_SCOPE_NAME);
+    });
+  });
+
+  it("verify passes when every source output mapping is read back on the clone", async function () {
+    var m = makeClient();
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Verified", newScope: TARGET_SCOPE_NAME,
+      updateSetSysId: US, confirm: true,
+    });
+    expect(m.cap.tableQueries).toContainEqual({
+      table: "sys_element_mapping",
+      query: "id=" + res.sysId + "^tableSTARTSWITHvar__m_sys_hub_action_output_",
+    });
+    expect(res.verify && res.verify.ok).toBe(true);
+    expect(res.verify && res.verify.notes.join(" ")).toMatch(/all 3 output mapping\(s\) present/);
+  });
+
+  it("verify fails when a source output mapping is missing on the clone", async function () {
+    var m = makeClient({ dropMappingOnReadback: "__action_status__" });
+    var res = await cloneActionType({
+      client: m.client, sourceSysId: SRC, newName: "Lost Map", newScope: TARGET_SCOPE_NAME,
+      updateSetSysId: US, confirm: true,
+    });
+    expect(res.action).toBe("created");
+    expect(res.verify && res.verify.ok).toBe(false);
+    expect(res.verify && res.verify.notes.join(" ")).toMatch(/1 output mapping\(s\) missing.*__action_status__/);
+  });
+
+  it("verifyOutputMappings: missing fails, a differing value is noted only", function () {
+    var src = [
+      { field: "status_code", value: PILL_STATUS_CODE },
+      { field: "__action_status__", value: ACTION_STATUS_JSON },
+    ];
+    var ok = verifyOutputMappings(src, [
+      { field: "status_code", value: PILL_STATUS_CODE },
+      { field: "__action_status__", value: "{}" },
+    ]);
+    expect(ok.ok).toBe(true);
+    expect(ok.notes.join(" ")).toMatch(/'__action_status__' differs/);
+    var missing = verifyOutputMappings(src, [{ field: "status_code", value: PILL_STATUS_CODE }]);
+    expect(missing.ok).toBe(false);
+    expect(verifyOutputMappings(src, []).ok).toBe(false);
+    expect(verifyOutputMappings([], []).ok).toBe(true);
   });
 });
