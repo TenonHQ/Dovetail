@@ -126,6 +126,13 @@ export var stepInputPatchSchema = z.object({
 /** A step is addressed by its cid or its label. */
 var stepRefSchema = z.string().min(1);
 
+/** Set an EXISTING step input's value, e.g. a REST step's http_method. */
+var setStepInputSchema = z.object({
+  step: stepRefSchema,
+  input: z.string().min(1),
+  value: z.string(),
+});
+
 export var editActionSchema = z.object({
   sysId: z.string().min(1),
   scopeSysId: z.string().min(1),
@@ -145,6 +152,7 @@ export var editActionSchema = z.object({
         }),
       )
       .optional(),
+    setStepInputs: z.array(setStepInputSchema).optional(),
     addStepOutputs: z
       .array(
         z.object({
@@ -182,6 +190,152 @@ export var editActionSchema = z.object({
   /** Default false — dry-run. Only true republishes. */
   apply: z.boolean().optional(),
   updateSetSysId: z.string().optional(),
+});
+
+/**
+ * action_clone — clone a Custom Action Type into a scope and publish it.
+ * Mirrors the dove-sn clone-action flags; ops is the inline StepOps object.
+ */
+export var cloneActionSchema = z.object({
+  /** Source sys_hub_action_type_definition sys_id. */
+  from: z.string().regex(/^[0-9a-f]{32}$/, "from must be a 32-char sys_id"),
+  name: z.string().min(1),
+  /** Target scope name (x_cadso_email_spok) or 32-hex sys_id. */
+  scope: z.string().min(1),
+  internalName: z.string().min(1).optional(),
+  description: z.string().optional(),
+  /** Required when confirm is true. */
+  updateSetSysId: z.string().optional(),
+  ops: z
+    .object({
+      patchStepScripts: editActionSchema.shape.ops.shape.patchStepScripts,
+      setStepInputs: z.array(setStepInputSchema).optional(),
+      addStepOutputs: editActionSchema.shape.ops.shape.addStepOutputs,
+      addStepInputs: editActionSchema.shape.ops.shape.addStepInputs,
+    })
+    .strict()
+    .optional(),
+  /** Default false — dry-run. Only true writes + publishes. */
+  confirm: z.boolean().optional(),
+  /** Forces a dry-run even with confirm. */
+  dryRun: z.boolean().optional(),
+});
+
+/**
+ * action_define — define a Custom Action Type's inputs, outputs and steps the way
+ * the Designer's Save does. Mirrors dove-sn define-action; `spec` is the
+ * DefineActionSpec (strict — unknown keys are rejected here and again by the
+ * planner, which also refuses bad names and dangling / unknown pill references).
+ */
+var defineVarType = z.enum(["string", "choice", "boolean", "integer"]);
+var defineStepValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.object({ name: z.string().min(1), value: z.string() }).strict()),
+  z.object({ value: z.string(), display: z.string().optional() }).strict(),
+]);
+export var defineActionSpecSchema = z
+  .object({
+    action: z
+      .object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        access: z.enum(["public", "package_private"]).optional(),
+      })
+      .strict()
+      .optional(),
+    inputs: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            label: z.string().optional(),
+            type: defineVarType.optional(),
+            mandatory: z.boolean().optional(),
+            choices: z.array(z.object({ value: z.string().min(1), label: z.string().optional() }).strict()).optional(),
+            default: z.string().optional(),
+            order: z.number().optional(),
+            maxLength: z.number().positive().optional(),
+            remove: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    outputs: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            label: z.string().optional(),
+            type: defineVarType.optional(),
+            value: z.string().optional(),
+            remove: z.boolean().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    steps: z
+      .array(
+        z
+          .object({
+            ref: z.string().min(1),
+            type: z.enum(["script", "rest"]),
+            label: z.string().min(1).optional(),
+            match: z.string().min(1).optional(),
+            remove: z.boolean().optional(),
+            errorHandling: z.enum(["EVAL_ERRORS", "NEXT_STEP"]).optional(),
+            script: z.string().optional(),
+            inputs: z
+              .record(
+                z.union([
+                  z.string(),
+                  z
+                    .object({
+                      value: z.string().optional(),
+                      type: defineVarType.optional(),
+                      label: z.string().optional(),
+                      mandatory: z.boolean().optional(),
+                      remove: z.boolean().optional(),
+                    })
+                    .strict(),
+                ]),
+              )
+              .optional(),
+            outputs: z
+              .array(
+                z
+                  .object({
+                    name: z.string().min(1),
+                    label: z.string().optional(),
+                    type: defineVarType.optional(),
+                    remove: z.boolean().optional(),
+                  })
+                  .strict(),
+              )
+              .optional(),
+            values: z.record(defineStepValue).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict();
+
+export var defineActionSchema = z.object({
+  /** sys_hub_action_type_definition sys_id (the shell must already exist). */
+  sysId: z.string().regex(/^[0-9a-f]{32}$/, "sysId must be a 32-char sys_id"),
+  /** The action's scope — name (x_cadso_email_spok) or 32-hex sys_id. */
+  scope: z.string().min(1),
+  spec: defineActionSpecSchema,
+  /** Pin the REST session to this update set before the save/publish. */
+  updateSetSysId: z.string().optional(),
+  /** With confirm: also publish (snapshot) after the save. */
+  publish: z.boolean().optional(),
+  /** Default false — dry-run. Only true writes. */
+  confirm: z.boolean().optional(),
+  /** Forces a dry-run even with confirm. */
+  dryRun: z.boolean().optional(),
 });
 
 export var editFlowSchema = z.object({
@@ -263,6 +417,33 @@ export var addIndexSchema = z.object({
   scope: z.string().optional(),
   updateSetSysId: z.string().min(1).optional(),
   dryRun: z.boolean().optional(),
+  debug: z.boolean().optional(),
+});
+
+// index_list is read-only: a table name and nothing else. `v_db_index` keys on the table
+// NAME, not a sys_id, so no sys_id form is offered — accepting one would mean resolving it
+// and then listing a table the caller never named.
+export var listIndexesSchema = z.object({
+  table: z.string().min(1),
+});
+
+// index_create takes an ordered column LIST — order is part of an index's identity, so it
+// is preserved verbatim and never sorted. `name` is accepted ONLY so that asking for one
+// earns the explanation that the platform's index-creator form has no name input (the
+// same contract set-column uses for internalType/element); createIndex refuses it.
+// confirm is the write gate: without confirm:true the tool is a pure dry-run that sends
+// nothing and reads nothing. There is deliberately NO updateSetSysId — a database index is
+// physical and is not captured in an update set.
+export var createIndexSchema = z.object({
+  table: z.string().min(1),
+  columns: z.array(z.string().min(1)).min(1),
+  unique: z.boolean().optional(),
+  name: z.string().optional(),
+  accessMethod: z.string().min(1).optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+  pollAttempts: z.number().int().positive().optional(),
+  pollIntervalMs: z.number().int().positive().optional(),
   debug: z.boolean().optional(),
 });
 
@@ -375,7 +556,15 @@ export var publishAppSchema = z.object({
   app: z.string().min(1),
   version: z.string().min(1),
   devNotes: z.string().optional(),
-  target: z.union([z.literal("store"), z.literal("repo")]),
+  target: z.union([
+    z.literal("store"),
+    z.literal("repo"),
+    z.literal("repo-ui"),
+    z.literal("update-set"),
+  ]),
+  updateSetName: z.string().optional(),
+  updateSetDescription: z.string().optional(),
+  includeData: z.boolean().optional(),
   confirm: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   timeoutMs: z.number().int().positive().optional(),

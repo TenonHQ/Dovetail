@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.45",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.45",
+  "prev_version": "0.0.44",
+  "published_at": "2026-09-30T21:15:07.753Z",
+  "git": {
+    "sha": "5ed116898825fdbe390d5f9e806ae797d34150ae",
+    "tag": "dovetail-servicenow@0.0.45"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "5ed116898",
+      "subject": "fix(servicenow): clone-action copies output mappings and IO labels (#284)",
+      "pr": 284
+    },
+    {
+      "sha": "2fd584e31",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

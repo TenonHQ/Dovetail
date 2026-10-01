@@ -50,13 +50,26 @@ import { copyFlow } from "./flowDesigner/copyFlow";
 import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
+import { cloneActionType } from "./flowDesigner/cloneActionType";
+import { defineActionType } from "./flowDesigner/defineActionType";
+import type { DefineActionSpec, DefineActionTypeResult } from "./flowDesigner/defineActionType";
+import type { StepOps } from "./flowDesigner/stepOps";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, addIndex, setColumn, setTable } from "./table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  listIndexes,
+  createIndex,
+  setColumn,
+  setTable,
+} from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
   AddIndexParams,
+  CreateIndexParams,
   SetColumnParams,
   ColumnAttributes,
   SetTableParams,
@@ -68,7 +81,7 @@ import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
 import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
-import { publishApp } from "./publishApp";
+import { publishApp, parsePublishTargets, PUBLISH_TARGETS } from "./publishApp";
 import type {
   PublishAppParams,
   PublishAppResult,
@@ -1047,6 +1060,358 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn clone-action:
+ *   --from <sys_id>            Required. Source sys_hub_action_type_definition sys_id.
+ *   --name <name>              Required. Display name of the clone (idempotency key with --scope).
+ *   --scope <name|sys_id>      Required. Target scope — a scope name (x_cadso_email_spok) or 32-hex sys_id.
+ *   --internal-name <name>     Optional. Default: slug of --name.
+ *   --description <text>       Optional.
+ *   --ops <path>               Optional. JSON StepOps applied to the cloned steps before publish:
+ *                              patchStepScripts / setStepInputs / addStepOutputs / addStepInputs.
+ *   --update-set <sys_id>      Required with --confirm. Every write + the publish land here.
+ *   --confirm                  Execute (write the graph, publish, verify). WITHOUT it: dry-run.
+ *   --dry-run                  Force a dry-run even with --confirm.
+ *   --json                     Emit the structured CloneActionTypeResult.
+ *
+ * Clones a Custom Action Type — parent, inputs, outputs, every step instance and
+ * its step-level ext inputs/outputs — into the target scope, then publishes it
+ * headlessly through the snapshot path (multi-step capable) and reads the steps
+ * back to verify. Idempotent on (name, scope). DRY-RUN BY DEFAULT.
+ *
+ * --ops shape:
+ *   {
+ *     "setStepInputs":    [{ "step": "REST Step", "input": "http_method", "value": "post" }],
+ *     "patchStepScripts": [{ "step": "Parse", "patchScript": { "find": "a", "replace": "b" } }],
+ *     "addStepOutputs":   [{ "step": "Parse", "name": "isRetryable", "type": "boolean" }],
+ *     "addStepInputs":    [{ "step": "Handle", "name": "isRetryable", "type": "boolean",
+ *                            "pillFrom": { "step": "Parse", "output": "isRetryable" } }]
+ *   }
+ * `step` is a step cid or label; `scriptFile` (resolved relative to the ops file)
+ * is sugar for `setScript` in patchStepScripts.
+ */
+var CLONE_OPS_KEYS = ["patchStepScripts", "setStepInputs", "addStepOutputs", "addStepInputs"];
+
+async function runCloneAction(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("clone-action", bare, [
+    "from",
+    "name",
+    "scope",
+    "internal-name",
+    "description",
+    "ops",
+    "update-set",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var from = flags.from;
+  var name = flags.name;
+  var scope = flags.scope;
+  if (!from || !name || !scope) {
+    process.stderr.write(
+      "clone-action: --from <sys_id>, --name <name> and --scope <scope name|sys_id> are required\n",
+    );
+    return 1;
+  }
+  var confirm = flags.confirm === "true";
+  var dryRun = flags["dry-run"] === "true";
+  var updateSet = flags["update-set"] || flags.updateSetSysId;
+  if (confirm && !dryRun && !updateSet) {
+    process.stderr.write(
+      "clone-action: --update-set <sys_id> is required with --confirm\n",
+    );
+    return 1;
+  }
+
+  var stepOps: Record<string, unknown> | undefined;
+  if (flags.ops) {
+    var parsedOps: unknown = JSON.parse(fs.readFileSync(flags.ops, "utf8"));
+    if (!parsedOps || typeof parsedOps !== "object" || Array.isArray(parsedOps)) {
+      process.stderr.write("clone-action: --ops must contain a StepOps object\n");
+      return 1;
+    }
+    var opsObj = parsedOps as Record<string, unknown>;
+    var opsKeys = Object.keys(opsObj);
+    for (var k = 0; k < opsKeys.length; k += 1) {
+      if (CLONE_OPS_KEYS.indexOf(opsKeys[k]) === -1) {
+        process.stderr.write(
+          "clone-action: unknown --ops key '" +
+            opsKeys[k] +
+            "' (allowed: " +
+            CLONE_OPS_KEYS.join(", ") +
+            ")\n",
+        );
+        return 1;
+      }
+    }
+    resolveScriptFiles(opsObj, flags.ops);
+    stepOps = opsObj;
+  }
+
+  var result = await cloneActionType({
+    client: createClient({}),
+    sourceSysId: from,
+    newName: name,
+    internalName: flags["internal-name"],
+    newScope: scope,
+    updateSetSysId: updateSet,
+    description: flags.description,
+    stepOps: stepOps as StepOps | undefined,
+    confirm: confirm,
+    dryRun: dryRun,
+  });
+
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result.verify && !result.verify.ok ? 1 : 0;
+  }
+
+  process.stdout.write(
+    "[" + result.action + "] " + name + " (" + result.internalName + ") -> " + result.sysId + "\n",
+  );
+  if (result.action === "unchanged") {
+    process.stdout.write(
+      "  an action with this name already exists in the target scope — nothing written\n",
+    );
+    return 0;
+  }
+  if (result.plan) {
+    process.stdout.write(
+      "  scope: " +
+        result.plan.scope.name +
+        " (" +
+        result.plan.scope.sysId +
+        ")  source scope: " +
+        result.plan.sourceScopeSysId +
+        "\n  records: " +
+        result.plan.total +
+        "\n",
+    );
+    var tables = Object.keys(result.plan.counts);
+    for (var t = 0; t < tables.length; t += 1) {
+      process.stdout.write("    " + tables[t] + ": " + result.plan.counts[tables[t]] + "\n");
+    }
+  }
+  if (result.steps) {
+    process.stdout.write("\n--- steps (as published) ---\n");
+    for (var si = 0; si < result.steps.after.length; si += 1) {
+      var step = result.steps.after[si];
+      process.stdout.write(
+        "  " +
+          step.label +
+          " (" +
+          step.cid +
+          ")" +
+          (step.scriptChars !== null ? " script " + step.scriptChars + " chars" : "") +
+          (step.extendedInputs.length ? " in:" + step.extendedInputs.length : "") +
+          (step.extendedOutputs.length ? " out:" + step.extendedOutputs.length : "") +
+          "\n",
+      );
+    }
+    for (var ci = 0; ci < result.steps.changes.length; ci += 1) {
+      process.stdout.write("  + " + result.steps.changes[ci] + "\n");
+    }
+    for (var wi = 0; wi < result.steps.warnings.length; wi += 1) {
+      process.stdout.write("  ! " + result.steps.warnings[wi] + "\n");
+    }
+  }
+  if (result.action === "planned") {
+    process.stdout.write(
+      "\nDRY RUN — nothing written. Re-run with --confirm --update-set <sys_id> to clone + publish.\n",
+    );
+    return 0;
+  }
+  process.stdout.write(
+    "\nwritten: " +
+      result.written.length +
+      " record(s)" +
+      (result.publish
+        ? "; published (HTTP " +
+          result.publish.httpStatus +
+          (result.publish.snapshotSysId ? ", snapshot " + result.publish.snapshotSysId : "") +
+          ")"
+        : "") +
+      "\n",
+  );
+  if (result.verify) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n");
+    process.stdout.write("  " + (result.verify.ok ? "OK" : "FAILED") + "\n");
+    for (var vi = 0; vi < result.verify.notes.length; vi += 1) {
+      process.stdout.write(
+        "  " + (result.verify.ok ? "+ " : "! ") + result.verify.notes[vi] + "\n",
+      );
+    }
+    if (!result.verify.ok) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * dove-sn define-action:
+ *   --sys-id <sys_id>          Required. The sys_hub_action_type_definition to define (the shell must
+ *                              exist — make it with clone-action or the Flow Designer).
+ *   --scope <name|sys_id>      Required. The action's own scope (x_cadso_email_spok or a 32-hex sys_id).
+ *   --spec <spec.json>         Required. The definition — action inputs, outputs, steps (see below).
+ *   --update-set <sys_id>      Optional. Pin the REST session to this update set before the save/publish.
+ *   --publish                  With --confirm: also publish (snapshot) after the save.
+ *   --confirm                  Execute (PUT the model, verify, optionally publish). WITHOUT it: dry-run.
+ *   --dry-run                  Force a dry-run even with --confirm.
+ *   --json                     Emit the structured DefineActionTypeResult.
+ *
+ * Saves the action the way the Flow Designer's Save does: GET the model + the
+ * step graph, merge the spec, PUT the FULL model back to
+ * /api/now/processflow/action/action_types/{id}, read it back to verify.
+ * DRY-RUN BY DEFAULT: prints the planned diff, writes nothing. Idempotent: a
+ * spec already in effect is "unchanged" and makes no PUT.
+ *
+ * --spec shape (every part optional — incremental edits are fine):
+ *   {
+ *     "action":  { "name": "...", "description": "...", "access": "public" | "package_private" },
+ *     "inputs":  [{ "name": "host", "type": "choice", "mandatory": true, "default": "api",
+ *                   "choices": [{ "value": "api", "label": "API" }] }],      // upsert by name; "remove": true
+ *     "outputs": [{ "name": "status_code", "value": "{{steps.call.status_code}}" }],
+ *     "steps": [
+ *       { "ref": "guard", "type": "script", "label": "Guard", "scriptFile": "guard.js",
+ *         "inputs":  { "host_1": "{{action.host}}" }, "outputs": [{ "name": "base_url" }] },
+ *       { "ref": "call", "type": "rest", "label": "Call", "values": { "base_url": "{{steps.guard.base_url}}",
+ *         "http_method": "get", "headers": [{ "name": "Accept", "value": "application/json" }] } }
+ *     ]
+ *   }
+ * `scriptFile` (resolved relative to the spec file) is sugar for `script`.
+ */
+async function runDefineAction(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("define-action", bare, ["sys-id", "scope", "spec", "update-set"]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var sysId = flags["sys-id"] || flags.sysId;
+  var scope = flags.scope;
+  var specPath = flags.spec;
+  if (!sysId || !scope || !specPath) {
+    process.stderr.write(
+      "define-action: --sys-id <sys_id>, --scope <scope name|sys_id> and --spec <spec.json> are required\n",
+    );
+    return 1;
+  }
+  var rawSpec: unknown = JSON.parse(fs.readFileSync(specPath, "utf8"));
+  if (!rawSpec || typeof rawSpec !== "object" || Array.isArray(rawSpec)) {
+    process.stderr.write("define-action: --spec must contain a JSON object\n");
+    return 1;
+  }
+  resolveStepScriptFiles(rawSpec as Record<string, unknown>, specPath);
+
+  var result = await defineActionType({
+    client: createClient({}),
+    sysId: sysId,
+    scope: scope,
+    spec: rawSpec as DefineActionSpec,
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    publish: flags.publish === "true",
+    updateSetSysId: flags["update-set"],
+  });
+
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result.verify && !result.verify.ok ? 1 : 0;
+  }
+
+  var d = result.diff;
+  process.stdout.write(
+    "[" + result.status + "] " + result.after.action.name + " (" + result.sysId + ") in " +
+      result.scope.name + "\n",
+  );
+  d.action.forEach(function (c) {
+    process.stdout.write("  action." + c.field + ": '" + c.before + "' -> '" + c.after + "'\n");
+  });
+  var named = function (kind: string, part: DefineActionTypeResult["diff"]["inputs"]): void {
+    part.added.forEach(function (n) {
+      process.stdout.write("  + " + kind + " " + n + "\n");
+    });
+    part.changed.forEach(function (c) {
+      process.stdout.write(
+        "  ~ " + kind + " " + c.name + ": " +
+          c.changes.map(function (f) {
+            return f.field + " '" + f.before + "' -> '" + f.after + "'";
+          }).join(", ") + "\n",
+      );
+    });
+    part.removed.forEach(function (n) {
+      process.stdout.write("  - " + kind + " " + n + "\n");
+    });
+  };
+  named("input", d.inputs);
+  named("output", d.outputs);
+  var stepLine = function (sign: string, s: DefineActionTypeResult["diff"]["steps"]["added"][number]): void {
+    process.stdout.write(
+      "  " + sign + " step " + s.order + " '" + s.label + "' [" + s.type + "] " + s.cid +
+        (s.ref ? " (ref " + s.ref + (s.matchedBy ? ", matched by " + s.matchedBy : "") + ")" : "") + "\n",
+    );
+    s.changes.forEach(function (c) {
+      process.stdout.write("      " + c + "\n");
+    });
+  };
+  d.steps.added.forEach(function (s) { stepLine("+", s); });
+  d.steps.changed.forEach(function (s) { stepLine("~", s); });
+  d.steps.removed.forEach(function (s) { stepLine("-", s); });
+  if (d.empty) {
+    process.stdout.write("  no changes — the spec is already in effect\n");
+  }
+  result.warnings.forEach(function (w) {
+    process.stdout.write("  ! " + w + "\n");
+  });
+  if (result.status === "planned") {
+    process.stdout.write(
+      "\nDRY RUN — nothing written. Re-run with --confirm (and --publish to snapshot) to save.\n",
+    );
+    return 0;
+  }
+  if (result.verify) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n  " + (result.verify.ok ? "OK" : "FAILED") + "\n");
+    result.verify.notes.forEach(function (n) {
+      process.stdout.write("  " + (result.verify && result.verify.ok ? "+ " : "! ") + n + "\n");
+    });
+  }
+  if (result.publish) {
+    process.stdout.write(
+      "published (HTTP " + result.publish.httpStatus +
+        (result.publish.snapshotSysId ? ", snapshot " + result.publish.snapshotSysId : "") + ")\n",
+    );
+  }
+  return result.verify && !result.verify.ok ? 1 : 0;
+}
+
+/** Replace each step's `scriptFile` with `script`, read relative to the spec file. */
+function resolveStepScriptFiles(spec: Record<string, unknown>, specPath: string): void {
+  var steps = spec.steps;
+  if (!Array.isArray(steps)) {
+    return;
+  }
+  var specDir = path.dirname(path.resolve(specPath));
+  for (var i = 0; i < steps.length; i += 1) {
+    var step = steps[i];
+    if (!step || typeof step !== "object" || typeof step.scriptFile !== "string") {
+      continue;
+    }
+    if (typeof step.script === "string") {
+      throw new Error("define-action: step '" + String(step.ref) + "' sets both scriptFile and script — pick one.");
+    }
+    step.script = fs.readFileSync(path.resolve(specDir, step.scriptFile), "utf8");
+    delete step.scriptFile;
+  }
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -1115,6 +1480,25 @@ function printHelp(): void {
       "                     is treated exactly like a proven collision. Success is\n" +
       "                     read back from v_db_index; that view has no uniqueness field, so\n" +
       "                     ENFORCEMENT is always reported unverified.\n" +
+      "  index-list         List a table's DATABASE INDEXES from the v_db_index view (read-only)\n" +
+      "                     (--table <name> [--json])\n" +
+      "                     sys_index is API-level-ACL 403 and sys_index_column does not\n" +
+      "                     exist, so v_db_index is the only index read surface. It has no\n" +
+      "                     uniqueness field, so WHICH indexes are unique is always\n" +
+      "                     reported unverified.\n" +
+      "  index-create       Create a DATABASE INDEX (composite and non-unique included) by\n" +
+      "                     replaying the platform index-creator form, then read it back\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is sent or read without --confirm\n" +
+      "                     (--table <name> --columns <a[,b,...]> [--unique]\n" +
+      "                      [--access-method <m>] [--confirm] [--dry-run]\n" +
+      "                      [--poll-attempts <n>] [--poll-interval-ms <n>] [--debug] [--json])\n" +
+      "                     A DATABASE INDEX IS PHYSICAL AND PER-INSTANCE: it is NOT captured\n" +
+      "                     in an update set and does NOT travel with a promotion — re-run it\n" +
+      "                     against every environment. There is no --update-set for that\n" +
+      "                     reason. Idempotent: an index over exactly those columns already\n" +
+      "                     present returns already-exists with no write. --name is REFUSED —\n" +
+      "                     the platform's form has no name input; the real name is returned.\n" +
+      "                     Needs a username+password identity that can form-log-in.\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
@@ -1161,17 +1545,36 @@ function printHelp(): void {
       "                                              (per-step scripts + step IO + data-pill wiring)\n" +
       '                      | --patch-script "<find>::<replace>" | --set-script <path> | --merge-outputs <path>\n' +
       "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
+      "  clone-action       Clone a Custom Action Type (all steps + step IO) into a scope and publish it\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--from <sys_id> --name <n> --scope <scope name|sys_id>\n" +
+      "                      [--internal-name <n>] [--description <d>]\n" +
+      "                      [--ops <ops.json>]  ops: setStepInputs / patchStepScripts /\n" +
+      "                                          addStepOutputs / addStepInputs\n" +
+      "                      [--update-set <sys_id> (required with --confirm)] [--confirm] [--dry-run] [--json])\n" +
+      "                     Idempotent on (name, scope). Publishes via the snapshot path and\n" +
+      "                     reads the steps back to verify.\n" +
+      "  define-action      Define a Custom Action Type's inputs, outputs and steps (script + REST,\n" +
+      "                     data-pill wired) the way the Designer's Save does, then optionally publish\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--sys-id <sys_id> --scope <scope name|sys_id> --spec <spec.json>\n" +
+      "                      [--update-set <sys_id>] [--publish] [--confirm] [--dry-run] [--json])\n" +
+      "                     Idempotent: a spec already in effect makes no write. The action shell\n" +
+      "                     must exist (clone-action or the Designer).\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-      "  publish-app        Publish a scoped app to the ServiceNow Store and/or the company\n" +
-      "                     application repository, then poll the publish to completion.\n" +
+      "  publish-app        Publish a scoped app to the ServiceNow Store, the company application\n" +
+      "                     repository, and/or a new update set, then poll each to completion.\n" +
       "                     STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store.\n" +
       "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
-      "                     (--app <scope|sys_id|name> --version <v> --target store|repo|both\n" +
+      "                     (--app <scope|sys_id|name> --version <v>\n" +
+      "                      --target store|repo|repo-ui|update-set|both (comma-separated ok)\n" +
       "                      [--dev-notes <text>] [--store-user <email>] [--timeout-ms <n>]\n" +
-      "                      [--dry-run] [--json] [--confirm])\n" +
+      "                      [--update-set-name <name>] [--update-set-description <text>]\n" +
+      "                      [--include-data] [--dry-run] [--json] [--confirm])\n" +
       "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
-      "                     the password is never a flag. Repo publish needs the sn_cicd role.\n" +
+      "                     the password is never a flag. 'repo' needs the sn_cicd plugin+role;\n" +
+      "                     'repo-ui' reaches the same repository over the UI uploader instead.\n" +
       "  export-update-set  Export an update set to importable <unload> XML, with secret\n" +
       "                     values replaced by __SET_DURING_INSTALL__ (no opt-out).\n" +
       "                     assemble mode is READ-ONLY; complete mode marks the set\n" +
@@ -1190,8 +1593,14 @@ function printHelp(): void {
       "                     (--in <file> [--out <file>] [--rules <file>] [--report] [--json])\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
       "\nGlobal flags:\n" +
-      "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
-      "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n",
+      "  --env <name|path>  Load credentials from a specific env file (also --env-file,\n" +
+      "                     or the DOVETAIL_ENV_FILE env var). A bare name like 'prod'\n" +
+      "                     resolves to .env.prod in the cwd. The file's SN_* connection\n" +
+      "                     vars replace any already exported; a missing or incomplete\n" +
+      "                     file is an error (no fallback). Default: .env in the cwd.\n" +
+      "  Flow Designer auth /api/now/processflow/* can't carry an API access policy, so\n" +
+      "                     under SN_API_KEY those calls use a dedicated basic-auth identity:\n" +
+      "                     SN_FLOW_USER / SN_FLOW_PASSWORD (or SN_DEV_FLOW_* / SN_PROD_FLOW_*).\n",
   );
 }
 
@@ -1444,6 +1853,140 @@ async function runAddIndex(flags: Record<string, string>): Promise<number> {
         "." +
         result.columns.join(",") +
         (result.indexName ? " -> " + result.indexName : "") +
+        "\n" +
+        result.note +
+        "\nUNVERIFIED: " +
+        result.unverified.join(", ") +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
+ * dove-sn index-list:
+ *   --table x_cadso_automate_message_batch_recipient [--json]
+ *
+ * Read-only. Lists the table's database indexes from the v_db_index view — the only
+ * index read surface an instance exposes (sys_index is API-level-ACL 403,
+ * sys_index_column does not exist).
+ *
+ * Exit codes: 0 read, 1 bad args.
+ */
+async function runIndexList(flags: Record<string, string>): Promise<number> {
+  if (!flags.table) {
+    process.stderr.write("index-list: --table <name> is required\n");
+    return 1;
+  }
+  var result = await listIndexes({
+    client: createClient({}),
+    table: flags.table,
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    result.table + " — " + result.indexes.length + " index(es)\n",
+  );
+  for (var i = 0; i < result.indexes.length; i += 1) {
+    var idx = result.indexes[i];
+    process.stdout.write(
+      "  " +
+        (idx.name || "(unnamed)") +
+        "  [" +
+        idx.columns.join(", ") +
+        "]  " +
+        (idx.type || "(no access_method)") +
+        "\n",
+    );
+  }
+  process.stdout.write(
+    result.note + "\nUNVERIFIED: " + result.unverified.join(", ") + "\n",
+  );
+  return 0;
+}
+
+/**
+ * dove-sn index-create:
+ *   --table x_cadso_core_u_smoke --columns a,b [--unique] [--access-method <m>]
+ *   [--confirm] [--dry-run] [--poll-attempts <n>] [--poll-interval-ms <n>]
+ *   [--debug] [--json]
+ *
+ * DRY-RUN BY DEFAULT — nothing is sent (and nothing is even READ) without --confirm;
+ * --dry-run forces a plan even with it. There is deliberately NO --update-set: a
+ * database index is physical and is not captured in one.
+ *
+ * Exit codes: 0 created / already-exists / dry-run, 1 bad args, 2 failed (which
+ * includes "the form was posted but no index was read back").
+ */
+async function runIndexCreate(flags: Record<string, string>): Promise<number> {
+  var columns = splitList(flags.columns || "");
+  if (!flags.table || columns.length === 0) {
+    process.stderr.write(
+      "index-create: --table <name> and --columns <a[,b,...]> are required\n",
+    );
+    return 1;
+  }
+  if (flags["update-set"]) {
+    process.stderr.write(
+      "index-create: --update-set is not accepted. A database index is a PHYSICAL, " +
+        "PER-INSTANCE change — it is NOT captured in an update set and does not " +
+        "travel with a promotion. Run index-create against each environment.\n",
+    );
+    return 1;
+  }
+  var params: CreateIndexParams = {
+    client: createClient({}),
+    table: flags.table,
+    columns: columns,
+    unique: flags.unique === "true",
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+  };
+  if (flags.name !== undefined) params.name = flags.name;
+  if (flags["access-method"]) params.accessMethod = flags["access-method"];
+  if (flags["form-path"]) params.formPath = flags["form-path"];
+  if (flags.debug === "true") params.debug = true;
+  // A non-integer poll setting would make the bounded wait unbounded (or zero).
+  // Reject it here with a named message instead of letting NaN reach the loop.
+  var numeric: Array<[string, "pollAttempts" | "pollIntervalMs"]> = [
+    ["poll-attempts", "pollAttempts"],
+    ["poll-interval-ms", "pollIntervalMs"],
+  ];
+  for (var n = 0; n < numeric.length; n += 1) {
+    var raw = flags[numeric[n][0]];
+    if (raw === undefined) continue;
+    var value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) {
+      process.stderr.write(
+        "index-create: --" +
+          numeric[n][0] +
+          " must be a positive integer (got '" +
+          raw +
+          "')\n",
+      );
+      return 1;
+    }
+    params[numeric[n][1]] = value;
+  }
+
+  var result = await createIndex(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        " [" +
+        result.columns.join(", ") +
+        "]" +
+        (result.name ? " -> " + result.name : "") +
+        (result.instance ? " on " + result.instance : "") +
+        (result.verified ? " — verified" : "") +
         "\n" +
         result.note +
         "\nUNVERIFIED: " +
@@ -1981,8 +2524,19 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
  * dove-sn publish-app:
  *   --app <scope|sys_id|name>   Required. The sys_app to publish.
  *   --version <v>               Required. Version to publish (e.g. 6.0.20260716).
- *   --target store|repo|both    Required. STORE PUBLISH IS EXTERNALLY VISIBLE.
- *   [--dev-notes <text>]        Optional developer notes.
+ *   --target <t[,t...]>         Required. store | repo | repo-ui | update-set |
+ *                               both (= store,repo). STORE IS EXTERNALLY VISIBLE.
+ *                               repo   = CI/CD REST API (needs the sn_cicd plugin)
+ *                               repo-ui= same destination over the UI uploader,
+ *                                        for instances without sn_cicd
+ *                               update-set = publish the app INTO a new update set
+ *   [--dev-notes <text>]        Optional developer notes (uploader targets).
+ *   [--update-set-name <name>]  update-set only. Defaults to the app's name.
+ *   [--update-set-description <text>]
+ *                               update-set only. Tenon convention is the release
+ *                               date stamp (YYYYMMDD) so a release is one query.
+ *   [--include-data]            update-set only. Include demo data (default off,
+ *                               matching the observed wire value).
  *   [--store-user <email>]      Store account email (else SN_STORE_USERNAME).
  *                               The password comes ONLY from SN_STORE_PASSWORD —
  *                               there is no flag for it, ever.
@@ -1990,9 +2544,9 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
  *   [--dry-run] [--json] [--confirm]
  *
  * DRY-RUN unless --confirm: without it the resolved plan is printed and the
- * command exits 1 (a deliberate refusal, not success). --target both publishes
- * store then repo sequentially with the same version and short-circuits if the
- * store leg fails; --json emits an array of per-target results.
+ * command exits 1 (a deliberate refusal, not success). Multiple targets run
+ * sequentially with the same version and short-circuit on the first failure;
+ * --json emits an array of per-target results.
  * Exit codes: 0 published/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
  */
 async function runPublishApp(flags: Record<string, string>): Promise<number> {
@@ -2001,20 +2555,18 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
   var target = flags.target;
   if (!app || !version || !target) {
     process.stderr.write(
-      "publish-app: --app, --version and --target store|repo|both are required\n",
+      "publish-app: --app, --version and --target <" +
+        PUBLISH_TARGETS.join("|") +
+        "|both> are required\n",
     );
     return 1;
   }
-  if (target !== "store" && target !== "repo" && target !== "both") {
-    process.stderr.write(
-      "publish-app: --target must be store, repo or both (got '" +
-        target +
-        "')\n",
-    );
+  var parsedTargets = parsePublishTargets(target);
+  if (parsedTargets.error) {
+    process.stderr.write("publish-app: " + parsedTargets.error + "\n");
     return 1;
   }
-  var targets: Array<PublishTarget> =
-    target === "both" ? ["store", "repo"] : [target as PublishTarget];
+  var targets: Array<PublishTarget> = parsedTargets.targets;
   var dryRun = flags["dry-run"] === "true";
   var confirmed = flags.confirm === "true";
   var client = createClient({});
@@ -2032,6 +2584,15 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
     };
     if (flags["dev-notes"]) params.devNotes = flags["dev-notes"];
     if (flags["store-user"]) params.storeUsername = flags["store-user"];
+    if (flags["update-set-name"]) {
+      params.updateSetName = flags["update-set-name"];
+    }
+    // Read with !== undefined, not truthiness: an intentionally empty
+    // description must stay empty rather than silently fall back.
+    if (flags["update-set-description"] !== undefined) {
+      params.updateSetDescription = flags["update-set-description"];
+    }
+    if (flags["include-data"] === "true") params.includeData = true;
     if (flags["timeout-ms"]) {
       // A NaN timeout would make the poll-loop budget check always false —
       // an infinite loop. Validate here, exit 1 on garbage.
@@ -2399,6 +2960,12 @@ async function main(): Promise<number> {
   if (parsed.command === "add-index") {
     return await runAddIndex(parsed.flags);
   }
+  if (parsed.command === "index-list") {
+    return await runIndexList(parsed.flags);
+  }
+  if (parsed.command === "index-create") {
+    return await runIndexCreate(parsed.flags);
+  }
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
   }
@@ -2422,6 +2989,12 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "edit-action") {
     return await runEditAction(parsed.flags);
+  }
+  if (parsed.command === "clone-action") {
+    return await runCloneAction(parsed.flags, parsed.bare);
+  }
+  if (parsed.command === "define-action") {
+    return await runDefineAction(parsed.flags, parsed.bare);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);

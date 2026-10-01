@@ -55,6 +55,33 @@ Reads ServiceNow credentials from env vars in this order of precedence:
 | User     | `SN_USER`       | `SN_DEV_USERNAME`   | `SN_PROD_USERNAME`   |
 | Password | `SN_PASSWORD`   | `SN_DEV_PASSWORD`   | `SN_PROD_PASSWORD`   |
 
+### Flow Designer identity (`SN_FLOW_*`)
+
+`/api/now/processflow/*` — every Flow Designer authoring call (view/edit/clone/
+publish an action, create/copy/publish a flow) — **cannot carry a REST API access
+policy** on ServiceNow, so under API-key auth (`SN_API_KEY`) those calls 401. They
+authenticate instead with a dedicated basic-auth identity used **only** for
+processflow paths; every other path keeps the main identity:
+
+| Field    | Preferred          | Dev fallback           | Prod fallback           |
+|----------|--------------------|------------------------|-------------------------|
+| User     | `SN_FLOW_USER`     | `SN_DEV_FLOW_USER`     | `SN_PROD_FLOW_USER`     |
+| Password | `SN_FLOW_PASSWORD` | `SN_DEV_FLOW_PASSWORD` | `SN_PROD_FLOW_PASSWORD` |
+
+- **Key mode + flow identity** → processflow requests go out as basic auth with the
+  flow identity and **no** `x-sn-apikey` header; table/Dovetail requests keep the key.
+- **Basic mode, no flow identity** → unchanged: processflow uses the main `SN_USER`.
+- **Key mode, no flow identity** → a processflow call **throws before sending**, naming
+  `SN_FLOW_USER` / `SN_FLOW_PASSWORD` (it would only 401). A half-set pair also throws.
+- Programmatic: `createClient({ apiKey, flowUser, flowPassword })` — explicit config beats
+  env. A config that pins the main identity (apiKey or user/password — e.g. one resolved
+  from an `--env` file) takes the flow identity from the config only, never from
+  `process.env`, so a per-call retarget can't borrow another instance's flow creds.
+- `--env <file>` fully determines both identities: the `SN_FLOW_*` / `SN_DEV_FLOW_*` /
+  `SN_PROD_FLOW_*` keys are connection keys, replaced (or cleared) from the file.
+
+The flow password is never logged; errors name the variables, never their values.
+
 The dev/prod fallbacks match the names documented in the committed
 `Craftsman/.env.example`, so existing developer setups work out of the box.
 Bare instance names (e.g. `TenonWorkStudio`) get `.service-now.com` appended
@@ -266,7 +293,215 @@ npx dove-sn edit-action --sys-id <id> --scope <scope> --set-script ./script.js \
 npx dove-sn edit-action --sys-id <id> --scope <scope> --from-json ops.json             # dry-run
 npx dove-sn edit-action --sys-id <id> --scope <scope> --from-json ops.json \
   --apply --update-set <id>                                                            # publish + verify
+
+# Clone a Custom Action Type (every step + its step IO) into a scope and publish it
+npx dove-sn clone-action --from <source_sys_id> --name "Send REST (Spoke)" \
+  --scope x_cadso_email_spok --ops ops.json                                            # dry-run (plan)
+npx dove-sn clone-action --from <source_sys_id> --name "Send REST (Spoke)" \
+  --scope x_cadso_email_spok --ops ops.json --update-set <id> --confirm                # write + publish + verify
+
+# Define an action type's inputs, outputs and steps (script + REST, pill-wired) like the Designer's Save
+npx dove-sn define-action --sys-id <id> --scope x_cadso_email_spok --spec spec.json      # dry-run (diff)
+npx dove-sn define-action --sys-id <id> --scope x_cadso_email_spok --spec spec.json \
+  --update-set <id> --confirm --publish                                                # save + verify + publish
 ```
+
+### Cloning an action type (`clone-action` / `action_clone`)
+
+`clone-action` copies a Custom Action Type headlessly — **multi-step capable** — and
+publishes the copy:
+
+1. **Reads** (Table API only — `sn_build_agent` is never used) the parent
+   `sys_hub_action_type_definition`, its `sys_hub_action_input` / `sys_hub_action_output`
+   (`model_id` → parent), every `sys_hub_step_instance` (**`action`** → parent), and each
+   step's `sys_hub_step_ext_input` / `sys_hub_step_ext_output` (`model_id` → step).
+2. **Plans** fresh sys_ids for every record (old→new step map), the target scope,
+   `name` = `--name`, `internal_name` = `--internal-name` or the slug of the name
+   (lowercase, non-alphanumerics → `_`), `state = draft`, and strips system/snapshot
+   fields (`master_snapshot`, `latest_snapshot`, `sys_update_name`, audit fields, …).
+3. **Writes** the graph through Dovetail `createRecord`, pinned to `--update-set`, scope
+   set per record.
+4. **Publishes**: the SOURCE action's steps are fetched from
+   `/processflow/action/action_types/{source}/step_instances`, each step's `action` and
+   `sys_id` remapped onto the clone, `--ops` applied, then grafted onto the clone's model
+   and POSTed to `/snapshot` — no steps fixture needed.
+5. **Verifies** by reading the clone's steps back (script hash + step IO per step, plus
+   the step count). A mismatch exits `1`.
+
+`--scope` takes a scope **name** (resolved via `sys_scope`) or a 32-hex sys_id. The
+clone is **idempotent** on `(name, scope)`: an existing match returns `unchanged` and
+writes nothing. **Dry-run by default** — without `--confirm` it prints the plan (records
+per table, step summary, the effect of every op) and writes nothing; `--update-set` is
+required with `--confirm`. Exit `0` on success (incl. dry-run / unchanged), `1` on error.
+
+`--ops` takes the same step ops as `edit-action --from-json`, plus **`setStepInputs`** —
+set an **existing** step input's value (and its `display_value` when present), e.g. a
+REST step's HTTP method. An unknown input fails with the list of inputs on that step:
+
+```json
+{
+  "setStepInputs": [
+    { "step": "REST Step", "input": "http_method", "value": "post" }
+  ],
+  "patchStepScripts": [
+    { "step": "Parse Response", "patchScript": { "find": "v1", "replace": "v2" } }
+  ],
+  "addStepOutputs": [{ "step": "Parse Response", "name": "isRetryable", "type": "boolean" }],
+  "addStepInputs": [
+    { "step": "Handle Error", "name": "isRetryable", "type": "boolean",
+      "pillFrom": { "step": "Parse Response", "output": "isRetryable" } }
+  ]
+}
+```
+
+The MCP tool **`action_clone`** takes the same inputs — `from`, `name`, `scope`,
+`internalName`, `description`, `updateSetSysId`, `ops` (inline object), `confirm`,
+`dryRun` — with the same dry-run-unless-`confirm:true` gate. `setStepInputs` is also
+accepted by `edit-action` / `action_edit`.
+
+### Defining an action type's body (`define-action` / `action_define`)
+
+`define-action` authors a Custom Action Type's **action inputs, outputs and steps** —
+script steps and REST steps, wired together with data pills — headlessly, the way
+the Flow Designer's **Save** button does, and optionally publishes it.
+
+```bash
+npx dove-sn define-action --sys-id <action_sys_id> --scope x_cadso_email_spok \
+  --spec spec.json                                                  # dry-run: the planned diff
+npx dove-sn define-action --sys-id <action_sys_id> --scope x_cadso_email_spok \
+  --spec spec.json --update-set <id> --confirm                      # save + verify
+npx dove-sn define-action --sys-id <action_sys_id> --scope x_cadso_email_spok \
+  --spec spec.json --update-set <id> --confirm --publish            # save + verify + publish
+```
+
+How it works (established from two captured Designer saves):
+
+1. `GET /api/now/processflow/action/action_types/{id}` — the model (43 keys; `steps` is null).
+2. `GET …/{id}/step_instances` — the real step graph.
+3. Merge the spec. Existing steps keep their `cid`; new steps are built from the
+   Designer's own step shape for that type (script / REST) with a fresh `cid`.
+4. `PUT …/{id}` with the **full** model — the Designer's save is not a delta. Each
+   step is sent in the Designer's 11-key shape (`DB_TYPE`, `cid`, `step_type_id`,
+   `section`, `label`, `action`, `order`, `inputs`, `extended_inputs`,
+   `extended_outputs`, `error_handling_type`).
+5. Read the model + steps back and compare them with the plan (a mismatch exits `1`).
+6. `--publish`: snapshot through the existing `publishActionType` path.
+
+**Dry-run by default** — without `--confirm` it prints the planned diff (inputs,
+outputs and steps added / changed / removed, with each step's input values) and makes
+no write. **Idempotent** — a spec that is already in effect is `unchanged` and makes no
+PUT. `--update-set` is optional; when given, the REST session is pinned to it before the
+save and the publish. Exit `0` on success (incl. dry-run / unchanged), `1` on error or a
+failed verify.
+
+**The action shell must already exist.** Creating a brand-new empty action headlessly is
+out of scope: make it with `clone-action` or in the Designer, then define its body here.
+
+#### Spec
+
+Every part is optional, so a spec can be a small incremental edit.
+
+| Key | Shape | Notes |
+|---|---|---|
+| `action` | `{ name?, description?, access?: "public" \| "package_private" }` | `name` sets `name` + `displayName` |
+| `inputs[]` | `{ name, label?, type?, mandatory?, choices?: [{value, label?}], default?, order?, maxLength?, remove? }` | Upsert by `name`. `type`: `string` (default) \| `choice` \| `boolean` \| `integer`. `choice` needs `choices`; `default` must be one of them. Changing an input's type makes ServiceNow mint a new variable record |
+| `outputs[]` | `{ name, label?, type?, value?, remove? }` | Upsert by `name`. `value` is the pill the output is wired to. System outputs (`__action_status__`, `__dont_treat_as_error__`) cannot be named |
+| `steps[]` | `{ ref, type: "script" \| "rest", label?, match?, remove?, errorHandling?, script?, inputs?, outputs?, values? }` | See below |
+
+Steps:
+
+- **Matching.** `match` (an existing step's cid or current label — use it to rename),
+  else `label`, else position (the spec's Nth step against the action's Nth step, same
+  type, flagged in the diff as `matched by order`). Unmatched steps are created and
+  placed before the next existing step the spec lists after them (else appended).
+  Existing steps are never reordered; `remove: true` deletes one.
+- **`script`** (script steps) — the script body. On the CLI, `scriptFile` (relative
+  to the spec file) is sugar for it.
+- **`inputs`** (script steps) — the step's own input variables (`extended_inputs`):
+  `{ "<name>": "<value or pill>" }` or `{ "<name>": { value?, type?, label?, mandatory?, remove? } }`.
+- **`outputs`** (script steps) — the step's own output variables (`extended_outputs`):
+  `[{ name, label?, type?, remove? }]`.
+- **`values`** — the step type's own inputs by name (unknown names are an error that
+  lists the valid ones). For a REST step: `connection` (`use_connection_alias`),
+  `connection_alias` (a `sys_alias` sys_id — its display name is looked up — or
+  `{ value, display }`), `override_base_url`, `base_url`, `resource_path`,
+  `http_method` (`get` / `post` / `put` / `delete` …), `headers` and `query_params`
+  (`[{ name, value }]` → the Designer's `ADV_NV` list), `body`, `request_type`,
+  `connection_timeout`, `retry_policy`, … Booleans take `true` / `false`.
+- **`errorHandling`** — `EVAL_ERRORS` (the default) or `NEXT_STEP` (continue on error).
+
+Pills (in `values`, script `inputs` and `outputs[].value`):
+
+| Pill | Means |
+|---|---|
+| `{{action.<input>}}` | an action input — must exist after the merge |
+| `{{steps.<ref>.<output>}}` | another spec step's output — resolved to `{{step[<cid>].<output>}}`. Inside a step it must point at an **earlier** step |
+| `{{step[<cid>].<output>}}` | the raw form — the cid must exist |
+
+REST steps expose `status_code`, `response_body`, `response_headers`, `error_message`,
+`error_code`, `response_stream`; a script step exposes its `outputs`. An **action
+output is wired by putting the pill in the output's own `value`** (the Designer also
+mirrors it into `display_value` and records the pill's label in `label_cache` — both
+handled for you). Everything is checked before any write: unknown keys, names with `^`
+or path characters (names must match `^[A-Za-z_][A-Za-z0-9_]*$`), an unknown step type,
+an unknown step ref / action input / step output in a pill, and any pill the spec would
+leave dangling (e.g. removing an input a step still reads).
+
+Example — the complete body of *Email Service Request GET*:
+
+```json
+{
+  "inputs": [
+    { "name": "host", "type": "choice", "mandatory": true, "default": "api",
+      "choices": [
+        { "value": "api", "label": "API" },
+        { "value": "storage_us_east4", "label": "US East 4" },
+        { "value": "storage_us_west1", "label": "US West 1" },
+        { "value": "storage_europe_west1", "label": "Europe West 1" }
+      ] },
+    { "name": "path", "type": "string", "mandatory": true },
+    { "name": "content_type", "type": "string", "mandatory": false },
+    { "name": "body", "type": "string", "mandatory": false }
+  ],
+  "steps": [
+    { "ref": "guard", "type": "script", "label": "Guard", "match": "Gaurd",
+      "scriptFile": "guard.js",
+      "inputs": {
+        "host_1": { "value": "{{action.host}}", "mandatory": true },
+        "path_1": { "value": "{{action.path}}", "mandatory": true }
+      },
+      "outputs": [
+        { "name": "base_url", "label": "Base URL", "type": "string" },
+        { "name": "error", "label": "Error", "type": "string" }
+      ] },
+    { "ref": "call", "type": "rest", "label": "Call email service", "match": "REST step",
+      "errorHandling": "NEXT_STEP",
+      "values": {
+        "connection": "use_connection_alias",
+        "connection_alias": "956cc622c3ee4a1085b196c4e401317e",
+        "override_base_url": true,
+        "base_url": "{{steps.guard.base_url}}",
+        "resource_path": "{{action.path}}",
+        "http_method": "get",
+        "headers": [{ "name": "Content-Type", "value": "{{action.content_type}}" }],
+        "connection_timeout": "25000"
+      } }
+  ],
+  "outputs": [
+    { "name": "status_code", "label": "Status Code", "type": "string", "value": "{{steps.call.status_code}}" },
+    { "name": "response_body", "label": "Response Body", "type": "string", "value": "{{steps.call.response_body}}" },
+    { "name": "error", "label": "Error", "type": "string", "value": "{{steps.call.error_message}}" }
+  ]
+}
+```
+
+The MCP tool **`action_define`** takes `sysId`, `scope`, `spec` (inline — `script`, not
+`scriptFile`), `updateSetSysId`, `publish`, `confirm`, `dryRun`, with the same
+dry-run-unless-`confirm:true` gate.
+
+Not yet covered (no Designer capture of the shape yet): step types other than script
+and REST, reference / object / array variable types, and the action's error-status
+conditions (`action_status_metadata`, which is carried through unchanged).
 
 ### Editing an action type's steps (`--from-json`)
 
@@ -417,6 +652,73 @@ Three consequences, each reported rather than hidden:
 single request goes out. Exit codes: `0` created / skipped / dry-run, `1` bad args, `2`
 failed (the lying-row case included).
 
+### List a table's indexes
+
+```bash
+npx dove-sn index-list --table x_cadso_automate_message_batch_recipient --json
+```
+
+Read-only: no form session, no writes. **`v_db_index` is the index read surface** - and
+the only one. `sys_index` fails an API-LEVEL ACL (HTTP 403) for every identity including
+admin, and `sys_index_column` does not exist at all (HTTP 400 `Invalid table`), so there
+is no two-table index model to join and nothing to cross-check against.
+
+Each row comes back as `{ name, columns, type, rawColumns }`. `columns` is the view's
+bracketed `column_names` cell (`"[phone]"`, `"[a,b]"`) **parsed** into a list - never
+substring-matched, because `"[owner_id]"` contains `"owner"`. `type` is `access_method`.
+
+**Uniqueness is not readable.** `v_db_index` has no uniqueness field, so a unique index
+and an ordinary one are indistinguishable in it: `unique` is left **absent** rather than
+guessed, and `uniqueness-enforced` is reported in `unverified` on every result. Only a
+duplicate-insert test proves enforcement. An empty result more likely means the table name
+is wrong than that the table is unindexed - every physical table has a `PRIMARY`.
+
+### Create an index (composite and non-unique included)
+
+> **A DATABASE INDEX IS A PHYSICAL, PER-INSTANCE CHANGE. IT IS NOT CAPTURED IN AN UPDATE
+> SET AND DOES NOT TRAVEL WITH A PROMOTION.** Re-run `index-create` against every
+> environment that needs the index (dev, test, uat, staging, prod). There is deliberately
+> no `--update-set` - passing one is an error, not a silent no-op.
+
+```bash
+# Dry-run (the DEFAULT) - sends nothing and reads nothing
+npx dove-sn index-create --table x_cadso_journey_instance --columns state,created_on
+
+# Send it
+npx dove-sn index-create \
+  --table x_cadso_journey_instance --columns state,created_on --confirm --json
+```
+
+This is what `add-index` cannot do. `sys_dictionary.unique` - the only record-shaped lever
+- is **per-column and unique-only**, so composite and plain indexes have no record path at
+all. `index-create` instead replays the platform's own index-creator form
+(`sys_action=create_index`, `sysparm_index_table`, `sysparm_fields`,
+`sysparm_unique_index_SKIP`) over a form-login session. That contract is lifted from the
+instance's shipped `index_creator_information` UI macro, not from a guess, and the POST
+target is taken from the rendered page's own `<form action>`.
+
+- **Dry-run by default.** Without `--confirm` nothing is sent *and nothing is read*;
+  `--dry-run` forces a plan even with `--confirm`.
+- **Idempotent.** On the live path `v_db_index` is read first, and an index over *exactly*
+  these columns short-circuits to `already-exists` with no form session and no write.
+  Column **order** is part of an index's identity - `[a,b]` is not `[b,a]`.
+- **`--name` is refused.** The platform's form has no name input; ServiceNow names the
+  index itself. Reporting a name the instance does not carry would be a lie, so the
+  created index's *real* name is returned in `name` instead.
+- **The read-back is the proof.** After the POST the index is polled for in `v_db_index`
+  (default 10 checks, 3 s apart - a build on a populated table is asynchronous). If it
+  never appears the status is `failed`: a form processor returning a page is not evidence
+  an ALTER ran, and a unique index cannot build over duplicate values (EMPTY counts).
+- **Uniqueness is still never claimed.** `uniqueness-enforced` stays in `unverified` on
+  every status.
+
+**Requires a username+password identity that can form-log-in.** An instance on
+API-key-only auth, SSO or MFA rejects the form login however valid the API key is; the
+verb fails at the session with that diagnosis rather than a mystery 302, and no `.do`
+replay (including `create-table`'s) can work in that state.
+
+Exit codes: `0` created / already-exists / dry-run, `1` bad args, `2` failed.
+
 ### Set a field on a record
 
 Set scalar field value(s) on an **existing** data record, capture the change into
@@ -516,11 +818,11 @@ Programmatic: `invokeRest({ method, path, body, confirm })` is exported, and the
 client gained `now.put` / `now.delete` / `now.invoke` (the latter returns
 `{ status, body }` verbatim) alongside the existing `now.get` / `now.post`.
 
-### Publish an app to the Store / application repository
+### Publish an app to the Store / application repository / an update set
 
 Publish a scoped application to the **ServiceNow Store**, the **company
-application repository**, or both — headlessly, with the publish's progress
-tracker polled to completion.
+application repository**, and/or **into a new update set** — headlessly, with
+each publish's progress tracker polled to completion.
 
 ```bash
 # Dry-run — the DEFAULT: resolves the app, prints the plan, publishes NOTHING
@@ -529,15 +831,21 @@ npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260716 --target bot
 # Publish for real (store, then repo, same version)
 npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260716 \
   --target both --dev-notes "July release" --confirm --json
+
+# Release flow on an instance WITHOUT the sn_cicd plugin: publish to the company
+# repository over the UI uploader, then capture the app into a dated update set.
+npx dove-sn publish-app --app x_cadso_filter --version 6.0.20260729 \
+  --target repo-ui,update-set --update-set-description 20260729 --confirm --json
 ```
 
 **Store publish is EXTERNALLY VISIBLE on the ServiceNow Store — treat
 `--target store --confirm` as a release.** `publish-app` is dry-run by default:
 without `--confirm` it prints the resolved plan and exits `1` (a deliberate
-refusal). `--target both` runs store then repo sequentially and short-circuits
-if the store leg fails.
+refusal). `--target` takes one target, a comma-separated list, or `both` (an
+alias for `store,repo`); targets run **in the order given** and short-circuit on
+the first failure.
 
-The two targets ride different transports:
+The targets ride different transports:
 
 - **store** replays the `sys_app` form's upload flow (`xmlhttp.do` +
   `sn_appauthor.ScopedAppUploaderAJAX`) over a form-login session — basic auth
@@ -547,13 +855,33 @@ The two targets ride different transports:
 - **repo** uses the supported CI/CD REST API (`POST /api/sn_cicd/app_repo/publish`
   + `GET /api/sn_cicd/progress/{id}`) over basic auth. The API user needs the
   `sn_cicd` role (or admin).
+- **repo-ui** reaches the *same* company repository as `repo`, but over the UI
+  uploader (`sysparm_publish_to_store=false`) instead of REST. Use it when the
+  instance has no CI/CD plugin — `tenonworkshop`, for instance, has no `sn_cicd`
+  scope and no `app_repo` service, so `repo` 404s there while `repo-ui` works.
+  It needs no Store credentials.
+- **update-set** publishes the app *into a newly created update set* via the
+  two-call `com.snc.apps.AppsAjaxProcessor` flow (`createUpdateSet` →
+  `publishToUpdateSet`). There is no REST equivalent. `--update-set-name`
+  defaults to the app's name (the dialog's field is readonly, so that is what
+  the UI submits); `--update-set-description` is conventionally the release date
+  stamp `YYYYMMDD`, which makes a whole release one query
+  (`sys_update_set` where `description=20260729`). `--include-data` maps to the
+  dialog's "Include demo data" box and defaults **off**, matching the value the
+  UI actually puts on the wire.
+
+Ordering matters when you combine them: the repo publish is what bumps
+`sys_app.version`, so put it **before** `update-set` if you want the set
+captured at the new version.
 
 `--app` accepts a scope name, `sys_app` sys_id, or app name; `--version` must be
 above the currently published version. The result carries the progress-tracker
 id, per-step states ("Packaging application", "Uploading application"), the
-Store `appLink`, and the publish's update-set sys_id where the instance reports
-one. Exit codes: `0` published or dry-run, `1` bad args/unconfirmed, `2`
-failed/timeout. Programmatic: `publishApp({ app, version, target, confirm })`.
+Store `appLink`, and the update-set sys_id — for the `update-set` target that is
+recorded as soon as the set is created, so it survives a later failure and you
+can always find (or delete) the set. Exit codes: `0` published or dry-run, `1`
+bad args/unconfirmed, `2` failed/timeout. Programmatic:
+`publishApp({ app, version, target, confirm })`.
 
 ### Export an update set (or a whole app) to importable XML
 
@@ -693,13 +1021,23 @@ Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, the schema verbs `create_table` /
 `add_column` / `add_index` (a single-column unique index via `sys_dictionary.unique`,
 read back from the `v_db_index` view - uniqueness enforcement is always reported
-unverified), the record-write verbs `set_field` (update scalar fields on an
+unverified) / `index_list` (read-only: a table's database indexes from `v_db_index`,
+the only index read surface - `sys_index` is API-level-ACL 403 and `sys_index_column`
+does not exist) / `index_create` (create an index, composite and non-unique included, by
+replaying the platform index-creator form; dry-run by default, idempotent, read back from
+`v_db_index` - and **not** captured in an update set, because a database index is a
+physical per-instance change), the record-write verbs `set_field` (update scalar fields on an
 existing record) and `create_record` (insert one record) — both update-set-captured
 and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step
 scripts, step-level inputs/outputs, data-pill wiring — dry-run by default, and the
-publish is read back and verified), `flow_publish` (compile a flow/subflow snapshot), `flow_copy`
+publish is read back and verified), `action_clone` (clone an action type — every step
+and its step IO — into a scope and publish + verify it; dry-run by default),
+`action_define` (define an existing action type's inputs, outputs and script/REST
+steps with data-pill wiring, the way the Designer's Save does; dry-run by default,
+idempotent, read back and verified, optional publish),
+`flow_publish` (compile a flow/subflow snapshot), `flow_copy`
 (copy a flow as an inactive draft), `flow_create` (create a NEW flow from scratch +
 publish, grafting a template), `flow_test` (validate or run a flow), and
 `flow_edit` (patch a flow), plus `invoke_rest` (invoke an arbitrary authenticated

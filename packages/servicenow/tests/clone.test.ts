@@ -1,5 +1,4 @@
 import { cloneSubflow } from "../src/flowDesigner/cloneSubflow";
-import { cloneActionType } from "../src/flowDesigner/cloneActionType";
 import type { ServiceNowClient } from "../src/client";
 
 interface Captured {
@@ -233,72 +232,5 @@ describe("cloneSubflow", function () {
   });
 });
 
-describe("cloneActionType", function () {
-  it("clones parent + inputs + outputs + step instances using model_id FK", async function () {
-    var SOURCE_AT = "44444444444444444444444444444444";
-    var ctx = makeClient([
-      {
-        match: function (t, q) { return t === "sys_hub_action_type_definition" && q.indexOf("sys_id=" + SOURCE_AT) >= 0; },
-        rows: [{ sys_id: SOURCE_AT, name: "Get Audience Members", internal_name: "get_aud", sys_scope: "old", description: "" }],
-      },
-      // idempotency check - empty
-      {
-        match: function (t, q) { return t === "sys_hub_action_type_definition" && q.indexOf("name=Get Engaged") >= 0; },
-        rows: [],
-      },
-      {
-        match: function (t) { return t === "sys_hub_action_input"; },
-        rows: [{ sys_id: "ai1", name: "Audience", model_id: SOURCE_AT, sys_scope: "old" }],
-      },
-      {
-        match: function (t) { return t === "sys_hub_action_output"; },
-        rows: [{ sys_id: "ao1", name: "Members", model_id: SOURCE_AT, sys_scope: "old" }],
-      },
-      {
-        match: function (t) { return t === "sys_hub_step_instance"; },
-        rows: [
-          { sys_id: "s1", name: "Step1", model_id: SOURCE_AT, sys_scope: "old" },
-          { sys_id: "s2", name: "Step2", model_id: SOURCE_AT, sys_scope: "old" },
-        ],
-      },
-    ]);
-
-    var result = await cloneActionType({
-      client: ctx.client,
-      sourceSysId: SOURCE_AT,
-      newName: "Get Engaged Audience Members",
-      newScope: NEW_SCOPE_ID,
-      updateSetSysId: UPDATE_SET_ID,
-    });
-
-    expect(result.action).toBe("created");
-    expect(ctx.cap.createRecordCalls).toHaveLength(5);
-    expect(ctx.cap.createRecordCalls[0].table).toBe("sys_hub_action_type_definition");
-    expect(ctx.cap.createRecordCalls[0].fields.name).toBe("Get Engaged Audience Members");
-
-    // Children must FK back to the new parent via model_id (not the source sys_id).
-    for (var i = 1; i < ctx.cap.createRecordCalls.length; i++) {
-      expect(ctx.cap.createRecordCalls[i].fields.model_id).toBe(result.sysId);
-      expect(ctx.cap.createRecordCalls[i].fields.sys_id).not.toBe(SOURCE_AT);
-    }
-  });
-
-  it("short-circuits when name+scope already exists", async function () {
-    var SOURCE_AT = "44444444444444444444444444444444";
-    var ctx = makeClient([
-      {
-        match: function (t, q) { return t === "sys_hub_action_type_definition" && q.indexOf("name=Existing") >= 0; },
-        rows: [{ sys_id: "abc12345abc12345abc12345abc12345" }],
-      },
-    ]);
-    var result = await cloneActionType({
-      client: ctx.client,
-      sourceSysId: SOURCE_AT,
-      newName: "Existing",
-      newScope: NEW_SCOPE_ID,
-      updateSetSysId: UPDATE_SET_ID,
-    });
-    expect(result.action).toBe("unchanged");
-    expect(ctx.cap.createRecordCalls).toHaveLength(0);
-  });
-});
+// cloneActionType has its own suite: tests/cloneActionType.test.ts (Table API reads,
+// multi-step graph, publish + verify).

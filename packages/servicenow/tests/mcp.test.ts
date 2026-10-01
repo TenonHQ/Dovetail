@@ -1,15 +1,18 @@
 import { buildDescriptors, TOOL_NAMES } from "../src/mcp/registry";
 import { runSmoke } from "../src/mcp/server";
 import { makeMockClient } from "./mockClient";
+import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US as CLONE_US } from "./cloneActionFixture";
 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 26 expected tools", function () {
+  it("registers exactly the 30 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
     expect(names.slice().sort()).toEqual([
+      "action_clone",
+      "action_define",
       "action_edit",
       "action_view",
       "add_choices_to_field",
@@ -27,6 +30,8 @@ describe("MCP registry", function () {
       "flow_test",
       "flow_view",
       "host_assets",
+      "index_create",
+      "index_list",
       "invoke_rest",
       "remove_choices_from_field",
       "set_column",
@@ -37,7 +42,7 @@ describe("MCP registry", function () {
       "set_table",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(26);
+    expect(TOOL_NAMES).toHaveLength(30);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -353,7 +358,9 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (26)");
+    expect(out).toContain("Registered tools (30)");
+    expect(out).toContain("action_define");
+    expect(out).toContain("action_clone");
     expect(out).toContain("add_index");
     expect(out).toContain("set_form_layout");
     expect(out).toContain("add_choices_to_field");
@@ -368,7 +375,7 @@ describe("MCP registry", function () {
 });
 
 describe("MCP registry — annotations", function () {
-  var readTools = ["flow_view", "action_view"];
+  var readTools = ["flow_view", "action_view", "index_list"];
 
   function byName(): Record<string, any> {
     var map: Record<string, any> = {};
@@ -396,7 +403,7 @@ describe("MCP registry — annotations", function () {
     var map = byName();
 
     // additive, idempotent upserts/creates
-    ["create_view", "add_choices_to_field"].forEach(function (name) {
+    ["create_view", "add_choices_to_field", "index_create"].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(false);
       expect(map[name].annotations.idempotentHint).toBe(true);
@@ -434,5 +441,138 @@ describe("MCP registry — annotations", function () {
       expect(map[name].annotations.destructiveHint).toBe(true);
       expect(map[name].annotations.idempotentHint).toBe(false);
     });
+  });
+});
+
+describe("MCP action_clone", function () {
+  function cloneTool(client: any) {
+    var d = buildDescriptors({ client: client }).filter(function (x) {
+      return x.name === "action_clone";
+    })[0];
+    return d;
+  }
+
+  it("mirrors action_edit's annotations", function () {
+    var all = buildDescriptors();
+    var edit = all.filter(function (x) { return x.name === "action_edit"; })[0];
+    var clone = all.filter(function (x) { return x.name === "action_clone"; })[0];
+    expect(clone.annotations).toEqual(edit.annotations);
+  });
+
+  it("is a dry-run without confirm:true — plan returned, nothing written or published", async function () {
+    var m = makeCloneClient();
+    var res = await cloneTool(m.client).handler({
+      from: CLONE_SRC,
+      name: "MCP Dry",
+      scope: TARGET_SCOPE_NAME,
+      ops: { setStepInputs: [{ step: "REST Step", input: "http_method", value: "post" }] },
+    });
+    expect(res.action).toBe("planned");
+    // 7 graph records + 3 output mappings + 2 IO labels
+    expect(res.plan.total).toBe(12);
+    expect(m.cap.creates).toHaveLength(0);
+    expect(m.cap.posts).toHaveLength(0);
+  });
+
+  it("dryRun:true wins over confirm:true", async function () {
+    var m = makeCloneClient();
+    var res = await cloneTool(m.client).handler({
+      from: CLONE_SRC, name: "MCP Forced", scope: TARGET_SCOPE_NAME,
+      updateSetSysId: CLONE_US, confirm: true, dryRun: true,
+    });
+    expect(res.action).toBe("planned");
+    expect(m.cap.creates).toHaveLength(0);
+  });
+
+  it("confirm:true writes, publishes and verifies", async function () {
+    var m = makeCloneClient();
+    var res = await cloneTool(m.client).handler({
+      from: CLONE_SRC, name: "MCP Real", scope: TARGET_SCOPE_NAME,
+      updateSetSysId: CLONE_US, confirm: true,
+    });
+    expect(res.action).toBe("created");
+    expect(m.cap.creates).toHaveLength(12);
+    expect(m.cap.posts).toHaveLength(1);
+    expect(res.verify.ok).toBe(true);
+  });
+
+  it("rejects unknown ops keys and a non-sys_id from", async function () {
+    var m = makeCloneClient();
+    await expect(cloneTool(m.client).handler({
+      from: CLONE_SRC, name: "X", scope: TARGET_SCOPE_NAME, ops: { bogus: [] },
+    })).rejects.toThrow();
+    await expect(cloneTool(m.client).handler({
+      from: "not-a-sys-id", name: "X", scope: TARGET_SCOPE_NAME,
+    })).rejects.toThrow();
+    expect(m.cap.tableQueries).toHaveLength(0);
+  });
+});
+
+describe("MCP action_define", function () {
+  var ACTION = "69b1b09fc3274f10d4ddf1db05013193";
+  var SCOPE = "c44692d8c366425085b196c4e4013187";
+
+  function server() {
+    var fx = require("./fixtures/actionDefine.save1.json");
+    var model = JSON.parse(JSON.stringify(fx.response.result));
+    var steps = model.steps;
+    model.steps = null;
+    var cap = { puts: 0, posts: 0 };
+    var client = {
+      table: {
+        query: async function (table: string) {
+          return table === "sys_scope" ? [{ sys_id: SCOPE, scope: "x_cadso_email_spok" }] : [];
+        },
+      },
+      claude: { changeUpdateSet: async function () { return {}; } },
+      now: {
+        get: async function (p: string) {
+          return p.indexOf("/step_instances") !== -1 ? { result: { steps: steps } } : { result: model };
+        },
+        put: async function (p: string, body: any) {
+          cap.puts += 1;
+          steps = body.steps;
+          model = Object.assign({}, body, { steps: null });
+          return { result: body };
+        },
+        post: async function () { cap.posts += 1; return { result: {} }; },
+      },
+    };
+    return { client: client, cap: cap };
+  }
+  function defineTool(client: any) {
+    return buildDescriptors({ client: client }).filter(function (x) { return x.name === "action_define"; })[0];
+  }
+  var spec = { outputs: [{ name: "status_code", value: "{{steps.rest.status_code}}" }],
+    steps: [{ ref: "rest", type: "rest", label: "REST step" }] };
+
+  it("mirrors action_edit's annotations", function () {
+    var all = buildDescriptors();
+    var edit = all.filter(function (x) { return x.name === "action_edit"; })[0];
+    expect(defineTool(undefined).annotations).toEqual(edit.annotations);
+  });
+
+  it("is a dry-run without confirm:true — diff returned, nothing written", async function () {
+    var s = server();
+    var res = await defineTool(s.client).handler({ sysId: ACTION, scope: SCOPE, spec: spec });
+    expect(res.status).toBe("planned");
+    expect(res.diff.outputs.added).toEqual(["status_code"]);
+    expect(s.cap.puts).toBe(0);
+    expect(s.cap.posts).toBe(0);
+  });
+
+  it("confirm:true saves; publish:true also publishes", async function () {
+    var s = server();
+    var res = await defineTool(s.client).handler({ sysId: ACTION, scope: SCOPE, spec: spec, confirm: true, publish: true });
+    expect(res.status).toBe("saved");
+    expect(s.cap.puts).toBe(1);
+    expect(s.cap.posts).toBe(1);
+  });
+
+  it("rejects unknown spec keys and a non-sys_id sysId before any request", async function () {
+    var s = server();
+    await expect(defineTool(s.client).handler({ sysId: ACTION, scope: SCOPE, spec: { bogus: [] } })).rejects.toThrow();
+    await expect(defineTool(s.client).handler({ sysId: "nope", scope: SCOPE, spec: spec })).rejects.toThrow();
+    expect(s.cap.puts).toBe(0);
   });
 });
