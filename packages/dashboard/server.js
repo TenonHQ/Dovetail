@@ -6,6 +6,15 @@ const { CookieJar } = require("tough-cookie");
 const fs = require("fs");
 const { execFile } = require("child_process");
 const RateLimit = require("express-rate-limit");
+const {
+  buildScopedUpdateSetName,
+  extractDuplicateNumber,
+  generateUpdateSetDescription,
+  generateUpdateSetName,
+  readActiveTask: readActiveTaskFile,
+  sanitizeTaskName,
+  scopeLabel,
+} = require("./lib/helpers");
 
 // Everything resolves from CWD — run this from your Dovetail project directory
 const PROJECT_ROOT = process.cwd();
@@ -30,6 +39,7 @@ const claudePlansLimiter = RateLimit({
   max: 60,
 });
 const SN_PASSWORD = process.env.SN_PASSWORD || "";
+const SN_API_KEY = process.env.SN_API_KEY || "";
 const BASE_URL = `https://${SN_INSTANCE}`;
 
 // Resolve an artifact path, preferring the dove.* name and falling back to the
@@ -94,14 +104,20 @@ app.use(express.static(path.join(__dirname, "public")));
 // Session-persistent ServiceNow client — cookie jar ensures scope changes
 // (changeScope) persist across subsequent requests in the same session.
 var snCookieJar = new CookieJar();
+// An inbound API key is the default auth mode when present: the x-sn-apikey
+// header replaces basic auth entirely.
+var snBaseHeaders = {
+  "Content-Type": "application/json",
+  Accept: "application/json",
+};
+if (SN_API_KEY) {
+  snBaseHeaders["x-sn-apikey"] = SN_API_KEY;
+}
 var snClient = wrapper(
   axios.create({
     baseURL: BASE_URL,
-    auth: { username: SN_USER, password: SN_PASSWORD },
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    auth: SN_API_KEY ? undefined : { username: SN_USER, password: SN_PASSWORD },
+    headers: snBaseHeaders,
     jar: snCookieJar,
     withCredentials: true,
   })
@@ -187,84 +203,15 @@ function clickupApi(method, endpoint, data) {
   });
 }
 
-// Scope -> "App" label used in generated update-set names. Mirrors the
-// override table in .claude/skills/sn-move-update-set so both tools agree.
-var SCOPE_LABEL_OVERRIDES = {
-  x_cadso_journey: "Journey",
-  x_cadso_core: "Core",
-  x_cadso_automate: "Automate",
-  x_cadso_text_spoke: "Text",
-  x_cadso_email_spok: "Email",
-};
-
-function scopeLabel(scope) {
-  if (SCOPE_LABEL_OVERRIDES[scope]) return SCOPE_LABEL_OVERRIDES[scope];
-  var stripped = scope.replace(/^x_cadso_/, "");
-  return stripped
-    .split(/[_-]/)
-    .filter(Boolean)
-    .map(function (w) {
-      return w.charAt(0).toUpperCase() + w.slice(1);
-    })
-    .join(" ");
-}
-
-function sanitizeTaskName(taskName) {
-  return taskName.replace(/[^a-zA-Z0-9\s\-_]/g, "").trim();
-}
-
-// Task-level base name (no App segment yet — that's added per-scope by
-// buildScopedUpdateSetName, since one task can span multiple scopes/apps).
-function generateUpdateSetName(devInitials, taskId, shortDesc) {
-  var parts = [];
-  if (devInitials) parts.push(devInitials);
-  parts.push(taskId);
-  parts.push(shortDesc);
-  return parts.join(" | ").substring(0, 80);
-}
-
-// Full per-scope update-set name: {DEVINITIALS} | {DEV-ID} | {App} | {Short Desc}
-function buildScopedUpdateSetName(activeTask, appLabel) {
-  var parts = [];
-  if (activeTask.devInitials) parts.push(activeTask.devInitials);
-  parts.push(activeTask.customId || activeTask.taskId);
-  parts.push(appLabel);
-  parts.push(activeTask.shortDesc || activeTask.taskName);
-  return parts.join(" | ").substring(0, 80);
-}
-
-// Generate update set description from task
-function generateUpdateSetDescription(taskName, taskDescription) {
-  var desc = taskName;
-  if (taskDescription) {
-    var firstSentence = taskDescription.split(/[.!\n]/)[0].trim();
-    if (firstSentence) {
-      desc += " — " + firstSentence.substring(0, 150);
-    }
-  }
-  return desc;
-}
-
-// Read active task from persistence file
+// Keep persistence paths in the server while the parsing logic remains a pure,
+// importable helper for package-local tests.
 function readActiveTask() {
-  if (fs.existsSync(ACTIVE_TASK_FILE)) {
-    return JSON.parse(fs.readFileSync(ACTIVE_TASK_FILE, "utf8"));
-  }
-  return null;
+  return readActiveTaskFile(ACTIVE_TASK_FILE);
 }
 
 // Write active task to persistence file
 function writeActiveTask(task) {
   fs.writeFileSync(ACTIVE_TASK_FILE, JSON.stringify(task, null, 2));
-}
-
-// Extract duplicate number from ServiceNow auto-numbered name
-// "CU-abc — Name" => -1, "CU-abc — Name 1" => 1, "CU-abc — Name 2" => 2
-function extractDuplicateNumber(name, baseName) {
-  if (name === baseName) return -1;
-  var suffix = name.substring(baseName.length).trim();
-  var num = parseInt(suffix, 10);
-  return isNaN(num) ? -1 : num;
 }
 
 // Find the best matching update set (highest duplicate number)
@@ -315,11 +262,20 @@ app.get("/api/scopes", async (req, res) => {
       saved = JSON.parse(fs.readFileSync(UPDATE_SET_CONFIG, "utf8"));
     }
 
+    // When a task is active, precompute the scope-qualified update-set name for
+    // each scope (same generator the Start Task / quick-create path uses) so the
+    // create UI never prefills a scope-less name that would collide across scopes.
+    // readActiveTask() is non-throwing and returns null for a malformed file, so
+    // a bad active task degrades to "no suggestion" rather than a 500 here.
+    const activeTaskForNames = readActiveTask();
     const scopes = scopeKeys.map((key) => ({
       scope: key,
       sys_id: scopeMap[key] ? scopeMap[key].sys_id : null,
       display_name: scopeMap[key] ? scopeMap[key].name : key,
       selected_update_set: saved[key] || null,
+      suggested_update_set_name: activeTaskForNames
+        ? buildScopedUpdateSetName(activeTaskForNames, scopeLabel(key))
+        : "",
     }));
 
     res.json({ scopes });

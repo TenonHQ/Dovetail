@@ -61,6 +61,8 @@ export interface SchemaOptions {
   instance: string;
   username: string;
   password: string;
+  /** Inbound REST API key (x-sn-apikey). When set it is the default auth mode and basic auth is not sent. */
+  apiKey?: string;
   outputDir: string;
   scopes: string[];
 }

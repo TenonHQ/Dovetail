@@ -279,18 +279,28 @@ export const snClient = (
   baseURL: string,
   username: string,
   password: string,
+  apiKey?: string,
 ) => {
   const jar = new CookieJar();
+  // When an inbound API key is supplied it is the default auth mode: the
+  // x-sn-apikey header replaces basic auth entirely. Requires key-enabled
+  // REST API access policies on the instance.
+  const baseHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) {
+    baseHeaders["x-sn-apikey"] = apiKey;
+  }
   const rawAxios = wrapper(
     axios.create({
       withCredentials: true,
-      auth: {
-        username,
-        password,
-      },
-      headers: {
-        "Content-Type": "application/json",
-      },
+      auth: apiKey
+        ? undefined
+        : {
+            username,
+            password,
+          },
+      headers: baseHeaders,
       baseURL,
       jar,
     } as any),
@@ -713,8 +723,18 @@ export const defaultClient = () => {
   if (internalClient) {
     return internalClient;
   }
-  const { SN_USER = "", SN_PASSWORD = "", SN_INSTANCE = "" } = process.env;
-  internalClient = snClient(`https://${SN_INSTANCE}/`, SN_USER, SN_PASSWORD);
+  const {
+    SN_USER = "",
+    SN_PASSWORD = "",
+    SN_INSTANCE = "",
+    SN_API_KEY = "",
+  } = process.env;
+  internalClient = snClient(
+    `https://${SN_INSTANCE}/`,
+    SN_USER,
+    SN_PASSWORD,
+    SN_API_KEY,
+  );
   return internalClient;
 };
 

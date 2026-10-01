@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-babel-preset-servicenow",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "engines": {
     "node": ">=22"
   },
@@ -27,7 +27,7 @@
     "@babel/types": "^7.23.0"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "~0.0.20",
+    "@tenonhq/dovetail-types": "~0.0.21",
     "@types/babel__core": "^7.20.2",
     "typescript": "^5.2.2"
   },

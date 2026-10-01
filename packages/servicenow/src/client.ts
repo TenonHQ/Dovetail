@@ -52,7 +52,21 @@ function resolveInstance(cfg: ServiceNowClientConfig): string {
   return normalizeHost(raw);
 }
 
-function resolveAuth(cfg: ServiceNowClientConfig): { user: string; password: string } {
+/** Resolved auth mode: inbound API key (x-sn-apikey header) or basic auth. */
+export type ResolvedAuth =
+  | { mode: "apiKey"; apiKey: string }
+  | { mode: "basic"; user: string; password: string };
+
+function resolveAuth(cfg: ServiceNowClientConfig): ResolvedAuth {
+  // Explicit config wins over the environment, and within each layer an API
+  // key is the default over basic credentials. A cfg that names user/password
+  // (e.g. one resolved from an --env file) deliberately pins basic auth even
+  // when the surrounding process.env carries SN_API_KEY — an env-file retarget
+  // must be fully determined by its file.
+  if (cfg.apiKey) {
+    return { mode: "apiKey", apiKey: cfg.apiKey };
+  }
+  var cfgWantsBasic = Boolean(cfg.user || cfg.password);
   var user = cfg.user
     || process.env.SN_USER
     || process.env.SN_DEV_USERNAME
@@ -63,13 +77,76 @@ function resolveAuth(cfg: ServiceNowClientConfig): { user: string; password: str
     || process.env.SN_DEV_PASSWORD
     || process.env.SN_PROD_PASSWORD
     || "";
+  if (!cfgWantsBasic) {
+    var envApiKey = process.env.SN_API_KEY
+      || process.env.SN_DEV_API_KEY
+      || process.env.SN_PROD_API_KEY
+      || "";
+    if (envApiKey) {
+      return { mode: "apiKey", apiKey: envApiKey };
+    }
+  }
   if (!user || !password) {
     throw new Error(
-      "ServiceNow credentials missing — set SN_USER/SN_PASSWORD (preferred) " +
-      "or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
+      "ServiceNow credentials missing — set SN_API_KEY (inbound API key, preferred), " +
+      "or SN_USER/SN_PASSWORD, or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
     );
   }
-  return { user: user, password: password };
+  return { mode: "basic", user: user, password: password };
+}
+
+/** Path prefix of the Flow Designer authoring API — the only paths the flow identity is used for. */
+export var PROCESSFLOW_PATH_PREFIX = "/api/now/processflow/";
+
+/**
+ * Resolved Flow Designer (processflow) identity:
+ *   - "basic"   — a complete SN_FLOW_USER / SN_FLOW_PASSWORD pair;
+ *   - "partial" — only one half was set (reported, never sent);
+ *   - "none"    — no flow identity configured.
+ */
+export type ResolvedFlowAuth =
+  | { mode: "basic"; user: string; password: string }
+  | { mode: "partial"; missing: string }
+  | { mode: "none" };
+
+/**
+ * Explicit config beats env. When the config pins the MAIN identity (apiKey or
+ * user/password — e.g. a config resolved from an --env file), the flow identity
+ * is taken from the config ONLY, so a per-call retarget can never borrow the
+ * process's flow credentials for a different instance.
+ */
+export function resolveFlowAuth(cfg: ServiceNowClientConfig): ResolvedFlowAuth {
+  var cfgPinsIdentity = Boolean(cfg.apiKey || cfg.user || cfg.password || cfg.flowUser || cfg.flowPassword);
+  var user = cfg.flowUser || "";
+  var password = cfg.flowPassword || "";
+  if (!cfgPinsIdentity) {
+    user = process.env.SN_FLOW_USER
+      || process.env.SN_DEV_FLOW_USER
+      || process.env.SN_PROD_FLOW_USER
+      || "";
+    password = process.env.SN_FLOW_PASSWORD
+      || process.env.SN_DEV_FLOW_PASSWORD
+      || process.env.SN_PROD_FLOW_PASSWORD
+      || "";
+  }
+  if (user && password) {
+    return { mode: "basic", user: user, password: password };
+  }
+  if (user) {
+    return { mode: "partial", missing: "SN_FLOW_PASSWORD" };
+  }
+  if (password) {
+    return { mode: "partial", missing: "SN_FLOW_USER" };
+  }
+  return { mode: "none" };
+}
+
+/** True when an instance-relative request URL targets the processflow API. */
+export function isProcessflowPath(url: unknown): boolean {
+  if (typeof url !== "string") {
+    return false;
+  }
+  return url.toLowerCase().indexOf(PROCESSFLOW_PATH_PREFIX) === 0;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -171,7 +248,9 @@ export interface ServiceNowClient {
   now: {
     /**
      * GET an arbitrary native ServiceNow REST path (e.g. /api/now/processflow/...).
-     * Basic auth, same credentials/retry/throttle as the rest of the client.
+     * Same credentials/retry/throttle as the rest of the client, except that
+     * /api/now/processflow/* paths authenticate with the dedicated Flow Designer
+     * identity (SN_FLOW_USER / SN_FLOW_PASSWORD) when one is configured.
      * Use for endpoints that aren't the Table API or the Dovetail Scripted REST API
      * — currently the Flow Designer processflow endpoints. Returns the raw response body.
      */
@@ -241,12 +320,70 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     ? config.maxRetries5xx
     : Number(process.env.SN_MAX_RETRIES_5XX) || 3;
 
+  var baseHeaders: Record<string, string> = {
+    accept: "application/json",
+    "content-type": "application/json"
+  };
+  if (creds.mode === "apiKey") {
+    baseHeaders["x-sn-apikey"] = creds.apiKey;
+  }
   var http: AxiosInstance = axios.create({
     baseURL: "https://" + host,
-    auth: { username: creds.user, password: creds.password },
-    headers: { accept: "application/json", "content-type": "application/json" },
+    auth: creds.mode === "basic"
+      ? { username: creds.user, password: creds.password }
+      : undefined,
+    headers: baseHeaders,
     validateStatus: function () { return true; }
   });
+
+  // Flow Designer (processflow) identity. processflow cannot carry a REST API
+  // access policy, so under API-key auth those calls must go out as basic auth
+  // with a dedicated identity. The transport is created lazily on the first
+  // processflow request and deliberately carries NO x-sn-apikey header.
+  var flowAuth = resolveFlowAuth(config);
+  var flowHttp: AxiosInstance | null = null;
+
+  /**
+   * Pick the transport for a request. Non-processflow paths always use the
+   * main client. A processflow path uses the flow identity when configured,
+   * the main client when it is already basic auth, and otherwise throws BEFORE
+   * sending — an API-key processflow call is a guaranteed 401.
+   */
+  function transportFor(cfg: AxiosRequestConfig): { http: AxiosInstance; flow: boolean } {
+    if (!isProcessflowPath(cfg.url)) {
+      return { http: http, flow: false };
+    }
+    if (flowAuth.mode === "partial") {
+      throw new Error(
+        "Flow Designer identity is incomplete: " + flowAuth.missing + " is not set. " +
+        "Set both SN_FLOW_USER and SN_FLOW_PASSWORD (or SN_DEV_FLOW_* / SN_PROD_FLOW_*) " +
+        "to authenticate /api/now/processflow/* requests."
+      );
+    }
+    if (flowAuth.mode === "basic") {
+      if (!flowHttp) {
+        flowHttp = axios.create({
+          baseURL: "https://" + host,
+          auth: { username: flowAuth.user, password: flowAuth.password },
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json"
+          },
+          validateStatus: function () { return true; }
+        });
+      }
+      return { http: flowHttp, flow: true };
+    }
+    if (creds.mode === "basic") {
+      return { http: http, flow: false };
+    }
+    throw new Error(
+      "Flow Designer requests (/api/now/processflow/*) cannot use API-key auth: ServiceNow " +
+      "cannot attach a REST API access policy to processflow, so the call would 401. " +
+      "Set SN_FLOW_USER and SN_FLOW_PASSWORD (a dedicated basic-auth identity used ONLY for " +
+      "processflow) in your env file, or pass { flowUser, flowPassword } to createClient."
+    );
+  }
 
   var lastAt = 0;
   // Dovetail core Scripted REST API: prefer the Dovetail-app path
@@ -271,6 +408,12 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
   ): Promise<{ status: number; data: any }> {
     var attempt429 = 0;
     var attempt5xx = 0;
+    // Resolved before the first send: a processflow call with no usable
+    // identity throws here, never reaching the network.
+    var transport = transportFor(cfg);
+    var authHint = transport.flow
+      ? "check SN_FLOW_USER/SN_FLOW_PASSWORD (the Flow Designer identity) and its roles."
+      : "check SN_USER/SN_PASSWORD and ACLs.";
     // eslint-disable-next-line no-constant-condition
     while (true) {
       var elapsed = Date.now() - lastAt;
@@ -281,7 +424,7 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
 
       var res;
       try {
-        res = await http.request(cfg);
+        res = await transport.http.request(cfg);
       } catch (netErr: any) {
         if (attempt5xx >= max5xx) {
           throw new Error("SN network error on " + ctx + ": " + (netErr && netErr.message));
@@ -313,7 +456,7 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
         return { status: res.status, data: res.data };
       }
       if (res.status === 401 || res.status === 403) {
-        throw new Error("SN auth error " + res.status + " on " + ctx + " — check SN_USER/SN_PASSWORD and ACLs.");
+        throw new Error("SN auth error " + res.status + " on " + ctx + " — " + authHint);
       }
       if (res.status === 404) {
         throw new Error("SN 404 on " + ctx + " — endpoint or record not found.");

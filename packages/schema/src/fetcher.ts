@@ -3,21 +3,35 @@ import chalk from "chalk";
 import { SchemaOptions, RawSchemaMap, TableField } from "./types";
 import { logger } from "./logger";
 
-function createClient(options: { instance: string; username: string; password: string }): AxiosInstance {
+function createClient(options: {
+  instance: string;
+  username: string;
+  password: string;
+  apiKey?: string;
+}): AxiosInstance {
   const baseURL = options.instance.startsWith("https://")
     ? options.instance
     : `https://${options.instance}`;
 
+  // An inbound API key is the default auth mode when present: the
+  // x-sn-apikey header replaces basic auth entirely.
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+  if (options.apiKey) {
+    headers["x-sn-apikey"] = options.apiKey;
+  }
+
   return axios.create({
     baseURL: baseURL.endsWith("/") ? baseURL : baseURL + "/",
-    auth: {
-      username: options.username,
-      password: options.password,
-    },
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-    },
+    auth: options.apiKey
+      ? undefined
+      : {
+          username: options.username,
+          password: options.password,
+        },
+    headers,
   });
 }
 
@@ -131,6 +145,7 @@ export async function fetchSchema(options: SchemaOptions): Promise<RawSchemaMap>
     instance: options.instance,
     username: options.username,
     password: options.password,
+    apiKey: options.apiKey,
   });
 
   logger.info("Fetching table schemas for " + scopes.length + " scopes...");

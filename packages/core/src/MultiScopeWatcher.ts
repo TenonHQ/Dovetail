@@ -606,20 +606,11 @@ class MultiScopeWatcherManager {
     try {
       const { defaultClient } = await import("./snClient");
       const client = defaultClient();
-      
-      // Create axios client directly to get update set details
-      const axios = (await import("axios")).default;
-      const { SN_USER = "", SN_PASSWORD = "", SN_INSTANCE = "" } = process.env;
-      
-      const axiosClient = axios.create({
-        auth: {
-          username: SN_USER,
-          password: SN_PASSWORD
-        },
-        baseURL: SN_INSTANCE
-      });
 
-      const response = await axiosClient.get(`/api/now/table/sys_update_set/${updateSetId}`, {
+      // Reuse the shared client's axios instance — it carries the resolved
+      // auth mode (inbound API key or basic) so this read never drifts from
+      // the rest of the tool's transport.
+      const response = await client.client.get(`/api/now/table/sys_update_set/${updateSetId}`, {
         params: {
           sysparm_fields: "name,state,sys_id"
         }

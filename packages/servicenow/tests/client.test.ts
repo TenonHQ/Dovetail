@@ -6,7 +6,8 @@ describe("createClient — env precedence", function () {
     "SN_INSTANCE", "SN_DEV_INSTANCE", "SN_PROD_INSTANCE",
     "SN_USER", "SN_PASSWORD",
     "SN_DEV_USERNAME", "SN_DEV_PASSWORD",
-    "SN_PROD_USERNAME", "SN_PROD_PASSWORD"
+    "SN_PROD_USERNAME", "SN_PROD_PASSWORD",
+    "SN_API_KEY", "SN_DEV_API_KEY", "SN_PROD_API_KEY"
   ];
 
   beforeEach(function () {
@@ -65,5 +66,40 @@ describe("createClient — env precedence", function () {
     process.env.SN_INSTANCE = "x.service-now.com";
     expect(function () { createClient({}); })
       .toThrow(/credentials missing/);
+  });
+
+  it("accepts SN_API_KEY alone — no basic credentials needed", function () {
+    process.env.SN_INSTANCE = "x.service-now.com";
+    process.env.SN_API_KEY = "key-123";
+    expect(function () { createClient({}); }).not.toThrow();
+  });
+
+  it("accepts cfg.apiKey alone", function () {
+    expect(function () {
+      createClient({ instance: "x.service-now.com", apiKey: "key-123" });
+    }).not.toThrow();
+  });
+
+  it("key wins over basic when both are in the environment", function () {
+    process.env.SN_INSTANCE = "x.service-now.com";
+    process.env.SN_USER = "u";
+    process.env.SN_PASSWORD = "p";
+    process.env.SN_API_KEY = "key-123";
+    // Both present must not throw; auth-mode selection is asserted in
+    // clientAuthMode.test.ts against the axios.create config.
+    expect(function () { createClient({}); }).not.toThrow();
+  });
+
+  it("cfg user/password pins basic auth even when env has SN_API_KEY", function () {
+    process.env.SN_API_KEY = "env-key";
+    expect(function () {
+      createClient({ instance: "x.service-now.com", user: "u", password: "p" });
+    }).not.toThrow();
+  });
+
+  it("falls back to SN_DEV_API_KEY / SN_PROD_API_KEY", function () {
+    process.env.SN_INSTANCE = "x.service-now.com";
+    process.env.SN_PROD_API_KEY = "prod-key";
+    expect(function () { createClient({}); }).not.toThrow();
   });
 });

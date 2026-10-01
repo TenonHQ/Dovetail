@@ -20,6 +20,12 @@ export async function getLoginInfo(): Promise<Sinc.LoginAnswers> {
       name: "password",
       message: "What is your password on that instance?",
     },
+    {
+      type: "password",
+      name: "apiKey",
+      message:
+        "Inbound API key (optional, Enter to skip — becomes the default auth when set)?",
+    },
   ]);
 }
 
@@ -28,11 +34,15 @@ export async function setupDotEnv(answers: Sinc.LoginAnswers) {
   process.env.SN_PASSWORD = answers.password;
   process.env.SN_INSTANCE = answers.instance;
 
-  writeEnvVars({
-    vars: [
-      { key: "SN_USER", value: answers.username },
-      { key: "SN_PASSWORD", value: answers.password },
-      { key: "SN_INSTANCE", value: answers.instance },
-    ],
-  });
+  var vars = [
+    { key: "SN_USER", value: answers.username },
+    { key: "SN_PASSWORD", value: answers.password },
+    { key: "SN_INSTANCE", value: answers.instance },
+  ];
+  if (answers.apiKey) {
+    process.env.SN_API_KEY = answers.apiKey;
+    vars.push({ key: "SN_API_KEY", value: answers.apiKey });
+  }
+
+  writeEnvVars({ vars: vars });
 }

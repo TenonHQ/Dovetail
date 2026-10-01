@@ -111,6 +111,8 @@ export namespace Sinc {
     instance: string;
     username: string;
     password: string;
+    /** Inbound REST API key (x-sn-apikey). Optional; becomes the default auth mode when set. */
+    apiKey?: string;
   }
 
   interface AppSelectionAnswer {

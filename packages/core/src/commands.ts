@@ -67,6 +67,7 @@ export function unknownTablesForScopes(tables: string[], scope?: string): string
 export async function refreshCommand(
   args: Sinc.SharedCmdArgs & {
     force?: boolean;
+    metadataOnly?: boolean;
     scope?: string;
     benchmark?: boolean;
     table?: string | string[];
@@ -92,13 +93,25 @@ export async function refreshCommand(
       }
     }
 
+    // --force overwrites field files from the instance; --metadata-only writes
+    // no field file at all. Asking for both is contradictory, so refuse rather
+    // than silently picking one and clobbering the caller's source.
+    if (args.metadataOnly && args.force) {
+      throw new Error(
+        "--metadata-only cannot be combined with --force: --force overwrites every " +
+        "field file from the instance, while --metadata-only writes none. Pick one.",
+      );
+    }
+
     fileLogger.debug(
       "Syncing manifest from instance (force=" + !!args.force +
+      ", metadataOnly=" + !!args.metadataOnly +
       ", benchmark=" + !!args.benchmark +
       ", tables=" + (tables.length > 0 ? tables.join(",") : "all") + ")",
     );
     await AppUtils.syncManifest(args.scope, {
       force: !!args.force,
+      metadataOnly: !!args.metadataOnly,
       benchmark: !!args.benchmark,
       tables: tables.length > 0 ? tables : undefined,
     });

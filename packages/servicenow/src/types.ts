@@ -5,10 +5,30 @@
 export interface ServiceNowClientConfig {
   /** Instance host, e.g. "tenonworkstudio.service-now.com". Defaults to SN_INSTANCE env var. */
   instance?: string;
-  /** Basic-auth user. Defaults to SN_USER env var. */
+  /**
+   * Inbound REST API key, sent as the `x-sn-apikey` header. Defaults to the
+   * SN_API_KEY env var. When a key is present it is the default auth mode and
+   * basic auth is not sent. Requires matching REST API access policies on the
+   * instance — an API without a key-enabled policy ignores the header (401).
+   */
+  apiKey?: string;
+  /** Basic-auth user. Defaults to SN_USER env var. Fallback when no API key is configured. */
   user?: string;
-  /** Basic-auth password. Defaults to SN_PASSWORD env var. */
+  /** Basic-auth password. Defaults to SN_PASSWORD env var. Fallback when no API key is configured. */
   password?: string;
+  /**
+   * Dedicated basic-auth identity for Flow Designer authoring — used ONLY for
+   * `/api/now/processflow/*` requests. ServiceNow cannot attach a REST API
+   * access policy to processflow, so under API-key auth every Flow Designer
+   * authoring call 401s; this identity is how those calls authenticate.
+   * Defaults to SN_FLOW_USER (then SN_DEV_FLOW_USER / SN_PROD_FLOW_USER) — but
+   * only when the config does not itself pin the main identity (apiKey or
+   * user/password), so an env-file-resolved config never borrows another
+   * instance's flow credentials from process.env.
+   */
+  flowUser?: string;
+  /** Password for `flowUser`. Defaults to SN_FLOW_PASSWORD (then SN_DEV_ / SN_PROD_FLOW_PASSWORD). Never logged. */
+  flowPassword?: string;
   /** Min gap between requests (ms). Defaults to SN_REQUEST_INTERVAL_MS or 20. */
   requestIntervalMs?: number;
   /** Max retries on 429. Defaults to SN_MAX_RETRIES_429 or 5. */
@@ -61,7 +81,25 @@ export interface UpdateSetRecord {
 export interface ChoiceActionResult {
   value: string;
   label: string;
+  /**
+   * The FIRST row matching this value — `sysIds[0]`. On "created" it is the new row;
+   * on "updated" a duplicate that was already correct is left untouched, so this is
+   * not necessarily a row that was written. `sysIds` is the complete picture.
+   */
   sysId: string;
+  /**
+   * EVERY sys_choice row that matched this language::value — not only the ones written.
+   * Normally one, but sys_choice has no uniqueness constraint, so a field can hold
+   * duplicates; on "updated" only the rows that actually differ are written, and any
+   * duplicate that already matched the spec is left alone. A length > 1 is the caller's
+   * signal that the field needs cleaning up.
+   *
+   * OPTIONAL only for backwards compatibility: this type ships in a published package,
+   * and a required field would break any consumer that constructs or mocks one. The
+   * runtime always populates it — treat a missing value as "an older build produced
+   * this", not as a state addChoicesToField can return.
+   */
+  sysIds?: Array<string>;
   action: "created" | "updated" | "unchanged";
 }
 
@@ -77,6 +115,61 @@ export interface AddChoicesResult {
     name: string;
   };
   choices: Array<ChoiceActionResult>;
+}
+
+export interface RemoveChoicesParams {
+  /** Target table, e.g. "x_cadso_core_event". */
+  table: string;
+  /** Target column, e.g. "state". */
+  column: string;
+  /** Choice values to soft-delete (deactivate). */
+  values: Array<string>;
+  /** Language of the choices to deactivate. Defaults to "en". */
+  language?: string;
+  /** Update set sys_id that will capture every write. Required — no default. */
+  updateSetSysId: string;
+}
+
+export interface ChoiceRemovalResult {
+  value: string;
+  /**
+   * The FIRST row matching this value — `sysIds[0]`, or "" when the value was not
+   * found. Not necessarily a row that was written: when one duplicate is already
+   * inactive and another is live, only the live one is touched. `sysIds` is the
+   * complete picture.
+   */
+  sysId: string;
+  /**
+   * EVERY sys_choice row that matched this language::value; [] when missing. A field
+   * can hold more than one row for a value (sys_choice has no uniqueness constraint),
+   * and all live ones are deactivated — acting on just the first would leave the
+   * choice selectable while reporting success.
+   *
+   * Required, unlike its counterpart on ChoiceActionResult: this type is new in the
+   * remove-choices verb and has never shipped, so there is no consumer to break, and
+   * the formatter can read it without an existence guard.
+   */
+  sysIds: Array<string>;
+  /**
+   * deactivated — was active, now inactive=true.
+   * unchanged   — already inactive; nothing written (idempotent).
+   * missing     — no such value on this field.language; nothing written.
+   */
+  action: "deactivated" | "unchanged" | "missing";
+}
+
+export interface RemoveChoicesResult {
+  field: {
+    table: string;
+    column: string;
+    language: string;
+    dictionarySysId: string;
+  };
+  updateSet: {
+    sysId: string;
+    name: string;
+  };
+  choices: Array<ChoiceRemovalResult>;
 }
 
 /* ─── Form / list / view layout tooling ─────────────────────────────────── */

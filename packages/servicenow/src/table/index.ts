@@ -38,6 +38,8 @@ export {
   setCurrentApplication,
   getRecordForm,
   getNewRecordForm,
+  getWithSession,
+  getFormPage,
   parseFormInputs,
   postForm,
   scrapeCk,
@@ -47,11 +49,41 @@ export type {
   FormAuth,
   FormSession,
   HarvestedForm,
+  FetchedFormPage,
   PostResult,
 } from "./formSession";
 
 export { addColumn, deriveElement } from "./addColumn";
 export type { AddColumnParams, AddColumnResult } from "./addColumn";
+
+export {
+  addIndex,
+  scanForDuplicates,
+  parseIndexColumns,
+  indexMatchesColumns,
+} from "./addIndex";
+export type {
+  AddIndexParams,
+  AddIndexResult,
+  AddIndexVerification,
+  DuplicateScan,
+  DuplicateValue,
+} from "./addIndex";
+
+export { listIndexes, assertTableName } from "./listIndexes";
+export type {
+  ListIndexesParams,
+  ListIndexesResult,
+  TableIndex,
+} from "./listIndexes";
+
+export {
+  createIndex,
+  validateCreateIndex,
+  DEFAULT_INDEX_FORM_PATH,
+  NOT_IN_UPDATE_SET,
+} from "./createIndex";
+export type { CreateIndexParams, CreateIndexResult } from "./createIndex";
 
 export {
   setColumn,
@@ -66,3 +98,29 @@ export type {
   AttributeChange,
   TruncationRisk,
 } from "./setColumn";
+
+export {
+  OVERRIDABLE,
+  LABEL_LANGUAGE,
+  explainMaxLengthNotOverridable,
+  resolveTableScope,
+  findOverrideRow,
+  findLabelRow,
+  effectiveValue,
+  diffInherited,
+  applyInheritedWrites,
+  overrideUpdateName,
+  labelUpdateName,
+} from "./overrideColumn";
+export type {
+  OverridableAttribute,
+  InheritedChange,
+  InheritedWriteParams,
+  InheritedWriteResult,
+} from "./overrideColumn";
+export { setTable, resolveTableAttributes } from "./setTable";
+export type {
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
+} from "./setTable";

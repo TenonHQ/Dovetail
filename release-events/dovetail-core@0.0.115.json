@@ -1,0 +1,42 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.115",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.115",
+  "prev_version": "0.0.114",
+  "published_at": "2026-07-28T03:15:38.018Z",
+  "git": {
+    "sha": "4a8d2cc328b7fd09f56d2ab6cd66203d28e5b1ae",
+    "tag": "dovetail-core@0.0.115"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "4a8d2cc32",
+      "subject": "fix(core): make metaData.json deterministic on every write path (#246)",
+      "pr": 246
+    },
+    {
+      "sha": "1749ba4f0",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "8d886d43d",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "b79555b25",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "02f562c32",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "05e406b06",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.114 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

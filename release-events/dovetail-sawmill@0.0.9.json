@@ -1,0 +1,35 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-sawmill@0.0.9",
+  "package": "@tenonhq/dovetail-sawmill",
+  "version": "0.0.9",
+  "prev_version": "0.0.8",
+  "published_at": "2026-08-31T21:34:20.896Z",
+  "git": {
+    "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+    "tag": "dovetail-sawmill@0.0.9"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "81ab50a4e",
+      "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+      "pr": 264
+    },
+    {
+      "sha": "4bc78bc61",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "c82439b30",
+      "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
+      "pr": 183
+    },
+    {
+      "sha": "958f4fcd7",
+      "subject": "chore(release): publish 3 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

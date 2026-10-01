@@ -43,13 +43,21 @@ export function buildBaseUrl(instance: string): string {
 }
 
 function createClient(config: SawmillApiConfig): AxiosInstance {
+  // An inbound API key is the default auth mode when present: the
+  // x-sn-apikey header replaces basic auth entirely.
+  var headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+  if (config.apiKey) {
+    headers["x-sn-apikey"] = config.apiKey;
+  }
   var raw = axios.create({
     baseURL: buildBaseUrl(config.instance),
-    auth: { username: config.username, password: config.password },
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-    },
+    auth: config.apiKey
+      ? undefined
+      : { username: config.username, password: config.password },
+    headers: headers,
     validateStatus: function (status: number) {
       return status >= 200 && status < 300;
     },
@@ -81,8 +89,8 @@ function shouldRetry5xx(isCommit: boolean): boolean {
 }
 
 export function createSawmillApi(config: SawmillApiConfig): SawmillApi {
-  if (!config || !config.instance || !config.username || !config.password) {
-    throw new Error("createSawmillApi requires instance, username, and password");
+  if (!config || !config.instance || !config.username || (!config.password && !config.apiKey)) {
+    throw new Error("createSawmillApi requires instance, username, and password (or apiKey)");
   }
   var client = createClient(config);
 

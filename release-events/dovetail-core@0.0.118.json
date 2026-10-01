@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.118",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.118",
+  "prev_version": "0.0.117",
+  "published_at": "2026-07-28T07:09:33.080Z",
+  "git": {
+    "sha": "e4193968a18d54df70f599a15e2b7b940fa491b9",
+    "tag": "dovetail-core@0.0.118"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "e4193968a",
+      "subject": "fix(core): close review findings from the metaData work (#251)",
+      "pr": 251
+    },
+    {
+      "sha": "f245dd850",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.117 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

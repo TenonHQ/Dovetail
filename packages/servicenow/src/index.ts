@@ -5,7 +5,21 @@
  * REST API so every change lands in the target update set and scope.
  */
 
-export { createClient } from "./client";
+export { createClient, resolveFlowAuth, isProcessflowPath, PROCESSFLOW_PATH_PREFIX } from "./client";
+
+export {
+  resolveExecutionContext,
+  isCiEnvironment,
+  evaluateWriteGate,
+  assertWriteAllowed,
+} from "./executionContext";
+export type {
+  ExecutionContext,
+  ResolveContextInput,
+  MergeSignal,
+  WriteGateInput,
+  GateDecision,
+} from "./executionContext";
 export {
   createClientFromEnvFile,
   resolveConfigFromEnvFile,
@@ -19,9 +33,14 @@ export type {
   NowInvokeMethod,
   NowInvokeParams,
   NowInvokeResponse,
+  ResolvedFlowAuth,
 } from "./client";
 
-export { addChoicesToField } from "./choices";
+export {
+  addChoicesToField,
+  removeChoicesFromField,
+  ChoiceWriteError,
+} from "./choices";
 
 export {
   hostAssets,
@@ -29,7 +48,7 @@ export {
   formatHostAssetsResult,
 } from "./hostAssets";
 
-export { formatAddChoicesResult } from "./formatter";
+export { formatAddChoicesResult, formatRemoveChoicesResult } from "./formatter";
 
 export { createView } from "./layout/views";
 export { setListLayout } from "./layout/listLayout";
@@ -44,9 +63,16 @@ export {
   verifyArtifact,
   cloneSubflow,
   cloneActionType,
+  resolveScope,
+  slugInternalName,
+  fetchActionSteps,
+  findStepInput,
   triggerPublication,
   publishActionType,
   editActionType,
+  defineActionType,
+  planActionDefinition,
+  validateDefineSpec,
   applyStepOps,
   verifySteps,
   summarizeSteps,
@@ -79,6 +105,8 @@ export type {
   CloneSubflowResult,
   CloneActionTypeParams,
   CloneActionTypeResult,
+  CloneActionTypePlan,
+  CloneActionTypeStepReport,
   TriggerPublicationParams,
   TriggerPublicationResult,
   PublishActionTypeParams,
@@ -86,11 +114,26 @@ export type {
   EditActionTypeParams,
   EditActionTypeResult,
   EditActionTypeOps,
+  DefineActionSpec,
+  DefineActionInputSpec,
+  DefineActionOutputSpec,
+  DefineStepSpec,
+  DefineStepVarSpec,
+  DefineStepOutputSpec,
+  DefineStepValue,
+  DefineActionTypeParams,
+  DefineActionTypeResult,
+  DefineActionDiff,
+  DefineActionPlan,
+  PlanActionDefinitionParams,
+  ActionView,
+  StepView,
   StepOps,
   StepRecord,
   StepSummary,
   StepIoSummary,
   PatchStepScriptOp,
+  SetStepInputOp,
   AddStepOutputOp,
   AddStepInputOp,
   ApplyStepOpsResult,
@@ -125,6 +168,9 @@ export type {
   AddChoicesParams,
   AddChoicesResult,
   ChoiceActionResult,
+  RemoveChoicesParams,
+  RemoveChoicesResult,
+  ChoiceRemovalResult,
   DictionaryRecord,
   UpdateSetRecord,
   LayoutAction,
@@ -157,19 +203,40 @@ export {
   DEFAULT_SAVE_ACTION,
   addColumn,
   deriveElement,
+  addIndex,
+  parseIndexColumns,
+  indexMatchesColumns,
+  listIndexes,
+  createIndex,
+  validateCreateIndex,
+  DEFAULT_INDEX_FORM_PATH,
+  NOT_IN_UPDATE_SET,
   setColumn,
   resolveAttributes,
   toStoredValue,
+  setTable,
+  resolveTableAttributes,
 } from "./table";
 export type {
   CreateTableParams,
   CreateTableResult,
   AddColumnParams,
   AddColumnResult,
+  AddIndexParams,
+  AddIndexResult,
+  AddIndexVerification,
+  ListIndexesParams,
+  ListIndexesResult,
+  TableIndex,
+  CreateIndexParams,
+  CreateIndexResult,
   SetColumnParams,
   SetColumnResult,
   ColumnAttributes,
   AttributeChange,
+  SetTableParams,
+  SetTableResult,
+  TableAttributes,
   TableGraph,
   NormalizedColumn,
   ColumnSpec,
@@ -192,6 +259,12 @@ export type { InvokeRestParams, InvokeRestResult } from "./invokeRest";
 export {
   publishApp,
   buildStartFields,
+  buildCreateUpdateSetFields,
+  buildPublishToUpdateSetFields,
+  resolveUpdateSetNaming,
+  describeTarget,
+  parsePublishTargets,
+  PUBLISH_TARGETS,
   parseXmlAnswer,
   parseProgressTree,
   classifyProgress,
@@ -211,3 +284,76 @@ export type {
   CicdProgress,
   PublishTransport,
 } from "./publishApp";
+
+export {
+  exportUpdateSet,
+  renderUpdateXmlRow,
+  renderRemoteUpdateSet,
+  renderUnload,
+  countUnloadRecords,
+  countUpdateXml,
+  fetchUpdateXmlRows,
+  refreshTypeFields,
+  parseStatsCount,
+  formatUnloadDate,
+  xmlEscape,
+  UPDATE_XML_FIELDS,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  DEFAULT_MAX_ROWS,
+} from "./exportUpdateSet";
+export type {
+  ExportUpdateSetParams,
+  ExportUpdateSetResult,
+  ExportMode,
+  ExportTransport,
+} from "./exportUpdateSet";
+
+export {
+  exportApp,
+  buildCreateSetFields,
+  buildPublishFields,
+  DEFAULT_EXPORT_APP_TIMEOUT_MS,
+} from "./exportApp";
+export type {
+  ExportAppParams,
+  ExportAppResult,
+  ExportAppTransport,
+} from "./exportApp";
+
+export {
+  stripSecrets,
+  verifyStripped,
+  readField,
+  readRecordTable,
+  recordFieldNames,
+  plannedStrips,
+  stripField,
+  stripJsonValue,
+  encodeXmlEntities,
+  encodeXmlText,
+  escapeRegExp,
+} from "./secrets/stripSecrets";
+export type {
+  StripSecretsResult,
+  StripSecretsOptions,
+  SecretField,
+  ReviewFinding,
+} from "./secrets/stripSecrets";
+
+export {
+  defaultSecretRules,
+  loadSecretRules,
+  mergeSecretRules,
+  secretFieldsFromDictionary,
+  isCapturable,
+  SENTINEL,
+  SECRET_INTERNAL_TYPES,
+} from "./secrets/secretRules";
+export type {
+  SecretRules,
+  FieldRule,
+  NotSecretRule,
+  DictionaryRow,
+  CapturableRow,
+} from "./secrets/secretRules";

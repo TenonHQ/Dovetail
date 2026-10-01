@@ -21,8 +21,9 @@ import type { ServiceNowClientConfig } from "./types";
  * the surrounding process.env, so the file fully determines the target.
  *
  * Throws if the file cannot be read, or if it does not define an instance and
- * a complete credential pair — failing loudly rather than silently falling
- * back to whatever instance the host process happens to be pointed at.
+ * credentials (an inbound API key, or a complete basic-auth pair) — failing
+ * loudly rather than silently falling back to whatever instance the host
+ * process happens to be pointed at.
  */
 export function resolveConfigFromEnvFile(envPath: string): ServiceNowClientConfig {
   if (typeof envPath !== "string" || envPath.length === 0) {
@@ -40,6 +41,7 @@ export function resolveConfigFromEnvFile(envPath: string): ServiceNowClientConfi
   var parsed = dotenv.parse(raw);
 
   var instance = parsed.SN_INSTANCE || parsed.SN_DEV_INSTANCE || parsed.SN_PROD_INSTANCE || "";
+  var apiKey = parsed.SN_API_KEY || parsed.SN_DEV_API_KEY || parsed.SN_PROD_API_KEY || "";
   var user = parsed.SN_USER || parsed.SN_DEV_USERNAME || parsed.SN_PROD_USERNAME || "";
   var password = parsed.SN_PASSWORD || parsed.SN_DEV_PASSWORD || parsed.SN_PROD_PASSWORD || "";
 
@@ -49,14 +51,39 @@ export function resolveConfigFromEnvFile(envPath: string): ServiceNowClientConfi
       "set SN_INSTANCE (preferred) or SN_DEV_INSTANCE / SN_PROD_INSTANCE."
     );
   }
+  // Dedicated Flow Designer (processflow) identity — optional. Carried only
+  // when the file sets it, so a file without it resolves exactly as before.
+  // Because the returned config pins the main identity, createClient takes the
+  // flow identity from this config ONLY: a file without SN_FLOW_* never
+  // borrows the host process's flow credentials.
+  var flowUser = parsed.SN_FLOW_USER || parsed.SN_DEV_FLOW_USER || parsed.SN_PROD_FLOW_USER || "";
+  var flowPassword = parsed.SN_FLOW_PASSWORD || parsed.SN_DEV_FLOW_PASSWORD || parsed.SN_PROD_FLOW_PASSWORD || "";
+  var withFlow = function (cfg: ServiceNowClientConfig): ServiceNowClientConfig {
+    if (flowUser) {
+      cfg.flowUser = flowUser;
+    }
+    if (flowPassword) {
+      cfg.flowPassword = flowPassword;
+    }
+    return cfg;
+  };
+
+  if (apiKey) {
+    // Key is the default auth mode when the file defines one. Returning the
+    // key WITHOUT user/password keeps the resolved config fully explicit —
+    // resolveAuth treats a config that names user/password as a deliberate
+    // basic-auth pin, so leaking them here would flip the mode.
+    return withFlow({ instance: instance, apiKey: apiKey });
+  }
   if (!user || !password) {
     throw new Error(
       "env file '" + envPath + "' is missing ServiceNow credentials — " +
-      "set SN_USER/SN_PASSWORD (preferred) or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
+      "set SN_API_KEY (inbound API key, preferred), SN_USER/SN_PASSWORD, " +
+      "or SN_DEV_USERNAME/SN_DEV_PASSWORD (or SN_PROD_*)."
     );
   }
 
-  return { instance: instance, user: user, password: password };
+  return withFlow({ instance: instance, user: user, password: password });
 }
 
 /**

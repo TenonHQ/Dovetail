@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.41",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.41",
+  "prev_version": "0.0.40",
+  "published_at": "2026-09-30T18:11:44.228Z",
+  "git": {
+    "sha": "9b9ab2c74484de1a8192957732b9a86df8e19054",
+    "tag": "dovetail-servicenow@0.0.41"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "9b9ab2c74",
+      "subject": "feat(servicenow): processflow identity + dove-sn clone-action / action_clone (#280)",
+      "pr": 280
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

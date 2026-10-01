@@ -268,9 +268,38 @@ export const getFileContextFromPath = (
 export const toAbsolutePath = (p: string): string =>
   path.isAbsolute(p) ? p : path.join(process.cwd(), p);
 
+/**
+ * True when `p` is a directory. THROWS if `p` does not exist — `fsp.stat`
+ * rejects with ENOENT and that rejection is deliberately not swallowed, because
+ * `getPathsInPath` relies on a missing path being an error rather than being
+ * silently treated as a file.
+ *
+ * If you are asking "is there a directory here?" about a path that may legally
+ * be absent, you want `isExistingDirectory` instead. Using this one for that
+ * shipped a real bug: the `--metadata-only` refresh aborted an entire scope on
+ * the first record present on the instance but absent from the branch, which is
+ * the common case, not an edge one.
+ */
 export const isDirectory = async (p: string): Promise<boolean> => {
   const stats = await fsp.stat(p);
   return stats.isDirectory();
+};
+
+/**
+ * True when `p` exists AND is a directory; false for a missing path, a regular
+ * file, or an unreadable one. Never throws.
+ *
+ * Prefer this over `pathExists` when the caller is about to write *into* `p` —
+ * `pathExists` also returns true for a regular file, so a stray file sitting at
+ * a record path would pass the check and fail confusingly at write time.
+ */
+export const isExistingDirectory = async (p: string): Promise<boolean> => {
+  try {
+    const stats = await fsp.stat(p);
+    return stats.isDirectory();
+  } catch (e) {
+    return false;
+  }
 };
 
 export const getPathsInPath = async (p: string): Promise<string[]> => {

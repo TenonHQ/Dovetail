@@ -27,14 +27,20 @@ import * as path from "path";
 import { loadEnvFile } from "./loadEnv";
 import { createClient } from "./client";
 import { readFieldsFromJsonFile } from "./fieldsFromJson";
-import { addChoicesToField } from "./choices";
-import { formatAddChoicesResult } from "./formatter";
+import { addChoicesToField, removeChoicesFromField } from "./choices";
+import { formatAddChoicesResult, formatRemoveChoicesResult } from "./formatter";
 import { createView } from "./layout/views";
 import { setListLayout } from "./layout/listLayout";
 import { setFormLayout } from "./layout/formLayout";
 import { setRelatedLists } from "./layout/relatedLists";
 import { formatLayoutResult, formatCreateViewResult } from "./layout/formatter";
 import { runStdio, runSmoke } from "./mcp/server";
+import { exportUpdateSet } from "./exportUpdateSet";
+import type { ExportMode } from "./exportUpdateSet";
+import { exportApp } from "./exportApp";
+import { stripSecrets } from "./secrets/stripSecrets";
+import { loadSecretRules } from "./secrets/secretRules";
+import { removeChoicesFromFieldSchema } from "./mcp/schemas";
 import { runBuildFlow } from "./flowDesigner/buildFlowOrchestrator";
 import { formatBuildFlowResult } from "./flowDesigner-formatter";
 import { readFlow } from "./flowDesigner/readFlow";
@@ -44,22 +50,38 @@ import { copyFlow } from "./flowDesigner/copyFlow";
 import { createFlow } from "./flowDesigner/createFlow";
 import { editFlow } from "./flowDesigner/editFlow";
 import { editActionType } from "./flowDesigner/editActionType";
+import { cloneActionType } from "./flowDesigner/cloneActionType";
+import { defineActionType } from "./flowDesigner/defineActionType";
+import type { DefineActionSpec, DefineActionTypeResult } from "./flowDesigner/defineActionType";
+import type { StepOps } from "./flowDesigner/stepOps";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, setColumn } from "./table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  listIndexes,
+  createIndex,
+  setColumn,
+  setTable,
+} from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
+  AddIndexParams,
+  CreateIndexParams,
   SetColumnParams,
   ColumnAttributes,
+  SetTableParams,
+  TableAttributes,
 } from "./table";
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
-import { invokeRest } from "./invokeRest";
+import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
-import { publishApp } from "./publishApp";
+import { publishApp, parsePublishTargets, PUBLISH_TARGETS } from "./publishApp";
 import type {
   PublishAppParams,
   PublishAppResult,
@@ -72,6 +94,7 @@ import {
 } from "./flowDesigner-formatter";
 import type {
   AddChoicesParams,
+  RemoveChoicesParams,
   ChoiceValue,
   CreateViewParams,
   SetListLayoutParams,
@@ -157,7 +180,45 @@ function paramsFromFlags(flags: Record<string, string>): AddChoicesParams {
   return params;
 }
 
-async function runAddChoices(flags: Record<string, string>): Promise<void> {
+/**
+ * A string flag whose value was forgotten arrives as the literal "true" (see
+ * ParsedArgs.bare). Booleans legitimately do that, strings never do — so refuse
+ * rather than write nonsense. Returns the message to print, or null when clean.
+ */
+function bareStringFlagError(
+  verb: string,
+  bare: Record<string, boolean>,
+  stringFlags: Array<string>,
+): string | null {
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      return (
+        verb + ": --" + stringFlags[f] + " needs a value (it was given none).\n"
+      );
+    }
+  }
+  return null;
+}
+
+async function runAddChoices(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // `updateSetSysId` is guarded alongside `update-set` because paramsFromFlags accepts
+  // both spellings — guarding only the dashed one leaves the alias as a way in.
+  var bareErr = bareStringFlagError("add-choices", bare, [
+    "table",
+    "column",
+    "update-set",
+    "updateSetSysId",
+    "choices",
+    "from-json",
+    "choice-type",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
   var params = paramsFromFlags(flags);
   var client = createClient({});
   var result = await addChoicesToField(client, params);
@@ -165,11 +226,87 @@ async function runAddChoices(flags: Record<string, string>): Promise<void> {
     process.stdout.write(
       JSON.stringify({ params: params, result: result }, null, 2) + "\n",
     );
-    return;
+    return 0;
   }
   process.stdout.write(
     formatAddChoicesResult(params.table, params.column, result) + "\n",
   );
+  return 0;
+}
+
+function removeParamsFromFlags(
+  flags: Record<string, string>,
+): RemoveChoicesParams {
+  if (flags["from-json"]) {
+    var raw = fs.readFileSync(flags["from-json"], "utf8");
+    // Validate rather than cast: the same zod schema the MCP tool parses with, so a
+    // malformed spec fails here with a field-level message instead of somewhere
+    // downstream as an undefined table name.
+    return removeChoicesFromFieldSchema.parse(
+      JSON.parse(raw),
+    ) as RemoveChoicesParams;
+  }
+  var table = flags.table;
+  var column = flags.column;
+  var updateSetSysId = flags["update-set"] || flags.updateSetSysId;
+  var valuesInline = flags.values;
+  if (!table || !column || !updateSetSysId || !valuesInline) {
+    throw new Error(
+      "Missing required flags: --table, --column, --update-set, --values",
+    );
+  }
+  var params: RemoveChoicesParams = {
+    table: table,
+    column: column,
+    updateSetSysId: updateSetSysId,
+    values: valuesInline
+      .split(",")
+      .map(function (v) {
+        return v.trim();
+      })
+      .filter(function (v) {
+        return v.length > 0;
+      }),
+  };
+  if (flags.language) {
+    params.language = flags.language;
+  }
+  return params;
+}
+
+async function runRemoveChoices(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // --language matters most here: a bare one makes every lookup key "true::<value>",
+  // so every value reports "missing", nothing is written, and the summary still reads
+  // like a clean run. That is the silent failure this verb family exists to catch.
+  var bareErr = bareStringFlagError("remove-choices", bare, [
+    "table",
+    "column",
+    "update-set",
+    "updateSetSysId",
+    "values",
+    "language",
+    "from-json",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var params = removeParamsFromFlags(flags);
+  var client = createClient({});
+  var result = await removeChoicesFromField(client, params);
+  if (flags.json === "true") {
+    process.stdout.write(
+      JSON.stringify({ params: params, result: result }, null, 2) + "\n",
+    );
+    return 0;
+  }
+  process.stdout.write(
+    formatRemoveChoicesResult(params.table, params.column, result) + "\n",
+  );
+  return 0;
 }
 
 /**
@@ -923,6 +1060,358 @@ async function runEditAction(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn clone-action:
+ *   --from <sys_id>            Required. Source sys_hub_action_type_definition sys_id.
+ *   --name <name>              Required. Display name of the clone (idempotency key with --scope).
+ *   --scope <name|sys_id>      Required. Target scope — a scope name (x_cadso_email_spok) or 32-hex sys_id.
+ *   --internal-name <name>     Optional. Default: slug of --name.
+ *   --description <text>       Optional.
+ *   --ops <path>               Optional. JSON StepOps applied to the cloned steps before publish:
+ *                              patchStepScripts / setStepInputs / addStepOutputs / addStepInputs.
+ *   --update-set <sys_id>      Required with --confirm. Every write + the publish land here.
+ *   --confirm                  Execute (write the graph, publish, verify). WITHOUT it: dry-run.
+ *   --dry-run                  Force a dry-run even with --confirm.
+ *   --json                     Emit the structured CloneActionTypeResult.
+ *
+ * Clones a Custom Action Type — parent, inputs, outputs, every step instance and
+ * its step-level ext inputs/outputs — into the target scope, then publishes it
+ * headlessly through the snapshot path (multi-step capable) and reads the steps
+ * back to verify. Idempotent on (name, scope). DRY-RUN BY DEFAULT.
+ *
+ * --ops shape:
+ *   {
+ *     "setStepInputs":    [{ "step": "REST Step", "input": "http_method", "value": "post" }],
+ *     "patchStepScripts": [{ "step": "Parse", "patchScript": { "find": "a", "replace": "b" } }],
+ *     "addStepOutputs":   [{ "step": "Parse", "name": "isRetryable", "type": "boolean" }],
+ *     "addStepInputs":    [{ "step": "Handle", "name": "isRetryable", "type": "boolean",
+ *                            "pillFrom": { "step": "Parse", "output": "isRetryable" } }]
+ *   }
+ * `step` is a step cid or label; `scriptFile` (resolved relative to the ops file)
+ * is sugar for `setScript` in patchStepScripts.
+ */
+var CLONE_OPS_KEYS = ["patchStepScripts", "setStepInputs", "addStepOutputs", "addStepInputs"];
+
+async function runCloneAction(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("clone-action", bare, [
+    "from",
+    "name",
+    "scope",
+    "internal-name",
+    "description",
+    "ops",
+    "update-set",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var from = flags.from;
+  var name = flags.name;
+  var scope = flags.scope;
+  if (!from || !name || !scope) {
+    process.stderr.write(
+      "clone-action: --from <sys_id>, --name <name> and --scope <scope name|sys_id> are required\n",
+    );
+    return 1;
+  }
+  var confirm = flags.confirm === "true";
+  var dryRun = flags["dry-run"] === "true";
+  var updateSet = flags["update-set"] || flags.updateSetSysId;
+  if (confirm && !dryRun && !updateSet) {
+    process.stderr.write(
+      "clone-action: --update-set <sys_id> is required with --confirm\n",
+    );
+    return 1;
+  }
+
+  var stepOps: Record<string, unknown> | undefined;
+  if (flags.ops) {
+    var parsedOps: unknown = JSON.parse(fs.readFileSync(flags.ops, "utf8"));
+    if (!parsedOps || typeof parsedOps !== "object" || Array.isArray(parsedOps)) {
+      process.stderr.write("clone-action: --ops must contain a StepOps object\n");
+      return 1;
+    }
+    var opsObj = parsedOps as Record<string, unknown>;
+    var opsKeys = Object.keys(opsObj);
+    for (var k = 0; k < opsKeys.length; k += 1) {
+      if (CLONE_OPS_KEYS.indexOf(opsKeys[k]) === -1) {
+        process.stderr.write(
+          "clone-action: unknown --ops key '" +
+            opsKeys[k] +
+            "' (allowed: " +
+            CLONE_OPS_KEYS.join(", ") +
+            ")\n",
+        );
+        return 1;
+      }
+    }
+    resolveScriptFiles(opsObj, flags.ops);
+    stepOps = opsObj;
+  }
+
+  var result = await cloneActionType({
+    client: createClient({}),
+    sourceSysId: from,
+    newName: name,
+    internalName: flags["internal-name"],
+    newScope: scope,
+    updateSetSysId: updateSet,
+    description: flags.description,
+    stepOps: stepOps as StepOps | undefined,
+    confirm: confirm,
+    dryRun: dryRun,
+  });
+
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result.verify && !result.verify.ok ? 1 : 0;
+  }
+
+  process.stdout.write(
+    "[" + result.action + "] " + name + " (" + result.internalName + ") -> " + result.sysId + "\n",
+  );
+  if (result.action === "unchanged") {
+    process.stdout.write(
+      "  an action with this name already exists in the target scope — nothing written\n",
+    );
+    return 0;
+  }
+  if (result.plan) {
+    process.stdout.write(
+      "  scope: " +
+        result.plan.scope.name +
+        " (" +
+        result.plan.scope.sysId +
+        ")  source scope: " +
+        result.plan.sourceScopeSysId +
+        "\n  records: " +
+        result.plan.total +
+        "\n",
+    );
+    var tables = Object.keys(result.plan.counts);
+    for (var t = 0; t < tables.length; t += 1) {
+      process.stdout.write("    " + tables[t] + ": " + result.plan.counts[tables[t]] + "\n");
+    }
+  }
+  if (result.steps) {
+    process.stdout.write("\n--- steps (as published) ---\n");
+    for (var si = 0; si < result.steps.after.length; si += 1) {
+      var step = result.steps.after[si];
+      process.stdout.write(
+        "  " +
+          step.label +
+          " (" +
+          step.cid +
+          ")" +
+          (step.scriptChars !== null ? " script " + step.scriptChars + " chars" : "") +
+          (step.extendedInputs.length ? " in:" + step.extendedInputs.length : "") +
+          (step.extendedOutputs.length ? " out:" + step.extendedOutputs.length : "") +
+          "\n",
+      );
+    }
+    for (var ci = 0; ci < result.steps.changes.length; ci += 1) {
+      process.stdout.write("  + " + result.steps.changes[ci] + "\n");
+    }
+    for (var wi = 0; wi < result.steps.warnings.length; wi += 1) {
+      process.stdout.write("  ! " + result.steps.warnings[wi] + "\n");
+    }
+  }
+  if (result.action === "planned") {
+    process.stdout.write(
+      "\nDRY RUN — nothing written. Re-run with --confirm --update-set <sys_id> to clone + publish.\n",
+    );
+    return 0;
+  }
+  process.stdout.write(
+    "\nwritten: " +
+      result.written.length +
+      " record(s)" +
+      (result.publish
+        ? "; published (HTTP " +
+          result.publish.httpStatus +
+          (result.publish.snapshotSysId ? ", snapshot " + result.publish.snapshotSysId : "") +
+          ")"
+        : "") +
+      "\n",
+  );
+  if (result.verify) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n");
+    process.stdout.write("  " + (result.verify.ok ? "OK" : "FAILED") + "\n");
+    for (var vi = 0; vi < result.verify.notes.length; vi += 1) {
+      process.stdout.write(
+        "  " + (result.verify.ok ? "+ " : "! ") + result.verify.notes[vi] + "\n",
+      );
+    }
+    if (!result.verify.ok) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * dove-sn define-action:
+ *   --sys-id <sys_id>          Required. The sys_hub_action_type_definition to define (the shell must
+ *                              exist — make it with clone-action or the Flow Designer).
+ *   --scope <name|sys_id>      Required. The action's own scope (x_cadso_email_spok or a 32-hex sys_id).
+ *   --spec <spec.json>         Required. The definition — action inputs, outputs, steps (see below).
+ *   --update-set <sys_id>      Optional. Pin the REST session to this update set before the save/publish.
+ *   --publish                  With --confirm: also publish (snapshot) after the save.
+ *   --confirm                  Execute (PUT the model, verify, optionally publish). WITHOUT it: dry-run.
+ *   --dry-run                  Force a dry-run even with --confirm.
+ *   --json                     Emit the structured DefineActionTypeResult.
+ *
+ * Saves the action the way the Flow Designer's Save does: GET the model + the
+ * step graph, merge the spec, PUT the FULL model back to
+ * /api/now/processflow/action/action_types/{id}, read it back to verify.
+ * DRY-RUN BY DEFAULT: prints the planned diff, writes nothing. Idempotent: a
+ * spec already in effect is "unchanged" and makes no PUT.
+ *
+ * --spec shape (every part optional — incremental edits are fine):
+ *   {
+ *     "action":  { "name": "...", "description": "...", "access": "public" | "package_private" },
+ *     "inputs":  [{ "name": "host", "type": "choice", "mandatory": true, "default": "api",
+ *                   "choices": [{ "value": "api", "label": "API" }] }],      // upsert by name; "remove": true
+ *     "outputs": [{ "name": "status_code", "value": "{{steps.call.status_code}}" }],
+ *     "steps": [
+ *       { "ref": "guard", "type": "script", "label": "Guard", "scriptFile": "guard.js",
+ *         "inputs":  { "host_1": "{{action.host}}" }, "outputs": [{ "name": "base_url" }] },
+ *       { "ref": "call", "type": "rest", "label": "Call", "values": { "base_url": "{{steps.guard.base_url}}",
+ *         "http_method": "get", "headers": [{ "name": "Accept", "value": "application/json" }] } }
+ *     ]
+ *   }
+ * `scriptFile` (resolved relative to the spec file) is sugar for `script`.
+ */
+async function runDefineAction(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("define-action", bare, ["sys-id", "scope", "spec", "update-set"]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var sysId = flags["sys-id"] || flags.sysId;
+  var scope = flags.scope;
+  var specPath = flags.spec;
+  if (!sysId || !scope || !specPath) {
+    process.stderr.write(
+      "define-action: --sys-id <sys_id>, --scope <scope name|sys_id> and --spec <spec.json> are required\n",
+    );
+    return 1;
+  }
+  var rawSpec: unknown = JSON.parse(fs.readFileSync(specPath, "utf8"));
+  if (!rawSpec || typeof rawSpec !== "object" || Array.isArray(rawSpec)) {
+    process.stderr.write("define-action: --spec must contain a JSON object\n");
+    return 1;
+  }
+  resolveStepScriptFiles(rawSpec as Record<string, unknown>, specPath);
+
+  var result = await defineActionType({
+    client: createClient({}),
+    sysId: sysId,
+    scope: scope,
+    spec: rawSpec as DefineActionSpec,
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    publish: flags.publish === "true",
+    updateSetSysId: flags["update-set"],
+  });
+
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result.verify && !result.verify.ok ? 1 : 0;
+  }
+
+  var d = result.diff;
+  process.stdout.write(
+    "[" + result.status + "] " + result.after.action.name + " (" + result.sysId + ") in " +
+      result.scope.name + "\n",
+  );
+  d.action.forEach(function (c) {
+    process.stdout.write("  action." + c.field + ": '" + c.before + "' -> '" + c.after + "'\n");
+  });
+  var named = function (kind: string, part: DefineActionTypeResult["diff"]["inputs"]): void {
+    part.added.forEach(function (n) {
+      process.stdout.write("  + " + kind + " " + n + "\n");
+    });
+    part.changed.forEach(function (c) {
+      process.stdout.write(
+        "  ~ " + kind + " " + c.name + ": " +
+          c.changes.map(function (f) {
+            return f.field + " '" + f.before + "' -> '" + f.after + "'";
+          }).join(", ") + "\n",
+      );
+    });
+    part.removed.forEach(function (n) {
+      process.stdout.write("  - " + kind + " " + n + "\n");
+    });
+  };
+  named("input", d.inputs);
+  named("output", d.outputs);
+  var stepLine = function (sign: string, s: DefineActionTypeResult["diff"]["steps"]["added"][number]): void {
+    process.stdout.write(
+      "  " + sign + " step " + s.order + " '" + s.label + "' [" + s.type + "] " + s.cid +
+        (s.ref ? " (ref " + s.ref + (s.matchedBy ? ", matched by " + s.matchedBy : "") + ")" : "") + "\n",
+    );
+    s.changes.forEach(function (c) {
+      process.stdout.write("      " + c + "\n");
+    });
+  };
+  d.steps.added.forEach(function (s) { stepLine("+", s); });
+  d.steps.changed.forEach(function (s) { stepLine("~", s); });
+  d.steps.removed.forEach(function (s) { stepLine("-", s); });
+  if (d.empty) {
+    process.stdout.write("  no changes — the spec is already in effect\n");
+  }
+  result.warnings.forEach(function (w) {
+    process.stdout.write("  ! " + w + "\n");
+  });
+  if (result.status === "planned") {
+    process.stdout.write(
+      "\nDRY RUN — nothing written. Re-run with --confirm (and --publish to snapshot) to save.\n",
+    );
+    return 0;
+  }
+  if (result.verify) {
+    process.stdout.write("\n--- verify (read back from the instance) ---\n  " + (result.verify.ok ? "OK" : "FAILED") + "\n");
+    result.verify.notes.forEach(function (n) {
+      process.stdout.write("  " + (result.verify && result.verify.ok ? "+ " : "! ") + n + "\n");
+    });
+  }
+  if (result.publish) {
+    process.stdout.write(
+      "published (HTTP " + result.publish.httpStatus +
+        (result.publish.snapshotSysId ? ", snapshot " + result.publish.snapshotSysId : "") + ")\n",
+    );
+  }
+  return result.verify && !result.verify.ok ? 1 : 0;
+}
+
+/** Replace each step's `scriptFile` with `script`, read relative to the spec file. */
+function resolveStepScriptFiles(spec: Record<string, unknown>, specPath: string): void {
+  var steps = spec.steps;
+  if (!Array.isArray(steps)) {
+    return;
+  }
+  var specDir = path.dirname(path.resolve(specPath));
+  for (var i = 0; i < steps.length; i += 1) {
+    var step = steps[i];
+    if (!step || typeof step !== "object" || typeof step.scriptFile !== "string") {
+      continue;
+    }
+    if (typeof step.script === "string") {
+      throw new Error("define-action: step '" + String(step.ref) + "' sets both scriptFile and script — pick one.");
+    }
+    step.script = fs.readFileSync(path.resolve(specDir, step.scriptFile), "utf8");
+    delete step.scriptFile;
+  }
+}
+
 async function runMcp(flags: Record<string, string>): Promise<number> {
   if (flags.smoke === "true") {
     await runSmoke();
@@ -940,6 +1429,9 @@ function printHelp(): void {
     "dove-sn — ServiceNow platform helpers\n\n" +
       "Commands:\n" +
       "  add-choices        Upsert sys_choice rows for a table.column\n" +
+      "  remove-choices     Soft-delete (inactive=true) sys_choice values for a table.column\n" +
+      "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id>\n" +
+      "                      [--language en] [--from-json <path>] [--json])\n" +
       "  create-view        Create a custom view (sys_ui_view)\n" +
       "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
       "  set-list-layout    Set the columns of a list layout\n" +
@@ -974,6 +1466,39 @@ function printHelp(): void {
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
       "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
       "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
+      "  add-index          Create a single-column UNIQUE index (sys_dictionary.unique), then verify\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--table <name|sys_id> --columns <column> --unique --update-set <sys_id>\n" +
+      "                      [--confirm] [--scope <s>] [--dry-run] [--debug] [--json])\n" +
+      "                     ONE column only: unique is a per-COLUMN dictionary flag, so a\n" +
+      "                     composite index is REFUSED, not narrowed — that stays UI work,\n" +
+      "                     as does a plain (non-unique) index. The run ABORTS before writing\n" +
+      "                     when the column holds duplicate values (EMPTY counts): a unique\n" +
+      "                     index cannot build over them and the platform fails that ALTER\n" +
+      "                     SILENTLY, leaving unique=true with no index behind it. It aborts\n" +
+      "                     the same way when that scan hits its row cap — an UNPROVEN scan\n" +
+      "                     is treated exactly like a proven collision. Success is\n" +
+      "                     read back from v_db_index; that view has no uniqueness field, so\n" +
+      "                     ENFORCEMENT is always reported unverified.\n" +
+      "  index-list         List a table's DATABASE INDEXES from the v_db_index view (read-only)\n" +
+      "                     (--table <name> [--json])\n" +
+      "                     sys_index is API-level-ACL 403 and sys_index_column does not\n" +
+      "                     exist, so v_db_index is the only index read surface. It has no\n" +
+      "                     uniqueness field, so WHICH indexes are unique is always\n" +
+      "                     reported unverified.\n" +
+      "  index-create       Create a DATABASE INDEX (composite and non-unique included) by\n" +
+      "                     replaying the platform index-creator form, then read it back\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is sent or read without --confirm\n" +
+      "                     (--table <name> --columns <a[,b,...]> [--unique]\n" +
+      "                      [--access-method <m>] [--confirm] [--dry-run]\n" +
+      "                      [--poll-attempts <n>] [--poll-interval-ms <n>] [--debug] [--json])\n" +
+      "                     A DATABASE INDEX IS PHYSICAL AND PER-INSTANCE: it is NOT captured\n" +
+      "                     in an update set and does NOT travel with a promotion — re-run it\n" +
+      "                     against every environment. There is no --update-set for that\n" +
+      "                     reason. Idempotent: an index over exactly those columns already\n" +
+      "                     present returns already-exists with no write. --name is REFUSED —\n" +
+      "                     the platform's form has no name input; the real name is returned.\n" +
+      "                     Needs a username+password identity that can form-log-in.\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
@@ -983,12 +1508,25 @@ function printHelp(): void {
       "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
       "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
       "                     Shorten or clear those values first, then re-run.\n" +
+      "                     An INHERITED column (one defined on a parent table) is narrowed for\n" +
+      "                     YOUR table alone, via sys_dictionary_override / sys_documentation —\n" +
+      "                     the parent and its other children are untouched. max-length is the\n" +
+      "                     exception: it is the parent's physical column and is refused.\n" +
       "                     --element / --internal-type are REFUSED with an explanation:\n" +
       "                     ServiceNow silently ignores both on an existing column.\n" +
+      "  set-table          Update an EXISTING TABLE's own dictionary row (the collection row),\n" +
+      "                     into an update set, then verify against the instance\n" +
+      "                     (--table <t> --update-set <sys_id> [--audit true|false]\n" +
+      "                      [--dry-run] [--json])\n" +
+      "                     --audit turns RECORD AUDITING on/off for the whole table: with it\n" +
+      "                     true ServiceNow writes a sys_audit row per changed field on every\n" +
+      "                     insert and update — a real cost on a high-write table.\n" +
+      "                     Column attributes belong to set-column, record values to set-field.\n" +
       "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
       "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
       "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json])\n" +
+      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json]\n" +
+      "                      [--out <file>  full JSON result to a file (atomic; overwrites); for large bodies])\n" +
       "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
       "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
       '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
@@ -1007,21 +1545,62 @@ function printHelp(): void {
       "                                              (per-step scripts + step IO + data-pill wiring)\n" +
       '                      | --patch-script "<find>::<replace>" | --set-script <path> | --merge-outputs <path>\n' +
       "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
+      "  clone-action       Clone a Custom Action Type (all steps + step IO) into a scope and publish it\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--from <sys_id> --name <n> --scope <scope name|sys_id>\n" +
+      "                      [--internal-name <n>] [--description <d>]\n" +
+      "                      [--ops <ops.json>]  ops: setStepInputs / patchStepScripts /\n" +
+      "                                          addStepOutputs / addStepInputs\n" +
+      "                      [--update-set <sys_id> (required with --confirm)] [--confirm] [--dry-run] [--json])\n" +
+      "                     Idempotent on (name, scope). Publishes via the snapshot path and\n" +
+      "                     reads the steps back to verify.\n" +
+      "  define-action      Define a Custom Action Type's inputs, outputs and steps (script + REST,\n" +
+      "                     data-pill wired) the way the Designer's Save does, then optionally publish\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
+      "                     (--sys-id <sys_id> --scope <scope name|sys_id> --spec <spec.json>\n" +
+      "                      [--update-set <sys_id>] [--publish] [--confirm] [--dry-run] [--json])\n" +
+      "                     Idempotent: a spec already in effect makes no write. The action shell\n" +
+      "                     must exist (clone-action or the Designer).\n" +
       "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
       "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-      "  publish-app        Publish a scoped app to the ServiceNow Store and/or the company\n" +
-      "                     application repository, then poll the publish to completion.\n" +
+      "  publish-app        Publish a scoped app to the ServiceNow Store, the company application\n" +
+      "                     repository, and/or a new update set, then poll each to completion.\n" +
       "                     STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store.\n" +
       "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
-      "                     (--app <scope|sys_id|name> --version <v> --target store|repo|both\n" +
+      "                     (--app <scope|sys_id|name> --version <v>\n" +
+      "                      --target store|repo|repo-ui|update-set|both (comma-separated ok)\n" +
       "                      [--dev-notes <text>] [--store-user <email>] [--timeout-ms <n>]\n" +
-      "                      [--dry-run] [--json] [--confirm])\n" +
+      "                      [--update-set-name <name>] [--update-set-description <text>]\n" +
+      "                      [--include-data] [--dry-run] [--json] [--confirm])\n" +
       "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
-      "                     the password is never a flag. Repo publish needs the sn_cicd role.\n" +
+      "                     the password is never a flag. 'repo' needs the sn_cicd plugin+role;\n" +
+      "                     'repo-ui' reaches the same repository over the UI uploader instead.\n" +
+      "  export-update-set  Export an update set to importable <unload> XML, with secret\n" +
+      "                     values replaced by __SET_DURING_INSTALL__ (no opt-out).\n" +
+      "                     assemble mode is READ-ONLY; complete mode marks the set\n" +
+      "                     complete on the instance and needs --confirm.\n" +
+      "                     (--update-set <sys_id|name> --out <file>\n" +
+      "                      [--mode assemble|complete]\n" +
+      "                      [--rules <file>] [--page-size <n>] [--max-rows <n>]\n" +
+      "                      [--dry-run] [--json] [--confirm])\n" +
+      "  export-app         Publish a scoped app into a new update set and export it.\n" +
+      "                     PUBLISHING IS A REAL INSTANCE WRITE (~1000+ records).\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
+      "                     (--app <scope|sys_id|name> --out <file> [--version <v>]\n" +
+      "                      [--description <text>] [--include-data] [--rules <file>]\n" +
+      "                      [--timeout-ms <n>] [--dry-run] [--json] [--confirm])\n" +
+      "  strip-secrets      Strip secret values from an unload XML exported elsewhere\n" +
+      "                     (--in <file> [--out <file>] [--rules <file>] [--report] [--json])\n" +
       "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
       "\nGlobal flags:\n" +
-      "  --env <path>       Load credentials from a specific .env file (also --env-file,\n" +
-      "                     or the DOVETAIL_ENV_FILE env var). Default: .env in the cwd.\n",
+      "  --env <name|path>  Load credentials from a specific env file (also --env-file,\n" +
+      "                     or the DOVETAIL_ENV_FILE env var). A bare name like 'prod'\n" +
+      "                     resolves to .env.prod in the cwd. The file's SN_* connection\n" +
+      "                     vars replace any already exported; a missing or incomplete\n" +
+      "                     file is an error (no fallback). Default: .env in the cwd.\n" +
+      "  Flow Designer auth /api/now/processflow/* can't carry an API access policy, so\n" +
+      "                     under SN_API_KEY those calls use a dedicated basic-auth identity:\n" +
+      "                     SN_FLOW_USER / SN_FLOW_PASSWORD (or SN_DEV_FLOW_* / SN_PROD_FLOW_*).\n",
   );
 }
 
@@ -1203,13 +1782,233 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   return 0;
 }
 
+/**
+ * dove-sn add-index:
+ *   --table x_cadso_journey_instance --columns occurrence_key --unique
+ *   --update-set <sys_id> [--confirm] [--scope x_cadso_journey] [--debug] [--json]
+ *
+ * DRY-RUN BY DEFAULT — nothing is written without --confirm (--dry-run forces a
+ * dry-run even with it). --update-set is required on the live path and is checked
+ * here, before a client is built or a single request goes out.
+ *
+ * Exit codes: 0 created / skipped / dry-run, 1 bad args, 2 failed (which includes
+ * "the dictionary flag is set but no index was read back" — the lying-row case).
+ */
+async function runAddIndex(flags: Record<string, string>): Promise<number> {
+  var table = flags.table;
+  var columns = (flags.columns || "")
+    .split(",")
+    .map(function (c) {
+      return c.trim();
+    })
+    .filter(function (c) {
+      return c.length > 0;
+    });
+  if (!table || columns.length === 0) {
+    process.stderr.write(
+      "add-index: --table and --columns <column> are required " +
+        "(--unique too, and --update-set unless this is a dry-run)\n",
+    );
+    return 1;
+  }
+  // The only headless lever is sys_dictionary.unique. Refuse a non-unique request by
+  // name instead of building something else and calling it done.
+  if (flags.unique !== "true") {
+    process.stderr.write(
+      "add-index: --unique is required — the only headless lever is " +
+        "sys_dictionary.unique, which has no equivalent for a plain (non-unique) " +
+        "index. Create that one in the platform UI.\n",
+    );
+    return 1;
+  }
+  // DRY-RUN BY DEFAULT: --confirm is what sends; --dry-run forces a plan even with it.
+  var dryRun = flags["dry-run"] === "true" || flags.confirm !== "true";
+  if (!dryRun && !flags["update-set"]) {
+    process.stderr.write(
+      "add-index: --update-set is required on the live path (only a dry-run works without one)\n",
+    );
+    return 1;
+  }
+
+  var params: AddIndexParams = {
+    client: createClient({}),
+    table: table,
+    columns: columns,
+    unique: true,
+    dryRun: dryRun,
+  };
+  if (flags.scope) params.scope = flags.scope;
+  if (flags["update-set"]) params.updateSetSysId = flags["update-set"];
+  if (flags.debug === "true") params.debug = true;
+
+  var result = await addIndex(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        "." +
+        result.columns.join(",") +
+        (result.indexName ? " -> " + result.indexName : "") +
+        "\n" +
+        result.note +
+        "\nUNVERIFIED: " +
+        result.unverified.join(", ") +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
+ * dove-sn index-list:
+ *   --table x_cadso_automate_message_batch_recipient [--json]
+ *
+ * Read-only. Lists the table's database indexes from the v_db_index view — the only
+ * index read surface an instance exposes (sys_index is API-level-ACL 403,
+ * sys_index_column does not exist).
+ *
+ * Exit codes: 0 read, 1 bad args.
+ */
+async function runIndexList(flags: Record<string, string>): Promise<number> {
+  if (!flags.table) {
+    process.stderr.write("index-list: --table <name> is required\n");
+    return 1;
+  }
+  var result = await listIndexes({
+    client: createClient({}),
+    table: flags.table,
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    result.table + " — " + result.indexes.length + " index(es)\n",
+  );
+  for (var i = 0; i < result.indexes.length; i += 1) {
+    var idx = result.indexes[i];
+    process.stdout.write(
+      "  " +
+        (idx.name || "(unnamed)") +
+        "  [" +
+        idx.columns.join(", ") +
+        "]  " +
+        (idx.type || "(no access_method)") +
+        "\n",
+    );
+  }
+  process.stdout.write(
+    result.note + "\nUNVERIFIED: " + result.unverified.join(", ") + "\n",
+  );
+  return 0;
+}
+
+/**
+ * dove-sn index-create:
+ *   --table x_cadso_core_u_smoke --columns a,b [--unique] [--access-method <m>]
+ *   [--confirm] [--dry-run] [--poll-attempts <n>] [--poll-interval-ms <n>]
+ *   [--debug] [--json]
+ *
+ * DRY-RUN BY DEFAULT — nothing is sent (and nothing is even READ) without --confirm;
+ * --dry-run forces a plan even with it. There is deliberately NO --update-set: a
+ * database index is physical and is not captured in one.
+ *
+ * Exit codes: 0 created / already-exists / dry-run, 1 bad args, 2 failed (which
+ * includes "the form was posted but no index was read back").
+ */
+async function runIndexCreate(flags: Record<string, string>): Promise<number> {
+  var columns = splitList(flags.columns || "");
+  if (!flags.table || columns.length === 0) {
+    process.stderr.write(
+      "index-create: --table <name> and --columns <a[,b,...]> are required\n",
+    );
+    return 1;
+  }
+  if (flags["update-set"]) {
+    process.stderr.write(
+      "index-create: --update-set is not accepted. A database index is a PHYSICAL, " +
+        "PER-INSTANCE change — it is NOT captured in an update set and does not " +
+        "travel with a promotion. Run index-create against each environment.\n",
+    );
+    return 1;
+  }
+  var params: CreateIndexParams = {
+    client: createClient({}),
+    table: flags.table,
+    columns: columns,
+    unique: flags.unique === "true",
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+  };
+  if (flags.name !== undefined) params.name = flags.name;
+  if (flags["access-method"]) params.accessMethod = flags["access-method"];
+  if (flags["form-path"]) params.formPath = flags["form-path"];
+  if (flags.debug === "true") params.debug = true;
+  // A non-integer poll setting would make the bounded wait unbounded (or zero).
+  // Reject it here with a named message instead of letting NaN reach the loop.
+  var numeric: Array<[string, "pollAttempts" | "pollIntervalMs"]> = [
+    ["poll-attempts", "pollAttempts"],
+    ["poll-interval-ms", "pollIntervalMs"],
+  ];
+  for (var n = 0; n < numeric.length; n += 1) {
+    var raw = flags[numeric[n][0]];
+    if (raw === undefined) continue;
+    var value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) {
+      process.stderr.write(
+        "index-create: --" +
+          numeric[n][0] +
+          " must be a positive integer (got '" +
+          raw +
+          "')\n",
+      );
+      return 1;
+    }
+    params[numeric[n][1]] = value;
+  }
+
+  var result = await createIndex(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        " [" +
+        result.columns.join(", ") +
+        "]" +
+        (result.name ? " -> " + result.name : "") +
+        (result.instance ? " on " + result.instance : "") +
+        (result.verified ? " — verified" : "") +
+        "\n" +
+        result.note +
+        "\nUNVERIFIED: " +
+        result.unverified.join(", ") +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
 /** Parse a CLI boolean flag. Bare `--mandatory` means true; `--mandatory false` means
  *  false. Anything else is rejected rather than quietly coerced to `true`. */
-function parseBoolFlag(name: string, raw: string): boolean {
+function parseBoolFlag(
+  name: string,
+  raw: string,
+  verb: string = "set-column",
+): boolean {
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(
-    "set-column: --" + name + " must be true or false (got '" + raw + "').",
+    verb + ": --" + name + " must be true or false (got '" + raw + "').",
   );
 }
 
@@ -1227,19 +2026,17 @@ async function runSetColumn(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
-  // A string flag whose value was forgotten arrives as the literal "true" — `--label`
-  // with nothing after it would rename the column to "true". Booleans legitimately do
-  // that, strings never do, so refuse rather than silently write nonsense.
-  var stringFlags = ["label", "default", "table", "column", "update-set"];
-  for (var f = 0; f < stringFlags.length; f += 1) {
-    if (bare[stringFlags[f]]) {
-      process.stderr.write(
-        "set-column: --" +
-          stringFlags[f] +
-          " needs a value (it was given none).\n",
-      );
-      return 1;
-    }
+  var bareErr = bareStringFlagError("set-column", bare, [
+    "label",
+    "default",
+    "table",
+    "column",
+    "update-set",
+    "updateSetSysId",
+  ]);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
   }
   var table = flags.table;
   var column = flags.column;
@@ -1299,6 +2096,12 @@ async function runSetColumn(
         result.table +
         "." +
         result.column +
+        // Say when the change went to an override rather than the column's own row. The
+        // caller asked for a table + column; without this they have no reason to expect
+        // the write landed on a different record type entirely.
+        (result.via === "override"
+          ? " — override (inherited from " + result.definedOn + ")"
+          : "") +
         (result.verified && result.status === "applied" ? " — verified" : "") +
         (result.status === "applied" && !result.capturedInUpdateSet
           ? " — NOT CAPTURED"
@@ -1310,6 +2113,80 @@ async function runSetColumn(
   }
   // 2 = the write landed but the instance does not reflect it (or it was not captured),
   // which must not read as success to a script.
+  if (result.status === "failed") return 2;
+  if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
+  return 0;
+}
+
+/**
+ * dove-sn set-table:
+ *   --table x_cadso_core_setting --audit true --update-set <sys_id>
+ *   [--dry-run] [--json]
+ *
+ * Updates the TABLE's own dictionary row (the `internal_type=collection` row, whose
+ * `element` is empty) — not a column's. Column attributes belong to set-column; a
+ * record's values belong to set-field.
+ */
+async function runSetTable(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  // Guard the string flags AND the updateSetSysId alias: a value-less string flag
+  // arrives as the literal "true", so --update-set (or its alias) with nothing after
+  // it would silently become the sys_id "true" and later fail as "not found".
+  var stringFlags = ["table", "update-set", "updateSetSysId"];
+  for (var f = 0; f < stringFlags.length; f += 1) {
+    if (bare[stringFlags[f]]) {
+      process.stderr.write(
+        "set-table: --" +
+          stringFlags[f] +
+          " needs a value (it was given none).\n",
+      );
+      return 1;
+    }
+  }
+  var table = flags.table;
+  if (!table) {
+    process.stderr.write(
+      "set-table: --table is required " +
+        "(--update-set is required too, unless --dry-run)\n",
+    );
+    return 1;
+  }
+  var attributes: TableAttributes = {};
+  if (flags.audit !== undefined) {
+    attributes.audit = parseBoolFlag("audit", flags.audit, "set-table");
+  }
+
+  var params: SetTableParams = {
+    client: createClient({}),
+    table: table,
+    attributes: attributes,
+  };
+  var setTableUs = flags["update-set"] || flags.updateSetSysId;
+  if (setTableUs) params.updateSetSysId = setTableUs;
+  if (flags["dry-run"] === "true") params.dryRun = true;
+
+  var result = await setTable(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        (result.verified && result.status === "applied" ? " — verified" : "") +
+        (result.status === "applied" && !result.capturedInUpdateSet
+          ? " — NOT CAPTURED"
+          : "") +
+        "\n" +
+        result.note +
+        "\n",
+    );
+  }
+  // 2 = the write landed but the instance does not reflect it (or it was not
+  // captured), which must not read as success to a script.
   if (result.status === "failed") return 2;
   if (result.status === "applied" && !result.capturedInUpdateSet) return 2;
   return 0;
@@ -1542,6 +2419,11 @@ async function runHostAssets(flags: Record<string, string>): Promise<number> {
  *   --confirm               Send for real. WITHOUT it the command is a DRY-RUN.
  *   --dry-run               Force a dry-run even with --confirm.
  *   --json                  Emit the structured InvokeRestResult.
+ *   --out <file>            Also write the full structured result to a file
+ *                           (pretty JSON, atomic temp+rename, OVERWRITES an
+ *                           existing file; parent dir must exist). The reliable
+ *                           channel for large response bodies - piped stdout is
+ *                           flush-guarded but a file needs no downstream reader.
  *
  * Invoke an arbitrary authenticated REST operation (Scripted REST included).
  * Dry-run by default; --confirm sends and returns { httpStatus, ok, body } with
@@ -1591,6 +2473,18 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
     params.body = body;
   }
   var result = await invokeRest(params);
+  if (flags.out) {
+    try {
+      writeInvokeRestResultFile(flags.out, result);
+    } catch (err) {
+      process.stderr.write(
+        "invoke-rest: --out write failed: " +
+          (err instanceof Error ? err.message : String(err)) +
+          "\n",
+      );
+      return 1;
+    }
+  }
   if (flags.json === "true") {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
@@ -1630,8 +2524,19 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
  * dove-sn publish-app:
  *   --app <scope|sys_id|name>   Required. The sys_app to publish.
  *   --version <v>               Required. Version to publish (e.g. 6.0.20260716).
- *   --target store|repo|both    Required. STORE PUBLISH IS EXTERNALLY VISIBLE.
- *   [--dev-notes <text>]        Optional developer notes.
+ *   --target <t[,t...]>         Required. store | repo | repo-ui | update-set |
+ *                               both (= store,repo). STORE IS EXTERNALLY VISIBLE.
+ *                               repo   = CI/CD REST API (needs the sn_cicd plugin)
+ *                               repo-ui= same destination over the UI uploader,
+ *                                        for instances without sn_cicd
+ *                               update-set = publish the app INTO a new update set
+ *   [--dev-notes <text>]        Optional developer notes (uploader targets).
+ *   [--update-set-name <name>]  update-set only. Defaults to the app's name.
+ *   [--update-set-description <text>]
+ *                               update-set only. Tenon convention is the release
+ *                               date stamp (YYYYMMDD) so a release is one query.
+ *   [--include-data]            update-set only. Include demo data (default off,
+ *                               matching the observed wire value).
  *   [--store-user <email>]      Store account email (else SN_STORE_USERNAME).
  *                               The password comes ONLY from SN_STORE_PASSWORD —
  *                               there is no flag for it, ever.
@@ -1639,9 +2544,9 @@ async function runInvokeRest(flags: Record<string, string>): Promise<number> {
  *   [--dry-run] [--json] [--confirm]
  *
  * DRY-RUN unless --confirm: without it the resolved plan is printed and the
- * command exits 1 (a deliberate refusal, not success). --target both publishes
- * store then repo sequentially with the same version and short-circuits if the
- * store leg fails; --json emits an array of per-target results.
+ * command exits 1 (a deliberate refusal, not success). Multiple targets run
+ * sequentially with the same version and short-circuit on the first failure;
+ * --json emits an array of per-target results.
  * Exit codes: 0 published/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
  */
 async function runPublishApp(flags: Record<string, string>): Promise<number> {
@@ -1650,20 +2555,18 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
   var target = flags.target;
   if (!app || !version || !target) {
     process.stderr.write(
-      "publish-app: --app, --version and --target store|repo|both are required\n",
+      "publish-app: --app, --version and --target <" +
+        PUBLISH_TARGETS.join("|") +
+        "|both> are required\n",
     );
     return 1;
   }
-  if (target !== "store" && target !== "repo" && target !== "both") {
-    process.stderr.write(
-      "publish-app: --target must be store, repo or both (got '" +
-        target +
-        "')\n",
-    );
+  var parsedTargets = parsePublishTargets(target);
+  if (parsedTargets.error) {
+    process.stderr.write("publish-app: " + parsedTargets.error + "\n");
     return 1;
   }
-  var targets: Array<PublishTarget> =
-    target === "both" ? ["store", "repo"] : [target as PublishTarget];
+  var targets: Array<PublishTarget> = parsedTargets.targets;
   var dryRun = flags["dry-run"] === "true";
   var confirmed = flags.confirm === "true";
   var client = createClient({});
@@ -1681,6 +2584,15 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
     };
     if (flags["dev-notes"]) params.devNotes = flags["dev-notes"];
     if (flags["store-user"]) params.storeUsername = flags["store-user"];
+    if (flags["update-set-name"]) {
+      params.updateSetName = flags["update-set-name"];
+    }
+    // Read with !== undefined, not truthiness: an intentionally empty
+    // description must stay empty rather than silently fall back.
+    if (flags["update-set-description"] !== undefined) {
+      params.updateSetDescription = flags["update-set-description"];
+    }
+    if (flags["include-data"] === "true") params.includeData = true;
     if (flags["timeout-ms"]) {
       // A NaN timeout would make the poll-loop budget check always false —
       // an infinite loop. Validate here, exit 1 on garbage.
@@ -1735,6 +2647,277 @@ async function runPublishApp(flags: Record<string, string>): Promise<number> {
   return exitCode;
 }
 
+/**
+ * dove-sn export-update-set:
+ *   --update-set <sys_id|name>  Required. The set to export.
+ *   [--mode assemble|complete]  assemble (default) is READ-ONLY; complete marks
+ *                               the set complete on the instance first, which is
+ *                               a real write and needs --confirm.
+ *   [--out <file>]              Write the XML here (default: stdout is NOT used —
+ *                               a document this size belongs in a file).
+ *   [--rules <file>]            JSON overrides for the secret rules.
+ *   [--page-size <n>] [--max-rows <n>]
+ *   [--dry-run] [--json] [--confirm]
+ *
+ * Secret values are ALWAYS replaced with __SET_DURING_INSTALL__; there is no
+ * opt-out flag. A field that looks secret and is covered by no rule fails the
+ * run, and nothing is written.
+ * Exit codes: 0 exported/dry-run, 1 bad args/unconfirmed, 2 failed.
+ */
+async function runExportUpdateSet(
+  flags: Record<string, string>,
+): Promise<number> {
+  var selector = flags["update-set"];
+  if (!selector) {
+    process.stderr.write(
+      "export-update-set: --update-set <sys_id|name> is required\n",
+    );
+    return 1;
+  }
+  var mode = flags.mode || "assemble";
+  if (mode !== "assemble" && mode !== "complete") {
+    process.stderr.write(
+      "export-update-set: --mode must be assemble or complete\n",
+    );
+    return 1;
+  }
+  var outPath = flags.out;
+  if (!outPath && flags["dry-run"] !== "true") {
+    process.stderr.write(
+      "export-update-set: --out <file> is required for a real export\n",
+    );
+    return 1;
+  }
+  var pageSize = undefined;
+  if (flags["page-size"]) {
+    pageSize = Number(flags["page-size"]);
+    if (!Number.isInteger(pageSize) || pageSize < 1) {
+      process.stderr.write(
+        "export-update-set: --page-size must be a positive integer\n",
+      );
+      return 1;
+    }
+  }
+  var maxRows = undefined;
+  if (flags["max-rows"]) {
+    maxRows = Number(flags["max-rows"]);
+    if (!Number.isInteger(maxRows) || maxRows < 1) {
+      process.stderr.write(
+        "export-update-set: --max-rows must be a positive integer\n",
+      );
+      return 1;
+    }
+  }
+
+  var result = await exportUpdateSet({
+    updateSet: selector,
+    mode: mode as ExportMode,
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    rulesPath: flags.rules,
+    pageSize: pageSize,
+    maxRows: maxRows,
+  });
+
+  if (result.status === "exported" && result.xml && outPath) {
+    fs.writeFileSync(path.resolve(outPath), result.xml, "utf8");
+  }
+  writeExportReceipt(flags, result, outPath);
+  if (result.status === "failed") {
+    return 2;
+  }
+  if (result.status === "dry-run" && flags["dry-run"] !== "true") {
+    return 1;
+  }
+  return 0;
+}
+
+/** Shared receipt for both export verbs. */
+function writeExportReceipt(
+  flags: Record<string, string>,
+  result: {
+    status: string;
+    note: string;
+    secretFields: Array<{ table: string; field: string }>;
+  },
+  outPath?: string,
+): void {
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+  process.stdout.write(
+    "[" +
+      result.status +
+      "]" +
+      (outPath && result.status === "exported"
+        ? " " + path.resolve(outPath)
+        : "") +
+      "\n" +
+      result.note +
+      "\n",
+  );
+  if (result.secretFields.length > 0) {
+    process.stdout.write("Set these after loading the package:\n");
+    for (var i = 0; i < result.secretFields.length; i += 1) {
+      process.stdout.write(
+        "  " +
+          result.secretFields[i].table +
+          "." +
+          result.secretFields[i].field +
+          "\n",
+      );
+    }
+  }
+}
+
+/**
+ * dove-sn export-app:
+ *   --app <scope|sys_id|name>   Required. The sys_app to publish and export.
+ *   [--version <v>]             Publish version (default: the app's current one).
+ *   [--description <text>]      Recorded on the update set.
+ *   [--include-data]            Ship table DATA as well as schema (off by default).
+ *   --out <file>                Where to write the XML.
+ *   [--rules <file>] [--timeout-ms <n>]
+ *   [--dry-run] [--json] [--confirm]
+ *
+ * PUBLISHING IS A REAL INSTANCE WRITE — a new update set and ~1000+ records.
+ * DRY-RUN BY DEFAULT. Secret values are always stripped before the file lands.
+ * Exit codes: 0 exported/dry-run, 1 bad args/unconfirmed, 2 failed/timeout.
+ */
+async function runExportApp(flags: Record<string, string>): Promise<number> {
+  var app = flags.app;
+  if (!app) {
+    process.stderr.write("export-app: --app <scope|sys_id|name> is required\n");
+    return 1;
+  }
+  var outPath = flags.out;
+  if (!outPath && flags["dry-run"] !== "true") {
+    process.stderr.write(
+      "export-app: --out <file> is required for a real export\n",
+    );
+    return 1;
+  }
+  var timeoutMs = undefined;
+  if (flags["timeout-ms"]) {
+    timeoutMs = Number(flags["timeout-ms"]);
+    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+      process.stderr.write(
+        "export-app: --timeout-ms must be a positive integer\n",
+      );
+      return 1;
+    }
+  }
+
+  var result = await exportApp({
+    app: app,
+    version: flags.version,
+    description: flags.description,
+    includeData: flags["include-data"] === "true",
+    keepSet: flags["keep-set"] !== "false",
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+    rulesPath: flags.rules,
+    timeoutMs: timeoutMs,
+  });
+
+  if (result.status === "exported" && result.xml && outPath) {
+    fs.writeFileSync(path.resolve(outPath), result.xml, "utf8");
+  }
+  writeExportReceipt(flags, result, outPath);
+  if (result.status === "failed" || result.status === "timeout") {
+    return 2;
+  }
+  if (result.status === "dry-run" && flags["dry-run"] !== "true") {
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * dove-sn strip-secrets:
+ *   --in <file>                 Required. An unload XML exported earlier.
+ *   --out <file>                Required unless --report.
+ *   [--rules <file>]            JSON overrides for the secret rules.
+ *   [--report]                  List what WOULD be stripped and what needs review;
+ *                               writes nothing.
+ *   [--json]
+ *
+ * Exists for documents produced outside these verbs. Exit codes: 0 clean,
+ * 1 bad args, 2 blocked (a field needs review, or a secret survived).
+ */
+async function runStripSecrets(flags: Record<string, string>): Promise<number> {
+  var inPath = flags.in;
+  if (!inPath) {
+    process.stderr.write("strip-secrets: --in <file> is required\n");
+    return 1;
+  }
+  var report = flags.report === "true";
+  var outPath = flags.out;
+  if (!report && !outPath) {
+    process.stderr.write(
+      "strip-secrets: --out <file> is required (or pass --report)\n",
+    );
+    return 1;
+  }
+  var xml = "";
+  try {
+    xml = fs.readFileSync(path.resolve(inPath), "utf8");
+  } catch (e) {
+    process.stderr.write("strip-secrets: cannot read " + inPath + "\n");
+    return 1;
+  }
+  var rules = loadSecretRules(flags.rules);
+  var result;
+  try {
+    result = stripSecrets(xml, rules, { allowUnreviewed: report });
+  } catch (e) {
+    process.stderr.write((e instanceof Error ? e.message : String(e)) + "\n");
+    return 2;
+  }
+  if (!report && outPath) {
+    fs.writeFileSync(path.resolve(outPath), result.xml, "utf8");
+  }
+  if (flags.json === "true") {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          recordsScanned: result.recordsScanned,
+          secretFields: result.secretFields,
+          reviewFindings: result.reviewFindings,
+          written: report ? null : path.resolve(outPath as string),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+  } else {
+    process.stdout.write(
+      "[" +
+        (report ? "report" : "stripped") +
+        "] " +
+        result.recordsScanned +
+        " record(s), " +
+        result.secretFields.length +
+        " secret value(s)" +
+        (report ? "" : " → " + path.resolve(outPath as string)) +
+        "\n",
+    );
+    for (var i = 0; i < result.reviewFindings.length; i += 1) {
+      process.stdout.write(
+        "  NEEDS REVIEW " +
+          result.reviewFindings[i].table +
+          "." +
+          result.reviewFindings[i].field +
+          " (matched '" +
+          result.reviewFindings[i].matched +
+          "')\n",
+      );
+    }
+  }
+  return report && result.reviewFindings.length > 0 ? 2 : 0;
+}
+
 async function main(): Promise<number> {
   var parsed = parseArgs(process.argv.slice(2));
   // Load credentials before any command runs. `--env`/`--env-file` (or the
@@ -1742,8 +2925,10 @@ async function main(): Promise<number> {
   // target multiple instances; otherwise the cwd `.env` is used.
   loadEnvFile(parsed.flags.env || parsed.flags["env-file"]);
   if (parsed.command === "add-choices") {
-    await runAddChoices(parsed.flags);
-    return 0;
+    return await runAddChoices(parsed.flags, parsed.bare);
+  }
+  if (parsed.command === "remove-choices") {
+    return await runRemoveChoices(parsed.flags, parsed.bare);
   }
   if (parsed.command === "build-flow") {
     return await runBuildFlowCmd(parsed.flags);
@@ -1772,8 +2957,20 @@ async function main(): Promise<number> {
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
   }
+  if (parsed.command === "add-index") {
+    return await runAddIndex(parsed.flags);
+  }
+  if (parsed.command === "index-list") {
+    return await runIndexList(parsed.flags);
+  }
+  if (parsed.command === "index-create") {
+    return await runIndexCreate(parsed.flags);
+  }
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);
+  }
+  if (parsed.command === "set-table") {
+    return await runSetTable(parsed.flags, parsed.bare);
   }
   if (parsed.command === "set-field") {
     return await runSetField(parsed.flags);
@@ -1792,6 +2989,12 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "edit-action") {
     return await runEditAction(parsed.flags);
+  }
+  if (parsed.command === "clone-action") {
+    return await runCloneAction(parsed.flags, parsed.bare);
+  }
+  if (parsed.command === "define-action") {
+    return await runDefineAction(parsed.flags, parsed.bare);
   }
   if (parsed.command === "create-view") {
     await runCreateView(parsed.flags);
@@ -1812,6 +3015,15 @@ async function main(): Promise<number> {
   if (parsed.command === "publish-app") {
     return await runPublishApp(parsed.flags);
   }
+  if (parsed.command === "export-update-set") {
+    return await runExportUpdateSet(parsed.flags);
+  }
+  if (parsed.command === "export-app") {
+    return await runExportApp(parsed.flags);
+  }
+  if (parsed.command === "strip-secrets") {
+    return await runStripSecrets(parsed.flags);
+  }
   if (parsed.command === "mcp") {
     return await runMcp(parsed.flags);
   }
@@ -1826,9 +3038,54 @@ async function main(): Promise<number> {
   throw new Error("Unknown command: " + parsed.command);
 }
 
+// A closed downstream pipe (e.g. `dove-sn ... --json | head`) surfaces as an
+// EPIPE on stdout. Exit quietly with the code already set instead of crashing
+// with an unhandled stream error.
+process.stdout.on("error", function (err: NodeJS.ErrnoException) {
+  if (err && err.code === "EPIPE") {
+    process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+  }
+  throw err;
+});
+
+/**
+ * process.exit() discards buffered stdout/stderr - when stdout is a PIPE,
+ * anything past the OS pipe buffer (~64KB) is silently dropped, which is how
+ * `invoke-rest --json` used to truncate large bodies mid-string. Queue an
+ * empty chunk behind any pending data on each stream and exit only when both
+ * callbacks confirm the flush. The barrier is queued UNCONDITIONALLY (not
+ * gated on writableLength) so the exit never races stream internals about
+ * whether a prior write is still in flight.
+ */
+function exitAfterFlush(code: number): void {
+  process.exitCode = code;
+  var pending = 0;
+  var finish = function (): void {
+    pending -= 1;
+    if (pending <= 0) {
+      process.exit(code);
+    }
+  };
+  [process.stdout, process.stderr].forEach(function (stream) {
+    if (stream.destroyed || !stream.writable) {
+      return;
+    }
+    pending += 1;
+    try {
+      stream.write("", finish);
+    } catch (writeErr) {
+      // A stream that rejects the barrier write has nothing left to flush.
+      pending -= 1;
+    }
+  });
+  if (pending === 0) {
+    process.exit(code);
+  }
+}
+
 main()
   .then(function (code) {
-    process.exit(code);
+    exitAfterFlush(code);
   })
   .catch(function (err) {
     process.stderr.write(
@@ -1836,5 +3093,5 @@ main()
         (err && err.message ? err.message : String(err)) +
         "\n",
     );
-    process.exit(1);
+    exitAfterFlush(1);
   });
