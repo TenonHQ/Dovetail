@@ -150,10 +150,31 @@ export async function openFormSession(auth: FormAuth): Promise<FormSession> {
     });
     jarFrom(res, jar);
   }
+  // Probe a real record form with redirect:"manual". An UNAUTHENTICATED session is
+  // bounced here (302 -> /session_timeout.do or /login.do) — and following that
+  // redirect yields a page that still carries a g_ck, so the old follow-the-redirect
+  // probe scraped an ANONYMOUS token and returned a "session" that was never logged
+  // in. Every caller then failed much later, with a 302 to welcome.do and no clue why.
+  // Treat the bounce as the login failure it is, at the point it happens.
   res = await fetch(B + "/sys_db_object.do?sys_id=-1&sysparm_stack=no", {
     headers: { Cookie: cookieHeader(jar), Accept: "text/html" },
+    redirect: "manual",
   });
   jarFrom(res, jar);
+  if (res.status >= 300 && res.status < 400) {
+    var bounce = res.headers.get("location") || "(no Location)";
+    throw new Error(
+      "form login failed — the instance bounced the authenticated probe to '" +
+        bounce +
+        "' (HTTP " +
+        res.status +
+        "). The session is NOT logged in, so no .do form replay can work. " +
+        "Check SN_USER/SN_PASSWORD for " +
+        auth.host +
+        ": form login needs a real username+password identity, and an instance on " +
+        "API-key-only auth (or SSO/MFA) will reject it however valid the key is.",
+    );
+  }
   var ck = scrapeCk(await res.text());
   if (!ck)
     throw new Error(
@@ -254,6 +275,67 @@ export async function getRecordForm(
   return { fields: fields, listEditKey: listEditKey };
 }
 
+/** A GET of an arbitrary `.do` page, with its inputs already harvested. */
+export interface FetchedFormPage {
+  status: number;
+  /** The `Location` header on a 3xx; "" otherwise. A redirect to welcome.do/login.do
+   *  means the session could not render the page — treat it as a hard failure, not
+   *  as "the page had no inputs". */
+  location: string;
+  /** Every `<input name=...>` on the page, with a fresh `sysparm_ck` overlaid. */
+  fields: Record<string, string>;
+  /** The first `<form action="...">` on the page, verbatim; "" when none is present. */
+  formAction: string;
+  /** The raw HTML, so a caller can assert on server-rendered messages. */
+  html: string;
+}
+
+/**
+ * GET an arbitrary instance `.do` page over the form session and harvest its inputs.
+ *
+ * Generalises getRecordForm (which is hard-wired to `sys_db_object.do`) for the
+ * platform pages that are NOT record forms — the index creator's GlideModal UI page
+ * being the first. `path` MUST be instance-relative and start with "/": an absolute
+ * URL would let a caller point the authenticated session (cookies AND the g_ck) at
+ * an arbitrary host, which is credential exfiltration dressed as a parameter.
+ */
+export async function getFormPage(
+  auth: FormAuth,
+  session: FormSession,
+  path: string,
+): Promise<FetchedFormPage> {
+  var p = typeof path === "string" ? path.trim() : "";
+  if (p.indexOf("/") !== 0 || p.indexOf("//") === 0) {
+    throw new Error(
+      "getFormPage: path must be instance-relative and start with a single '/' (got '" +
+        String(path) +
+        "').",
+    );
+  }
+  var res = await fetch(base(auth) + p, {
+    headers: { Cookie: cookieHeader(session.jar), Accept: "text/html" },
+    redirect: "manual",
+  });
+  jarFrom(res, session.jar);
+  var html = "";
+  try {
+    html = await res.text();
+  } catch (e) {
+    html = "";
+  }
+  var fields = parseFormInputs(html);
+  var freshCk = scrapeCk(html);
+  if (freshCk) fields["sysparm_ck"] = freshCk;
+  var actionMatch = /<form\b[^>]*\baction\s*=\s*["']([^"']*)["']/i.exec(html);
+  return {
+    status: res.status,
+    location: res.headers.get("location") || "",
+    fields: fields,
+    formAction: actionMatch ? decodeHtmlEntities(actionMatch[1]) : "",
+    html: html,
+  };
+}
+
 /**
  * GET the new-record (sys_id=-1) sys_db_object form. Thin wrapper over getRecordForm
  * preserved for the create-table caller. The new-record form renders no related
@@ -317,6 +399,41 @@ export interface PostResult {
   status: number;
   location: string;
   body: string;
+}
+
+/**
+ * GET a `.do` path with the session cookie jar. Some servlets — notably
+ * `/export_update_set.do` — stream their document only to an authenticated
+ * session, and answer an in-progress request with an empty 200 rather than an
+ * error, so the caller must inspect the body. Never throws on a non-2xx: the
+ * status is returned for the caller to classify.
+ */
+export async function getWithSession(
+  auth: FormAuth,
+  session: FormSession,
+  path: string,
+): Promise<PostResult> {
+  var B = base(auth);
+  var res = await fetch(B + path, {
+    headers: {
+      Cookie: cookieHeader(session.jar),
+      "X-UserToken": session.ck,
+      Accept: "application/xml, text/xml, text/html, */*",
+    },
+    redirect: "manual",
+  });
+  jarFrom(res, session.jar);
+  var body = "";
+  try {
+    body = await res.text();
+  } catch (e) {
+    body = "";
+  }
+  return {
+    status: res.status,
+    location: res.headers.get("location") || "",
+    body: body,
+  };
 }
 
 /** POST a form-urlencoded field map to a `.do` path. Follows nothing — returns the 302. */

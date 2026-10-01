@@ -10,6 +10,10 @@ import * as path from "path";
 import {
   publishApp,
   buildStartFields,
+  buildCreateUpdateSetFields,
+  buildPublishToUpdateSetFields,
+  resolveUpdateSetNaming,
+  parsePublishTargets,
   parseXmlAnswer,
   parseProgressTree,
   classifyProgress,
@@ -35,6 +39,14 @@ function fixture(name: string): string {
 var START_XML = fixture("publishApp.startAnswer.xml");
 var RUNNING_XML = fixture("publishApp.progressRunning.xml");
 var SUCCESS_XML = fixture("publishApp.progressSuccessStore.xml");
+var CREATE_US_XML = fixture("publishApp.createUpdateSetAnswer.xml");
+var PUBLISH_US_XML = fixture("publishApp.publishToUpdateSetAnswer.xml");
+var SUCCESS_US_XML = fixture("publishApp.progressSuccessUpdateSet.xml");
+
+/** sys_update_set sys_id the HAR's createUpdateSet call answered with. */
+var US_SYS_ID = "2d368e8f87928b901e398516dabb3509";
+/** Progress worker sys_id from the HAR's publishToUpdateSet call. */
+var US_WORKER_SYS_ID = "7d36ce8f87928b901e398516dabb354f";
 
 var APP_ROW = {
   sys_id: "6f609bbe8731a910b656fe66cebb3552",
@@ -91,9 +103,7 @@ function scriptedTransport(bodies: Array<PostResult>): {
   };
 }
 
-function storeParams(
-  overrides: Partial<PublishAppParams>,
-): PublishAppParams {
+function storeParams(overrides: Partial<PublishAppParams>): PublishAppParams {
   var base: PublishAppParams = {
     client: makeMockClient({ query: appQuery() }).client,
     app: "x_cadso_filter",
@@ -201,7 +211,10 @@ describe("parseProgressTree / classifyProgress / harvest", function () {
   it("classifies 3 and 4 as terminal failures", function () {
     var failed: ProgressNode = { state: "3" };
     var cancelled: ProgressNode = { state: "4" };
-    expect(classifyProgress(failed)).toEqual({ terminal: true, success: false });
+    expect(classifyProgress(failed)).toEqual({
+      terminal: true,
+      success: false,
+    });
     expect(classifyProgress(cancelled)).toEqual({
       terminal: true,
       success: false,
@@ -225,7 +238,9 @@ describe("parseCicdPublishResponse / parseCicdProgress", function () {
   it("harvests the progress id", function () {
     var parsed = parseCicdPublishResponse({
       result: {
-        links: { progress: { id: "prog123", url: "https://x/progress/prog123" } },
+        links: {
+          progress: { id: "prog123", url: "https://x/progress/prog123" },
+        },
         status_label: "Pending",
       },
     });
@@ -277,26 +292,26 @@ describe("publishApp — validation", function () {
   });
 
   it("requires app, version and a valid target", async function () {
+    await expect(publishApp(storeParams({ app: "" }))).rejects.toThrow(
+      /app .* required/,
+    );
+    await expect(publishApp(storeParams({ version: "" }))).rejects.toThrow(
+      /version is required/,
+    );
     await expect(
-      publishApp(storeParams({ app: "" })),
-    ).rejects.toThrow(/app .* required/);
-    await expect(
-      publishApp(storeParams({ version: "" })),
-    ).rejects.toThrow(/version is required/);
-    await expect(
-      publishApp(
-        storeParams({ target: "everywhere" as unknown as "store" }),
-      ),
-    ).rejects.toThrow(/target must be 'store' or 'repo'/);
+      publishApp(storeParams({ target: "everywhere" as unknown as "store" })),
+    ).rejects.toThrow(
+      /target must be 'store', 'repo', 'repo-ui', or 'update-set'/,
+    );
   });
 
   it("refuses a NaN/non-positive timeout (would poll forever)", async function () {
-    await expect(
-      publishApp(storeParams({ timeoutMs: NaN })),
-    ).rejects.toThrow(/timeoutMs must be a positive number/);
-    await expect(
-      publishApp(storeParams({ timeoutMs: -5 })),
-    ).rejects.toThrow(/timeoutMs must be a positive number/);
+    await expect(publishApp(storeParams({ timeoutMs: NaN }))).rejects.toThrow(
+      /timeoutMs must be a positive number/,
+    );
+    await expect(publishApp(storeParams({ timeoutMs: -5 }))).rejects.toThrow(
+      /timeoutMs must be a positive number/,
+    );
   });
 
   it("refuses a live store publish without store credentials, naming the vars", async function () {
@@ -320,7 +335,7 @@ describe("publishApp — validation", function () {
       },
     });
     await expect(
-      publishApp(storeParams({ client: ctx.client }))
+      publishApp(storeParams({ client: ctx.client })),
     ).rejects.toThrow(/more than one/);
   });
 });
@@ -451,9 +466,7 @@ describe("publishApp — repo engine (CI/CD API)", function () {
     return { client: ctx.client, invokes: invokes };
   }
 
-  function repoParams(
-    client: PublishAppParams["client"],
-  ): PublishAppParams {
+  function repoParams(client: PublishAppParams["client"]): PublishAppParams {
     return {
       client: client,
       app: "x_cadso_filter",
@@ -562,5 +575,274 @@ describe("publishApp — repo engine (CI/CD API)", function () {
       if (savedUser !== undefined) process.env.SN_STORE_USERNAME = savedUser;
       if (savedPass !== undefined) process.env.SN_STORE_PASSWORD = savedPass;
     }
+  });
+});
+
+describe("buildCreateUpdateSetFields", function () {
+  var fields = buildCreateUpdateSetFields({
+    appSysId: APP_ROW.sys_id,
+    updateSetName: "@tenon/list-filter",
+    description: "20260729",
+  });
+
+  it("targets the AppsAjaxProcessor createUpdateSet function", function () {
+    expect(fields.sysparm_processor).toBe("com.snc.apps.AppsAjaxProcessor");
+    expect(fields.sysparm_function).toBe("createUpdateSet");
+    expect(fields.sysparm_scope).toBe("global");
+  });
+
+  it("spells the app sys_id as sysparm_appid (NOT sysparm_sys_id)", function () {
+    expect(fields.sysparm_appid).toBe(APP_ROW.sys_id);
+    expect("sysparm_sys_id" in fields).toBe(false);
+  });
+
+  it("passes the name and description, and never adopts the set", function () {
+    expect(fields.sysparm_name).toBe("@tenon/list-filter");
+    expect(fields.sysparm_description).toBe("20260729");
+    // Adopting it would leak the set into unrelated writes for the rest of
+    // the session — a batch would cross-contaminate.
+    expect(fields.sysparm_current).toBe("false");
+  });
+});
+
+describe("buildPublishToUpdateSetFields", function () {
+  var base = {
+    appSysId: APP_ROW.sys_id,
+    updateSetSysId: US_SYS_ID,
+    version: "6.0.20260729",
+    description: "20260729",
+    includeData: false,
+  };
+
+  it("spells the app sys_id as sysparm_sys_id (NOT sysparm_appid)", function () {
+    var fields = buildPublishToUpdateSetFields(base);
+    expect(fields.sysparm_sys_id).toBe(APP_ROW.sys_id);
+    expect("sysparm_appid" in fields).toBe(false);
+    expect(fields.sysparm_update_set_id).toBe(US_SYS_ID);
+  });
+
+  it("sends the literal 'start' as sysparm_name, not a composed label", function () {
+    // The dialog composes "<app> - <version>" but the progress viewer
+    // overwrites sysparm_name with "start" before it reaches the wire.
+    var fields = buildPublishToUpdateSetFields(base);
+    expect(fields.sysparm_name).toBe("start");
+    expect(fields.sysparm_function).toBe("publishToUpdateSet");
+    expect(fields.sysparm_version).toBe("6.0.20260729");
+  });
+
+  it("defaults include_data to the empty string the HAR actually sent", function () {
+    expect(buildPublishToUpdateSetFields(base).sysparm_include_data).toBe("");
+    var opted = buildPublishToUpdateSetFields(
+      Object.assign({}, base, { includeData: true }),
+    );
+    expect(opted.sysparm_include_data).toBe("true");
+  });
+});
+
+describe("resolveUpdateSetNaming", function () {
+  it("defaults the name to the app name (the dialog input is readonly)", function () {
+    var n = resolveUpdateSetNaming({
+      appName: "@tenon/list-filter",
+      updateSetDescription: "20260729",
+    });
+    expect(n.name).toBe("@tenon/list-filter");
+    expect(n.description).toBe("20260729");
+  });
+
+  it("prefers an explicit name and trims it", function () {
+    var n = resolveUpdateSetNaming({
+      appName: "@tenon/list-filter",
+      updateSetName: "  Release - July  ",
+    });
+    expect(n.name).toBe("Release - July");
+    expect(n.description).toBe("");
+  });
+
+  it("falls back to the app name when the override is blank", function () {
+    var n = resolveUpdateSetNaming({
+      appName: "@tenon/list-filter",
+      updateSetName: "   ",
+    });
+    expect(n.name).toBe("@tenon/list-filter");
+  });
+
+  it("refuses when no name can be resolved", function () {
+    expect(function () {
+      resolveUpdateSetNaming({ appName: "" });
+    }).toThrow(/needs an update set name/);
+  });
+});
+
+describe("publishApp — repo-ui target", function () {
+  it("publishes over the UI uploader with publish_to_store=false", async function () {
+    var scripted = scriptedTransport([
+      ok(START_XML),
+      ok(RUNNING_XML),
+      ok(SUCCESS_XML),
+    ]);
+    var result = await publishApp(
+      storeParams({
+        target: "repo-ui",
+        transport: scripted.transport,
+        storeUsername: undefined,
+        storePassword: undefined,
+      }),
+    );
+    expect(result.status).toBe("published");
+    expect(result.target).toBe("repo-ui");
+    expect(scripted.posts[0].path).toBe("/xmlhttp.do");
+    expect(scripted.posts[0].fields.sysparm_processor).toBe(
+      "sn_appauthor.ScopedAppUploaderAJAX",
+    );
+    expect(scripted.posts[0].fields.sysparm_publish_to_store).toBe("false");
+    expect(result.note).toContain("company application repository");
+  });
+
+  it("needs no Store credentials at all", async function () {
+    var savedUser = process.env.SN_STORE_USERNAME;
+    var savedPass = process.env.SN_STORE_PASSWORD;
+    delete process.env.SN_STORE_USERNAME;
+    delete process.env.SN_STORE_PASSWORD;
+    try {
+      var scripted = scriptedTransport([ok(START_XML), ok(SUCCESS_XML)]);
+      var result = await publishApp(
+        storeParams({
+          target: "repo-ui",
+          transport: scripted.transport,
+          storeUsername: undefined,
+          storePassword: undefined,
+        }),
+      );
+      expect(result.status).toBe("published");
+      // Belt and braces: no credential key may ride the request.
+      expect("sysparm_password" in scripted.posts[0].fields).toBe(false);
+      expect(scripted.posts[0].fields.sysparm_username).toBe("");
+    } finally {
+      if (savedUser !== undefined) process.env.SN_STORE_USERNAME = savedUser;
+      if (savedPass !== undefined) process.env.SN_STORE_PASSWORD = savedPass;
+    }
+  });
+});
+
+describe("publishApp — update-set target", function () {
+  function usParams(overrides: Partial<PublishAppParams>) {
+    return storeParams(
+      Object.assign(
+        {
+          target: "update-set" as const,
+          version: "6.0.20260729",
+          updateSetDescription: "20260729",
+          storeUsername: undefined,
+          storePassword: undefined,
+        },
+        overrides,
+      ),
+    );
+  }
+
+  it("creates the set then publishes into it, and polls to success", async function () {
+    var scripted = scriptedTransport([
+      ok(CREATE_US_XML),
+      ok(PUBLISH_US_XML),
+      ok(SUCCESS_US_XML),
+    ]);
+    var result = await publishApp(usParams({ transport: scripted.transport }));
+
+    expect(result.status).toBe("published");
+    expect(result.updateSetSysId).toBe(US_SYS_ID);
+    expect(result.executionSysId).toBe(US_WORKER_SYS_ID);
+
+    // Call 1 — createUpdateSet, named after the app, described by the stamp.
+    expect(scripted.posts[0].fields.sysparm_function).toBe("createUpdateSet");
+    expect(scripted.posts[0].fields.sysparm_name).toBe(APP_ROW.name);
+    expect(scripted.posts[0].fields.sysparm_description).toBe("20260729");
+
+    // Call 2 — publishToUpdateSet, wired to the set call 1 returned.
+    expect(scripted.posts[1].fields.sysparm_function).toBe(
+      "publishToUpdateSet",
+    );
+    expect(scripted.posts[1].fields.sysparm_update_set_id).toBe(US_SYS_ID);
+
+    // Call 3 — the shared progress poller.
+    expect(scripted.posts[2].fields.sysparm_processor).toBe(
+      "AJAXProgressStatusChecker",
+    );
+    expect(scripted.posts[2].fields.sysparm_execution_id).toBe(
+      US_WORKER_SYS_ID,
+    );
+  });
+
+  it("keeps the update set sys_id when the publish call fails", async function () {
+    // The set is already on the instance — losing its sys_id would strand it.
+    var scripted = scriptedTransport([
+      ok(CREATE_US_XML),
+      { status: 500, location: "", body: "boom" },
+    ]);
+    var result = await publishApp(usParams({ transport: scripted.transport }));
+    expect(result.status).toBe("failed");
+    expect(result.updateSetSysId).toBe(US_SYS_ID);
+    expect(result.note).toContain("EMPTY");
+  });
+
+  it("publishes nothing when the set cannot be created", async function () {
+    var scripted = scriptedTransport([
+      { status: 200, location: "", body: '<?xml version="1.0"?><xml/>' },
+    ]);
+    var result = await publishApp(usParams({ transport: scripted.transport }));
+    expect(result.status).toBe("failed");
+    expect(result.updateSetSysId).toBe("");
+    expect(scripted.posts.length).toBe(1);
+    expect(result.note).toContain("Nothing was published");
+  });
+
+  it("dry-runs both calls without posting", async function () {
+    var scripted = scriptedTransport([ok(CREATE_US_XML)]);
+    var result = await publishApp(
+      usParams({ transport: scripted.transport, confirm: false }),
+    );
+    expect(result.status).toBe("dry-run");
+    expect(scripted.posts.length).toBe(0);
+    var preview = result.requestPreview || {};
+    expect(preview["1.sysparm_function"]).toBe("createUpdateSet");
+    expect(preview["2.sysparm_function"]).toBe("publishToUpdateSet");
+    expect(preview["1.sysparm_description"]).toBe("20260729");
+  });
+});
+
+describe("parsePublishTargets", function () {
+  it("keeps 'both' as the store,repo alias", function () {
+    expect(parsePublishTargets("both")).toEqual({
+      targets: ["store", "repo"],
+      error: "",
+    });
+  });
+
+  it("accepts a single target", function () {
+    expect(parsePublishTargets("update-set").targets).toEqual(["update-set"]);
+  });
+
+  it("accepts a comma-separated list and PRESERVES order", function () {
+    // Order is load-bearing: the repo publish bumps sys_app.version, so the
+    // update set must be captured after it.
+    var parsed = parsePublishTargets("repo-ui,update-set");
+    expect(parsed.error).toBe("");
+    expect(parsed.targets).toEqual(["repo-ui", "update-set"]);
+  });
+
+  it("tolerates whitespace and empty segments", function () {
+    expect(parsePublishTargets(" repo-ui , , update-set ").targets).toEqual([
+      "repo-ui",
+      "update-set",
+    ]);
+  });
+
+  it("rejects an unknown target without throwing", function () {
+    var parsed = parsePublishTargets("repo-ui,everywhere");
+    expect(parsed.targets).toEqual([]);
+    expect(parsed.error).toContain("everywhere");
+  });
+
+  it("rejects an empty value", function () {
+    expect(parsePublishTargets("   ").error).toContain("empty");
   });
 });

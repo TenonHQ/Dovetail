@@ -1,0 +1,2459 @@
+{
+ "_note": "Trimmed Flow Designer Save (PUT) capture — see tests/defineActionType.test.ts. Secret-like values were redacted at capture.",
+ "method": "PUT",
+ "path": "/api/now/processflow/action/action_types/69b1b09fc3274f10d4ddf1db05013193",
+ "query": {
+  "sysparm_transaction_scope": "c44692d8c366425085b196c4e4013187"
+ },
+ "status": 200,
+ "request": {
+  "active": true,
+  "outputs": [
+   {
+    "name": "status_code",
+    "type": "string",
+    "type_label": "String",
+    "label": "Status Code",
+    "value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}",
+    "display_value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}",
+    "mandatory": false,
+    "order": 1,
+    "id": "8be27453c3674f10d4ddf1db050131ac"
+   },
+   {
+    "name": "__action_status__",
+    "type": "object",
+    "type_label": "Object",
+    "label": "Action Status",
+    "value": "{\"version\":\"1.0\",\"complexObjectSchema\":{\"FlowDesigner:FDACTIONSTATUS\":{\"code\":\"Integer\",\"code.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"Integer\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"integer\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Code\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"40\\\"}\"},\"message\":\"String\",\"message.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"String\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"string\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Message\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"2\\\",\\\"max_length\\\":\\\"4000\\\"}\"}},\"FlowDesigner:FDACTIONSTATUS.$type_facets\":{\"SimpleMapFacet\":\"{\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Action Status\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"uiUniqueId\\\":\\\"794bc342-9c9d-444b-a3f2-dd4b6a5a0173\\\",\\\"uiTypeLabel\\\":\\\"Object\\\",\\\"co_type_name\\\":\\\"FDACTIONSTATUS\\\",\\\"element_mapping_provider\\\":\\\"com.glide.flow_design.action.data.FlowDesignVariableMapper\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":null,\\\"uiType\\\":\\\"object\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"65000\\\"}\"}},\"complexObject\":{\"code\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}},\"message\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}}},\"serializationFormat\":\"JSON\"}",
+    "display_value": "{\"version\":\"1.0\",\"complexObjectSchema\":{\"FlowDesigner:FDACTIONSTATUS\":{\"code\":\"Integer\",\"code.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"Integer\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"integer\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Code\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"40\\\"}\"},\"message\":\"String\",\"message.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"String\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"string\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Message\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"2\\\",\\\"max_length\\\":\\\"4000\\\"}\"}},\"FlowDesigner:FDACTIONSTATUS.$type_facets\":{\"SimpleMapFacet\":\"{\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Action Status\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"uiUniqueId\\\":\\\"794bc342-9c9d-444b-a3f2-dd4b6a5a0173\\\",\\\"uiTypeLabel\\\":\\\"Object\\\",\\\"co_type_name\\\":\\\"FDACTIONSTATUS\\\",\\\"element_mapping_provider\\\":\\\"com.glide.flow_design.action.data.FlowDesignVariableMapper\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":null,\\\"uiType\\\":\\\"object\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"65000\\\"}\"}},\"complexObject\":{\"code\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}},\"message\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}}},\"serializationFormat\":\"JSON\"}",
+    "mandatory": false,
+    "order": 2,
+    "id": "29923813c3674f10d4ddf1db05013173"
+   },
+   {
+    "name": "response_body",
+    "type": "string",
+    "type_label": "String",
+    "label": "Response Body",
+    "value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].response_body}}",
+    "display_value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].response_body}}",
+    "mandatory": false,
+    "order": 3,
+    "id": "8fe27453c3674f10d4ddf1db050131b9"
+   },
+   {
+    "name": "__dont_treat_as_error__",
+    "type": "boolean",
+    "type_label": "True/False",
+    "label": "Don't Treat as Error",
+    "value": false,
+    "display_value": "false",
+    "mandatory": false,
+    "order": 4,
+    "id": "21923813c3674f10d4ddf1db0501317d"
+   },
+   {
+    "name": "error",
+    "type": "string",
+    "type_label": "String",
+    "label": "Error",
+    "value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].error_message}}",
+    "display_value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].error_message}}",
+    "mandatory": false,
+    "order": 5,
+    "id": "8fe27453c3674f10d4ddf1db050131c8"
+   }
+  ],
+  "entitled": true,
+  "label_cache": [
+   {
+    "name": "{{action.host}}",
+    "label": "action➛host",
+    "type": "action",
+    "base_type": "choice"
+   },
+   {
+    "name": "{{action.path}}",
+    "label": "action➛path",
+    "type": "action",
+    "base_type": "string"
+   },
+   {
+    "name": "{{action.content_type}}",
+    "label": "action➛content_type",
+    "type": "action",
+    "base_type": "string"
+   },
+   {
+    "name": "{{action.body}}",
+    "label": "action➛body",
+    "type": "action",
+    "base_type": "string"
+   },
+   {
+    "name": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}",
+    "label": "step➛REST step➛Status Code",
+    "type": "step",
+    "base_type": "string"
+   },
+   {
+    "name": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].error_message}}",
+    "label": "step➛REST step➛Error Message",
+    "type": "step",
+    "base_type": "string"
+   },
+   {
+    "name": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].response_body}}",
+    "label": "step➛REST step➛Response Body",
+    "type": "step",
+    "base_type": "string"
+   },
+   {
+    "name": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}",
+    "label": "step➛Gaurd➛Error",
+    "type": "step",
+    "base_type": "string"
+   },
+   {
+    "name": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].base_url}}",
+    "label": "step➛Gaurd➛Base URL",
+    "type": "step",
+    "base_type": "string"
+   }
+  ],
+  "access": "public",
+  "callable_by_client_api": false,
+  "displayName": "Email Service Request GET",
+  "inputs": [
+   {
+    "name": "host",
+    "type": "choice",
+    "type_label": "Choice",
+    "label": "host",
+    "mandatory": true,
+    "order": 1,
+    "id": "8992f413c3674f10d4ddf1db0501317d",
+    "defaultValue": "api",
+    "choices": [
+     {
+      "label": "API",
+      "value": "api",
+      "order": 1
+     },
+     {
+      "label": "US East 4",
+      "value": "storage_us_east4",
+      "order": 2
+     },
+     {
+      "label": "US West 1",
+      "value": "storage_us_west1",
+      "order": 3
+     },
+     {
+      "label": "Europe West 1",
+      "value": "storage_europe_west1",
+      "order": 4
+     }
+    ],
+    "choiceType": "1",
+    "maxsize": 32
+   },
+   {
+    "name": "path",
+    "type": "string",
+    "type_label": "String",
+    "label": "path",
+    "mandatory": true,
+    "order": 2,
+    "id": "4992f413c3674f10d4ddf1db050131bd",
+    "defaultValue": "",
+    "maxsize": "2000"
+   },
+   {
+    "name": "content_type",
+    "type": "string",
+    "type_label": "String",
+    "label": "content_type",
+    "mandatory": false,
+    "order": 3,
+    "id": "4592f413c3674f10d4ddf1db050131c4",
+    "defaultValue": "",
+    "maxsize": 8000
+   },
+   {
+    "name": "body",
+    "type": "string",
+    "type_label": "String",
+    "label": "body",
+    "mandatory": false,
+    "order": 4,
+    "id": "5192f413c3674f10d4ddf1db050131cb",
+    "defaultValue": "",
+    "maxsize": "26000000"
+   }
+  ],
+  "natlang": "",
+  "description": "",
+  "scopeProtectionPolicyReadOnly": false,
+  "protection": "",
+  "type": "",
+  "latest_snapshot": "",
+  "is_snapshot": false,
+  "security": {},
+  "internal_name": "email_service_request_get",
+  "scope": "c44692d8c366425085b196c4e4013187",
+  "compiler_build": "",
+  "scopename": "x_cadso_email_spok",
+  "quiescence": "never",
+  "id": "69b1b09fc3274f10d4ddf1db05013193",
+  "state": "modified",
+  "authored_version": 28100,
+  "master_snapshot": "",
+  "action_template": "",
+  "annotation": "",
+  "action_status_metadata": {
+   "sysId": "e5923813c3674f10d4ddf1db0501319e",
+   "actionTypeId": "69b1b09fc3274f10d4ddf1db05013193",
+   "conditions": [
+    {
+     "condition": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}ISNOTEMPTY",
+     "dontTreatAsError": false,
+     "actionStatusMetadataId": null,
+     "sysId": "new",
+     "label": "Err from Gaurd",
+     "order": 1,
+     "status": {
+      "displayValue": null,
+      "children": [
+       {
+        "displayValue": null,
+        "children": null,
+        "parameter": {
+         "uiDisplayTypeLabel": "Integer",
+         "display_value": "",
+         "parent": null,
+         "searchField": null,
+         "defaultValue": "",
+         "show_ref_finder": false,
+         "use_dependent": false,
+         "type": "integer",
+         "mandatory": false,
+         "extended": false,
+         "local": false,
+         "sys_class_name": "",
+         "reference": "",
+         "dependent_on": "",
+         "data_structure": "",
+         "readonly": false,
+         "children": [],
+         "complexObjectValue": null,
+         "dynamic": null,
+         "id": "",
+         "type_label": "Integer",
+         "placeholder": null,
+         "value": "400",
+         "table": "",
+         "scriptActive": false,
+         "order": 1,
+         "internal_link": "",
+         "ref_qual": "",
+         "defaultDisplayValue": "",
+         "reference_display": "",
+         "comments": null,
+         "choiceOption": "",
+         "label": "Code",
+         "script": {},
+         "hint": "",
+         "name": "code",
+         "scriptAsJsonString": null,
+         "fieldFacetMap": {
+          "uiTypeLabel": "Integer",
+          "action_error_output": "true"
+         },
+         "attributes": {},
+         "maxsize": 40,
+         "columnName": "",
+         "uiDisplayType": "integer"
+        },
+        "name": "code",
+        "scriptAsJsonString": null,
+        "displayField": null,
+        "id": null,
+        "value": "400",
+        "scriptActive": false,
+        "script": null
+       },
+       {
+        "displayValue": null,
+        "children": null,
+        "parameter": {
+         "uiDisplayTypeLabel": "String",
+         "display_value": "",
+         "parent": null,
+         "searchField": null,
+         "defaultValue": "",
+         "show_ref_finder": false,
+         "use_dependent": false,
+         "type": "string",
+         "mandatory": false,
+         "extended": false,
+         "local": false,
+         "sys_class_name": "",
+         "reference": "",
+         "dependent_on": "",
+         "data_structure": "",
+         "readonly": false,
+         "children": [],
+         "complexObjectValue": null,
+         "dynamic": null,
+         "id": "",
+         "type_label": "String",
+         "placeholder": null,
+         "value": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}",
+         "table": "",
+         "scriptActive": false,
+         "order": 2,
+         "internal_link": "",
+         "ref_qual": "",
+         "defaultDisplayValue": "",
+         "reference_display": "",
+         "comments": null,
+         "choiceOption": "",
+         "label": "Message",
+         "script": {},
+         "hint": "",
+         "name": "message",
+         "scriptAsJsonString": null,
+         "fieldFacetMap": {
+          "uiTypeLabel": "String",
+          "action_error_output": "true"
+         },
+         "attributes": {},
+         "maxsize": 4000,
+         "columnName": "",
+         "uiDisplayType": "string"
+        },
+        "name": "message",
+        "scriptAsJsonString": null,
+        "displayField": null,
+        "id": null,
+        "value": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}",
+        "scriptActive": false,
+        "script": null
+       }
+      ],
+      "parameter": null,
+      "name": "status",
+      "scriptAsJsonString": null,
+      "displayField": null,
+      "id": null,
+      "value": null,
+      "scriptActive": false,
+      "script": null
+     }
+    }
+   ]
+  },
+  "parent_action": "",
+  "scopelabel": "Tenon Marketing Automate Email Spoke",
+  "connection_configurations": [],
+  "category_order": 100,
+  "system": false,
+  "action_status_metadata_template": {},
+  "flow_priority": "",
+  "name": "Email Service Request GET",
+  "pharmacy": {
+   "pharmacyCompound": {}
+  },
+  "scopelogo": "",
+  "attributes": {
+   "labelCacheCleanUpExecuted": "true"
+  },
+  "category": "{\"display\":\"Email Service - External API\",\"value\":\"8db1749fc3274f10d4ddf1db05013101\"}",
+  "copied_from": "",
+  "ih_action": false,
+  "steps": [
+   {
+    "DB_TYPE": "SCRIPT",
+    "cid": "777e0dc1-1672-443c-a82f-daef21d72a6c",
+    "step_type_id": "106afb6647032200b4fad7527c9a71e7",
+    "section": "",
+    "label": "Gaurd",
+    "action": "69b1b09fc3274f10d4ddf1db05013193",
+    "order": 1,
+    "error_handling_type": "EVAL_ERRORS",
+    "inputs": [
+     {
+      "name": "required_run_time",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "Required Runtime",
+      "value": "instance",
+      "display_value": "",
+      "defaultValue": "instance",
+      "default_value": "instance",
+      "mandatory": true,
+      "order": 100,
+      "id": "74315b04b3201300176b051a16a8dc2b",
+      "choices": [
+       {
+        "label": "Instance",
+        "value": "instance",
+        "order": 1
+       },
+       {
+        "label": "MID",
+        "value": "mid",
+        "order": 2
+       },
+       {
+        "label": "Vanilla (Core JavaScript)",
+        "value": "vanilla",
+        "order": 3
+       }
+      ]
+     },
+     {
+      "name": "mid_selection_type",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "Select MID Server Using",
+      "value": "any",
+      "display_value": "",
+      "defaultValue": "any",
+      "default_value": "any",
+      "mandatory": false,
+      "order": 200,
+      "id": "2c226939b3101300176b051a16a8dc83",
+      "choices": [
+       {
+        "label": "Any MID",
+        "value": "any",
+        "order": 1
+       },
+       {
+        "label": "Use Connection Alias",
+        "value": "use_connection_alias",
+        "order": 2
+       },
+       {
+        "label": "Use Inline Selection",
+        "value": "define_connection_inline",
+        "order": 3
+       }
+      ]
+     },
+     {
+      "name": "connection_alias",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Connection Alias",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 250,
+      "id": "2b2ba571b3101300176b051a16a8dc8f"
+     },
+     {
+      "name": "host",
+      "type": "string",
+      "type_label": "String",
+      "label": "Host",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 300,
+      "id": "28e4e579b3101300176b051a16a8dc0f"
+     },
+     {
+      "name": "mid_selection",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "MID Selection",
+      "value": "auto_select",
+      "display_value": "",
+      "defaultValue": "auto_select",
+      "default_value": "auto_select",
+      "mandatory": false,
+      "order": 350,
+      "id": "cbd1070373531010791f94596bf6a776",
+      "choices": [
+       {
+        "label": "Auto-Select MID Server",
+        "value": "auto_select",
+        "order": 1
+       },
+       {
+        "label": "Specific MID Server",
+        "value": "specific_mid_server",
+        "order": 2
+       },
+       {
+        "label": "Specific MID Cluster",
+        "value": "specific_mid_cluster",
+        "order": 3
+       }
+      ]
+     },
+     {
+      "name": "application",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "MID Application",
+      "value": "{\"display\":\"ALL\",\"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+      "display_value": "",
+      "defaultValue": "{\"display\":\"ALL\", \"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+      "default_value": "{\"display\":\"ALL\", \"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+      "mandatory": false,
+      "order": 400,
+      "id": "f5e56d79b3101300176b051a16a8dce4"
+     },
+     {
+      "name": "capabilities",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Capabilities",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 500,
+      "id": "7d36ed79b3101300176b051a16a8dceb"
+     },
+     {
+      "name": "mid_server",
+      "type": "document_id",
+      "type_label": "Document ID",
+      "label": "MID Server",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 550,
+      "id": "f0d58b8373531010791f94596bf6a7be"
+     },
+     {
+      "name": "mid_cluster",
+      "type": "document_id",
+      "type_label": "Document ID",
+      "label": "MID Cluster",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 550,
+      "id": "0d2db9e653310110d3a8ddeeff7b1208"
+     },
+     {
+      "name": "script",
+      "value": "(function execute(inputs, outputs) {\r\n  var HOSTS = {\r\n    api: \"https://api.mailgun.net\",\r\n    storage_us_east4: \"https://storage-us-east4.api.mailgun.net\",\r\n    storage_us_west1: \"https://storage-us-west1.api.mailgun.net\",\r\n    storage_europe_west1: \"https://storage-europe-west1.api.mailgun.net\"\r\n  };\r\n  outputs.base_url = \"\";\r\n  outputs.error = \"\";\r\n  var host = String(inputs.host_1 || \"\");\r\n  var path = String(inputs.path_1 || \"\");\r\n  if (!Object.prototype.hasOwnProperty.call(HOSTS, host)) {\r\n    outputs.error = \"invalid host\";\r\n    return;\r\n  }\r\n  if (!/^\\/(v1|v3)\\//.test(path) || path.indexOf(\"..\") !== -1 || /[\\r\\n]/.test(path) || /:\\/\\//.test(path) || path.indexOf(\"//\") !== -1) {\r\n    outputs.error = \"invalid path\";\r\n    return;\r\n  }\r\n  outputs.base_url = HOSTS[host];\r\n})(inputs, outputs);"
+     }
+    ],
+    "extended_inputs": [
+     {
+      "name": "host_1",
+      "type": "string",
+      "type_label": "String",
+      "label": "",
+      "value": "",
+      "mandatory": true,
+      "order": 0
+     },
+     {
+      "name": "path_1",
+      "type": "string",
+      "type_label": "String",
+      "label": "",
+      "value": "",
+      "mandatory": true,
+      "order": 100
+     }
+    ],
+    "extended_outputs": [
+     {
+      "name": "base_url",
+      "type": "string",
+      "type_label": "String",
+      "label": "Base URL",
+      "mandatory": false,
+      "order": 1,
+      "cid": "777e0dc1-1672-443c-a82f-daef21d72a6c",
+      "extended": true,
+      "step_name": "Gaurd"
+     },
+     {
+      "name": "error",
+      "type": "string",
+      "type_label": "String",
+      "label": "Error",
+      "mandatory": false,
+      "order": 2,
+      "cid": "777e0dc1-1672-443c-a82f-daef21d72a6c",
+      "extended": true,
+      "step_name": "Gaurd"
+     }
+    ]
+   },
+   {
+    "DB_TYPE": "REST",
+    "cid": "7d49315c-b657-4319-b150-f96c556c95d3",
+    "step_type_id": "07a762fb47222200b4fad7527c9a7129",
+    "section": "",
+    "label": "REST step",
+    "action": "69b1b09fc3274f10d4ddf1db05013193",
+    "order": 2,
+    "error_handling_type": "NEXT_STEP",
+    "inputs": [
+     {
+      "name": "connection",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "Connection",
+      "value": "use_connection_alias",
+      "display_value": "",
+      "defaultValue": "use_connection_alias",
+      "default_value": "use_connection_alias",
+      "mandatory": false,
+      "order": 5,
+      "id": "91e207d03b50030057a4a2e334efc4a0",
+      "choices": [
+       {
+        "label": "Define Connection Inline",
+        "value": "define_connection_inline",
+        "order": 1
+       },
+       {
+        "label": "Use Connection Alias",
+        "value": "use_connection_alias",
+        "order": 2
+       }
+      ]
+     },
+     {
+      "name": "build_request",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "Build Request",
+      "value": "manually",
+      "display_value": "",
+      "defaultValue": "manually",
+      "default_value": "manually",
+      "mandatory": false,
+      "order": 10,
+      "id": "bb61fcd3c7312300a150effeeb97638e",
+      "choices": [
+       {
+        "label": "Manually",
+        "value": "manually",
+        "order": 1
+       },
+       {
+        "label": "From OpenAPI specification - Deprecated",
+        "value": "from_openapi",
+        "order": 2
+       },
+       {
+        "label": "From REST Message",
+        "value": "from_snrestmessage",
+        "order": 3
+       }
+      ]
+     },
+     {
+      "name": "connection_alias",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Connection Alias",
+      "value": "{\"display\":\"x_cadso_email_spok.Email_Spoke_Connection\",\"value\":\"956cc622c3ee4a1085b196c4e401317e\"}",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 10,
+      "id": "262882f03b23320057a4a2e334efc4f0"
+     },
+     {
+      "name": "use_mid",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Use MID",
+      "value": false,
+      "display_value": "",
+      "defaultValue": "false",
+      "default_value": "false",
+      "mandatory": false,
+      "order": 10,
+      "id": "e532afc12f101300a09a839fb18c95b9"
+     },
+     {
+      "name": "credential_alias",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Credential Alias",
+      "value": "<redacted>",
+      "display_value": "<redacted>",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 10,
+      "id": "445c2a72b3701300176b051a16a8dcc2"
+     },
+     {
+      "name": "mid_selection",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "MID Selection",
+      "value": "auto_select",
+      "display_value": "",
+      "defaultValue": "auto_select",
+      "default_value": "auto_select",
+      "mandatory": false,
+      "order": 11,
+      "id": "a7d3fa4b73131010791f94596bf6a79a",
+      "choices": [
+       {
+        "label": "Auto-Select MID Server",
+        "value": "auto_select",
+        "order": 1
+       },
+       {
+        "label": "Specific MID Server",
+        "value": "specific_mid_server",
+        "order": 2
+       },
+       {
+        "label": "Specific MID Cluster",
+        "value": "specific_mid_cluster",
+        "order": 3
+       }
+      ]
+     },
+     {
+      "name": "application",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "MID Application",
+      "value": "{\"display\":\"ALL\",\"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+      "display_value": "",
+      "defaultValue": "{\"display\":\"ALL\", \"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+      "default_value": "{\"display\":\"ALL\", \"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+      "mandatory": false,
+      "order": 12,
+      "id": "f11ebf865f101300a09a2abd7f466652"
+     },
+     {
+      "name": "capabilities",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Capabilities",
+      "value": "{\"display\":\"REST\",\"value\":\"18409d8007482000dada43c0d1021e8f\"}",
+      "display_value": "",
+      "defaultValue": "{\"display\":\"REST\", \"value\":\"18409d8007482000dada43c0d1021e8f\"}",
+      "default_value": "{\"display\":\"REST\", \"value\":\"18409d8007482000dada43c0d1021e8f\"}",
+      "mandatory": false,
+      "order": 13,
+      "id": "c30a451d2f201300a09a839fb18c95b4"
+     },
+     {
+      "name": "mid_server",
+      "type": "document_id",
+      "type_label": "Document ID",
+      "label": "MID Server",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 14,
+      "id": "61d6b2cb73131010791f94596bf6a721"
+     },
+     {
+      "name": "api_source",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "API Source",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 15,
+      "id": "c346f4d7c7312300a150effeeb976366"
+     },
+     {
+      "name": "mid_cluster",
+      "type": "document_id",
+      "type_label": "Document ID",
+      "label": "MID Cluster",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 15,
+      "id": "cdfcf11053f10110d3a8ddeeff7b12e2"
+     },
+     {
+      "name": "base_url",
+      "type": "url",
+      "type_label": "URL",
+      "label": "Base URL",
+      "value": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].base_url}}",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 15,
+      "id": "a67a8ef03b23320057a4a2e334efc472"
+     },
+     {
+      "name": "api_operation",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "API Operation",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 16,
+      "id": "29c75782c7822300a150effeeb976338"
+     },
+     {
+      "name": "resource_path",
+      "type": "string",
+      "type_label": "String",
+      "label": "Resource Path",
+      "value": "{{action.path}}",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 20,
+      "id": "3d090af03b23320057a4a2e334efc455"
+     },
+     {
+      "name": "http_method",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "HTTP Method",
+      "value": "get",
+      "display_value": "",
+      "defaultValue": "get",
+      "default_value": "get",
+      "mandatory": false,
+      "order": 25,
+      "id": "e85b7ebf47222200b4fad7527c9a71e3",
+      "choices": [
+       {
+        "label": "GET",
+        "value": "get",
+        "order": 1
+       },
+       {
+        "label": "POST",
+        "value": "post",
+        "order": 2
+       },
+       {
+        "label": "PUT",
+        "value": "put",
+        "order": 3
+       },
+       {
+        "label": "PATCH",
+        "value": "patch",
+        "order": 4
+       },
+       {
+        "label": "DELETE",
+        "value": "delete",
+        "order": 5
+       }
+      ]
+     },
+     {
+      "name": "query_params",
+      "type": "name_values",
+      "type_label": "Name/Values",
+      "label": "Query Parameters",
+      "value": "{\"type\":\"ADV_NV\",\"value\":[]}",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 25,
+      "id": "4328e2fb47222200b4fad7527c9a7164"
+     },
+     {
+      "name": "headers",
+      "type": "name_values",
+      "type_label": "Name/Values",
+      "label": "Headers",
+      "value": "{\"type\":\"ADV_NV\",\"value\":[{\"name\":\"Content-Type\",\"value\":\"{{action.content_type}}\",\"attributes\":{\"omit_if_empty\":false,\"mandatory\":false}},{\"name\":\"Accept\",\"value\":\"application/json\",\"attributes\":{\"omit_if_empty\":false,\"mandatory\":false}}]}",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 30,
+      "id": "371837f1c71003007b237f48cb9763b0"
+     },
+     {
+      "name": "request_type",
+      "type": "choice",
+      "type_label": "Choice",
+      "label": "Request Type",
+      "value": "text",
+      "display_value": "",
+      "defaultValue": "text",
+      "default_value": "text",
+      "mandatory": false,
+      "order": 40,
+      "id": "bc79234a87d01300dd637d5e27cb0b24",
+      "choices": [
+       {
+        "label": "Text",
+        "value": "text",
+        "order": 1
+       },
+       {
+        "label": "Binary",
+        "value": "binary",
+        "order": 2
+       },
+       {
+        "label": "Multipart",
+        "value": "multi-part",
+        "order": 3
+       },
+       {
+        "label": "Form URL-Encoded",
+        "value": "form-url-encoded",
+        "order": 4
+       }
+      ]
+     },
+     {
+      "name": "body",
+      "type": "multi_small",
+      "type_label": "Multiple Line Small Text Area",
+      "label": "Request Body[Text]",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 45,
+      "id": "6c6073f1c71003007b237f48cb97633b"
+     },
+     {
+      "name": "form_URL_encoded_map",
+      "type": "string",
+      "type_label": "String",
+      "label": "form_URL_encoded_map",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 45,
+      "id": "3684ec4787d01300dd637d5e27cb0bcb"
+     },
+     {
+      "name": "attachment_id",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Attachment",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 45,
+      "id": "8bf0dc9687141300dd637d5e27cb0b3c"
+     },
+     {
+      "name": "multipart_sources_string",
+      "type": "string",
+      "type_label": "String",
+      "label": "multipart_sources_string",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 45,
+      "id": "b564608787d01300dd637d5e27cb0b7d"
+     },
+     {
+      "name": "save_response_as_attachment",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Save As Attachment",
+      "value": false,
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 49,
+      "id": "f9df589687301300735f7d5e27cb0b2d"
+     },
+     {
+      "name": "attachment_file_name",
+      "type": "string",
+      "type_label": "String",
+      "label": "Attachment File Name",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 50,
+      "id": "9458387787201300b3b67d5e27cb0b3b"
+     },
+     {
+      "name": "rest_message",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "REST Message",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 90,
+      "id": "b79bea415b101110ab933520b881c737"
+     },
+     {
+      "name": "is_streaming",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Is Streaming",
+      "value": false,
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "f1255aa377322300efb691572b106135"
+     },
+     {
+      "name": "honor_duplicate_headers",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Honor Duplicate Headers",
+      "value": true,
+      "display_value": "",
+      "defaultValue": "false",
+      "default_value": "false",
+      "mandatory": false,
+      "order": 100,
+      "id": "15288f755bd24110ab933520b881c713"
+     },
+     {
+      "name": "is_temporary_attachment",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Is Temporary Attachment",
+      "value": false,
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "89fa6545cb200010a2fcb895634c9c3c"
+     },
+     {
+      "name": "rest_message_function",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "REST Message Function",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "35bb6e415b101110ab933520b881c752"
+     },
+     {
+      "name": "honor_duplicate_query_params",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Honor Duplicate Query Params",
+      "value": true,
+      "display_value": "",
+      "defaultValue": "false",
+      "default_value": "false",
+      "mandatory": false,
+      "order": 100,
+      "id": "58715a1c53f22010d3a8ddeeff7b1248"
+     },
+     {
+      "name": "table",
+      "type": "table_name",
+      "type_label": "Table Name",
+      "label": "Table",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "a9adb007b3c21300176b051a16a8dc9a"
+     },
+     {
+      "name": "override_base_url",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Override Base URL",
+      "value": true,
+      "defaultValue": "false",
+      "default_value": "false",
+      "mandatory": false,
+      "order": 100,
+      "id": "8e4f451f5b010110ab933520b881c72c"
+     },
+     {
+      "name": "attachment_file_record",
+      "type": "document_id",
+      "type_label": "Document ID",
+      "label": "Attachment File Record",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "6278787787201300b3b67d5e27cb0b94"
+     },
+     {
+      "name": "connection_timeout",
+      "type": "integer",
+      "type_label": "Integer",
+      "label": "Connection Timeout",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "7a59009bc7522010820469467ec260c0"
+     },
+     {
+      "name": "rest_metadata",
+      "type": "json",
+      "type_label": "JSON",
+      "label": "REST Metadata",
+      "value": "",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 100,
+      "id": "3c4d7367c7d32300a150effeeb9763a4"
+     },
+     {
+      "name": "enable_retry_policy",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Enable Retry Policy",
+      "value": false,
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 200,
+      "id": "321e31fd87803300a8cc7d5e27cb0b7a"
+     },
+     {
+      "name": "override_default_policy_for_alias",
+      "type": "boolean",
+      "type_label": "True/False",
+      "label": "Override Default Policy for Alias",
+      "value": false,
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 300,
+      "id": "324e357187c03300a8cc7d5e27cb0b43"
+     },
+     {
+      "name": "retry_policy",
+      "type": "reference",
+      "type_label": "Reference",
+      "label": "Retry Policy",
+      "value": "{\"display\":\"Default HTTP Retry Policy\",\"value\":\"ef751ff07301330025d71afe2ff6a7f9\"}",
+      "display_value": "",
+      "defaultValue": "",
+      "default_value": "",
+      "mandatory": false,
+      "order": 400,
+      "id": "37be397587c03300a8cc7d5e27cb0ba2"
+     }
+    ],
+    "extended_inputs": [],
+    "extended_outputs": [
+     {
+      "name": "sn_auth_token",
+      "type": "password2",
+      "type_label": "Password (2 Way Encrypted)",
+      "label": "Credential Value",
+      "mandatory": false,
+      "order": 1,
+      "id": "15923813c3674f10d4ddf1db05013149",
+      "cid": "7d49315c-b657-4319-b150-f96c556c95d3",
+      "extended": true,
+      "local": false,
+      "step_name": "REST step"
+     }
+    ]
+   }
+  ]
+ },
+ "response": {
+  "result": {
+   "outputs": [
+    {
+     "name": "status_code",
+     "type": "string",
+     "type_label": "String",
+     "label": "Status Code",
+     "value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}",
+     "display_value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}",
+     "mandatory": false,
+     "order": 1,
+     "id": "8be27453c3674f10d4ddf1db050131ac"
+    },
+    {
+     "name": "__action_status__",
+     "type": "object",
+     "type_label": "Object",
+     "label": "Action Status",
+     "value": "{\"version\":\"1.0\",\"complexObjectSchema\":{\"FlowDesigner:FDACTIONSTATUS\":{\"code\":\"Integer\",\"code.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"Integer\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"integer\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Code\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"40\\\"}\"},\"message\":\"String\",\"message.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"String\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"string\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Message\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"2\\\",\\\"max_length\\\":\\\"4000\\\"}\"}},\"FlowDesigner:FDACTIONSTATUS.$type_facets\":{\"SimpleMapFacet\":\"{\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Action Status\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"uiUniqueId\\\":\\\"794bc342-9c9d-444b-a3f2-dd4b6a5a0173\\\",\\\"uiTypeLabel\\\":\\\"Object\\\",\\\"co_type_name\\\":\\\"FDACTIONSTATUS\\\",\\\"element_mapping_provider\\\":\\\"com.glide.flow_design.action.data.FlowDesignVariableMapper\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":null,\\\"uiType\\\":\\\"object\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"65000\\\"}\"}},\"complexObject\":{\"code\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}},\"message\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}}},\"serializationFormat\":\"JSON\"}",
+     "display_value": "{\"version\":\"1.0\",\"complexObjectSchema\":{\"FlowDesigner:FDACTIONSTATUS\":{\"code\":\"Integer\",\"code.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"Integer\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"integer\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Code\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"40\\\"}\"},\"message\":\"String\",\"message.$field_facets\":{\"SimpleMapFacet\":\"{\\\"uiTypeLabel\\\":\\\"String\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":\\\"\\\",\\\"uiType\\\":\\\"string\\\",\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Message\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"order\\\":\\\"2\\\",\\\"max_length\\\":\\\"4000\\\"}\"}},\"FlowDesigner:FDACTIONSTATUS.$type_facets\":{\"SimpleMapFacet\":\"{\\\"default_value\\\":\\\"\\\",\\\"label\\\":\\\"Action Status\\\",\\\"action_error_output\\\":\\\"true\\\",\\\"mandatory\\\":\\\"false\\\",\\\"uiUniqueId\\\":\\\"794bc342-9c9d-444b-a3f2-dd4b6a5a0173\\\",\\\"uiTypeLabel\\\":\\\"Object\\\",\\\"co_type_name\\\":\\\"FDACTIONSTATUS\\\",\\\"element_mapping_provider\\\":\\\"com.glide.flow_design.action.data.FlowDesignVariableMapper\\\",\\\"read_only\\\":\\\"false\\\",\\\"hint\\\":null,\\\"uiType\\\":\\\"object\\\",\\\"order\\\":\\\"1\\\",\\\"max_length\\\":\\\"65000\\\"}\"}},\"complexObject\":{\"code\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}},\"message\":{\"$cv\":{\"$c\":\"java.lang.String\",\"$v\":\"\"}}},\"serializationFormat\":\"JSON\"}",
+     "mandatory": false,
+     "order": 2,
+     "id": "29923813c3674f10d4ddf1db05013173"
+    },
+    {
+     "name": "response_body",
+     "type": "string",
+     "type_label": "String",
+     "label": "Response Body",
+     "value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].response_body}}",
+     "display_value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].response_body}}",
+     "mandatory": false,
+     "order": 3,
+     "id": "8fe27453c3674f10d4ddf1db050131b9"
+    },
+    {
+     "name": "__dont_treat_as_error__",
+     "type": "boolean",
+     "type_label": "True/False",
+     "label": "Don't Treat as Error",
+     "value": false,
+     "display_value": "false",
+     "mandatory": false,
+     "order": 4,
+     "id": "21923813c3674f10d4ddf1db0501317d"
+    },
+    {
+     "name": "error",
+     "type": "string",
+     "type_label": "String",
+     "label": "Error",
+     "value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].error_message}}",
+     "display_value": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].error_message}}",
+     "mandatory": false,
+     "order": 5,
+     "id": "8fe27453c3674f10d4ddf1db050131c8"
+    }
+   ],
+   "entitled": true,
+   "label_cache": [
+    {
+     "name": "{{action.host}}",
+     "label": "action➛host",
+     "type": "action",
+     "base_type": "choice"
+    },
+    {
+     "name": "{{action.path}}",
+     "label": "action➛path",
+     "type": "action",
+     "base_type": "string"
+    },
+    {
+     "name": "{{action.content_type}}",
+     "label": "action➛content_type",
+     "type": "action",
+     "base_type": "string"
+    },
+    {
+     "name": "{{action.body}}",
+     "label": "action➛body",
+     "type": "action",
+     "base_type": "string"
+    },
+    {
+     "name": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].status_code}}",
+     "label": "step➛REST step➛Status Code",
+     "type": "step",
+     "base_type": "string"
+    },
+    {
+     "name": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].error_message}}",
+     "label": "step➛REST step➛Error Message",
+     "type": "step",
+     "base_type": "string"
+    },
+    {
+     "name": "{{step[7d49315c-b657-4319-b150-f96c556c95d3].response_body}}",
+     "label": "step➛REST step➛Response Body",
+     "type": "step",
+     "base_type": "string"
+    },
+    {
+     "name": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}",
+     "label": "step➛Gaurd➛Error",
+     "type": "step",
+     "base_type": "string"
+    },
+    {
+     "name": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].base_url}}",
+     "label": "step➛Gaurd➛Base URL",
+     "type": "step",
+     "base_type": "string"
+    }
+   ],
+   "access": "public",
+   "callable_by_client_api": false,
+   "displayName": "Email Service Request GET",
+   "inputs": [
+    {
+     "name": "host",
+     "type": "choice",
+     "type_label": "Choice",
+     "label": "host",
+     "mandatory": true,
+     "order": 1,
+     "id": "ffb4b457c3674f10d4ddf1db05013109",
+     "defaultValue": "api",
+     "choices": [
+      {
+       "label": "-- None --",
+       "value": "",
+       "order": 0
+      },
+      {
+       "label": "API",
+       "value": "api",
+       "order": 1
+      },
+      {
+       "label": "US East 4",
+       "value": "storage_us_east4",
+       "order": 2
+      },
+      {
+       "label": "US West 1",
+       "value": "storage_us_west1",
+       "order": 3
+      },
+      {
+       "label": "Europe West 1",
+       "value": "storage_europe_west1",
+       "order": 4
+      }
+     ],
+     "maxsize": 32
+    },
+    {
+     "name": "path",
+     "type": "string",
+     "type_label": "String",
+     "label": "path",
+     "mandatory": true,
+     "order": 2,
+     "id": "4992f413c3674f10d4ddf1db050131bd",
+     "defaultValue": "",
+     "maxsize": 2000
+    },
+    {
+     "name": "content_type",
+     "type": "string",
+     "type_label": "String",
+     "label": "content_type",
+     "mandatory": false,
+     "order": 3,
+     "id": "4592f413c3674f10d4ddf1db050131c4",
+     "defaultValue": "",
+     "maxsize": 8000
+    },
+    {
+     "name": "body",
+     "type": "string",
+     "type_label": "String",
+     "label": "body",
+     "mandatory": false,
+     "order": 4,
+     "id": "5192f413c3674f10d4ddf1db050131cb",
+     "defaultValue": "",
+     "maxsize": 26000000
+    }
+   ],
+   "natlang": "",
+   "description": "",
+   "scopeProtectionPolicyReadOnly": false,
+   "protection": "",
+   "type": "",
+   "latest_snapshot": "",
+   "is_snapshot": false,
+   "security": {},
+   "internal_name": "email_service_request_get",
+   "scope": "c44692d8c366425085b196c4e4013187",
+   "compiler_build": "",
+   "scopename": "x_cadso_email_spok",
+   "quiescence": "never",
+   "id": "69b1b09fc3274f10d4ddf1db05013193",
+   "state": "draft",
+   "authored_version": 28100,
+   "master_snapshot": "",
+   "action_template": "",
+   "annotation": "",
+   "action_status_metadata": {
+    "sysId": "e5923813c3674f10d4ddf1db0501319e",
+    "actionTypeId": "69b1b09fc3274f10d4ddf1db05013193",
+    "conditions": [
+     {
+      "condition": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}ISNOTEMPTY",
+      "dontTreatAsError": false,
+      "actionStatusMetadataId": "e5923813c3674f10d4ddf1db0501319e",
+      "sysId": "d4c4f457c3674f10d4ddf1db05013115",
+      "label": "Err from Gaurd",
+      "order": 1,
+      "status": {
+       "displayValue": null,
+       "children": [
+        {
+         "displayValue": null,
+         "children": null,
+         "parameter": {
+          "uiDisplayTypeLabel": "Integer",
+          "display_value": "",
+          "parent": null,
+          "searchField": null,
+          "defaultValue": "",
+          "show_ref_finder": false,
+          "use_dependent": false,
+          "type": "integer",
+          "mandatory": false,
+          "extended": false,
+          "local": false,
+          "sys_class_name": "",
+          "reference": "",
+          "dependent_on": "",
+          "data_structure": "",
+          "readonly": false,
+          "children": [],
+          "complexObjectValue": null,
+          "dynamic": null,
+          "id": "",
+          "type_label": "Integer",
+          "placeholder": null,
+          "value": "",
+          "table": "",
+          "scriptActive": false,
+          "order": 1,
+          "internal_link": "",
+          "ref_qual": "",
+          "defaultDisplayValue": "",
+          "reference_display": "",
+          "comments": null,
+          "choiceOption": "",
+          "label": "Code",
+          "script": {},
+          "hint": "",
+          "name": "code",
+          "scriptAsJsonString": null,
+          "fieldFacetMap": {
+           "uiTypeLabel": "Integer",
+           "action_error_output": "true"
+          },
+          "attributes": {},
+          "maxsize": 40,
+          "columnName": "",
+          "uiDisplayType": "integer"
+         },
+         "name": "code",
+         "scriptAsJsonString": null,
+         "displayField": null,
+         "id": null,
+         "value": "400",
+         "scriptActive": false,
+         "script": null
+        },
+        {
+         "displayValue": null,
+         "children": null,
+         "parameter": {
+          "uiDisplayTypeLabel": "String",
+          "display_value": "",
+          "parent": null,
+          "searchField": null,
+          "defaultValue": "",
+          "show_ref_finder": false,
+          "use_dependent": false,
+          "type": "string",
+          "mandatory": false,
+          "extended": false,
+          "local": false,
+          "sys_class_name": "",
+          "reference": "",
+          "dependent_on": "",
+          "data_structure": "",
+          "readonly": false,
+          "children": [],
+          "complexObjectValue": null,
+          "dynamic": null,
+          "id": "",
+          "type_label": "String",
+          "placeholder": null,
+          "value": "",
+          "table": "",
+          "scriptActive": false,
+          "order": 2,
+          "internal_link": "",
+          "ref_qual": "",
+          "defaultDisplayValue": "",
+          "reference_display": "",
+          "comments": null,
+          "choiceOption": "",
+          "label": "Message",
+          "script": {},
+          "hint": "",
+          "name": "message",
+          "scriptAsJsonString": null,
+          "fieldFacetMap": {
+           "uiTypeLabel": "String",
+           "mapped": "{\"message\":\"{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}\"}",
+           "action_error_output": "true"
+          },
+          "attributes": {},
+          "maxsize": 4000,
+          "columnName": "",
+          "uiDisplayType": "string"
+         },
+         "name": "message",
+         "scriptAsJsonString": null,
+         "displayField": null,
+         "id": null,
+         "value": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].error}}",
+         "scriptActive": false,
+         "script": null
+        }
+       ],
+       "parameter": null,
+       "name": "status",
+       "scriptAsJsonString": null,
+       "displayField": null,
+       "id": null,
+       "value": null,
+       "scriptActive": false,
+       "script": null
+      }
+     }
+    ]
+   },
+   "parent_action": "",
+   "active": true,
+   "scopelabel": "Tenon Marketing Automate Email Spoke",
+   "connection_configurations": [],
+   "steps": [
+    {
+     "cid": "777e0dc1-1672-443c-a82f-daef21d72a6c",
+     "step_type_id": "106afb6647032200b4fad7527c9a71e7",
+     "step_type": "SCRIPT",
+     "section": "",
+     "label": "Gaurd",
+     "action": "69b1b09fc3274f10d4ddf1db05013193",
+     "order": 1,
+     "error_handling_type": "EVAL_ERRORS",
+     "step_id": "9d923813c3674f10d4ddf1db05013116",
+     "inputs": [
+      {
+       "name": "required_run_time",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "Required Runtime",
+       "value": "instance",
+       "display_value": "",
+       "defaultValue": "instance",
+       "mandatory": true,
+       "order": 100,
+       "id": "74315b04b3201300176b051a16a8dc2b",
+       "choices": [
+        {
+         "label": "Instance",
+         "value": "instance",
+         "order": 1
+        },
+        {
+         "label": "MID",
+         "value": "mid",
+         "order": 2
+        },
+        {
+         "label": "Vanilla (Core JavaScript)",
+         "value": "vanilla",
+         "order": 3
+        }
+       ]
+      },
+      {
+       "name": "mid_selection_type",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "Select MID Server Using",
+       "value": "any",
+       "display_value": "",
+       "defaultValue": "any",
+       "mandatory": false,
+       "order": 200,
+       "id": "2c226939b3101300176b051a16a8dc83",
+       "choices": [
+        {
+         "label": "Any MID",
+         "value": "any",
+         "order": 1
+        },
+        {
+         "label": "Use Connection Alias",
+         "value": "use_connection_alias",
+         "order": 2
+        },
+        {
+         "label": "Use Inline Selection",
+         "value": "define_connection_inline",
+         "order": 3
+        }
+       ]
+      },
+      {
+       "name": "connection_alias",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Connection Alias",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 250,
+       "id": "2b2ba571b3101300176b051a16a8dc8f"
+      },
+      {
+       "name": "host",
+       "type": "string",
+       "type_label": "String",
+       "label": "Host",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 300,
+       "id": "28e4e579b3101300176b051a16a8dc0f"
+      },
+      {
+       "name": "mid_selection",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "MID Selection",
+       "value": "auto_select",
+       "display_value": "",
+       "defaultValue": "auto_select",
+       "mandatory": false,
+       "order": 350,
+       "id": "cbd1070373531010791f94596bf6a776",
+       "choices": [
+        {
+         "label": "Auto-Select MID Server",
+         "value": "auto_select",
+         "order": 1
+        },
+        {
+         "label": "Specific MID Server",
+         "value": "specific_mid_server",
+         "order": 2
+        },
+        {
+         "label": "Specific MID Cluster",
+         "value": "specific_mid_cluster",
+         "order": 3
+        }
+       ]
+      },
+      {
+       "name": "application",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "MID Application",
+       "value": "{\"display\":\"ALL\",\"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+       "display_value": "",
+       "defaultValue": "{\"display\":\"ALL\", \"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+       "mandatory": false,
+       "order": 400,
+       "id": "f5e56d79b3101300176b051a16a8dce4"
+      },
+      {
+       "name": "capabilities",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Capabilities",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 500,
+       "id": "7d36ed79b3101300176b051a16a8dceb"
+      },
+      {
+       "name": "mid_server",
+       "type": "document_id",
+       "type_label": "Document ID",
+       "label": "MID Server",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 550,
+       "id": "f0d58b8373531010791f94596bf6a7be"
+      },
+      {
+       "name": "mid_cluster",
+       "type": "document_id",
+       "type_label": "Document ID",
+       "label": "MID Cluster",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 550,
+       "id": "0d2db9e653310110d3a8ddeeff7b1208"
+      },
+      {
+       "name": "script",
+       "type": "script",
+       "type_label": "Script",
+       "label": "Script",
+       "value": "(function execute(inputs, outputs) {\r\n  var HOSTS = {\r\n    api: \"https://api.mailgun.net\",\r\n    storage_us_east4: \"https://storage-us-east4.api.mailgun.net\",\r\n    storage_us_west1: \"https://storage-us-west1.api.mailgun.net\",\r\n    storage_europe_west1: \"https://storage-europe-west1.api.mailgun.net\"\r\n  };\r\n  outputs.base_url = \"\";\r\n  outputs.error = \"\";\r\n  var host = String(inputs.host_1 || \"\");\r\n  var path = String(inputs.path_1 || \"\");\r\n  if (!Object.prototype.hasOwnProperty.call(HOSTS, host)) {\r\n    outputs.error = \"invalid host\";\r\n    return;\r\n  }\r\n  if (!/^\\/(v1|v3)\\//.test(path) || path.indexOf(\"..\") !== -1 || /[\\r\\n]/.test(path) || /:\\/\\//.test(path) || path.indexOf(\"//\") !== -1) {\r\n    outputs.error = \"invalid path\";\r\n    return;\r\n  }\r\n  outputs.base_url = HOSTS[host];\r\n})(inputs, outputs);",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 600,
+       "id": "71aa7f6647032200b4fad7527c9a719b"
+      }
+     ],
+     "extended_inputs": [
+      {
+       "name": "host_1",
+       "type": "string",
+       "type_label": "String",
+       "label": "host_1",
+       "value": "",
+       "mandatory": true,
+       "order": 0,
+       "id": "b7b4b457c3674f10d4ddf1db0501313a",
+       "extended": true,
+       "local": false
+      },
+      {
+       "name": "path_1",
+       "type": "string",
+       "type_label": "String",
+       "label": "path_1",
+       "value": "",
+       "mandatory": true,
+       "order": 100,
+       "id": "3bb4b457c3674f10d4ddf1db0501314d",
+       "extended": true,
+       "local": false
+      }
+     ],
+     "extended_outputs": [
+      {
+       "name": "base_url",
+       "type": "string",
+       "type_label": "String",
+       "label": "Base URL",
+       "mandatory": false,
+       "order": 1,
+       "id": "b7b4b457c3674f10d4ddf1db05013152",
+       "extended": true,
+       "local": false
+      },
+      {
+       "name": "error",
+       "type": "string",
+       "type_label": "String",
+       "label": "Error",
+       "mandatory": false,
+       "order": 2,
+       "id": "bbb4b457c3674f10d4ddf1db05013159",
+       "extended": true,
+       "local": false
+      }
+     ],
+     "outputs": [
+      {
+       "name": "__step_status__",
+       "type": "object",
+       "label": "Step Status"
+      }
+     ]
+    },
+    {
+     "cid": "7d49315c-b657-4319-b150-f96c556c95d3",
+     "step_type_id": "07a762fb47222200b4fad7527c9a7129",
+     "step_type": "REST",
+     "section": "",
+     "label": "REST step",
+     "action": "69b1b09fc3274f10d4ddf1db05013193",
+     "order": 2,
+     "error_handling_type": "NEXT_STEP",
+     "step_id": "99923813c3674f10d4ddf1db05013132",
+     "inputs": [
+      {
+       "name": "connection",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "Connection",
+       "value": "use_connection_alias",
+       "display_value": "",
+       "defaultValue": "use_connection_alias",
+       "mandatory": false,
+       "order": 5,
+       "id": "91e207d03b50030057a4a2e334efc4a0",
+       "choices": [
+        {
+         "label": "Define Connection Inline",
+         "value": "define_connection_inline",
+         "order": 1
+        },
+        {
+         "label": "Use Connection Alias",
+         "value": "use_connection_alias",
+         "order": 2
+        }
+       ]
+      },
+      {
+       "name": "build_request",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "Build Request",
+       "value": "manually",
+       "display_value": "",
+       "defaultValue": "manually",
+       "mandatory": false,
+       "order": 10,
+       "id": "bb61fcd3c7312300a150effeeb97638e",
+       "choices": [
+        {
+         "label": "Manually",
+         "value": "manually",
+         "order": 1
+        },
+        {
+         "label": "From OpenAPI specification - Deprecated",
+         "value": "from_openapi",
+         "order": 2
+        },
+        {
+         "label": "From REST Message",
+         "value": "from_snrestmessage",
+         "order": 3
+        }
+       ]
+      },
+      {
+       "name": "connection_alias",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Connection Alias",
+       "value": "{\"display\":\"x_cadso_email_spok.Email_Spoke_Connection\",\"value\":\"956cc622c3ee4a1085b196c4e401317e\"}",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 10,
+       "id": "262882f03b23320057a4a2e334efc4f0"
+      },
+      {
+       "name": "use_mid",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Use MID",
+       "value": false,
+       "display_value": "",
+       "defaultValue": "false",
+       "mandatory": false,
+       "order": 10,
+       "id": "e532afc12f101300a09a839fb18c95b9"
+      },
+      {
+       "name": "credential_alias",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Credential Alias",
+       "value": "<redacted>",
+       "display_value": "<redacted>",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 10,
+       "id": "445c2a72b3701300176b051a16a8dcc2"
+      },
+      {
+       "name": "mid_selection",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "MID Selection",
+       "value": "auto_select",
+       "display_value": "",
+       "defaultValue": "auto_select",
+       "mandatory": false,
+       "order": 11,
+       "id": "a7d3fa4b73131010791f94596bf6a79a",
+       "choices": [
+        {
+         "label": "Auto-Select MID Server",
+         "value": "auto_select",
+         "order": 1
+        },
+        {
+         "label": "Specific MID Server",
+         "value": "specific_mid_server",
+         "order": 2
+        },
+        {
+         "label": "Specific MID Cluster",
+         "value": "specific_mid_cluster",
+         "order": 3
+        }
+       ]
+      },
+      {
+       "name": "application",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "MID Application",
+       "value": "{\"display\":\"ALL\",\"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+       "display_value": "",
+       "defaultValue": "{\"display\":\"ALL\", \"value\":\"35aa573fd7802200bdbaee5b5e610375\"}",
+       "mandatory": false,
+       "order": 12,
+       "id": "f11ebf865f101300a09a2abd7f466652"
+      },
+      {
+       "name": "capabilities",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Capabilities",
+       "value": "{\"display\":\"REST\",\"value\":\"18409d8007482000dada43c0d1021e8f\"}",
+       "display_value": "",
+       "defaultValue": "{\"display\":\"REST\", \"value\":\"18409d8007482000dada43c0d1021e8f\"}",
+       "mandatory": false,
+       "order": 13,
+       "id": "c30a451d2f201300a09a839fb18c95b4"
+      },
+      {
+       "name": "mid_server",
+       "type": "document_id",
+       "type_label": "Document ID",
+       "label": "MID Server",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 14,
+       "id": "61d6b2cb73131010791f94596bf6a721"
+      },
+      {
+       "name": "api_source",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "API Source",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 15,
+       "id": "c346f4d7c7312300a150effeeb976366"
+      },
+      {
+       "name": "mid_cluster",
+       "type": "document_id",
+       "type_label": "Document ID",
+       "label": "MID Cluster",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 15,
+       "id": "cdfcf11053f10110d3a8ddeeff7b12e2"
+      },
+      {
+       "name": "base_url",
+       "type": "url",
+       "type_label": "URL",
+       "label": "Base URL",
+       "value": "{{step[777e0dc1-1672-443c-a82f-daef21d72a6c].base_url}}",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 15,
+       "id": "a67a8ef03b23320057a4a2e334efc472"
+      },
+      {
+       "name": "api_operation",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "API Operation",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 16,
+       "id": "29c75782c7822300a150effeeb976338"
+      },
+      {
+       "name": "resource_path",
+       "type": "string",
+       "type_label": "String",
+       "label": "Resource Path",
+       "value": "{{action.path}}",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 20,
+       "id": "3d090af03b23320057a4a2e334efc455"
+      },
+      {
+       "name": "http_method",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "HTTP Method",
+       "value": "get",
+       "display_value": "",
+       "defaultValue": "get",
+       "mandatory": false,
+       "order": 25,
+       "id": "e85b7ebf47222200b4fad7527c9a71e3",
+       "choices": [
+        {
+         "label": "GET",
+         "value": "get",
+         "order": 1
+        },
+        {
+         "label": "POST",
+         "value": "post",
+         "order": 2
+        },
+        {
+         "label": "PUT",
+         "value": "put",
+         "order": 3
+        },
+        {
+         "label": "PATCH",
+         "value": "patch",
+         "order": 4
+        },
+        {
+         "label": "DELETE",
+         "value": "delete",
+         "order": 5
+        }
+       ]
+      },
+      {
+       "name": "query_params",
+       "type": "name_values",
+       "type_label": "Name/Values",
+       "label": "Query Parameters",
+       "value": "{\"type\":\"ADV_NV\",\"value\":[]}",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 25,
+       "id": "4328e2fb47222200b4fad7527c9a7164"
+      },
+      {
+       "name": "headers",
+       "type": "name_values",
+       "type_label": "Name/Values",
+       "label": "Headers",
+       "value": "{\"type\":\"ADV_NV\",\"value\":[{\"name\":\"Content-Type\",\"attributes\":{\"omit_if_empty\":false,\"mandatory\":false},\"value\":\"{{action.content_type}}\"},{\"name\":\"Accept\",\"attributes\":{\"omit_if_empty\":false,\"mandatory\":false},\"value\":\"application/json\"}]}",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 30,
+       "id": "371837f1c71003007b237f48cb9763b0"
+      },
+      {
+       "name": "request_type",
+       "type": "choice",
+       "type_label": "Choice",
+       "label": "Request Type",
+       "value": "text",
+       "display_value": "",
+       "defaultValue": "text",
+       "mandatory": false,
+       "order": 40,
+       "id": "bc79234a87d01300dd637d5e27cb0b24",
+       "choices": [
+        {
+         "label": "Text",
+         "value": "text",
+         "order": 1
+        },
+        {
+         "label": "Binary",
+         "value": "binary",
+         "order": 2
+        },
+        {
+         "label": "Multipart",
+         "value": "multi-part",
+         "order": 3
+        },
+        {
+         "label": "Form URL-Encoded",
+         "value": "form-url-encoded",
+         "order": 4
+        }
+       ]
+      },
+      {
+       "name": "body",
+       "type": "multi_small",
+       "type_label": "Multiple Line Small Text Area",
+       "label": "Request Body[Text]",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 45,
+       "id": "6c6073f1c71003007b237f48cb97633b"
+      },
+      {
+       "name": "form_URL_encoded_map",
+       "type": "string",
+       "type_label": "String",
+       "label": "form_URL_encoded_map",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 45,
+       "id": "3684ec4787d01300dd637d5e27cb0bcb"
+      },
+      {
+       "name": "attachment_id",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Attachment",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 45,
+       "id": "8bf0dc9687141300dd637d5e27cb0b3c"
+      },
+      {
+       "name": "multipart_sources_string",
+       "type": "string",
+       "type_label": "String",
+       "label": "multipart_sources_string",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 45,
+       "id": "b564608787d01300dd637d5e27cb0b7d"
+      },
+      {
+       "name": "save_response_as_attachment",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Save As Attachment",
+       "value": false,
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 49,
+       "id": "f9df589687301300735f7d5e27cb0b2d"
+      },
+      {
+       "name": "attachment_file_name",
+       "type": "string",
+       "type_label": "String",
+       "label": "Attachment File Name",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 50,
+       "id": "9458387787201300b3b67d5e27cb0b3b"
+      },
+      {
+       "name": "rest_message",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "REST Message",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 90,
+       "id": "b79bea415b101110ab933520b881c737"
+      },
+      {
+       "name": "is_streaming",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Is Streaming",
+       "value": false,
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "f1255aa377322300efb691572b106135"
+      },
+      {
+       "name": "honor_duplicate_headers",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Honor Duplicate Headers",
+       "value": true,
+       "display_value": "",
+       "defaultValue": "false",
+       "mandatory": false,
+       "order": 100,
+       "id": "15288f755bd24110ab933520b881c713"
+      },
+      {
+       "name": "is_temporary_attachment",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Is Temporary Attachment",
+       "value": false,
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "89fa6545cb200010a2fcb895634c9c3c"
+      },
+      {
+       "name": "rest_message_function",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "REST Message Function",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "35bb6e415b101110ab933520b881c752"
+      },
+      {
+       "name": "honor_duplicate_query_params",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Honor Duplicate Query Params",
+       "value": true,
+       "display_value": "",
+       "defaultValue": "false",
+       "mandatory": false,
+       "order": 100,
+       "id": "58715a1c53f22010d3a8ddeeff7b1248"
+      },
+      {
+       "name": "table",
+       "type": "table_name",
+       "type_label": "Table Name",
+       "label": "Table",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "a9adb007b3c21300176b051a16a8dc9a"
+      },
+      {
+       "name": "override_base_url",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Override Base URL",
+       "value": true,
+       "display_value": "",
+       "defaultValue": "false",
+       "mandatory": false,
+       "order": 100,
+       "id": "8e4f451f5b010110ab933520b881c72c"
+      },
+      {
+       "name": "attachment_file_record",
+       "type": "document_id",
+       "type_label": "Document ID",
+       "label": "Attachment File Record",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "6278787787201300b3b67d5e27cb0b94"
+      },
+      {
+       "name": "connection_timeout",
+       "type": "integer",
+       "type_label": "Integer",
+       "label": "Connection Timeout",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "7a59009bc7522010820469467ec260c0"
+      },
+      {
+       "name": "rest_metadata",
+       "type": "json",
+       "type_label": "JSON",
+       "label": "REST Metadata",
+       "value": "",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 100,
+       "id": "3c4d7367c7d32300a150effeeb9763a4"
+      },
+      {
+       "name": "enable_retry_policy",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Enable Retry Policy",
+       "value": false,
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 200,
+       "id": "321e31fd87803300a8cc7d5e27cb0b7a"
+      },
+      {
+       "name": "override_default_policy_for_alias",
+       "type": "boolean",
+       "type_label": "True/False",
+       "label": "Override Default Policy for Alias",
+       "value": false,
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 300,
+       "id": "324e357187c03300a8cc7d5e27cb0b43"
+      },
+      {
+       "name": "retry_policy",
+       "type": "reference",
+       "type_label": "Reference",
+       "label": "Retry Policy",
+       "value": "{\"display\":\"Default HTTP Retry Policy\",\"value\":\"ef751ff07301330025d71afe2ff6a7f9\"}",
+       "display_value": "",
+       "defaultValue": "",
+       "mandatory": false,
+       "order": 400,
+       "id": "37be397587c03300a8cc7d5e27cb0ba2"
+      }
+     ],
+     "extended_inputs": [],
+     "extended_outputs": [
+      {
+       "name": "sn_auth_token",
+       "type": "password2",
+       "type_label": "Password (2 Way Encrypted)",
+       "label": "Credential Value",
+       "mandatory": false,
+       "order": 1,
+       "id": "15923813c3674f10d4ddf1db05013149",
+       "extended": true,
+       "local": false
+      }
+     ],
+     "outputs": [
+      {
+       "name": "error_message",
+       "type": "string",
+       "label": "Error Message"
+      },
+      {
+       "name": "response_headers",
+       "type": "string",
+       "label": "Response Headers"
+      },
+      {
+       "name": "response_stream",
+       "type": "string",
+       "label": "Response Stream"
+      },
+      {
+       "name": "status_code",
+       "type": "string",
+       "label": "Status Code"
+      },
+      {
+       "name": "response_body",
+       "type": "string",
+       "label": "Response Body"
+      },
+      {
+       "name": "error_code",
+       "type": "string",
+       "label": "Error Code"
+      },
+      {
+       "name": "__step_status__",
+       "type": "object",
+       "label": "Step Status"
+      }
+     ]
+    }
+   ],
+   "category_order": 100,
+   "system": false,
+   "action_status_metadata_template": {},
+   "flow_priority": "",
+   "domainName": "global",
+   "name": "Email Service Request GET",
+   "pharmacy": {
+    "pharmacyCompound": {}
+   },
+   "scopelogo": "",
+   "attributes": {
+    "labelCacheCleanUpExecuted": "true"
+   },
+   "category": "{\"display\":\"Email Service - External API\",\"value\":\"8db1749fc3274f10d4ddf1db05013101\"}",
+   "copied_from": "",
+   "ih_action": false
+  }
+ }
+}

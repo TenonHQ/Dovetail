@@ -1,10 +1,11 @@
 {
   "name": "@tenonhq/dovetail-dashboard",
-  "version": "0.0.51",
+  "version": "0.0.52",
   "description": "Update Set Dashboard for Dovetail",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "jest",
     "version:bump": "node ./../../Scripts/bump-version.js ./package.json",
     "postpublish": "npm run version:bump"
   },
@@ -30,5 +31,8 @@
     "type": "git",
     "url": "git+https://github.com/TenonHQ/Dovetail.git",
     "directory": "packages/dashboard"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }

@@ -284,3 +284,72 @@ describe("stepOps — hasStepOps", function () {
     expect(hasStepOps({ addStepOutputs: [{ step: "a", name: "b" }] })).toBe(true);
   });
 });
+
+describe("stepOps — setStepInputs", function () {
+  function restGraph(): Array<StepRecord> {
+    return [
+      {
+        cid: "cid_rest",
+        label: "REST Step",
+        inputs: [
+          { name: "http_method", value: "get", display_value: "GET" },
+          { name: "rest_endpoint", value: { value: "/api/old" } }
+        ],
+        extended_inputs: [{ name: "payload", type: "string", value: "" }]
+      }
+    ];
+  }
+
+  it("sets an existing input's value and display_value on a copy", function () {
+    var src = restGraph();
+    var res = applyStepOps(src, {
+      setStepInputs: [{ step: "REST Step", input: "http_method", value: "post" }]
+    });
+    var method = (res.steps[0].inputs as Array<Record<string, unknown>>)[0];
+    expect(method.value).toBe("post");
+    expect(method.display_value).toBe("post");
+    expect(res.touchedCids).toEqual(["cid_rest"]);
+    expect(res.changes[0]).toContain("'get' -> 'post'");
+    // input graph untouched
+    expect((src[0].inputs as Array<Record<string, unknown>>)[0].value).toBe("get");
+  });
+
+  it("preserves a wrapped value and does not invent display_value", function () {
+    var res = applyStepOps(restGraph(), {
+      setStepInputs: [{ step: "cid_rest", input: "rest_endpoint", value: "/api/new" }]
+    });
+    var endpoint = (res.steps[0].inputs as Array<Record<string, unknown>>)[1];
+    expect(endpoint.value).toEqual({ value: "/api/new" });
+    expect(Object.prototype.hasOwnProperty.call(endpoint, "display_value")).toBe(false);
+  });
+
+  it("falls back to extended_inputs", function () {
+    var res = applyStepOps(restGraph(), {
+      setStepInputs: [{ step: "REST Step", input: "payload", value: "{{step[x].y}}" }]
+    });
+    expect((res.steps[0].extended_inputs as Array<Record<string, unknown>>)[0].value).toBe("{{step[x].y}}");
+  });
+
+  it("throws on an unknown input, listing what is there", function () {
+    expect(function () {
+      applyStepOps(restGraph(), { setStepInputs: [{ step: "REST Step", input: "verb", value: "post" }] });
+    }).toThrow(/input 'verb' not found on step 'REST Step'.*http_method, rest_endpoint, payload/);
+  });
+
+  it("throws on a non-string value and skips a no-op", function () {
+    expect(function () {
+      applyStepOps(restGraph(), {
+        setStepInputs: [{ step: "REST Step", input: "http_method", value: 5 as unknown as string }]
+      });
+    }).toThrow(/value must be a string/);
+    var res = applyStepOps(restGraph(), {
+      setStepInputs: [{ step: "REST Step", input: "http_method", value: "get" }]
+    });
+    expect(res.touchedCids).toEqual([]);
+    expect(res.warnings[0]).toMatch(/already 'get'/);
+  });
+
+  it("counts as a step op for hasStepOps", function () {
+    expect(hasStepOps({ setStepInputs: [{ step: "a", input: "b", value: "c" }] })).toBe(true);
+  });
+});

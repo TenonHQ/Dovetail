@@ -16,6 +16,19 @@ export interface ServiceNowClientConfig {
   user?: string;
   /** Basic-auth password. Defaults to SN_PASSWORD env var. Fallback when no API key is configured. */
   password?: string;
+  /**
+   * Dedicated basic-auth identity for Flow Designer authoring — used ONLY for
+   * `/api/now/processflow/*` requests. ServiceNow cannot attach a REST API
+   * access policy to processflow, so under API-key auth every Flow Designer
+   * authoring call 401s; this identity is how those calls authenticate.
+   * Defaults to SN_FLOW_USER (then SN_DEV_FLOW_USER / SN_PROD_FLOW_USER) — but
+   * only when the config does not itself pin the main identity (apiKey or
+   * user/password), so an env-file-resolved config never borrows another
+   * instance's flow credentials from process.env.
+   */
+  flowUser?: string;
+  /** Password for `flowUser`. Defaults to SN_FLOW_PASSWORD (then SN_DEV_ / SN_PROD_FLOW_PASSWORD). Never logged. */
+  flowPassword?: string;
   /** Min gap between requests (ms). Defaults to SN_REQUEST_INTERVAL_MS or 20. */
   requestIntervalMs?: number;
   /** Max retries on 429. Defaults to SN_MAX_RETRIES_429 or 5. */

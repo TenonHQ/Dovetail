@@ -34,14 +34,29 @@ import { copyFlow } from "../flowDesigner/copyFlow";
 import { createFlow } from "../flowDesigner/createFlow";
 import { editFlow } from "../flowDesigner/editFlow";
 import { editActionType } from "../flowDesigner/editActionType";
+import { cloneActionType } from "../flowDesigner/cloneActionType";
+import { defineActionType } from "../flowDesigner/defineActionType";
+import type { DefineActionSpec } from "../flowDesigner/defineActionType";
 import { testFlow } from "../flowDesigner/testFlow";
-import { createTable, addColumn, setColumn, setTable } from "../table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  listIndexes,
+  createIndex,
+  setColumn,
+  setTable,
+} from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
 import { invokeRest } from "../invokeRest";
 import type { InvokeRestParams } from "../invokeRest";
 import { publishApp } from "../publishApp";
+import { exportUpdateSet } from "../exportUpdateSet";
+import type { ExportUpdateSetParams } from "../exportUpdateSet";
+import { exportApp } from "../exportApp";
+import type { ExportAppParams } from "../exportApp";
 import type { PublishAppParams } from "../publishApp";
 import {
   createViewSchema,
@@ -53,6 +68,8 @@ import {
   viewFlowSchema,
   viewActionSchema,
   editActionSchema,
+  cloneActionSchema,
+  defineActionSchema,
   publishFlowSchema,
   copyFlowSchema,
   createFlowSchema,
@@ -60,6 +77,9 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
+  addIndexSchema,
+  listIndexesSchema,
+  createIndexSchema,
   setColumnSchema,
   setTableSchema,
   setFieldSchema,
@@ -67,6 +87,8 @@ import {
   hostAssetsSchema,
   invokeRestSchema,
   publishAppSchema,
+  exportUpdateSetSchema,
+  exportAppSchema,
 } from "./schemas";
 
 export var TOOL_NAMES = [
@@ -79,6 +101,8 @@ export var TOOL_NAMES = [
   "flow_view",
   "action_view",
   "action_edit",
+  "action_clone",
+  "action_define",
   "flow_publish",
   "flow_copy",
   "flow_create",
@@ -86,6 +110,9 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
+  "add_index",
+  "index_list",
+  "index_create",
   "set_column",
   "set_table",
   "set_field",
@@ -93,6 +120,8 @@ export var TOOL_NAMES = [
   "host_assets",
   "invoke_rest",
   "app_publish",
+  "update_set_export",
+  "app_export",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -260,6 +289,76 @@ export function buildDescriptors(
           ops: p.ops,
           apply: p.apply === true,
           updateSetSysId: p.updateSetSysId,
+        });
+      },
+    },
+    {
+      name: "action_clone",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Clone a ServiceNow Custom Action Type (sys_hub_action_type_definition) into a scope and " +
+        "publish it headlessly — multi-step capable. Clones the parent, its inputs/outputs, every " +
+        "step instance and each step's ext inputs/outputs (fresh sys_ids, target scope), writes them " +
+        "through Dovetail createRecord pinned to updateSetSysId, then grafts the SOURCE's step graph " +
+        "(remapped onto the clone) onto the model and POSTs /snapshot, and reads the steps back to " +
+        "verify. Optional ops (inline StepOps) patch the cloned steps first: setStepInputs " +
+        "[{step, input, value}] sets an existing input (e.g. a REST step's http_method), plus " +
+        "patchStepScripts / addStepOutputs / addStepInputs as in action_edit. Idempotent: an existing " +
+        "(name, scope) returns action 'unchanged' with no writes. DRY-RUN BY DEFAULT: without " +
+        "confirm:true it reads everything and returns the plan (records per table, step summary, ops " +
+        "effects) and writes nothing; dryRun:true forces a dry-run even with confirm. from is the " +
+        "source sys_id; scope is the target scope name (e.g. x_cadso_email_spok) or sys_id; " +
+        "updateSetSysId is required with confirm.",
+      shape: cloneActionSchema.shape,
+      handler: async function (args: any) {
+        var p = cloneActionSchema.parse(args);
+        return cloneActionType({
+          client: client(),
+          sourceSysId: p.from,
+          newName: p.name,
+          internalName: p.internalName,
+          newScope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          description: p.description,
+          stepOps: p.ops,
+          confirm: p.confirm === true,
+          dryRun: p.dryRun === true,
+        });
+      },
+    },
+    {
+      name: "action_define",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Define a Custom Action Type's body — action inputs, outputs and steps (script and REST " +
+        "steps wired with data pills) — headlessly, the way the Flow Designer's Save does: GET the " +
+        "model + /step_instances, merge the spec, PUT the FULL model back to " +
+        "/api/now/processflow/action/action_types/{sysId}, read it back to verify; publish:true also " +
+        "snapshots it. spec: { action?: {name, description, access}, inputs?: [{name, type, mandatory, " +
+        "choices, default, remove}], outputs?: [{name, value: '{{steps.<ref>.<output>}}'}], steps?: [{ref, " +
+        "type: 'script'|'rest', label, match?, script?, inputs? (script vars, name -> value/pill), " +
+        "outputs? (script vars), values? (step-type inputs, e.g. REST base_url / http_method / headers " +
+        "[{name,value}] / connection_alias sys_id)}] }. Pills: {{action.<input>}}, " +
+        "{{steps.<ref>.<output>}} (resolved to {{step[<cid>].<output>}}). Steps match existing ones by " +
+        "match (cid/label), label, then position; new steps get fresh cids, existing cids are kept. " +
+        "Unknown keys, bad names and unknown/dangling pill references are refused before any write. " +
+        "DRY-RUN BY DEFAULT: without confirm:true it returns the planned diff (inputs/outputs/steps " +
+        "added/changed/removed, per-step input values) and writes nothing; dryRun:true forces a " +
+        "dry-run. Idempotent: a spec already in effect returns status 'unchanged' with no PUT. The " +
+        "action shell must already exist (action_clone or the Designer). sysId is the " +
+        "sys_hub_action_type_definition sys_id; scope is the action's scope name or sys_id.",
+      shape: defineActionSchema.shape,
+      handler: async function (args: any) {
+        var p = defineActionSchema.parse(args);
+        return defineActionType({
+          client: client(),
+          sysId: p.sysId,
+          scope: p.scope,
+          spec: p.spec as DefineActionSpec,
+          updateSetSysId: p.updateSetSysId,
+          publish: p.publish === true,
+          confirm: p.confirm === true,
+          dryRun: p.dryRun === true,
         });
       },
     },
@@ -447,6 +546,140 @@ export function buildDescriptors(
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
+          debug: p.debug,
+        });
+      },
+    },
+    {
+      name: "add_index",
+      annotations: WRITE_OVERWRITE,
+      description:
+        "Create a single-column UNIQUE index on an EXISTING ServiceNow table, headless. The " +
+        "ONLY headless lever is sys_dictionary.unique — sys_index fails an API-LEVEL ACL (403) " +
+        "for every identity and sys_index_column does not exist — so this patches the column's " +
+        "dictionary row through the update-set-aware write path and lets the platform build the " +
+        "physical index off that flag, then READS IT BACK from the v_db_index view. columns is a " +
+        "list but exactly one entry is supported: unique is a PER-COLUMN flag, so a composite " +
+        "request is REFUSED rather than silently narrowed to a different index than the one asked " +
+        "for, and unique:false is refused too (there is no dictionary lever for a plain index) — " +
+        "both stay platform-UI work. Before writing, the column's values are scanned and the run " +
+        "ABORTS on duplicates, EMPTY included: a unique index cannot build over them, and the " +
+        "platform fails that ALTER SILENTLY, leaving a dictionary row claiming unique=true with no " +
+        "index behind it (the x_cadso_core_metric_point.idempotency_key trap). That scan is paged " +
+        "and capped, and a scan that hits the cap ABORTS TOO — an UNPROVEN scan is treated exactly " +
+        "like a proven collision, because writing on a partly-read column is how this verb would " +
+        "manufacture that trap on a table too big to have been checked. status is 'created' " +
+        "only when a matching v_db_index row was read back; a flag with no index is 'failed', and " +
+        "verified.indexPresent is null (UNKNOWN) when the view could not be read — never false, " +
+        "because a blind instrument is not evidence of absence. 'uniqueness-enforced' is ALWAYS " +
+        "reported in unverified: v_db_index carries no uniqueness field, so enforcement is provable " +
+        "only by a duplicate-insert test. updateSetSysId is required on the live path; dryRun:true " +
+        "returns the plan with no reads and no writes.",
+      shape: addIndexSchema.shape,
+      handler: async function (args: unknown) {
+        var p = addIndexSchema.parse(args);
+        // The schema leaves updateSetSysId optional (dry-run doesn't need one), so
+        // enforce the live-path requirement HERE — a tool-level error before any
+        // work beats a failure surfacing from deep inside addIndex. Same pattern as
+        // add_column.
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "add_index: updateSetSysId is required on the live path so the " +
+              "sys_dictionary change is captured in a known update set — " +
+              "set dryRun:true to plan without one.",
+          );
+        }
+        // `unique` is boolean at the boundary (unvalidated JSON arrives here), but only
+        // true is buildable — refuse it by name rather than let a caller believe a plain
+        // index was created.
+        var unique = p.unique;
+        if (unique !== true) {
+          throw new Error(
+            "add_index: only a unique index can be created headlessly — the sole " +
+              "lever is sys_dictionary.unique, which has no equivalent for a plain " +
+              "(non-unique) index. Pass unique:true, or create that index in the " +
+              "platform UI.",
+          );
+        }
+        return addIndex({
+          client: client(),
+          table: p.table,
+          columns: p.columns,
+          unique: unique,
+          scope: p.scope,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun,
+          debug: p.debug,
+        });
+      },
+    },
+    {
+      name: "index_list",
+      annotations: READ_ONLY,
+      description:
+        "List the DATABASE INDEXES on a ServiceNow table. Read-only — no form session, no " +
+        "writes. Reads the v_db_index VIEW, which is the only index read surface an instance " +
+        "exposes: sys_index fails an API-LEVEL ACL (HTTP 403) for every identity including " +
+        "admin (an ACL that refuses GET refuses POST), and sys_index_column does not exist at " +
+        "all (HTTP 400 'Invalid table') — there is no two-table index model to join. Each row " +
+        "returns { name, columns, type, rawColumns }: `columns` is v_db_index's bracketed " +
+        "`column_names` cell ('[phone]', '[a,b]') PARSED into a list, never substring-matched, " +
+        "and `type` is access_method (btree for essentially everything). UNIQUENESS IS NOT " +
+        "READABLE: v_db_index carries no uniqueness field, so a unique index and an ordinary " +
+        "one are indistinguishable in it — `unique` is therefore left ABSENT rather than " +
+        "guessed, and 'uniqueness-enforced' is always reported in unverified. Only a " +
+        "duplicate-insert test proves enforcement. An empty result more likely means the table " +
+        "name is wrong than that the table is unindexed (every physical table has a PRIMARY).",
+      shape: listIndexesSchema.shape,
+      handler: async function (args: unknown) {
+        var p = listIndexesSchema.parse(args);
+        return listIndexes({ client: client(), table: p.table });
+      },
+    },
+    {
+      name: "index_create",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
+      description:
+        "Create a DATABASE INDEX on an EXISTING ServiceNow table — including the COMPOSITE and " +
+        "NON-UNIQUE indexes add_index cannot build. A DATABASE INDEX IS A PHYSICAL, PER-INSTANCE " +
+        "CHANGE: IT IS NOT CAPTURED IN AN UPDATE SET AND DOES NOT TRAVEL WITH A PROMOTION, so it " +
+        "must be re-run against every environment that needs it — which is why this tool takes " +
+        "no updateSetSysId. There is no record path to an index (sys_index is API-level-ACL 403, " +
+        "sys_index_column does not exist, and sys_dictionary.unique — the add_index lever — is " +
+        "per-column and unique-only), so this replays the platform's own index-creator form " +
+        "(sys_action=create_index) over a form-login session. DRY-RUN BY DEFAULT: without " +
+        "confirm:true NOTHING is sent and nothing is read; dryRun:true forces a dry-run even " +
+        "with confirm. IDEMPOTENT: on the live path v_db_index is read first, and an index over " +
+        "exactly these columns returns 'already-exists' with no write. `columns` is ORDERED — " +
+        "order is part of an index's identity and is preserved verbatim. `name` is REFUSED: the " +
+        "platform's form has no name input (ServiceNow names the index itself), so accepting one " +
+        "would mean reporting a name the instance does not carry — the created index's real name " +
+        "comes back in `name`. After the POST the index is polled for in v_db_index (default 10 " +
+        "checks, 3s apart, since a build on a populated table is asynchronous); if it never " +
+        "appears the result is 'failed', because a form processor returning a page is not " +
+        "evidence an ALTER ran — and a unique index cannot build over duplicate values, EMPTY " +
+        "included. verified:true means a matching row was READ BACK. 'uniqueness-enforced' is " +
+        "ALWAYS in unverified: v_db_index has no uniqueness field, so enforcement is provable " +
+        "only by a duplicate-insert test. Requires a username+password identity that can form-" +
+        "log-in; an instance on API-key-only auth or SSO/MFA will fail at the session with a " +
+        "diagnosis, because no .do replay can work there.",
+      shape: createIndexSchema.shape,
+      handler: async function (args: unknown) {
+        var p = createIndexSchema.parse(args);
+        return createIndex({
+          client: client(),
+          table: p.table,
+          columns: p.columns,
+          unique: p.unique,
+          name: p.name,
+          accessMethod: p.accessMethod,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+          pollAttempts: p.pollAttempts,
+          pollIntervalMs: p.pollIntervalMs,
           debug: p.debug,
         });
       },
@@ -653,18 +886,24 @@ export function buildDescriptors(
       name: "app_publish",
       annotations: WRITE_EXECUTE,
       description:
-        "Publish a scoped ServiceNow application to ONE target per call — the ServiceNow Store " +
-        "(target 'store') or the company Application Repository (target 'repo'); call twice to " +
-        "publish to both — then poll the publish to completion. STORE PUBLISH IS EXTERNALLY " +
-        "VISIBLE on the ServiceNow Store — treat it as a release. DRY-RUN BY DEFAULT: without " +
-        "confirm:true the resolved plan (app, current version, target) is returned and nothing is " +
-        "published. target 'store' replays the sys_app form's upload flow over a form-login session " +
-        "and requires SN_STORE_USERNAME/SN_STORE_PASSWORD in the server's env file — credentials " +
-        "never transit tool arguments. target 'repo' uses the supported CI/CD REST API " +
-        "(/api/sn_cicd/app_repo/publish) and requires the sn_cicd role. app is a scope name, " +
+        "Publish a scoped ServiceNow application to ONE target per call, then poll the publish to " +
+        "completion; call repeatedly to hit several targets. STORE PUBLISH IS EXTERNALLY VISIBLE " +
+        "on the ServiceNow Store — treat it as a release. DRY-RUN BY DEFAULT: without confirm:true " +
+        "the resolved plan (app, current version, target) is returned and nothing is published. " +
+        "Targets: 'store' replays the sys_app form's upload flow over a form-login session and " +
+        "requires SN_STORE_USERNAME/SN_STORE_PASSWORD in the server's env file — credentials never " +
+        "transit tool arguments. 'repo' publishes to the company Application Repository via the " +
+        "supported CI/CD REST API (/api/sn_cicd/app_repo/publish) and requires the sn_cicd plugin " +
+        "and role. 'repo-ui' reaches the SAME company repository over the UI uploader instead — use " +
+        "it on instances without sn_cicd, where 'repo' 404s. 'update-set' publishes the app INTO a " +
+        "newly created update set via the two-call AppsAjaxProcessor flow (no REST equivalent " +
+        "exists); updateSetName defaults to the app's name and updateSetDescription is conventionally " +
+        "the release date stamp (YYYYMMDD) so a whole release is one sys_update_set query. " +
+        "includeData (default false) is the dialog's 'Include demo data' box. app is a scope name, " +
         "sys_app sys_id, or app name; version must be above the currently published version. The " +
         "result carries the progress-tracker id, per-step states, the Store appLink, and the " +
-        "publish's update-set sys_id where the instance reports one.",
+        "update-set sys_id (for 'update-set' this is set as soon as the set is created, so it " +
+        "survives a later failure).",
       shape: publishAppSchema.shape,
       handler: async function (args: any) {
         var p = publishAppSchema.parse(args);
@@ -673,6 +912,9 @@ export function buildDescriptors(
           version: p.version,
           target: p.target,
           devNotes: p.devNotes,
+          updateSetName: p.updateSetName,
+          updateSetDescription: p.updateSetDescription,
+          includeData: p.includeData,
           confirm: p.confirm,
           dryRun: p.dryRun,
           timeoutMs: p.timeoutMs,
@@ -681,6 +923,73 @@ export function buildDescriptors(
           params.client = deps.client;
         }
         return publishApp(params);
+      },
+    },
+    {
+      name: "update_set_export",
+      annotations: READ_ONLY,
+      description:
+        "Export one update set to an importable <unload> XML document, with every secret value " +
+        "replaced by the __SET_DURING_INSTALL__ sentinel. Two modes. mode 'assemble' (the default) " +
+        "is READ-ONLY: it pages the set's sys_update_xml rows and builds the document, touching no " +
+        "instance state, which is what packaging work wants against a shared instance. mode " +
+        "'complete' marks the set complete on the instance (a REAL WRITE, so it needs confirm:true) " +
+        "and reads the export servlet instead — the servlet answers an in-progress set with an " +
+        "empty 200, which this handles rather than writing an empty file. The export REFUSES to " +
+        "produce a document when the row count does not match the set, or when a field looks " +
+        "secret and no rule covers it: adjudicate it in the rules file as a strip rule or as " +
+        "notSecret with a reason. Secret stripping cannot be disabled. The result carries the XML, " +
+        "the record count, and the table.field list of every value replaced, so the install runbook " +
+        "can list what to set afterwards.",
+      shape: exportUpdateSetSchema.shape,
+      handler: async function (args: any) {
+        var p = exportUpdateSetSchema.parse(args);
+        var params: ExportUpdateSetParams = {
+          updateSet: p.updateSet,
+          mode: p.mode,
+          rulesPath: p.rulesPath,
+          pageSize: p.pageSize,
+          maxRows: p.maxRows,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return exportUpdateSet(params);
+      },
+    },
+    {
+      name: "app_export",
+      annotations: WRITE_EXECUTE,
+      description:
+        "Publish a scoped application into a NEW update set and export that set to importable " +
+        "<unload> XML — the headless equivalent of the UI's Publish to Update Set then Export to " +
+        "XML. PUBLISHING IS A REAL SHARED-INSTANCE WRITE: it creates an update set and can add " +
+        "1000+ sys_update_xml rows, so DRY-RUN BY DEFAULT — without confirm:true the resolved plan " +
+        "is returned and nothing is published. This is NOT the Store publish (that is app_publish, " +
+        "which is externally visible); this one stays inside the instance. Secret values are always " +
+        "replaced with the __SET_DURING_INSTALL__ sentinel before the document is returned, with no " +
+        "opt-out. includeData ships table data as well as schema and is off by default. The result " +
+        "carries the update set sys_id, the record count, the XML, and every stripped table.field.",
+      shape: exportAppSchema.shape,
+      handler: async function (args: any) {
+        var p = exportAppSchema.parse(args);
+        var params: ExportAppParams = {
+          app: p.app,
+          version: p.version,
+          description: p.description,
+          includeData: p.includeData,
+          keepSet: p.keepSet,
+          rulesPath: p.rulesPath,
+          timeoutMs: p.timeoutMs,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+        };
+        if (deps.client) {
+          params.client = deps.client;
+        }
+        return exportApp(params);
       },
     },
   ];

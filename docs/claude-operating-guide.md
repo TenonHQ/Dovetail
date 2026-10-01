@@ -4,7 +4,7 @@
 >
 > Audience: a Claude Code session (or the developer reading over its shoulder). For *building/contributing* to Dovetail, see [`../ONBOARDING.md`](../ONBOARDING.md). For the platform design, see [`dovetail-platform-spec.md`](dovetail-platform-spec.md).
 
-Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**64 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
+Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**69 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
 
 ---
 
@@ -14,7 +14,7 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
 | **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 25 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, manage prompt drafts, build a session handoff |
-| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 23 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
+| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 28 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
 
@@ -101,7 +101,7 @@ Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders 
 
 ---
 
-## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 23 tools (SN authoring writes)
+## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 28 tools (SN authoring writes)
 
 Source: `packages/servicenow/src/mcp/registry.ts` — the registry is the source of
 truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug.
@@ -109,7 +109,7 @@ truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug
 Writes are **captured in the update set you pass** and are **idempotent** (re-running
 reports every record unchanged).
 
-> **`dryRun` is NOT universal.** 13 of the 23 accept it; the other 10 write (or read)
+> **`dryRun` is NOT universal.** 19 of the 28 accept it; the other 9 write (or read)
 > immediately. Notably **neither choice verb supports `dryRun`** — `remove_choices_from_field`
 > is a soft delete and reversible by re-adding, but it is not previewable. Check the
 > tool's own schema before assuming you can plan a write.
@@ -136,6 +136,9 @@ reports every record unchanged).
 |---|---|---|
 | `create_table` | Create a scoped table | yes |
 | `add_column` | Add a column to a table | yes |
+| `add_index` | Create a **single-column UNIQUE** index via `sys_dictionary.unique` (the only headless lever — `sys_index` is ACL-403), read back from the `v_db_index` view. Composite and non-unique are refused, not narrowed; duplicate values — or a duplicate scan that hits its row cap — abort before any write; uniqueness *enforcement* is always reported unverified | yes |
+| `index_list` | **Read-only.** List a table's database indexes from the `v_db_index` view — the only index read surface (`sys_index` is API-level-ACL 403, `sys_index_column` does not exist). `column_names` is parsed out of its bracketed form; `unique` is left absent because the view has no uniqueness field | n/a (read-only) |
+| `index_create` | Create an index — **composite and non-unique included** — by replaying the platform index-creator form, then polling `v_db_index` until it appears. Idempotent (an index over exactly those columns returns `already-exists`); `name` is refused (the form has no name input); **NOT captured in an update set** — a database index is physical and per-instance, so re-run it per environment. Needs a form-loginable username+password identity | dry-run **by default**; `confirm:true` writes |
 | `set_column` | Update a column's dictionary definition | yes |
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
@@ -148,6 +151,8 @@ reports every record unchanged).
 | `flow_view` | Read a flow/subflow's compiled step graph | n/a (read) |
 | `action_view` | Read a custom action type's definition | n/a (read) |
 | `action_edit` | Patch an action type's steps | no |
+| `action_clone` | Clone an action type (all steps + step IO) into a scope, then publish + verify; dry-run unless `confirm:true` | yes |
+| `action_define` | Define an existing action type's inputs, outputs and steps (script + REST, data-pill wired) the way the Designer's Save does — one PUT of the full model, read back + verified; `publish:true` also snapshots. Dry-run (planned diff) unless `confirm:true`; idempotent (no PUT when already in effect). The shell comes from `action_clone` or the Designer | yes |
 | `flow_publish` | Publish a flow | no |
 | `flow_copy` | Copy a flow | no |
 | `flow_create` | Author a new flow | yes |
@@ -161,6 +166,8 @@ reports every record unchanged).
 | `host_assets` | Host static assets on the instance | yes |
 | `invoke_rest` | Call an instance REST endpoint | yes |
 | `app_publish` | Publish an app to the store / company repo | yes |
+| `update_set_export` | Export an update set to importable XML, secrets replaced with a sentinel | yes (read-only in assemble mode) |
+| `app_export` | Publish an app into a new update set and export it, secrets stripped | yes |
 
 Same operations are available from the `dove-sn` CLI (§5) for scripted/CI use.
 
@@ -208,6 +215,7 @@ Source: `packages/servicenow/src/cli.ts`. Every write lands in `--update-set`; m
 | `set-form-layout` | Set form sections + fields (`--from-json`, nested spec) |
 | `set-related-lists` | Set a form's related lists (`--from-json` or `--related-lists`); `--prune` |
 | `build-flow` | Author Custom Action Types + Subflows from a JSON spec. Exit codes: `0` done/unchanged/dry-run, `2` needs UI publish, `3` verify-mismatch, `4` write-failed, `5` unrecoverable |
+| `define-action` | Define an action type's inputs/outputs/steps from a JSON spec (`--sys-id --scope --spec`), dry-run unless `--confirm`; `--publish` snapshots after the save |
 | `mcp` | Run the MCP stdio server (`--smoke` lists tools and exits) |
 
 > **`--env <path>` (alias `--env-file`, or the `DOVETAIL_ENV_FILE` env var)** selects which `.env` file `dove-sn` loads credentials from — applies to every subcommand including `mcp`. Default is `.env` in the cwd. Both `dovetail-mcp` (`dove-mcp`) and this server also read `DOVETAIL_ENV_FILE`, letting an MCP host point a server at a specific credential file.

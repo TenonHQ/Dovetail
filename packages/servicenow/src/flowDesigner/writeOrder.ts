@@ -39,8 +39,12 @@ export interface WriteOpResult {
   logicalName: string;
   table: string;
   sysId: string;
-  /** Currently always "created" — claude.createRecord doesn't distinguish. */
-  action: "created";
+  /**
+   * executeWritePlan always reports "created" — claude.createRecord doesn't
+   * distinguish. "updated" is reported by callers that upsert (cloneActionType's
+   * label rows, which the platform may already have created on the dictionary insert).
+   */
+  action: "created" | "updated";
 }
 
 export class WriteOrderError extends Error {
