@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-clickup@0.0.14",
+  "package": "@tenonhq/dovetail-clickup",
+  "version": "0.0.14",
+  "prev_version": "0.0.13",
+  "published_at": "2026-10-01T17:10:38.339Z",
+  "git": {
+    "sha": "fb43357046e2207913dfb265730008d64b89b366",
+    "tag": "dovetail-clickup@0.0.14"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "fb4335704",
+      "subject": "chore(deps): bump axios from 1.16.0 to 1.20.0 (#238)",
+      "pr": 238
+    },
+    {
+      "sha": "534f517e4",
+      "subject": "chore(release): publish 3 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-dashboard@0.0.53",
+  "package": "@tenonhq/dovetail-dashboard",
+  "version": "0.0.53",
+  "prev_version": "0.0.52",
+  "published_at": "2026-10-01T17:10:38.339Z",
+  "git": {
+    "sha": "fb43357046e2207913dfb265730008d64b89b366",
+    "tag": "dovetail-dashboard@0.0.53"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "fb4335704",
+      "subject": "chore(deps): bump axios from 1.16.0 to 1.20.0 (#238)",
+      "pr": 238
+    },
+    {
+      "sha": "87831d6db",
+      "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.52 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
