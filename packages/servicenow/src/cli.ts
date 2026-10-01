@@ -55,12 +55,21 @@ import { defineActionType } from "./flowDesigner/defineActionType";
 import type { DefineActionSpec, DefineActionTypeResult } from "./flowDesigner/defineActionType";
 import type { StepOps } from "./flowDesigner/stepOps";
 import { testFlow } from "./flowDesigner/testFlow";
-import { createTable, addColumn, addIndex, setColumn, setTable } from "./table";
+import {
+  createTable,
+  addColumn,
+  addIndex,
+  listIndexes,
+  createIndex,
+  setColumn,
+  setTable,
+} from "./table";
 import type {
   ColumnSpec,
   CreateTableParams,
   AddColumnParams,
   AddIndexParams,
+  CreateIndexParams,
   SetColumnParams,
   ColumnAttributes,
   SetTableParams,
@@ -1471,6 +1480,25 @@ function printHelp(): void {
       "                     is treated exactly like a proven collision. Success is\n" +
       "                     read back from v_db_index; that view has no uniqueness field, so\n" +
       "                     ENFORCEMENT is always reported unverified.\n" +
+      "  index-list         List a table's DATABASE INDEXES from the v_db_index view (read-only)\n" +
+      "                     (--table <name> [--json])\n" +
+      "                     sys_index is API-level-ACL 403 and sys_index_column does not\n" +
+      "                     exist, so v_db_index is the only index read surface. It has no\n" +
+      "                     uniqueness field, so WHICH indexes are unique is always\n" +
+      "                     reported unverified.\n" +
+      "  index-create       Create a DATABASE INDEX (composite and non-unique included) by\n" +
+      "                     replaying the platform index-creator form, then read it back\n" +
+      "                     DRY-RUN BY DEFAULT — nothing is sent or read without --confirm\n" +
+      "                     (--table <name> --columns <a[,b,...]> [--unique]\n" +
+      "                      [--access-method <m>] [--confirm] [--dry-run]\n" +
+      "                      [--poll-attempts <n>] [--poll-interval-ms <n>] [--debug] [--json])\n" +
+      "                     A DATABASE INDEX IS PHYSICAL AND PER-INSTANCE: it is NOT captured\n" +
+      "                     in an update set and does NOT travel with a promotion — re-run it\n" +
+      "                     against every environment. There is no --update-set for that\n" +
+      "                     reason. Idempotent: an index over exactly those columns already\n" +
+      "                     present returns already-exists with no write. --name is REFUSED —\n" +
+      "                     the platform's form has no name input; the real name is returned.\n" +
+      "                     Needs a username+password identity that can form-log-in.\n" +
       "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
@@ -1825,6 +1853,140 @@ async function runAddIndex(flags: Record<string, string>): Promise<number> {
         "." +
         result.columns.join(",") +
         (result.indexName ? " -> " + result.indexName : "") +
+        "\n" +
+        result.note +
+        "\nUNVERIFIED: " +
+        result.unverified.join(", ") +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
+ * dove-sn index-list:
+ *   --table x_cadso_automate_message_batch_recipient [--json]
+ *
+ * Read-only. Lists the table's database indexes from the v_db_index view — the only
+ * index read surface an instance exposes (sys_index is API-level-ACL 403,
+ * sys_index_column does not exist).
+ *
+ * Exit codes: 0 read, 1 bad args.
+ */
+async function runIndexList(flags: Record<string, string>): Promise<number> {
+  if (!flags.table) {
+    process.stderr.write("index-list: --table <name> is required\n");
+    return 1;
+  }
+  var result = await listIndexes({
+    client: createClient({}),
+    table: flags.table,
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    result.table + " — " + result.indexes.length + " index(es)\n",
+  );
+  for (var i = 0; i < result.indexes.length; i += 1) {
+    var idx = result.indexes[i];
+    process.stdout.write(
+      "  " +
+        (idx.name || "(unnamed)") +
+        "  [" +
+        idx.columns.join(", ") +
+        "]  " +
+        (idx.type || "(no access_method)") +
+        "\n",
+    );
+  }
+  process.stdout.write(
+    result.note + "\nUNVERIFIED: " + result.unverified.join(", ") + "\n",
+  );
+  return 0;
+}
+
+/**
+ * dove-sn index-create:
+ *   --table x_cadso_core_u_smoke --columns a,b [--unique] [--access-method <m>]
+ *   [--confirm] [--dry-run] [--poll-attempts <n>] [--poll-interval-ms <n>]
+ *   [--debug] [--json]
+ *
+ * DRY-RUN BY DEFAULT — nothing is sent (and nothing is even READ) without --confirm;
+ * --dry-run forces a plan even with it. There is deliberately NO --update-set: a
+ * database index is physical and is not captured in one.
+ *
+ * Exit codes: 0 created / already-exists / dry-run, 1 bad args, 2 failed (which
+ * includes "the form was posted but no index was read back").
+ */
+async function runIndexCreate(flags: Record<string, string>): Promise<number> {
+  var columns = splitList(flags.columns || "");
+  if (!flags.table || columns.length === 0) {
+    process.stderr.write(
+      "index-create: --table <name> and --columns <a[,b,...]> are required\n",
+    );
+    return 1;
+  }
+  if (flags["update-set"]) {
+    process.stderr.write(
+      "index-create: --update-set is not accepted. A database index is a PHYSICAL, " +
+        "PER-INSTANCE change — it is NOT captured in an update set and does not " +
+        "travel with a promotion. Run index-create against each environment.\n",
+    );
+    return 1;
+  }
+  var params: CreateIndexParams = {
+    client: createClient({}),
+    table: flags.table,
+    columns: columns,
+    unique: flags.unique === "true",
+    confirm: flags.confirm === "true",
+    dryRun: flags["dry-run"] === "true",
+  };
+  if (flags.name !== undefined) params.name = flags.name;
+  if (flags["access-method"]) params.accessMethod = flags["access-method"];
+  if (flags["form-path"]) params.formPath = flags["form-path"];
+  if (flags.debug === "true") params.debug = true;
+  // A non-integer poll setting would make the bounded wait unbounded (or zero).
+  // Reject it here with a named message instead of letting NaN reach the loop.
+  var numeric: Array<[string, "pollAttempts" | "pollIntervalMs"]> = [
+    ["poll-attempts", "pollAttempts"],
+    ["poll-interval-ms", "pollIntervalMs"],
+  ];
+  for (var n = 0; n < numeric.length; n += 1) {
+    var raw = flags[numeric[n][0]];
+    if (raw === undefined) continue;
+    var value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) {
+      process.stderr.write(
+        "index-create: --" +
+          numeric[n][0] +
+          " must be a positive integer (got '" +
+          raw +
+          "')\n",
+      );
+      return 1;
+    }
+    params[numeric[n][1]] = value;
+  }
+
+  var result = await createIndex(params);
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.table +
+        " [" +
+        result.columns.join(", ") +
+        "]" +
+        (result.name ? " -> " + result.name : "") +
+        (result.instance ? " on " + result.instance : "") +
+        (result.verified ? " — verified" : "") +
         "\n" +
         result.note +
         "\nUNVERIFIED: " +
@@ -2797,6 +2959,12 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "add-index") {
     return await runAddIndex(parsed.flags);
+  }
+  if (parsed.command === "index-list") {
+    return await runIndexList(parsed.flags);
+  }
+  if (parsed.command === "index-create") {
+    return await runIndexCreate(parsed.flags);
   }
   if (parsed.command === "set-column") {
     return await runSetColumn(parsed.flags, parsed.bare);

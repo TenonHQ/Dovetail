@@ -39,6 +39,7 @@ export {
   getRecordForm,
   getNewRecordForm,
   getWithSession,
+  getFormPage,
   parseFormInputs,
   postForm,
   scrapeCk,
@@ -48,6 +49,7 @@ export type {
   FormAuth,
   FormSession,
   HarvestedForm,
+  FetchedFormPage,
   PostResult,
 } from "./formSession";
 
@@ -67,6 +69,21 @@ export type {
   DuplicateScan,
   DuplicateValue,
 } from "./addIndex";
+
+export { listIndexes, assertTableName } from "./listIndexes";
+export type {
+  ListIndexesParams,
+  ListIndexesResult,
+  TableIndex,
+} from "./listIndexes";
+
+export {
+  createIndex,
+  validateCreateIndex,
+  DEFAULT_INDEX_FORM_PATH,
+  NOT_IN_UPDATE_SET,
+} from "./createIndex";
+export type { CreateIndexParams, CreateIndexResult } from "./createIndex";
 
 export {
   setColumn,

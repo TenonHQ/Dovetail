@@ -42,6 +42,8 @@ import {
   createTable,
   addColumn,
   addIndex,
+  listIndexes,
+  createIndex,
   setColumn,
   setTable,
 } from "../table";
@@ -76,6 +78,8 @@ import {
   createTableSchema,
   addColumnSchema,
   addIndexSchema,
+  listIndexesSchema,
+  createIndexSchema,
   setColumnSchema,
   setTableSchema,
   setFieldSchema,
@@ -107,6 +111,8 @@ export var TOOL_NAMES = [
   "create_table",
   "add_column",
   "add_index",
+  "index_list",
+  "index_create",
   "set_column",
   "set_table",
   "set_field",
@@ -606,6 +612,74 @@ export function buildDescriptors(
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
+          debug: p.debug,
+        });
+      },
+    },
+    {
+      name: "index_list",
+      annotations: READ_ONLY,
+      description:
+        "List the DATABASE INDEXES on a ServiceNow table. Read-only — no form session, no " +
+        "writes. Reads the v_db_index VIEW, which is the only index read surface an instance " +
+        "exposes: sys_index fails an API-LEVEL ACL (HTTP 403) for every identity including " +
+        "admin (an ACL that refuses GET refuses POST), and sys_index_column does not exist at " +
+        "all (HTTP 400 'Invalid table') — there is no two-table index model to join. Each row " +
+        "returns { name, columns, type, rawColumns }: `columns` is v_db_index's bracketed " +
+        "`column_names` cell ('[phone]', '[a,b]') PARSED into a list, never substring-matched, " +
+        "and `type` is access_method (btree for essentially everything). UNIQUENESS IS NOT " +
+        "READABLE: v_db_index carries no uniqueness field, so a unique index and an ordinary " +
+        "one are indistinguishable in it — `unique` is therefore left ABSENT rather than " +
+        "guessed, and 'uniqueness-enforced' is always reported in unverified. Only a " +
+        "duplicate-insert test proves enforcement. An empty result more likely means the table " +
+        "name is wrong than that the table is unindexed (every physical table has a PRIMARY).",
+      shape: listIndexesSchema.shape,
+      handler: async function (args: unknown) {
+        var p = listIndexesSchema.parse(args);
+        return listIndexes({ client: client(), table: p.table });
+      },
+    },
+    {
+      name: "index_create",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
+      description:
+        "Create a DATABASE INDEX on an EXISTING ServiceNow table — including the COMPOSITE and " +
+        "NON-UNIQUE indexes add_index cannot build. A DATABASE INDEX IS A PHYSICAL, PER-INSTANCE " +
+        "CHANGE: IT IS NOT CAPTURED IN AN UPDATE SET AND DOES NOT TRAVEL WITH A PROMOTION, so it " +
+        "must be re-run against every environment that needs it — which is why this tool takes " +
+        "no updateSetSysId. There is no record path to an index (sys_index is API-level-ACL 403, " +
+        "sys_index_column does not exist, and sys_dictionary.unique — the add_index lever — is " +
+        "per-column and unique-only), so this replays the platform's own index-creator form " +
+        "(sys_action=create_index) over a form-login session. DRY-RUN BY DEFAULT: without " +
+        "confirm:true NOTHING is sent and nothing is read; dryRun:true forces a dry-run even " +
+        "with confirm. IDEMPOTENT: on the live path v_db_index is read first, and an index over " +
+        "exactly these columns returns 'already-exists' with no write. `columns` is ORDERED — " +
+        "order is part of an index's identity and is preserved verbatim. `name` is REFUSED: the " +
+        "platform's form has no name input (ServiceNow names the index itself), so accepting one " +
+        "would mean reporting a name the instance does not carry — the created index's real name " +
+        "comes back in `name`. After the POST the index is polled for in v_db_index (default 10 " +
+        "checks, 3s apart, since a build on a populated table is asynchronous); if it never " +
+        "appears the result is 'failed', because a form processor returning a page is not " +
+        "evidence an ALTER ran — and a unique index cannot build over duplicate values, EMPTY " +
+        "included. verified:true means a matching row was READ BACK. 'uniqueness-enforced' is " +
+        "ALWAYS in unverified: v_db_index has no uniqueness field, so enforcement is provable " +
+        "only by a duplicate-insert test. Requires a username+password identity that can form-" +
+        "log-in; an instance on API-key-only auth or SSO/MFA will fail at the session with a " +
+        "diagnosis, because no .do replay can work there.",
+      shape: createIndexSchema.shape,
+      handler: async function (args: unknown) {
+        var p = createIndexSchema.parse(args);
+        return createIndex({
+          client: client(),
+          table: p.table,
+          columns: p.columns,
+          unique: p.unique,
+          name: p.name,
+          accessMethod: p.accessMethod,
+          confirm: p.confirm,
+          dryRun: p.dryRun,
+          pollAttempts: p.pollAttempts,
+          pollIntervalMs: p.pollIntervalMs,
           debug: p.debug,
         });
       },

@@ -652,6 +652,73 @@ Three consequences, each reported rather than hidden:
 single request goes out. Exit codes: `0` created / skipped / dry-run, `1` bad args, `2`
 failed (the lying-row case included).
 
+### List a table's indexes
+
+```bash
+npx dove-sn index-list --table x_cadso_automate_message_batch_recipient --json
+```
+
+Read-only: no form session, no writes. **`v_db_index` is the index read surface** - and
+the only one. `sys_index` fails an API-LEVEL ACL (HTTP 403) for every identity including
+admin, and `sys_index_column` does not exist at all (HTTP 400 `Invalid table`), so there
+is no two-table index model to join and nothing to cross-check against.
+
+Each row comes back as `{ name, columns, type, rawColumns }`. `columns` is the view's
+bracketed `column_names` cell (`"[phone]"`, `"[a,b]"`) **parsed** into a list - never
+substring-matched, because `"[owner_id]"` contains `"owner"`. `type` is `access_method`.
+
+**Uniqueness is not readable.** `v_db_index` has no uniqueness field, so a unique index
+and an ordinary one are indistinguishable in it: `unique` is left **absent** rather than
+guessed, and `uniqueness-enforced` is reported in `unverified` on every result. Only a
+duplicate-insert test proves enforcement. An empty result more likely means the table name
+is wrong than that the table is unindexed - every physical table has a `PRIMARY`.
+
+### Create an index (composite and non-unique included)
+
+> **A DATABASE INDEX IS A PHYSICAL, PER-INSTANCE CHANGE. IT IS NOT CAPTURED IN AN UPDATE
+> SET AND DOES NOT TRAVEL WITH A PROMOTION.** Re-run `index-create` against every
+> environment that needs the index (dev, test, uat, staging, prod). There is deliberately
+> no `--update-set` - passing one is an error, not a silent no-op.
+
+```bash
+# Dry-run (the DEFAULT) - sends nothing and reads nothing
+npx dove-sn index-create --table x_cadso_journey_instance --columns state,created_on
+
+# Send it
+npx dove-sn index-create \
+  --table x_cadso_journey_instance --columns state,created_on --confirm --json
+```
+
+This is what `add-index` cannot do. `sys_dictionary.unique` - the only record-shaped lever
+- is **per-column and unique-only**, so composite and plain indexes have no record path at
+all. `index-create` instead replays the platform's own index-creator form
+(`sys_action=create_index`, `sysparm_index_table`, `sysparm_fields`,
+`sysparm_unique_index_SKIP`) over a form-login session. That contract is lifted from the
+instance's shipped `index_creator_information` UI macro, not from a guess, and the POST
+target is taken from the rendered page's own `<form action>`.
+
+- **Dry-run by default.** Without `--confirm` nothing is sent *and nothing is read*;
+  `--dry-run` forces a plan even with `--confirm`.
+- **Idempotent.** On the live path `v_db_index` is read first, and an index over *exactly*
+  these columns short-circuits to `already-exists` with no form session and no write.
+  Column **order** is part of an index's identity - `[a,b]` is not `[b,a]`.
+- **`--name` is refused.** The platform's form has no name input; ServiceNow names the
+  index itself. Reporting a name the instance does not carry would be a lie, so the
+  created index's *real* name is returned in `name` instead.
+- **The read-back is the proof.** After the POST the index is polled for in `v_db_index`
+  (default 10 checks, 3 s apart - a build on a populated table is asynchronous). If it
+  never appears the status is `failed`: a form processor returning a page is not evidence
+  an ALTER ran, and a unique index cannot build over duplicate values (EMPTY counts).
+- **Uniqueness is still never claimed.** `uniqueness-enforced` stays in `unverified` on
+  every status.
+
+**Requires a username+password identity that can form-log-in.** An instance on
+API-key-only auth, SSO or MFA rejects the form login however valid the API key is; the
+verb fails at the session with that diagnosis rather than a mystery 302, and no `.do`
+replay (including `create-table`'s) can work in that state.
+
+Exit codes: `0` created / already-exists / dry-run, `1` bad args, `2` failed.
+
 ### Set a field on a record
 
 Set scalar field value(s) on an **existing** data record, capture the change into
@@ -954,7 +1021,12 @@ Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, the schema verbs `create_table` /
 `add_column` / `add_index` (a single-column unique index via `sys_dictionary.unique`,
 read back from the `v_db_index` view - uniqueness enforcement is always reported
-unverified), the record-write verbs `set_field` (update scalar fields on an
+unverified) / `index_list` (read-only: a table's database indexes from `v_db_index`,
+the only index read surface - `sys_index` is API-level-ACL 403 and `sys_index_column`
+does not exist) / `index_create` (create an index, composite and non-unique included, by
+replaying the platform index-creator form; dry-run by default, idempotent, read back from
+`v_db_index` - and **not** captured in an update set, because a database index is a
+physical per-instance change), the record-write verbs `set_field` (update scalar fields on an
 existing record) and `create_record` (insert one record) — both update-set-captured
 and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action

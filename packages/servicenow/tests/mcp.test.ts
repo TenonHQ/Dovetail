@@ -6,7 +6,7 @@ import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 28 expected tools", function () {
+  it("registers exactly the 30 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -30,6 +30,8 @@ describe("MCP registry", function () {
       "flow_test",
       "flow_view",
       "host_assets",
+      "index_create",
+      "index_list",
       "invoke_rest",
       "remove_choices_from_field",
       "set_column",
@@ -40,7 +42,7 @@ describe("MCP registry", function () {
       "set_table",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(28);
+    expect(TOOL_NAMES).toHaveLength(30);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -356,7 +358,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (28)");
+    expect(out).toContain("Registered tools (30)");
     expect(out).toContain("action_define");
     expect(out).toContain("action_clone");
     expect(out).toContain("add_index");
@@ -373,7 +375,7 @@ describe("MCP registry", function () {
 });
 
 describe("MCP registry — annotations", function () {
-  var readTools = ["flow_view", "action_view"];
+  var readTools = ["flow_view", "action_view", "index_list"];
 
   function byName(): Record<string, any> {
     var map: Record<string, any> = {};
@@ -401,7 +403,7 @@ describe("MCP registry — annotations", function () {
     var map = byName();
 
     // additive, idempotent upserts/creates
-    ["create_view", "add_choices_to_field"].forEach(function (name) {
+    ["create_view", "add_choices_to_field", "index_create"].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(false);
       expect(map[name].annotations.idempotentHint).toBe(true);
