@@ -420,6 +420,33 @@ export var addIndexSchema = z.object({
   debug: z.boolean().optional(),
 });
 
+// index_list is read-only: a table name and nothing else. `v_db_index` keys on the table
+// NAME, not a sys_id, so no sys_id form is offered — accepting one would mean resolving it
+// and then listing a table the caller never named.
+export var listIndexesSchema = z.object({
+  table: z.string().min(1),
+});
+
+// index_create takes an ordered column LIST — order is part of an index's identity, so it
+// is preserved verbatim and never sorted. `name` is accepted ONLY so that asking for one
+// earns the explanation that the platform's index-creator form has no name input (the
+// same contract set-column uses for internalType/element); createIndex refuses it.
+// confirm is the write gate: without confirm:true the tool is a pure dry-run that sends
+// nothing and reads nothing. There is deliberately NO updateSetSysId — a database index is
+// physical and is not captured in an update set.
+export var createIndexSchema = z.object({
+  table: z.string().min(1),
+  columns: z.array(z.string().min(1)).min(1),
+  unique: z.boolean().optional(),
+  name: z.string().optional(),
+  accessMethod: z.string().min(1).optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+  pollAttempts: z.number().int().positive().optional(),
+  pollIntervalMs: z.number().int().positive().optional(),
+  debug: z.boolean().optional(),
+});
+
 // set-column takes a CLOSED attribute set, not an open field map: an unbounded write to
 // sys_dictionary lets a caller silently corrupt the schema. internalType and element are
 // listed but are NOT settable — ServiceNow honours neither on an existing column, and

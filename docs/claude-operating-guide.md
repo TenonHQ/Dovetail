@@ -137,6 +137,8 @@ reports every record unchanged).
 | `create_table` | Create a scoped table | yes |
 | `add_column` | Add a column to a table | yes |
 | `add_index` | Create a **single-column UNIQUE** index via `sys_dictionary.unique` (the only headless lever — `sys_index` is ACL-403), read back from the `v_db_index` view. Composite and non-unique are refused, not narrowed; duplicate values — or a duplicate scan that hits its row cap — abort before any write; uniqueness *enforcement* is always reported unverified | yes |
+| `index_list` | **Read-only.** List a table's database indexes from the `v_db_index` view — the only index read surface (`sys_index` is API-level-ACL 403, `sys_index_column` does not exist). `column_names` is parsed out of its bracketed form; `unique` is left absent because the view has no uniqueness field | n/a (read-only) |
+| `index_create` | Create an index — **composite and non-unique included** — by replaying the platform index-creator form, then polling `v_db_index` until it appears. Idempotent (an index over exactly those columns returns `already-exists`); `name` is refused (the form has no name input); **NOT captured in an update set** — a database index is physical and per-instance, so re-run it per environment. Needs a form-loginable username+password identity | dry-run **by default**; `confirm:true` writes |
 | `set_column` | Update a column's dictionary definition | yes |
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
