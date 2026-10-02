@@ -38,11 +38,6 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Naming the shell switches every step from `bash -e {0}` to
-    # `bash --noprofile --norc -eo pipefail {0}`, so no pipe can mask a failure.
-    defaults:
-      run:
-        shell: bash
     # Belt-and-braces: skip the workflow's own release commits. The [skip ci]
     # tag in the commit message already prevents the trigger.
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
@@ -124,11 +119,8 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
           # Tee stdout so the Slack notifier can report which packages reached
           # npm even if a later stage (the bump-push to main) fails. pipefail is
-          # set explicitly: an unspecified step shell is `bash -e {0}` (no
-          # pipefail), which let tee's exit 0 mask a failed publish and report
-          # the run green (mcp-kit E404, run 36895638891). With pipefail the
-          # script's exit code — not tee's — decides this step's result.
-          set -o pipefail
+          # on by default in GitHub's bash shell, so the script's exit code — not
+          # tee's — determines this step's success.
           node Scripts/publish-on-merge.js "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
 
       # Post the publish outcome (success OR failure) to Slack #deployment so a

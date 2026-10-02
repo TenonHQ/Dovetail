@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-mcp@0.0.45",
+  "package": "@tenonhq/dovetail-mcp",
+  "version": "0.0.45",
+  "prev_version": "0.0.44",
+  "published_at": "2026-10-02T17:40:24.884Z",
+  "git": {
+    "sha": "f4aaad6bcda58eb3fb5a9373b8a7cc69e00070b2",
+    "tag": "dovetail-mcp@0.0.45"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "f4aaad6bc",
+      "subject": "chore(deps): bump sanitize-html to 2.17.7 + raise gmail/mcp Node floor to 22.12 (#289)",
+      "pr": 289
+    },
+    {
+      "sha": "b46e30a86",
+      "subject": "chore(release): publish 7 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}

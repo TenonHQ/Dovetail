@@ -12,9 +12,7 @@
  *   3. npm's own prepack builds the package before publish; the existing
  *      postpublish hook bumps the source package.json to the next patch.
  *   4. Commits the bumped package.json files + refreshed lockfile back to the
- *      branch as one chore(release) commit tagged [skip ci]. Only the fields
- *      this run edited are re-applied, onto the LATEST branch tip, so a PR
- *      merged mid-run is never reverted (see commitVersionBumps).
+ *      branch as one chore(release) commit tagged [skip ci].
  *   5. Creates a git tag + GitHub Release for each published package.
  *
  * Pass --dry-run to print the plan without publishing, committing, or tagging.
@@ -28,7 +26,6 @@
 const fs = require("fs");
 const cp = require("child_process");
 const ws = require("./lib/workspace");
-const releaseDelta = require("./lib/release-delta");
 
 const ZERO_SHA = "0000000000000000000000000000000000000000";
 const BOT_NAME = "github-actions[bot]";
@@ -362,52 +359,20 @@ function releaseCommitMessage(published) {
   return subject + "\n\n" + body;
 }
 
-/**
- * Capture the manifest edits this run made (version reconcile/postpublish bump
- * and cascade re-pins) as field-level deltas against the run's checkout.
- */
-function captureManifestDeltas(published, headSha) {
-  const deltas = [];
+/** Commit the version bumps + refreshed lockfile and push them to the branch. */
+function commitVersionBumps(published, extraFiles) {
+  console.log("\nRefreshing lockfile and committing version bumps...");
+  run("npm", ["install", "--package-lock-only", "--no-audit", "--no-fund"]);
+
+  const files = ["package-lock.json"];
   for (let i = 0; i < published.length; i++) {
-    const rel = "packages/" + published[i].dirName + "/package.json";
-    const beforeText = captureSafe("git", ["show", headSha + ":" + rel]);
-    const before = beforeText ? JSON.parse(beforeText) : {};
-    const after = JSON.parse(fs.readFileSync(ws.REPO_ROOT + "/" + rel, "utf8"));
-    deltas.push({ rel: rel, delta: releaseDelta.manifestDelta(before, after) });
+    files.push("packages/" + published[i].dirName + "/package.json");
   }
-  return deltas;
-}
-
-/** Re-apply captured deltas onto the manifests currently checked out (the tip). */
-function applyManifestDeltas(deltas) {
-  const files = [];
-  for (let i = 0; i < deltas.length; i++) {
-    const abs = ws.REPO_ROOT + "/" + deltas[i].rel;
-    if (!fs.existsSync(abs)) {
-      console.warn("  " + deltas[i].rel + " no longer exists on the branch tip — skipping its bump");
-      continue;
+  if (extraFiles) {
+    for (let i = 0; i < extraFiles.length; i++) {
+      files.push(extraFiles[i]);
     }
-    const tip = JSON.parse(fs.readFileSync(abs, "utf8"));
-    const next = releaseDelta.applyManifestDelta(tip, deltas[i].delta);
-    fs.writeFileSync(abs, JSON.stringify(next, null, 2) + "\n");
-    files.push(deltas[i].rel);
   }
-  return files;
-}
-
-/**
- * Commit the version bumps + refreshed lockfile + release manifest and push
- * them to the branch.
- *
- * The run's checkout is stale whenever another PR merged while it published,
- * so whole files from it must never be staged: that reverted #268's
- * sanitize-html bump (release commit b46e30a). Instead every attempt hard-
- * resets onto the latest tip, re-applies only the field-level edits this run
- * made, and regenerates the lockfile and release manifest from that tip.
- */
-function commitVersionBumps(published, range, headSha) {
-  console.log("\nCommitting version bumps onto the latest branch tip...");
-  const deltas = captureManifestDeltas(published, headSha);
 
   const branch = process.env.GITHUB_REF_NAME
     || captureSafe("git", ["rev-parse", "--abbrev-ref", "HEAD"])
@@ -417,21 +382,21 @@ function commitVersionBumps(published, range, headSha) {
   run("git", ["config", "user.name", BOT_NAME]);
   run("git", ["config", "user.email", BOT_EMAIL]);
 
-  // Up to 3 attempts handle the concurrent-publish race where another run
-  // pushes between our fetch and our push; each attempt rebuilds from the tip.
+  run("git", ["fetch", "origin", branch]);
+  // Re-anchor onto the latest branch tip; the working-tree edits are kept,
+  // so the commit always lands cleanly without a rebase conflict.
+  run("git", ["reset", "--soft", "origin/" + branch]);
+  run("git", ["add"].concat(files));
+  if (!captureSafe("git", ["diff", "--cached", "--name-only"])) {
+    console.log("  nothing to commit");
+    return;
+  }
+  run("git", ["commit", "-m", message]);
+
+  // Push with up to 3 retries to handle the rare concurrent-publish race where
+  // another run merged its own release commit between our fetch and our push.
   let pushed = false;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    run("git", ["fetch", "origin", branch]);
-    run("git", ["reset", "--hard", "origin/" + branch]);
-    const files = ["package-lock.json"].concat(applyManifestDeltas(deltas));
-    run("npm", ["install", "--package-lock-only", "--no-audit", "--no-fund"]);
-    const manifestFiles = emitReleaseManifest(published, range, headSha);
-    run("git", ["add"].concat(files, manifestFiles));
-    if (!captureSafe("git", ["diff", "--cached", "--name-only"])) {
-      console.log("  nothing to commit");
-      return;
-    }
-    run("git", ["commit", "-m", message]);
     try {
       run("git", ["push", "origin", "HEAD:" + branch]);
       pushed = true;
@@ -439,7 +404,9 @@ function commitVersionBumps(published, range, headSha) {
       break;
     } catch (e) {
       if (attempt < 3) {
-        console.log("  push failed (attempt " + attempt + "); rebuilding on the latest " + branch + " and retrying...");
+        console.log("  push failed (attempt " + attempt + "); rebasing onto latest " + branch + " and retrying...");
+        run("git", ["fetch", "origin", branch]);
+        run("git", ["rebase", "origin/" + branch]);
       }
     }
   }
@@ -617,7 +584,8 @@ function main() {
     // bumps or cutting releases — a human investigates. Any package that did
     // publish before the abort stays at that npm version (no tag / source bump)
     // until its next change re-publishes it via the version reconcile.
-    commitVersionBumps(published, range, range.head);
+    const manifestFiles = emitReleaseManifest(published, range, range.head);
+    commitVersionBumps(published, manifestFiles);
     createReleases(published, range.head);
   }
 
@@ -634,11 +602,7 @@ function main() {
 // Pure helpers are exported for unit tests; the orchestrator only auto-runs
 // when invoked directly (not when required by a test), so requiring this file
 // defines functions without publishing anything.
-module.exports = {
-  unresolvedInternalDeps: unresolvedInternalDeps,
-  npmSpecResolves: npmSpecResolves,
-  commitVersionBumps: commitVersionBumps,
-};
+module.exports = { unresolvedInternalDeps: unresolvedInternalDeps, npmSpecResolves: npmSpecResolves };
 
 if (require.main === module) {
   try {

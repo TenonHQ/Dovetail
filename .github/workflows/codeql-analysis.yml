@@ -1,44 +1,51 @@
 name: "Code scanning - action"
 
-# CodeQL advanced setup (GitHub "default setup" is not configured for this
-# repo, so this workflow is the only code scanner). Upgraded from the
-# codeql-action v1 template, which GitHub retired in Jan 2023 and which now
-# fails the CodeQL-Build job on every run.
-#
-# The job id stays `CodeQL-Build` so the check name and the analysis category
-# keep matching existing alert history.
-
 on:
   push:
-    branches: [main]
   pull_request:
   schedule:
-    - cron: "0 8 * * 4"
-
-concurrency:
-  group: codeql-${{ github.ref }}
-  cancel-in-progress: true
+    - cron: '0 8 * * 4'
 
 jobs:
   CodeQL-Build:
+
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      actions: read
-      security-events: write # upload SARIF results
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+        fetch-depth: 2
 
-      # JS/TS needs no build: buildless extraction reads the sources directly.
-      # `actions` scans the workflows themselves (injection, token scope).
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript, actions
-          build-mode: none
+    # If this run was triggered by a pull request event, then checkout
+    # the head of the pull request instead of the merge commit.
+    - run: git checkout HEAD^2
+      if: ${{ github.event_name == 'pull_request' }}
+      
+    # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      # Override language selection by uncommenting this and choosing your languages
+      # with:
+      #   languages: go, javascript, csharp, python, cpp, java
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+    # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
+    # If this step fails, then you should remove it and run the build manually (see below)
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v1
+
+    # ℹ️ Command-line programs to run using the OS shell.
+    # 📚 https://git.io/JvXDl
+
+    # ✏️ If the Autobuild fails above, remove it and uncomment the following three lines
+    #    and modify them (or add more) to build your code if your project
+    #    uses a compiled language
+
+    #- run: |
+    #   make bootstrap
+    #   make release
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1

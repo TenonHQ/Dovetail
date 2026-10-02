@@ -1,7 +1,81 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-01T17:10:38.372Z",
+  "generated_at": "2026-10-02T17:40:24.896Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-gmail@0.0.13",
+      "package": "@tenonhq/dovetail-gmail",
+      "version": "0.0.13",
+      "prev_version": "0.0.12",
+      "published_at": "2026-10-02T17:40:24.884Z",
+      "git": {
+        "sha": "f4aaad6bcda58eb3fb5a9373b8a7cc69e00070b2",
+        "tag": "dovetail-gmail@0.0.13"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "f4aaad6bc",
+          "subject": "chore(deps): bump sanitize-html to 2.17.7 + raise gmail/mcp Node floor to 22.12 (#289)",
+          "pr": 289
+        },
+        {
+          "sha": "b46e30a86",
+          "subject": "chore(release): publish 7 packages [skip ci]"
+        },
+        {
+          "sha": "8ca5124c1",
+          "subject": "chore(deps): bump sanitize-html from 2.17.4 to 2.17.7 (#268)",
+          "pr": 268
+        },
+        {
+          "sha": "4bc78bc61",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "c82439b30",
+          "subject": "chore(deps): bump js-yaml, jest and ts-jest (#183)",
+          "pr": 183
+        },
+        {
+          "sha": "092e176fc",
+          "subject": "chore(release): publish 3 packages [skip ci]"
+        },
+        {
+          "sha": "82924d15c",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.45",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.45",
+      "prev_version": "0.0.44",
+      "published_at": "2026-10-02T17:40:24.884Z",
+      "git": {
+        "sha": "f4aaad6bcda58eb3fb5a9373b8a7cc69e00070b2",
+        "tag": "dovetail-mcp@0.0.45"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "f4aaad6bc",
+          "subject": "chore(deps): bump sanitize-html to 2.17.7 + raise gmail/mcp Node floor to 22.12 (#289)",
+          "pr": 289
+        },
+        {
+          "sha": "b46e30a86",
+          "subject": "chore(release): publish 7 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-clickup@0.0.14",
@@ -1257,53 +1331,6 @@
         {
           "sha": "05e406b06",
           "subject": "chore(release): @tenonhq/dovetail-core@0.0.114 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.34",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.34",
-      "prev_version": "0.0.33",
-      "published_at": "2026-07-23T15:03:26.069Z",
-      "git": {
-        "sha": "864b065152544e200e09e3d5a726eed13d810d43",
-        "tag": "dovetail-servicenow@0.0.34"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "864b06515",
-          "subject": "feat(servicenow): set-column overrides inherited columns per-child (DEV-509) (#235)",
-          "pr": 235
-        },
-        {
-          "sha": "8d886d43d",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.31",
-      "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.31",
-      "prev_version": "0.0.30",
-      "published_at": "2026-07-23T15:03:26.069Z",
-      "git": {
-        "sha": "864b065152544e200e09e3d5a726eed13d810d43",
-        "tag": "dovetail-mcp@0.0.31"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "8d886d43d",
-          "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
       "exports_delta": null,
