@@ -3,28 +3,26 @@
  * dove-sn — thin CLI adapter for @tenonhq/dovetail-servicenow.
  *
  * Usage:
- *   dove-sn add-choices \
- *     --table x_cadso_core_event \
- *     --column state \
- *     --update-set <sys_id> \
- *     --choices 'delivered=Delivered,failed=Failed,...' \
- *     [--choice-type 3] [--json]
+ *   dove-sn help                 verb index
+ *   dove-sn help <verb>          one verb's flags, value formats, write gate, example
+ *   dove-sn <verb> --help        same — never loads an env file or builds a client
+ *   dove-sn <verb> [flags]
  *
- *   dove-sn add-choices --from-json path/to/choices.json
- *
- * JSON payload shape:
- *   {
- *     "table": "x_cadso_core_event",
- *     "column": "state",
- *     "updateSetSysId": "...",
- *     "choiceType": 3,
- *     "choices": [{ "value": "delivered", "label": "Delivered" }, ...]
- *   }
+ * Every verb's usage is rendered from VERB_USAGE in ./cliUsage — add the entry there
+ * when you add a dispatch site below; cliHelp.test.ts fails on a missing one.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { loadEnvFile } from "./loadEnv";
+import {
+  formatUnknownVerb,
+  formatVerbIndex,
+  formatVerbUsage,
+  isKnownVerb,
+  normalizeVerbInput,
+  usageFor,
+} from "./cliUsage";
 import { createClient } from "./client";
 import { readFieldsFromJsonFile } from "./fieldsFromJson";
 import { addChoicesToField, removeChoicesFromField } from "./choices";
@@ -113,15 +111,27 @@ interface ParsedArgs {
    * Recorded here so a verb can tell the two apart and refuse.
    */
   bare: Record<string, boolean>;
+  /**
+   * Non-flag tokens after the command that no flag consumed as its value —
+   * `dove-sn help add-choices` carries the verb here.
+   */
+  positional: Array<string>;
 }
 
-function parseArgs(argv: Array<string>): ParsedArgs {
-  var command = argv[0] || "";
+export function parseArgs(argv: Array<string>): ParsedArgs {
+  // `dove-sn --help` has no verb: a leading flag means an empty command and the
+  // flag loop starts at index 0 instead of skipping it.
+  var hasCommand = argv.length > 0 && argv[0].indexOf("--") !== 0;
+  var command = hasCommand ? argv[0] : "";
   var flags: Record<string, string> = {};
   var bare: Record<string, boolean> = {};
-  for (var i = 1; i < argv.length; i += 1) {
+  var positional: Array<string> = [];
+  for (var i = hasCommand ? 1 : 0; i < argv.length; i += 1) {
     var arg = argv[i];
-    if (arg.indexOf("--") !== 0) continue;
+    if (arg.indexOf("--") !== 0) {
+      positional.push(arg);
+      continue;
+    }
     var key = arg.slice(2);
     var value = "true";
     var isBare = true;
@@ -138,7 +148,7 @@ function parseArgs(argv: Array<string>): ParsedArgs {
     flags[key] = value;
     if (isBare) bare[key] = true;
   }
-  return { command: command, flags: flags, bare: bare };
+  return { command: command, flags: flags, bare: bare, positional: positional };
 }
 
 function parseChoicesInline(input: string): Array<ChoiceValue> {
@@ -184,12 +194,16 @@ function paramsFromFlags(flags: Record<string, string>): AddChoicesParams {
  * A string flag whose value was forgotten arrives as the literal "true" (see
  * ParsedArgs.bare). Booleans legitimately do that, strings never do — so refuse
  * rather than write nonsense. Returns the message to print, or null when clean.
+ *
+ * The list of string flags is the verb's `stringFlags` in VERB_USAGE — the help and
+ * this guard read the same array, so neither can drift from the other.
  */
 function bareStringFlagError(
   verb: string,
   bare: Record<string, boolean>,
-  stringFlags: Array<string>,
 ): string | null {
+  var usage = usageFor(verb);
+  var stringFlags = usage && usage.stringFlags ? usage.stringFlags : [];
   for (var f = 0; f < stringFlags.length; f += 1) {
     if (bare[stringFlags[f]]) {
       return (
@@ -206,15 +220,7 @@ async function runAddChoices(
 ): Promise<number> {
   // `updateSetSysId` is guarded alongside `update-set` because paramsFromFlags accepts
   // both spellings — guarding only the dashed one leaves the alias as a way in.
-  var bareErr = bareStringFlagError("add-choices", bare, [
-    "table",
-    "column",
-    "update-set",
-    "updateSetSysId",
-    "choices",
-    "from-json",
-    "choice-type",
-  ]);
+  var bareErr = bareStringFlagError("add-choices", bare);
   if (bareErr) {
     process.stderr.write(bareErr);
     return 1;
@@ -281,15 +287,7 @@ async function runRemoveChoices(
   // --language matters most here: a bare one makes every lookup key "true::<value>",
   // so every value reports "missing", nothing is written, and the summary still reads
   // like a clean run. That is the silent failure this verb family exists to catch.
-  var bareErr = bareStringFlagError("remove-choices", bare, [
-    "table",
-    "column",
-    "update-set",
-    "updateSetSysId",
-    "values",
-    "language",
-    "from-json",
-  ]);
+  var bareErr = bareStringFlagError("remove-choices", bare);
   if (bareErr) {
     process.stderr.write(bareErr);
     return 1;
@@ -1096,15 +1094,7 @@ async function runCloneAction(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
-  var bareErr = bareStringFlagError("clone-action", bare, [
-    "from",
-    "name",
-    "scope",
-    "internal-name",
-    "description",
-    "ops",
-    "update-set",
-  ]);
+  var bareErr = bareStringFlagError("clone-action", bare);
   if (bareErr) {
     process.stderr.write(bareErr);
     return 1;
@@ -1290,7 +1280,7 @@ async function runDefineAction(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
-  var bareErr = bareStringFlagError("define-action", bare, ["sys-id", "scope", "spec", "update-set"]);
+  var bareErr = bareStringFlagError("define-action", bare);
   if (bareErr) {
     process.stderr.write(bareErr);
     return 1;
@@ -1422,190 +1412,6 @@ async function runMcp(flags: Record<string, string>): Promise<number> {
     /* keep the MCP server alive */
   });
   return 0;
-}
-
-function printHelp(): void {
-  process.stdout.write(
-    "dove-sn — ServiceNow platform helpers\n\n" +
-      "Commands:\n" +
-      "  add-choices        Upsert sys_choice rows for a table.column\n" +
-      "  remove-choices     Soft-delete (inactive=true) sys_choice values for a table.column\n" +
-      "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id>\n" +
-      "                      [--language en] [--from-json <path>] [--json])\n" +
-      "  create-view        Create a custom view (sys_ui_view)\n" +
-      "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
-      "  set-list-layout    Set the columns of a list layout\n" +
-      "                     (--from-json <path>  OR  --table <t> --columns a,b,c --update-set <sys_id>\n" +
-      "                      [--view <v>] [--parent <t>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
-      "  set-form-layout    Set the sections + fields of a form layout\n" +
-      "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--json])\n" +
-      "  set-related-lists  Set which related lists appear on a form\n" +
-      "                     (--from-json <path>  OR  --table <t> --related-lists a,b --update-set <sys_id>\n" +
-      "                      [--view <v>] [--scope <s>] [--prune false] [--dry-run] [--json])\n" +
-      "  build-flow         Author Custom Action Types and Subflows from a JSON spec\n" +
-      "                     (--from-json <path> [--update-set <sys_id>] [--dry-run] [--skip-publish] [--json])\n" +
-      "  view-flow          Read a flow/subflow's compiled step graph (read-only)\n" +
-      "                     (--sys-id <sys_id> [--json] [--raw])\n" +
-      "  view-action        Read a Custom Action Type's model — inputs/outputs (read-only)\n" +
-      "                     (--sys-id <sys_id> --scope <sys_id> [--json] [--raw])\n" +
-      "  publish-flow       Compile a flow/subflow snapshot (write)\n" +
-      "                     (--sys-id <sys_id> [--scope <sys_id>] [--json])\n" +
-      "  copy-flow          Copy a flow/subflow (inactive draft) via the Designer Copy API\n" +
-      "                     (--sys-id <sys_id> --name <name> [--scope <sys_id>] [--json])\n" +
-      "  create-flow        Create a NEW flow (type=flow) from scratch + publish (grafts a template)\n" +
-      "                     (--name <n> --template <sys_id> --scope <sys_id>\n" +
-      "                      [--trigger-table <t>] [--trigger-condition <q>] [--log-message <m>]\n" +
-      "                      [--internal-name <n>] [--description <d>] [--dry-run] [--json])\n" +
-      "  create-table       Create a NEW table (sys_db_object) WITH columns, via the Studio form save\n" +
-      "                     (--name <x_scope_t> --label <l> --scope <s>\n" +
-      '                      --columns "Label:type:max, ..."  OR  --from-json <spec.json>\n' +
-      "                      [--extends <t>] [--number-prefix <p>] [--user-role <r>]\n" +
-      "                      [--no-acls] [--no-menu] [--update-set <sys_id>] [--dry-run] [--json])\n" +
-      "  add-column         Add ONE column to an EXISTING table via a scope-aware sys_dictionary insert, then verify\n" +
-      "                     (--table <name|sys_id> --label <l> --type <t> --update-set <sys_id>\n" +
-      "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
-      "                      [--mandatory] [--default <v>] [--dependent-on-field <element>]\n" +
-      "                      [--scope <s>] [--dry-run] [--json])\n" +
-      "                     --dependent-on-field names the sibling column a document_id resolves\n" +
-      "                     against (its table_name column); it must already exist on the table.\n" +
-      "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
-      "  add-index          Create a single-column UNIQUE index (sys_dictionary.unique), then verify\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
-      "                     (--table <name|sys_id> --columns <column> --unique --update-set <sys_id>\n" +
-      "                      [--confirm] [--scope <s>] [--dry-run] [--debug] [--json])\n" +
-      "                     ONE column only: unique is a per-COLUMN dictionary flag, so a\n" +
-      "                     composite index is REFUSED, not narrowed — that stays UI work,\n" +
-      "                     as does a plain (non-unique) index. The run ABORTS before writing\n" +
-      "                     when the column holds duplicate values (EMPTY counts): a unique\n" +
-      "                     index cannot build over them and the platform fails that ALTER\n" +
-      "                     SILENTLY, leaving unique=true with no index behind it. It aborts\n" +
-      "                     the same way when that scan hits its row cap — an UNPROVEN scan\n" +
-      "                     is treated exactly like a proven collision. Success is\n" +
-      "                     read back from v_db_index; that view has no uniqueness field, so\n" +
-      "                     ENFORCEMENT is always reported unverified.\n" +
-      "  index-list         List a table's DATABASE INDEXES from the v_db_index view (read-only)\n" +
-      "                     (--table <name> [--json])\n" +
-      "                     sys_index is API-level-ACL 403 and sys_index_column does not\n" +
-      "                     exist, so v_db_index is the only index read surface. It has no\n" +
-      "                     uniqueness field, so WHICH indexes are unique is always\n" +
-      "                     reported unverified.\n" +
-      "  index-create       Create a DATABASE INDEX (composite and non-unique included) by\n" +
-      "                     replaying the platform index-creator form, then read it back\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is sent or read without --confirm\n" +
-      "                     (--table <name> --columns <a[,b,...]> [--unique]\n" +
-      "                      [--access-method <m>] [--confirm] [--dry-run]\n" +
-      "                      [--poll-attempts <n>] [--poll-interval-ms <n>] [--debug] [--json])\n" +
-      "                     A DATABASE INDEX IS PHYSICAL AND PER-INSTANCE: it is NOT captured\n" +
-      "                     in an update set and does NOT travel with a promotion — re-run it\n" +
-      "                     against every environment. There is no --update-set for that\n" +
-      "                     reason. Idempotent: an index over exactly those columns already\n" +
-      "                     present returns already-exists with no write. --name is REFUSED —\n" +
-      "                     the platform's form has no name input; the real name is returned.\n" +
-      "                     Needs a username+password identity that can form-log-in.\n" +
-      "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length/\n" +
-      "                     dependent-on-field),\n" +
-      "                     into an update set, then verify against the instance\n" +
-      "                     (--table <t> --column <c> --update-set <sys_id>\n" +
-      "                      [--label <l>] [--mandatory true|false] [--default <v>]\n" +
-      "                      [--read-only true|false] [--max-length <n>]\n" +
-      "                      [--dependent-on-field <element>] [--dry-run] [--json])\n" +
-      "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
-      "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
-      "                     Shorten or clear those values first, then re-run.\n" +
-      "                     An INHERITED column (one defined on a parent table) is narrowed for\n" +
-      "                     YOUR table alone, via sys_dictionary_override / sys_documentation —\n" +
-      "                     the parent and its other children are untouched. max-length is the\n" +
-      "                     exception: it is the parent's physical column and is refused.\n" +
-      "                     --element / --internal-type are REFUSED with an explanation:\n" +
-      "                     ServiceNow silently ignores both on an existing column.\n" +
-      "  set-table          Update an EXISTING TABLE's own dictionary row (the collection row),\n" +
-      "                     into an update set, then verify against the instance\n" +
-      "                     (--table <t> --update-set <sys_id> [--audit true|false]\n" +
-      "                      [--dry-run] [--json])\n" +
-      "                     --audit turns RECORD AUDITING on/off for the whole table: with it\n" +
-      "                     true ServiceNow writes a sys_audit row per changed field on every\n" +
-      "                     insert and update — a real cost on a high-write table.\n" +
-      "                     Column attributes belong to set-column, record values to set-field.\n" +
-      "  invoke-rest        Invoke an arbitrary authenticated REST operation (Scripted REST incl.)\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is sent without --confirm\n" +
-      "                     (--method <GET|POST|PUT|DELETE> --path /api/<scope>/<service>/<resource>\n" +
-      "                      [--body '<json>' | --body-json <path>] [--confirm] [--dry-run] [--json]\n" +
-      "                      [--out <file>  full JSON result to a file (atomic; overwrites); for large bodies])\n" +
-      "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
-      "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
-      '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
-      "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
-      "                     (--table <t> --scope <s> --update-set <sys_id>\n" +
-      '                      (--fields "k=v,k2=v2" | --from-json <path>)\n' +
-      "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
-      "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
-      "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
-      "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
-      "  test-flow          Validate (default) or run a flow/subflow\n" +
-      "                     (--sys-id <sys_id> [--execute --confirm] [--inputs <json>] [--json])\n" +
-      "  edit-action        Patch a published Custom Action Type and republish (snapshot)\n" +
-      "                     (--sys-id <sys_id> --scope <sys_id>\n" +
-      "                      --from-json <ops.json>  ops: patchStepScripts / addStepOutputs / addStepInputs\n" +
-      "                                              (per-step scripts + step IO + data-pill wiring)\n" +
-      '                      | --patch-script "<find>::<replace>" | --set-script <path> | --merge-outputs <path>\n' +
-      "                      [--script-input <name>] [--update-set <sys_id>] [--apply] [--json])\n" +
-      "  clone-action       Clone a Custom Action Type (all steps + step IO) into a scope and publish it\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
-      "                     (--from <sys_id> --name <n> --scope <scope name|sys_id>\n" +
-      "                      [--internal-name <n>] [--description <d>]\n" +
-      "                      [--ops <ops.json>]  ops: setStepInputs / patchStepScripts /\n" +
-      "                                          addStepOutputs / addStepInputs\n" +
-      "                      [--update-set <sys_id> (required with --confirm)] [--confirm] [--dry-run] [--json])\n" +
-      "                     Idempotent on (name, scope). Publishes via the snapshot path and\n" +
-      "                     reads the steps back to verify.\n" +
-      "  define-action      Define a Custom Action Type's inputs, outputs and steps (script + REST,\n" +
-      "                     data-pill wired) the way the Designer's Save does, then optionally publish\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
-      "                     (--sys-id <sys_id> --scope <scope name|sys_id> --spec <spec.json>\n" +
-      "                      [--update-set <sys_id>] [--publish] [--confirm] [--dry-run] [--json])\n" +
-      "                     Idempotent: a spec already in effect makes no write. The action shell\n" +
-      "                     must exist (clone-action or the Designer).\n" +
-      "  edit-flow          Patch a flow/subflow (rename, description, step inputs)\n" +
-      "                     (--sys-id <sys_id> --from-json <ops.json> [--apply] [--update-set <sys_id>] [--scope <sys_id>] [--json])\n" +
-      "  publish-app        Publish a scoped app to the ServiceNow Store, the company application\n" +
-      "                     repository, and/or a new update set, then poll each to completion.\n" +
-      "                     STORE PUBLISH IS EXTERNALLY VISIBLE on the ServiceNow Store.\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
-      "                     (--app <scope|sys_id|name> --version <v>\n" +
-      "                      --target store|repo|repo-ui|update-set|both (comma-separated ok)\n" +
-      "                      [--dev-notes <text>] [--store-user <email>] [--timeout-ms <n>]\n" +
-      "                      [--update-set-name <name>] [--update-set-description <text>]\n" +
-      "                      [--include-data] [--dry-run] [--json] [--confirm])\n" +
-      "                     Store creds: SN_STORE_USERNAME/SN_STORE_PASSWORD in the --env file;\n" +
-      "                     the password is never a flag. 'repo' needs the sn_cicd plugin+role;\n" +
-      "                     'repo-ui' reaches the same repository over the UI uploader instead.\n" +
-      "  export-update-set  Export an update set to importable <unload> XML, with secret\n" +
-      "                     values replaced by __SET_DURING_INSTALL__ (no opt-out).\n" +
-      "                     assemble mode is READ-ONLY; complete mode marks the set\n" +
-      "                     complete on the instance and needs --confirm.\n" +
-      "                     (--update-set <sys_id|name> --out <file>\n" +
-      "                      [--mode assemble|complete]\n" +
-      "                      [--rules <file>] [--page-size <n>] [--max-rows <n>]\n" +
-      "                      [--dry-run] [--json] [--confirm])\n" +
-      "  export-app         Publish a scoped app into a new update set and export it.\n" +
-      "                     PUBLISHING IS A REAL INSTANCE WRITE (~1000+ records).\n" +
-      "                     DRY-RUN BY DEFAULT — nothing is published without --confirm\n" +
-      "                     (--app <scope|sys_id|name> --out <file> [--version <v>]\n" +
-      "                      [--description <text>] [--include-data] [--rules <file>]\n" +
-      "                      [--timeout-ms <n>] [--dry-run] [--json] [--confirm])\n" +
-      "  strip-secrets      Strip secret values from an unload XML exported elsewhere\n" +
-      "                     (--in <file> [--out <file>] [--rules <file>] [--report] [--json])\n" +
-      "  mcp                Run the MCP stdio server (--smoke lists tools and exits)\n" +
-      "\nGlobal flags:\n" +
-      "  --env <name|path>  Load credentials from a specific env file (also --env-file,\n" +
-      "                     or the DOVETAIL_ENV_FILE env var). A bare name like 'prod'\n" +
-      "                     resolves to .env.prod in the cwd. The file's SN_* connection\n" +
-      "                     vars replace any already exported; a missing or incomplete\n" +
-      "                     file is an error (no fallback). Default: .env in the cwd.\n" +
-      "  Flow Designer auth /api/now/processflow/* can't carry an API access policy, so\n" +
-      "                     under SN_API_KEY those calls use a dedicated basic-auth identity:\n" +
-      "                     SN_FLOW_USER / SN_FLOW_PASSWORD (or SN_DEV_FLOW_* / SN_PROD_FLOW_*).\n",
-  );
 }
 
 /** Parse inline `--columns "Label:type:max, Other:choice, ..."` into ColumnSpec[]. */
@@ -2034,15 +1840,7 @@ async function runSetColumn(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
 ): Promise<number> {
-  var bareErr = bareStringFlagError("set-column", bare, [
-    "label",
-    "default",
-    "table",
-    "column",
-    "update-set",
-    "updateSetSysId",
-    "dependent-on-field",
-  ]);
+  var bareErr = bareStringFlagError("set-column", bare);
   if (bareErr) {
     process.stderr.write(bareErr);
     return 1;
@@ -2147,16 +1945,10 @@ async function runSetTable(
   // Guard the string flags AND the updateSetSysId alias: a value-less string flag
   // arrives as the literal "true", so --update-set (or its alias) with nothing after
   // it would silently become the sys_id "true" and later fail as "not found".
-  var stringFlags = ["table", "update-set", "updateSetSysId"];
-  for (var f = 0; f < stringFlags.length; f += 1) {
-    if (bare[stringFlags[f]]) {
-      process.stderr.write(
-        "set-table: --" +
-          stringFlags[f] +
-          " needs a value (it was given none).\n",
-      );
-      return 1;
-    }
+  var bareErr = bareStringFlagError("set-table", bare);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
   }
   var table = flags.table;
   if (!table) {
@@ -2931,12 +2723,84 @@ async function runStripSecrets(flags: Record<string, string>): Promise<number> {
   return report && result.reviewFindings.length > 0 ? 2 : 0;
 }
 
-async function main(): Promise<number> {
-  var parsed = parseArgs(process.argv.slice(2));
+/**
+ * Which help, if any, the invocation asks for. `null` means "run the verb".
+ *   dove-sn / dove-sn help / dove-sn --help            → { verb: "" }   (index)
+ *   dove-sn help <verb> / dove-sn --help <verb>        → { verb }
+ *   dove-sn <verb> --help                              → { verb }
+ */
+function resolveHelpRequest(parsed: ParsedArgs): { verb: string } | null {
+  if (parsed.command === "help") {
+    return { verb: parsed.positional.length > 0 ? parsed.positional[0] : "" };
+  }
+  if (parsed.flags.help !== undefined) {
+    if (parsed.command) return { verb: parsed.command };
+    // `--help add-choices`: the parser read the verb as the flag's value.
+    return { verb: parsed.flags.help === "true" ? "" : parsed.flags.help };
+  }
+  if (!parsed.command) return { verb: "" };
+  return null;
+}
+
+/** Print the index or one verb's usage. Unknown verb → closest matches on stderr, exit 1. */
+function runHelp(rawVerb: string): number {
+  if (!rawVerb) {
+    process.stdout.write(formatVerbIndex());
+    return 0;
+  }
+  var verb = normalizeVerbInput(rawVerb);
+  if (!isKnownVerb(verb)) {
+    process.stderr.write(formatUnknownVerb(rawVerb));
+    return 1;
+  }
+  process.stdout.write(formatVerbUsage(verb));
+  return 0;
+}
+
+/**
+ * A thrown bad-args error — the `Missing required flags: ...` family and its
+ * `<verb>: --x and --y are required` cousins. These get the verb's usage block appended;
+ * anything else (auth, HTTP, verify) is reported as before.
+ */
+function isUsageError(err: Error): boolean {
+  return /\brequired\b|\binvalid --/i.test(err.message);
+}
+
+export async function main(argv: Array<string>): Promise<number> {
+  var parsed = parseArgs(argv);
+  // Help never needs credentials: answer it BEFORE the env file is read or any verb can
+  // build a client, so `<verb> --help` is provably offline.
+  var help = resolveHelpRequest(parsed);
+  if (help) return runHelp(help.verb);
+  if (!isKnownVerb(parsed.command)) {
+    process.stderr.write(formatUnknownVerb(parsed.command));
+    return 1;
+  }
   // Load credentials before any command runs. `--env`/`--env-file` (or the
   // DOVETAIL_ENV_FILE env var) selects a specific file so one checkout can
   // target multiple instances; otherwise the cwd `.env` is used.
   loadEnvFile(parsed.flags.env || parsed.flags["env-file"]);
+  var code: number;
+  try {
+    code = await dispatch(parsed);
+  } catch (err) {
+    if (!(err instanceof Error) || !isUsageError(err)) throw err;
+    process.stderr.write(
+      "dove-sn error: " + err.message + "\n\n" + formatVerbUsage(parsed.command),
+    );
+    return 1;
+  }
+  // Exit 1 is the verbs' bad-args code (a missing flag, a refused value, an unconfirmed
+  // run). The verb already said what was wrong; point at where the fix is documented.
+  if (code === 1) {
+    process.stderr.write(
+      "Run `dove-sn help " + parsed.command + "` for flags, value formats and an example.\n",
+    );
+  }
+  return code;
+}
+
+async function dispatch(parsed: ParsedArgs): Promise<number> {
   if (parsed.command === "add-choices") {
     return await runAddChoices(parsed.flags, parsed.bare);
   }
@@ -3040,26 +2904,13 @@ async function main(): Promise<number> {
   if (parsed.command === "mcp") {
     return await runMcp(parsed.flags);
   }
-  if (
-    !parsed.command ||
-    parsed.command === "help" ||
-    parsed.flags.help === "true"
-  ) {
-    printHelp();
-    return 0;
+  if (parsed.command === "help") {
+    return runHelp(parsed.positional.length > 0 ? parsed.positional[0] : "");
   }
-  throw new Error("Unknown command: " + parsed.command);
+  // main() already rejected an unknown verb; reaching here means a dispatch site is
+  // missing for a verb that IS in VERB_USAGE (cliHelp.test.ts catches that too).
+  throw new Error("No dispatch site for verb: " + normalizeVerbInput(parsed.command));
 }
-
-// A closed downstream pipe (e.g. `dove-sn ... --json | head`) surfaces as an
-// EPIPE on stdout. Exit quietly with the code already set instead of crashing
-// with an unhandled stream error.
-process.stdout.on("error", function (err: NodeJS.ErrnoException) {
-  if (err && err.code === "EPIPE") {
-    process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
-  }
-  throw err;
-});
 
 /**
  * process.exit() discards buffered stdout/stderr - when stdout is a PIPE,
@@ -3096,15 +2947,28 @@ function exitAfterFlush(code: number): void {
   }
 }
 
-main()
-  .then(function (code) {
-    exitAfterFlush(code);
-  })
-  .catch(function (err) {
-    process.stderr.write(
-      "dove-sn error: " +
-        (err && err.message ? err.message : String(err)) +
-        "\n",
-    );
-    exitAfterFlush(1);
+// Only the `dove-sn` binary runs main(); importing this module (tests) must not.
+if (require.main === module) {
+  // A closed downstream pipe (e.g. `dove-sn ... --json | head`) surfaces as an
+  // EPIPE on stdout. Exit quietly with the code already set instead of crashing
+  // with an unhandled stream error.
+  process.stdout.on("error", function (err: NodeJS.ErrnoException) {
+    if (err && err.code === "EPIPE") {
+      process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
+    }
+    throw err;
   });
+
+  main(process.argv.slice(2))
+    .then(function (code) {
+      exitAfterFlush(code);
+    })
+    .catch(function (err) {
+      process.stderr.write(
+        "dove-sn error: " +
+          (err && err.message ? err.message : String(err)) +
+          "\n",
+      );
+      exitAfterFlush(1);
+    });
+}
