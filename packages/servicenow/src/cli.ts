@@ -26,7 +26,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { loadEnvFile } from "./loadEnv";
 import { createClient } from "./client";
-import { readFieldsFromJsonFile } from "./fieldsFromJson";
+import { resolveRecordFields } from "./fieldsFromJson";
 import { addChoicesToField, removeChoicesFromField } from "./choices";
 import { formatAddChoicesResult, formatRemoveChoicesResult } from "./formatter";
 import { createView } from "./layout/views";
@@ -1533,10 +1533,10 @@ function printHelp(): void {
       "                      [--out <file>  full JSON result to a file (atomic; overwrites); for large bodies])\n" +
       "  set-field          Set field value(s) on an EXISTING record, into an update set, then verify\n" +
       "                     (--table <t> --sys-id <id>|--query <q> --update-set <sys_id>\n" +
-      '                      (--fields "k=v,k2=v2" | --from-json <path>) [--dry-run] [--json])\n' +
+      '                      (--fields "k=v,k2=v2" | --from-json <path> | --from-stdin) [--dry-run] [--json])\n' +
       "  create-record      Create ONE NEW record in a data table, into an update set, then verify\n" +
       "                     (--table <t> --scope <s> --update-set <sys_id>\n" +
-      '                      (--fields "k=v,k2=v2" | --from-json <path>)\n' +
+      '                      (--fields "k=v,k2=v2" | --from-json <path> | --from-stdin)\n' +
       "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
       "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
       "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
@@ -2205,33 +2205,14 @@ async function runSetTable(
   return 0;
 }
 
-/** Parse inline `--fields "k=v, k2=v2"` into a field map. */
-function parseFieldsInline(input: string): Record<string, string> {
-  var out: Record<string, string> = {};
-  if (!input) return out;
-  var parts = input.split(",");
-  for (var i = 0; i < parts.length; i += 1) {
-    var piece = parts[i].trim();
-    if (!piece) continue;
-    var eq = piece.indexOf("=");
-    if (eq === -1) continue;
-    var key = piece.slice(0, eq).trim();
-    if (key) out[key] = piece.slice(eq + 1).trim();
-  }
-  return out;
-}
-
 /**
- * Merge the two field sources for the record-write verbs: inline `--fields "k=v,k2=v2"`
- * and `--from-json <path>` (a JSON object — the only form that can carry a large or
- * multiline value, since the inline form splits on commas and trims). On a key present in
- * both, `--from-json` wins: it is the explicit spec file. Throws on an unreadable file,
- * malformed JSON, or a non-scalar value (surfaced by the caller as a bad-args error).
+ * Thunk handed to resolveRecordFields so process.stdin is dereferenced ONLY when a verb
+ * was told to read it (`--from-stdin` / `--from-json -`). No other dove-sn verb touches
+ * stdin: an open-but-idle non-TTY pipe (an agent harness launching us in the background)
+ * must never be awaited — see #299.
  */
-function mergeFields(flags: Record<string, string>): Record<string, string> {
-  var inline = parseFieldsInline(flags.fields || "");
-  if (!flags["from-json"]) return inline;
-  return Object.assign(inline, readFieldsFromJsonFile(flags["from-json"]));
+function getProcessStdin(): NodeJS.ReadStream {
+  return process.stdin;
 }
 
 /**
@@ -2242,7 +2223,9 @@ function mergeFields(flags: Record<string, string>): Record<string, string> {
  *   [--from-json <path>]                         (JSON { field: value }; carries large or
  *                                                 multiline values the inline form can't;
  *                                                 overrides --fields on a shared key)
- *                                                — at least one of --fields / --from-json is required
+ *   [--from-stdin | --from-json -]               (same JSON object, read from stdin — the ONLY
+ *                                                 way stdin is ever read; never implicit)
+ *                                                — at least one field source is required
  *   --update-set <sys_id>                        (required — the change is captured here)
  *   [--dry-run] [--json]
  * Exit codes: 0 applied/dry-run, 1 bad args, 2 write landed but read-back unverified.
@@ -2251,7 +2234,7 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
   var fields: Record<string, string>;
   try {
-    fields = mergeFields(flags);
+    fields = await resolveRecordFields(flags, getProcessStdin);
   } catch (err) {
     process.stderr.write(
       "set-field: " + (err instanceof Error ? err.message : String(err)) + "\n",
@@ -2266,7 +2249,7 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
     !flags["update-set"]
   ) {
     process.stderr.write(
-      'set-field: --table, one of --sys-id/--query, --update-set, and at least one field (--fields "k=v" or --from-json <path>) are required\n',
+      'set-field: --table, one of --sys-id/--query, --update-set, and at least one field (--fields "k=v", --from-json <path>, or --from-stdin) are required\n',
     );
     return 1;
   }
@@ -2309,7 +2292,9 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
  *   [--fields "name=avg_message_parts,label=Avg. Message Parts,order=35"]
  *   [--from-json <path>]                         (JSON { field: value }; carries large or
  *                                                 multiline values the inline form can't)
- *                                                — at least one of --fields / --from-json is required
+ *   [--from-stdin | --from-json -]               (same JSON object, read from stdin — the ONLY
+ *                                                 way stdin is ever read; never implicit)
+ *                                                — at least one field source is required
  *   --scope x_cadso_core                         (the app that owns the new record)
  *   --update-set <sys_id>                        (required — the insert is captured here)
  *   [--if-absent "name=avg_message_parts"]       (skip the insert when this query already matches)
@@ -2321,7 +2306,7 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
   var fields: Record<string, string>;
   try {
-    fields = mergeFields(flags);
+    fields = await resolveRecordFields(flags, getProcessStdin);
   } catch (err) {
     process.stderr.write(
       "create-record: " +
@@ -2337,7 +2322,7 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
     !flags["update-set"]
   ) {
     process.stderr.write(
-      'create-record: --table, --scope, --update-set, and at least one field (--fields "k=v" or --from-json <path>) are required\n',
+      'create-record: --table, --scope, --update-set, and at least one field (--fields "k=v", --from-json <path>, or --from-stdin) are required\n',
     );
     return 1;
   }

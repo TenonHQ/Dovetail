@@ -82,3 +82,60 @@ describe("client.table.query overloads", function () {
     expect(call.params.sysparm_fields).toBeUndefined();
   });
 });
+
+describe("client.table.query offset → sysparm_offset (paging past the 1000-row cap)", function () {
+  beforeEach(function () {
+    jest.clearAllMocks();
+    var env = process.env;
+    env["SN_INSTANCE"] = "test.service-now.com";
+    env["SN_USER"] = "u";
+    env["SN_PASSWORD"] = "p";
+    env["SN_REQUEST_INTERVAL_MS"] = "0";
+  });
+
+  it("forwards offset alongside fields", async function () {
+    mockHttp.request.mockResolvedValueOnce(makeOk([]));
+    var client = createClient();
+    await client.table.query("incident", "active=true^ORDERBYsys_id", {
+      limit: 1000,
+      fields: ["sys_id"],
+      offset: 1000,
+    });
+    var call = mockHttp.request.mock.calls[0][0];
+    expect(call.params.sysparm_limit).toBe(1000);
+    expect(call.params.sysparm_fields).toBe("sys_id");
+    expect(call.params.sysparm_offset).toBe(1000);
+  });
+
+  it("forwards offset without fields, and sends 0 explicitly when asked", async function () {
+    mockHttp.request.mockResolvedValueOnce(makeOk([]));
+    var client = createClient();
+    await client.table.query("incident", "active=true", { limit: 500, offset: 0 });
+    var call = mockHttp.request.mock.calls[0][0];
+    expect(call.params).toEqual({
+      sysparm_query: "active=true",
+      sysparm_limit: 500,
+      sysparm_display_value: false,
+      sysparm_offset: 0,
+    });
+  });
+
+  it("does not send sysparm_offset when offset is omitted", async function () {
+    mockHttp.request.mockResolvedValueOnce(makeOk([]));
+    var client = createClient();
+    await client.table.query("incident", "active=true", { limit: 10, fields: ["sys_id"] });
+    var call = mockHttp.request.mock.calls[0][0];
+    expect(Object.prototype.hasOwnProperty.call(call.params, "sysparm_offset")).toBe(false);
+  });
+
+  it("rejects a negative or non-integer offset before any request is made", async function () {
+    var client = createClient();
+    await expect(
+      client.table.query("incident", "active=true", { limit: 10, offset: -1 }),
+    ).rejects.toThrow(/offset must be a non-negative integer/);
+    await expect(
+      client.table.query("incident", "active=true", { limit: 10, offset: 1.5 }),
+    ).rejects.toThrow(/offset must be a non-negative integer/);
+    expect(mockHttp.request).not.toHaveBeenCalled();
+  });
+});

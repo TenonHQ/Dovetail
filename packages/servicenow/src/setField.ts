@@ -74,6 +74,109 @@ export function pickFields(row: Record<string, unknown>, names: Array<string>): 
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Read-back comparison.
+//
+// ServiceNow's HTML sanitizer rewrites characters in html / translated_html /
+// wiki fields on save (e.g. "@" → "&#64;"), so a byte-strict compare of the
+// submitted value against the stored one reports a false mismatch on a record
+// that is correct. Neither verb fetches the dictionary, so the field type is
+// unknown here; the equivalence is therefore detected CONSERVATIVELY — it is
+// accepted only when the STORED value carries at least one entity reference
+// (the sanitizer's fingerprint) and both sides are identical once entities
+// are decoded. Everything else keeps the strict byte compare, and a genuinely
+// different html value still decodes to something different → mismatch.
+// ---------------------------------------------------------------------------
+
+var NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: "\u00a0"
+};
+var ENTITY_PATTERN = "&(#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[a-zA-Z][a-zA-Z0-9]{1,31});";
+var ENTITY_TEST_RE = new RegExp(ENTITY_PATTERN);
+
+/** True when the string contains at least one numeric or named HTML entity reference. */
+export function hasHtmlEntity(value: string): boolean {
+  if (typeof value !== "string" || value.indexOf("&") === -1) return false;
+  return ENTITY_TEST_RE.test(value);
+}
+
+/**
+ * Decode numeric (decimal / hex) and the basic named HTML entities. Unknown names
+ * and out-of-range code points are left untouched so the decode can never invent
+ * characters that were not there.
+ */
+export function decodeHtmlEntities(value: string): string {
+  if (typeof value !== "string" || value.indexOf("&") === -1) return value;
+  return value.replace(new RegExp(ENTITY_PATTERN, "g"), function (whole: string, body: string): string {
+    if (body.charAt(0) === "#") {
+      var hex = body.charAt(1) === "x" || body.charAt(1) === "X";
+      var code = parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      if (!isFinite(code) || code <= 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+        return whole;
+      }
+      return String.fromCodePoint(code);
+    }
+    if (Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, body)) {
+      return NAMED_ENTITIES[body];
+    }
+    return whole;
+  });
+}
+
+export type ReadBackMatch = "exact" | "entity-equivalent" | "mismatch";
+
+/** Compare one submitted value to its stored read-back. See the block comment above. */
+export function readBackMatches(sent: unknown, stored: unknown): ReadBackMatch {
+  var a = fieldToString(sent);
+  var b = fieldToString(stored);
+  if (a === b) return "exact";
+  if (hasHtmlEntity(b) && decodeHtmlEntities(a) === decodeHtmlEntities(b)) {
+    return "entity-equivalent";
+  }
+  return "mismatch";
+}
+
+export interface ReadBackVerification {
+  /** True when every requested field matched (exactly or entity-equivalent). */
+  verified: boolean;
+  /** Fields whose stored value differs from the request. */
+  mismatched: Array<string>;
+  /** Fields that matched only after HTML-entity decoding (the sanitizer rewrote them). */
+  entityNormalized: Array<string>;
+}
+
+/** Verify every requested field against the read-back map (as produced by pickFields). */
+export function verifyReadBack(
+  requested: Record<string, string>,
+  after: Record<string, string>
+): ReadBackVerification {
+  var names = requested ? Object.keys(requested) : [];
+  var result: ReadBackVerification = { verified: true, mismatched: [], entityNormalized: [] };
+  for (var i = 0; i < names.length; i += 1) {
+    var name = names[i];
+    var match = readBackMatches(requested[name], after ? after[name] : undefined);
+    if (match === "mismatch") {
+      result.verified = false;
+      result.mismatched.push(name);
+    } else if (match === "entity-equivalent") {
+      result.entityNormalized.push(name);
+    }
+  }
+  return result;
+}
+
+/** Human-readable suffix naming the fields that verified only after entity decoding. */
+export function readBackNote(check: ReadBackVerification): string {
+  if (!check || check.entityNormalized.length === 0) return "";
+  return " (" + check.entityNormalized.join(", ")
+    + ": the instance HTML-entity-encoded the value on save; compared after decoding)";
+}
+
 export async function setField(params: SetFieldParams): Promise<SetFieldResult> {
   var client = params.client || createClient({});
   var table = params.table;
@@ -144,12 +247,8 @@ export async function setField(params: SetFieldParams): Promise<SetFieldResult> 
   // Read back and verify each field equals what we set.
   var afterRows = await client.table.query(table, "sys_id=" + sysId, { limit: 1, fields: readFields });
   var after = pickFields(afterRows[0] || {}, fieldNames);
-  var verified = true;
-  for (var j = 0; j < fieldNames.length; j += 1) {
-    if (after[fieldNames[j]] !== fieldToString(params.fields[fieldNames[j]])) {
-      verified = false;
-    }
-  }
+  var check = verifyReadBack(params.fields, after);
+  var verified = check.verified;
 
   return {
     status: verified ? "applied" : "failed",
@@ -162,6 +261,8 @@ export async function setField(params: SetFieldParams): Promise<SetFieldResult> 
     verified: verified,
     note: verified
       ? "Set " + fieldNames.join(", ") + " on " + table + "/" + sysId + " and verified via read-back."
-      : "Write landed but read-back does not match the requested values — check field types / ACLs."
+        + readBackNote(check)
+      : "Write landed but read-back does not match the requested values ("
+        + check.mismatched.join(", ") + ") — check field types / ACLs."
   };
 }

@@ -69,11 +69,19 @@ clear "not configured" error.
 | `calendar_get_today`            | Today's events                                 |
 | `calendar_get_week`             | Next 7 days                                    |
 | `calendar_get_event`            | Single event by ID                             |
-| `servicenow_query_table`        | Table API GET (deny-listed tables blocked)     |
+| `servicenow_query_table`        | Table API GET — `table`, `sysparm_query`, optional `fields[]`, `limit` (≤1000), `offset`, `env` (deny-listed tables blocked) |
 
 ServiceNow deny-list (default): `sys_user_password`, `sys_user_token`,
 `sys_credential`, `sys_secret`, `sys_user_grmember`, `sys_audit`. Override
 per-table with `SINC_MCP_SN_TABLE_OVERRIDE=table_a,table_b`.
+
+**Paging past 1000 rows.** The Table API caps a single page at 1000 rows and
+`limit` is capped to match, so a larger result set is read page by page with
+`offset` (→ `sysparm_offset`): keep `sysparm_query` and `limit` fixed and
+request `offset = page * limit` for page 0, 1, 2, …; the last page is the first
+one that returns fewer than `limit` rows. Add `ORDERBYsys_id` to the query so
+the pages don't shift between calls. `offset` is omitted from the request when
+not supplied.
 
 🔒 **Gated writes (Phase 2).** The four ClickUp write tools are inert unless
 `SINC_MCP_WRITES_ENABLE=1` is set — that's the operator-controlled gate. When

@@ -158,6 +158,12 @@ function sleep(ms: number): Promise<void> {
 export interface TableQueryOptions {
   limit?: number;
   fields?: string[];
+  /**
+   * Row offset (sysparm_offset) for paging. The Table API caps a single page
+   * at 1000 rows, so a scan past that needs offset = page * limit. Must be a
+   * non-negative integer; omitted → not sent (ServiceNow default 0).
+   */
+  offset?: number;
 }
 
 export interface TableSchemaField {
@@ -512,6 +518,7 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
   ): Promise<Array<T>> {
     var limit: number = 100;
     var fields: string[] | undefined;
+    var offset: number | undefined;
     if (typeof limitOrOptions === "number") {
       limit = limitOrOptions;
     } else if (limitOrOptions && typeof limitOrOptions === "object") {
@@ -521,6 +528,13 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
       if (limitOrOptions.fields && limitOrOptions.fields.length > 0) {
         fields = limitOrOptions.fields;
       }
+      if (limitOrOptions.offset !== undefined) {
+        var rawOffset = limitOrOptions.offset;
+        if (typeof rawOffset !== "number" || !isFinite(rawOffset) || rawOffset < 0 || Math.floor(rawOffset) !== rawOffset) {
+          throw new Error("table.query(" + table + "): offset must be a non-negative integer (got " + String(rawOffset) + ").");
+        }
+        offset = rawOffset;
+      }
     }
     var params: Record<string, any> = {
       sysparm_query: query,
@@ -529,6 +543,9 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     };
     if (fields) {
       params.sysparm_fields = fields.join(",");
+    }
+    if (offset !== undefined) {
+      params.sysparm_offset = offset;
     }
     var data = await request<{ result: Array<T> }>(
       {

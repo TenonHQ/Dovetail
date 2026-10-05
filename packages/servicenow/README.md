@@ -769,6 +769,36 @@ already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1`
 args, `2` write landed unverified (or skipped with drift). To **update** an existing
 record instead, use `set-field`.
 
+#### Field sources (`--fields`, `--from-json`, `--from-stdin`)
+
+Both verbs take their field map from any combination of three sources; on a shared
+key the file / stdin value wins over the inline one.
+
+| Source | Use it for |
+| --- | --- |
+| `--fields "k=v,k2=v2"` | Short scalar values. Splits on commas and trims, so it cannot carry a comma, newline or `=`. |
+| `--from-json <path>` | A flat JSON object `{ "field": "value" }` — any character, any size (script bodies, HTML, JSON blobs). |
+| `--from-stdin` (alias `--from-json -`) | The same JSON object, piped in: `cat fields.json \| npx dove-sn create-record ... --from-stdin`. |
+
+**stdin is read only when you ask for it.** Without `--from-stdin` / `--from-json -`
+no `dove-sn` verb touches stdin at all, so a process launched with an open-but-idle
+stdin pipe (an agent harness running it in the background) returns immediately instead
+of waiting for input that never comes; a missing field source is an immediate usage
+error (exit `1`), never a prompt. `--from-stdin` refuses a terminal stdin and an empty
+stream with an actionable message.
+
+#### Read-back verification and the HTML sanitizer
+
+After the write both verbs re-query the record and compare every requested value to
+what was stored. ServiceNow's HTML sanitizer rewrites characters in `html` /
+`translated_html` / `wiki` fields on save (for example `@` becomes `&#64;`), which used
+to surface as a false **mismatch** on a record that was in fact correct. The compare is
+now strict byte-for-byte first, and only when the **stored** value contains an HTML
+entity reference are both sides entity-decoded and compared again; a match found that
+way is reported as verified with a note naming the normalized field(s). A genuinely
+different value still decodes to something different and still reports `failed`
+(exit `2`), and the failure note names the mismatched field(s).
+
 Both verbs are exported for programmatic use:
 
 ```ts

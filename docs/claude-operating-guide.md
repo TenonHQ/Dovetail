@@ -49,7 +49,7 @@ Source: `packages/mcp/src/registry.ts`. The 4 write tools throw unless `SINC_MCP
 ### ServiceNow — read (1)
 | Tool | What it does | Guardrail |
 |---|---|---|
-| `servicenow_query_table` | Read-only GET against the SN Table API. Required: `table`, `sysparm_query`. Optional: `fields[]`, `limit` (default 100, max 1000) | Sensitive tables (`sys_user_password`, `sys_credential`, …) are denied unless `SINC_MCP_SN_TABLE_OVERRIDE=<table>` is set |
+| `servicenow_query_table` | Read-only GET against the SN Table API. Required: `table`, `sysparm_query`. Optional: `fields[]`, `limit` (default 100, max 1000 — the per-page ceiling), `offset` (→ `sysparm_offset`; page past 1000 rows with `offset = page * limit`) | Sensitive tables (`sys_user_password`, `sys_credential`, …) are denied unless `SINC_MCP_SN_TABLE_OVERRIDE=<table>` is set |
 
 > **For SN *writes*, this server has none** — use the `dovetail-servicenow` MCP (§4) or the `dove`/`dove-sn` CLIs (§5). This is by design: `dovetail-mcp` is read-mostly.
 
