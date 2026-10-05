@@ -43,9 +43,25 @@ export namespace Sinc {
   }
 
   interface ITableOptions {
+    /** Field whose display value names the record folder (default: the record's display value). */
     displayField?: string;
+    /** Field(s) appended as " (value)" to de-duplicate folder names; an array uses the first non-empty. */
     differentiatorField?: string | string[];
-    query: string;
+    /** Encoded query ANDed onto every pull of this table (e.g. "language=en"). */
+    query?: string;
+    /**
+     * Encoded query that REPLACES the per-scope `sys_scope` filter, for tables whose rows
+     * carry no sys_scope (sys_choice). `{scope}` → the app scope name, `{scopeId}` → its
+     * sys_id. A table with a scopeQuery is also added to every scope's table list, since
+     * it cannot be discovered through sys_metadata. Example: "nameSTARTSWITH{scope}_".
+     */
+    scopeQuery?: string;
+    /**
+     * Record-folder name built from raw field values, e.g. "{name}.{element}.{value}".
+     * An empty token is dropped with the literal before it. Wins over displayField /
+     * differentiatorField; the duplicate-name guard still runs afterwards.
+     */
+    nameTemplate?: string;
   }
 
   interface FieldConfig {
