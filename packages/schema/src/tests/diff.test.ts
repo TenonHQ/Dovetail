@@ -11,6 +11,7 @@ function field(overrides: Partial<NormalizedField>): NormalizedField {
     mandatory: false,
     reference: "",
     default_value: "",
+    dependent_on_field: "",
   };
   return Object.assign({}, base, overrides);
 }
@@ -120,6 +121,33 @@ describe("diffSchemas — field-level severity", function () {
     var diff = run(oneField({ name: "state", default_value: "draft" }), oneField({ name: "state", default_value: "pending" }));
     expect(diff.fields[0]).toMatchObject({ change: "default_changed", severity: "WARN" });
     expect(diff.exit_code).toBe(0);
+  });
+
+  it("dependent_on_field change => WARN (set, repointed, and cleared)", function () {
+    var set = run(
+      oneField({ name: "document_id", type: "document_id" }),
+      oneField({ name: "document_id", type: "document_id", dependent_on_field: "table" })
+    );
+    expect(set.fields[0]).toMatchObject({ change: "dependency_changed", severity: "WARN", from: "", to: "table" });
+    expect(set.exit_code).toBe(0);
+
+    var repointed = run(
+      oneField({ name: "document_id", type: "document_id", dependent_on_field: "table" }),
+      oneField({ name: "document_id", type: "document_id", dependent_on_field: "record_table" })
+    );
+    expect(repointed.fields[0]).toMatchObject({ change: "dependency_changed", from: "table", to: "record_table" });
+
+    var cleared = run(
+      oneField({ name: "document_id", type: "document_id", dependent_on_field: "table" }),
+      oneField({ name: "document_id", type: "document_id" })
+    );
+    expect(cleared.fields[0]).toMatchObject({ change: "dependency_changed", from: "table", to: "" });
+
+    var same = run(
+      oneField({ name: "document_id", type: "document_id", dependent_on_field: "table" }),
+      oneField({ name: "document_id", type: "document_id", dependent_on_field: "table" })
+    );
+    expect(same.fields).toHaveLength(0);
   });
 
   it("label change => INFO", function () {

@@ -7,6 +7,12 @@ export interface TableField {
   reference: string;
   default_value: string;
   inherited_from: string | null;
+  /**
+   * sys_dictionary.dependent_on_field — the sibling column a document_id (or any
+   * dependent) column resolves against. Present ONLY when set on the instance, so
+   * the dump of a table with no dependent columns is byte-identical to before.
+   */
+  dependent_on_field?: string;
 }
 
 export interface RawTableData {
@@ -98,6 +104,7 @@ export interface SnapshotInfo extends SnapshotManifest {
 
 // A field reduced to comparable primitives. `type`/`reference` are coerced from
 // either a string or a legacy {link,value} object; `inherited_from` is dropped.
+// `dependent_on_field` is "" when the dump carries none (older baselines never did).
 export interface NormalizedField {
   name: string;
   label: string;
@@ -106,6 +113,7 @@ export interface NormalizedField {
   mandatory: boolean;
   reference: string;
   default_value: string;
+  dependent_on_field: string;
 }
 
 export interface NormalizedTable {
@@ -139,6 +147,7 @@ export type FieldChangeKind =
   | "now_optional"
   | "retargeted"
   | "default_changed"
+  | "dependency_changed"
   | "label_changed";
 
 export interface FieldChange {

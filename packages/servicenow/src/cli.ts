@@ -1464,7 +1464,10 @@ function printHelp(): void {
       "  add-column         Add ONE column to an EXISTING table via a scope-aware sys_dictionary insert, then verify\n" +
       "                     (--table <name|sys_id> --label <l> --type <t> --update-set <sys_id>\n" +
       "                      [--name <element>] [--max-length <n>] [--reference <table>]\n" +
-      "                      [--mandatory] [--default <v>] [--scope <s>] [--dry-run] [--json])\n" +
+      "                      [--mandatory] [--default <v>] [--dependent-on-field <element>]\n" +
+      "                      [--scope <s>] [--dry-run] [--json])\n" +
+      "                     --dependent-on-field names the sibling column a document_id resolves\n" +
+      "                     against (its table_name column); it must already exist on the table.\n" +
       "                     --update-set is REQUIRED on the live path (not for --dry-run).\n" +
       "  add-index          Create a single-column UNIQUE index (sys_dictionary.unique), then verify\n" +
       "                     DRY-RUN BY DEFAULT — nothing is written without --confirm\n" +
@@ -1499,12 +1502,13 @@ function printHelp(): void {
       "                     present returns already-exists with no write. --name is REFUSED —\n" +
       "                     the platform's form has no name input; the real name is returned.\n" +
       "                     Needs a username+password identity that can form-log-in.\n" +
-      "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length),\n" +
+      "  set-column         Update an EXISTING column's SCHEMA (label/mandatory/default/read-only/max-length/\n" +
+      "                     dependent-on-field),\n" +
       "                     into an update set, then verify against the instance\n" +
       "                     (--table <t> --column <c> --update-set <sys_id>\n" +
       "                      [--label <l>] [--mandatory true|false] [--default <v>]\n" +
       "                      [--read-only true|false] [--max-length <n>]\n" +
-      "                      [--dry-run] [--json])\n" +
+      "                      [--dependent-on-field <element>] [--dry-run] [--json])\n" +
       "                     A max-length SHRINK is REFUSED while rows hold longer values —\n" +
       "                     ServiceNow silently ignores such a shrink (200 OK, no change).\n" +
       "                     Shorten or clear those values first, then re-run.\n" +
@@ -1709,7 +1713,7 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
  * dove-sn add-column:
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
- *   [--mandatory] [--default <value>]
+ *   [--mandatory] [--default <value>] [--dependent-on-field <element>]
  *   [--scope x_cadso_journey] [--update-set <sys_id>]
  *   [--from-json <spec.json>] [--dry-run] [--debug] [--json]
  * --update-set is required unless --dry-run.
@@ -1730,6 +1734,9 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
     if (flags.reference) column.reference = flags.reference;
     if (flags.mandatory === "true") column.mandatory = true;
     if (flags["default"] !== undefined) column.default = flags["default"];
+    if (flags["dependent-on-field"] !== undefined) {
+      column.dependent_on_field = flags["dependent-on-field"];
+    }
   }
   if (!table || !column || !column.label) {
     process.stderr.write(
@@ -2016,7 +2023,8 @@ function parseBoolFlag(
  * dove-sn set-column:
  *   --table x_cadso_journey --column description --update-set <sys_id>
  *   [--label "Description"] [--mandatory true|false] [--default <v>]
- *   [--read-only true|false] [--max-length 4000] [--dry-run] [--json]
+ *   [--read-only true|false] [--max-length 4000] [--dependent-on-field <element>]
+ *   [--dry-run] [--json]
  *
  * Updates an EXISTING column's schema. `internal_type` and a rename are refused —
  * ServiceNow silently ignores both on an existing column. To CREATE one, use add-column;
@@ -2033,6 +2041,7 @@ async function runSetColumn(
     "column",
     "update-set",
     "updateSetSysId",
+    "dependent-on-field",
   ]);
   if (bareErr) {
     process.stderr.write(bareErr);
@@ -2061,6 +2070,10 @@ async function runSetColumn(
   }
   if (flags["read-only"] !== undefined) {
     attributes.readOnly = parseBoolFlag("read-only", flags["read-only"]);
+  }
+  // An explicit empty string clears the dependency; a bare flag is refused above.
+  if (flags["dependent-on-field"] !== undefined) {
+    attributes.dependentOnField = flags["dependent-on-field"].trim();
   }
   if (flags["max-length"] !== undefined) {
     var len = Number(flags["max-length"]);

@@ -103,6 +103,22 @@ async function getTableHierarchy(options: {
   return [tableName];
 }
 
+// sys_dictionary.dependent_on_field is a plain string on the Table API, but guard the
+// {link,value} shape too — the same drift the snapshot normalizer already tolerates.
+function coerceDependentOnField(raw: unknown): string {
+  if (raw === null || raw === undefined) {
+    return "";
+  }
+  if (typeof raw === "string") {
+    return raw.trim();
+  }
+  if (typeof raw === "object" && "value" in (raw as Record<string, unknown>)) {
+    const value = (raw as Record<string, unknown>).value;
+    return value === null || value === undefined ? "" : String(value).trim();
+  }
+  return String(raw).trim();
+}
+
 async function getTableFields(options: {
   client: AxiosInstance;
   tableName: string;
@@ -114,23 +130,33 @@ async function getTableFields(options: {
     const response = await client.get("api/now/table/sys_dictionary", {
       params: {
         sysparm_query: query,
-        sysparm_fields: "element,column_label,internal_type,max_length,mandatory,reference,default_value",
+        sysparm_fields:
+          "element,column_label,internal_type,max_length,mandatory,reference,default_value,dependent_on_field",
       },
     });
 
     if (response.data.result) {
-      return response.data.result.map((field: any) => ({
-        name: field.element,
-        label: field.column_label,
-        type: field.internal_type && field.internal_type.value
-          ? field.internal_type.value
-          : field.internal_type || "",
-        max_length: field.max_length || "",
-        mandatory: field.mandatory === "true",
-        reference: field.reference || "",
-        default_value: field.default_value || "",
-        inherited_from: null,
-      }));
+      return response.data.result.map((field: any) => {
+        const out: TableField = {
+          name: field.element,
+          label: field.column_label,
+          type: field.internal_type && field.internal_type.value
+            ? field.internal_type.value
+            : field.internal_type || "",
+          max_length: field.max_length || "",
+          mandatory: field.mandatory === "true",
+          reference: field.reference || "",
+          default_value: field.default_value || "",
+          inherited_from: null,
+        };
+        // Emitted only when set: most columns have no dependency, and a key on every
+        // field would rewrite every tracked dump for nothing.
+        const dependentOn = coerceDependentOnField(field.dependent_on_field);
+        if (dependentOn) {
+          out.dependent_on_field = dependentOn;
+        }
+        return out;
+      });
     }
   } catch (error: any) {
     logger.warn("Error getting fields for " + tableName + ": " + error.message);

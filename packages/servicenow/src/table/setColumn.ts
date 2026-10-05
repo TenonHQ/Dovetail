@@ -81,6 +81,7 @@ import { encodeQueryValue } from "../choices";
 import {
   OVERRIDABLE,
   explainMaxLengthNotOverridable,
+  explainDependentOnFieldNotOverridable,
   findOverrideRow,
   findLabelRow,
   diffInherited,
@@ -117,6 +118,7 @@ var WRITABLE: Record<string, string> = {
   default: "default_value",
   readOnly: "read_only",
   maxLength: "max_length",
+  dependentOnField: "dependent_on_field",
 };
 
 /** Attributes ServiceNow will not honour on an existing column, and the reason. Each
@@ -145,6 +147,12 @@ export interface ColumnAttributes {
   readOnly?: boolean;
   /** PHYSICAL: the column's length. Changing this fires a real ALTER on the table. */
   maxLength?: number;
+  /**
+   * The sibling column this one resolves against (sys_dictionary.dependent_on_field —
+   * a document_id's table_name column). "" clears it. The named column must exist on
+   * the table. Not overridable per-child: sys_dictionary_override has no such field.
+   */
+  dependentOnField?: string;
 
   // The two below are declared ONLY so a caller can express them and be told why they
   // cannot be done. Silently dropping them would leave someone who asked to rename a
@@ -566,6 +574,15 @@ export async function setColumn(
   var table = String(params.table).trim();
   var column = String(params.column).trim();
 
+  // No network needed to know a column cannot depend on itself.
+  if (writes.dependent_on_field !== undefined && writes.dependent_on_field === column) {
+    throw new Error(
+      "set-column: dependent_on_field '" +
+        column +
+        "' names the column itself — a column cannot depend on itself.",
+    );
+  }
+
   var readFields = ["sys_id", "element", "internal_type"].concat(targets);
   var resolved = await resolveColumn(params.client, table, column, readFields);
   var row = resolved.row;
@@ -604,6 +621,32 @@ export async function setColumn(
   }
 
   var columnSysId = fieldToString(row.sys_id);
+
+  // The dependency target must exist on the table. ServiceNow stores any string here
+  // unchecked, so a typo would land as a column that resolves against nothing. Only the
+  // table's own rows are searched (an inherited column was routed to the override path
+  // above and refused there). Runs on the dry-run too, so a plan never promises a write
+  // the live path would refuse.
+  if (writes.dependent_on_field !== undefined && writes.dependent_on_field !== "") {
+    var dependencyRows = await params.client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "name=" +
+        encodeQueryValue(table) +
+        "^element=" +
+        encodeQueryValue(writes.dependent_on_field),
+      { limit: 1, fields: ["sys_id", "element"] },
+    );
+    if (dependencyRows.length === 0) {
+      throw new Error(
+        "set-column: dependent_on_field '" +
+          writes.dependent_on_field +
+          "' is not a column on '" +
+          table +
+          "' (its own sys_dictionary rows were searched; inherited columns are not " +
+          "considered). Add that column first, then re-run. Nothing was written.",
+      );
+    }
+  }
 
   // Diff against what the instance actually stores. Only a genuine difference is
   // written: ServiceNow fires the physical ALTER on a CHANGE, and a same-value write
@@ -937,6 +980,11 @@ async function setInheritedColumn(
   if (ctx.writes.max_length !== undefined) {
     throw new Error(
       explainMaxLengthNotOverridable(ctx.table, ctx.column, ctx.definedOn),
+    );
+  }
+  if (ctx.writes.dependent_on_field !== undefined) {
+    throw new Error(
+      explainDependentOnFieldNotOverridable(ctx.table, ctx.column, ctx.definedOn),
     );
   }
 

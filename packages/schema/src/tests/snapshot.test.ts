@@ -64,6 +64,29 @@ describe("readSchemaTree", function () {
     expect(s.generated_at).toBe("2025-01-01T00:00:00.000Z");
   });
 
+  it("carries dependent_on_field when the dump has it, and reads it as empty when it does not", async function () {
+    var root = await makeTmp();
+    await writeTree(root);
+    await fsp.writeFile(
+      path.join(root, "journey", "x_cadso_journey_instance.json"),
+      JSON.stringify({
+        table_name: "x_cadso_journey_instance",
+        label: "Instance",
+        scope: "x_cadso_journey",
+        fields: [
+          { name: "table", label: "Table", type: "table_name", max_length: "80", mandatory: false, reference: "", default_value: "", inherited_from: null },
+          { name: "document_id", label: "Record", type: "document_id", max_length: "32", mandatory: false, reference: "", default_value: "", inherited_from: null, dependent_on_field: "table" },
+        ],
+      })
+    );
+    var s = await readSchemaTree({ dir: root, scope: "x_cadso_journey" });
+    var fields = s.tables["x_cadso_journey_instance"].fields;
+    expect(fields[0].dependent_on_field).toBe("");
+    expect(fields[1].dependent_on_field).toBe("table");
+    // A pre-existing dump with no key at all normalizes the same way as "".
+    expect(s.tables["x_cadso_journey_action"].fields[0].dependent_on_field).toBe("");
+  });
+
   it("filters by scope using the table-name prefix", async function () {
     var root = await makeTmp();
     await writeTree(root);

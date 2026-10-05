@@ -519,10 +519,12 @@ export function buildDescriptors(
         "inserts, restores) so the column lands in the right scope and update set, then READS THE COLUMN " +
         "BACK from sys_dictionary to prove it materialised (a returned sys_id with no column is reported " +
         "failed, not created). table is the table name or its sys_db_object sys_id; column is " +
-        "{ label, type, name?, max_length?, reference?, mandatory?, default? } with friendly types mapped to " +
-        "internal types (string -> string_full_utf8) and reference = the target table NAME; element is " +
-        "derived from label unless column.name is given. updateSetSysId is required on the live path. " +
-        "dryRun:true returns the plan with no writes.",
+        "{ label, type, name?, max_length?, reference?, mandatory?, default?, dependent_on_field? } with " +
+        "friendly types mapped to internal types (string -> string_full_utf8) and reference = the target " +
+        "table NAME; element is derived from label unless column.name is given. dependent_on_field names " +
+        "the sibling column a document_id column resolves against (its table_name column) — it must " +
+        "already exist on the table, is verified on the read-back, and is refused when absent. " +
+        "updateSetSysId is required on the live path. dryRun:true returns the plan with no writes.",
       shape: addColumnSchema.shape,
       handler: async function (args: any) {
         var p = addColumnSchema.parse(args);
@@ -689,7 +691,9 @@ export function buildDescriptors(
       annotations: WRITE_OVERWRITE,
       description:
         "Update the SCHEMA of an EXISTING column on an EXISTING ServiceNow table — its label, " +
-        "mandatory, default, readOnly, or maxLength — captured into a named update set, then READ " +
+        "mandatory, default, readOnly, maxLength, or dependentOnField (the sibling column a " +
+        "document_id resolves against; must exist on the table; \"\" clears it; not overridable " +
+        "per-child) — captured into a named update set, then READ " +
         "BACK from the instance to verify. This is the schema counterpart to set_field: set_field " +
         "changes a RECORD's value, set_column changes the COLUMN's definition (sys_dictionary). Use " +
         "add_column to CREATE a column. maxLength is PHYSICAL — changing it fires a real ALTER on the " +
