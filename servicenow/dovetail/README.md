@@ -37,6 +37,14 @@ and un-promotable. This directory is the source of truth going forward.
   `packages/core/src/tests/dovetailUtilsMSCollision.test.ts`, which loads this file
   into a sandbox with ServiceNow stubs — so a regression here fails the pre-publish
   test gate in CI (`publish.yml` runs the full suite before anything ships).
+  **Table options** honoured here (sent by the client from `dove.config.js`
+  `tableOptions`): `query`, `displayField`, `differentiatorField`, and — for
+  platform-config tables whose rows carry **no `sys_scope`** (`sys_choice`) —
+  `scopeQuery` (an encoded query with `{scope}`/`{scopeId}` tokens that replaces the
+  `sys_scope` filter; such a table is also added to the scope's table list, since
+  `getTableNames` only sees `sys_metadata` children) and `nameTemplate`
+  (`"{name}.{element}.{value}"` folder names from raw fields; empty tokens dropped).
+  Covered by `packages/core/src/tests/dovetailUtilsMSTableOptions.test.ts`.
 
   > Not to be confused with `../sys_script_include/SincUtilsMS.js`, which backs the
   > **dead** Sincronia API and carries the same (now un-fixed) bug. It is slated for

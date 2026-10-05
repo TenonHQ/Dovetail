@@ -3,11 +3,14 @@
  * Ported from legacy upstream to global scope so Tenon owns the full read surface
  * (manifest, bulk download, app list, current scope, ATF push).
  *
- * Deploy to: Global Scope > Script Includes
+ * Deploy to: Global Scope > Script Includes (app "Dovetail", sys_scope 5f33b5d433d90b147b18bc534d5c7bf6)
  * Name: DovetailUtilsMS
  * api_name: global.DovetailUtilsMS
- * sys_id: 884a272c334887107b18bc534d5c7b97
+ * sys_id: 12e1ce1c335d0b147b18bc534d5c7be1 (tenonworkstudio; 884a272c… is the dead SincUtilsMS)
  * Accessible from: All application scopes
+ *
+ * Not synced by dove (global scope) — deploy with `dove-sn set-field --table sys_script_include
+ * --sys-id <sys_id> --from-json <{script}> --update-set <Dovetail-scope set>` and read back.
  */
 var DovetailUtilsMS = Class.create();
 DovetailUtilsMS.prototype = {
@@ -35,6 +38,7 @@ DovetailUtilsMS.prototype = {
     var scopeId = config.scopeId;
     var includes = config.includes;
     var excludes = config.excludes;
+    var tableOptions = config.tableOptions === undefined ? {} : config.tableOptions;
     var tables = [];
     var appFilesAgg = new GlideAggregate("sys_metadata");
     appFilesAgg.addQuery("sys_scope", "=", scopeId);
@@ -43,19 +47,44 @@ DovetailUtilsMS.prototype = {
 
     while (appFilesAgg.next()) {
       var tableName = appFilesAgg.getValue("sys_class_name");
-      var tableExcluded =
-        tableName in excludes &&
-        typeof excludes[tableName] !== "object" &&
-        excludes[tableName] !== false;
-      var tableIncluded =
-        tableName in includes && includes[tableName] !== false;
 
-      if (!tableExcluded || tableIncluded) {
+      if (this.isTableAllowed(tableName, includes, excludes)) {
         tables.push(tableName);
       }
     }
 
+    // A table that carries no sys_scope (sys_choice is the canonical case: every
+    // row's sys_scope is empty, so it is never a sys_metadata child of any app)
+    // can never be discovered by the aggregate above. When dove.config.js gives
+    // such a table a `scopeQuery`, it is listed explicitly here and filtered by
+    // that query in buildTableMap instead of by sys_scope.
+    for (var optTable in tableOptions) {
+      var opts = tableOptions[optTable];
+      var hasScopeQuery =
+        opts && typeof opts === "object" && typeof opts.scopeQuery === "string" && opts.scopeQuery !== "";
+
+      if (hasScopeQuery && tables.indexOf(optTable) === -1 && this.isTableAllowed(optTable, includes, excludes)) {
+        tables.push(optTable);
+      }
+    }
+
     return tables;
+  },
+
+  isTableAllowed: function (tableName, includes, excludes) {
+    var tableExcluded =
+      tableName in excludes && typeof excludes[tableName] !== "object" && excludes[tableName] !== false;
+    var tableIncluded = tableName in includes && includes[tableName] !== false;
+
+    return !tableExcluded || tableIncluded;
+  },
+
+  // Render a `scopeQuery` table option into an encoded query for one scope.
+  // `{scope}` → the app scope name (x_cadso_automate), `{scopeId}` → its sys_id.
+  resolveScopeQuery: function (scopeQuery, scopeName, scopeId) {
+    return String(scopeQuery)
+      .replace(/\{scope\}/g, scopeName || "")
+      .replace(/\{scopeId\}/g, scopeId || "");
   },
 
   getManifest: function (config) {
@@ -69,7 +98,8 @@ DovetailUtilsMS.prototype = {
     var tableNames = this.getTableNames({
       scopeId: scopeId,
       includes: includes,
-      excludes: excludes
+      excludes: excludes,
+      tableOptions: tableOptions
     });
 
     for (var i = 0; i < tableNames.length; i++) {
@@ -77,6 +107,7 @@ DovetailUtilsMS.prototype = {
       var tableMap = this.buildTableMap({
         tableName: tableName,
         scopeId: scopeId,
+        scopeName: scopeName,
         includes: includes,
         excludes: excludes,
         getContents: getContents,
@@ -100,6 +131,7 @@ DovetailUtilsMS.prototype = {
   buildTableMap: function (config) {
     var tableName = config.tableName;
     var scopeId = config.scopeId;
+    var scopeName = config.scopeName;
     var getContents = config.getContents;
     var includes = config.includes;
     var excludes = config.excludes;
@@ -123,8 +155,22 @@ DovetailUtilsMS.prototype = {
     var pendingRecords = [];
     var nameCounts = {};
     var recGR = new GlideRecord(tableName);
-    recGR.addQuery("sys_scope", scopeId);
-    recGR.addQuery("sys_class_name", tableName);
+
+    // Scope membership. Platform-config tables that carry no sys_scope (sys_choice)
+    // declare a `scopeQuery` instead — an encoded query with a {scope} token, e.g.
+    // "nameSTARTSWITH{scope}_" — which replaces the sys_scope filter outright.
+    if (typeof tableOptions.scopeQuery === "string" && tableOptions.scopeQuery !== "") {
+      recGR.addEncodedQuery(this.resolveScopeQuery(tableOptions.scopeQuery, scopeName, scopeId));
+    } else {
+      recGR.addQuery("sys_scope", scopeId);
+    }
+
+    // Flat tables (sys_choice, sys_dictionary) have no sys_class_name column; an
+    // addQuery on a column the table lacks is ignored by the platform, but guard it
+    // so the intent is explicit rather than relying on that leniency.
+    if (typeof recGR.isValidField !== "function" || recGR.isValidField("sys_class_name")) {
+      recGR.addQuery("sys_class_name", tableName);
+    }
 
     if (tableOptions.query !== undefined) {
       recGR.addEncodedQuery(tableOptions.query);
@@ -246,8 +292,50 @@ DovetailUtilsMS.prototype = {
     };
   },
 
+  // Render a `nameTemplate` table option ("{name}.{element}.{value}") against a
+  // record. Each {token} is the raw value of that field. An EMPTY token is dropped
+  // together with the literal that precedes it, so "{name}.{element}" on a
+  // sys_dictionary collection row (element empty) yields the bare table name
+  // rather than "table.". Returns "" when every token is empty.
+  renderNameTemplate: function (recGR, template) {
+    var pattern = /\{([A-Za-z0-9_]+)\}/g;
+    var out = "";
+    var lastIndex = 0;
+    var match = pattern.exec(template);
+
+    while (match !== null) {
+      var literal = template.substring(lastIndex, match.index);
+      var value = recGR.getValue(match[1]);
+
+      if (value !== null && value !== undefined && String(value) !== "") {
+        if (out !== "" || lastIndex === 0) {
+          out += literal;
+        }
+        out += String(value);
+      }
+
+      lastIndex = match.index + match[0].length;
+      match = pattern.exec(template);
+    }
+
+    if (out !== "") {
+      out += template.substring(lastIndex);
+    }
+
+    return out;
+  },
+
   generateRecordName: function (recGR, tableOptions) {
     var recordName = recGR.getDisplayValue() || recGR.getValue("sys_id");
+
+    // nameTemplate is explicit and wins over displayField / differentiatorField.
+    // Tables whose display value is not unique across a scope (sys_choice.label,
+    // sys_dictionary.column_label) name their records from the fields that ARE:
+    // "{name}.{element}.{value}" → x_cadso_automate_message_batch_recipient.last_status.delivered
+    if (typeof tableOptions.nameTemplate === "string" && tableOptions.nameTemplate !== "") {
+      var templated = this.renderNameTemplate(recGR, tableOptions.nameTemplate);
+      return (templated || recGR.getValue("sys_id")).replace(/[\/\\]/g, "〳");
+    }
 
     if (tableOptions.displayField !== undefined) {
       recordName = recGR.getElement(tableOptions.displayField).getDisplayValue();

@@ -355,13 +355,32 @@ module.exports = {
       // an encoded query to filter records by
       query: "some_field=test",
     },
+    // Platform-config tables whose rows carry NO sys_scope (sys_choice) can't be
+    // discovered or filtered per scope the normal way. `scopeQuery` replaces the
+    // sys_scope filter with an encoded query; `{scope}` is the app scope name and
+    // `{scopeId}` its sys_id. The table is then pulled for every scope.
+    sys_choice: {
+      scopeQuery: "nameSTARTSWITH{scope}_",
+      // Build the folder name from raw field values instead of the display value
+      // (`label` collides across tables and fields). An empty token is dropped
+      // together with the literal before it.
+      nameTemplate: "{name}.{element}.{value}",
+      query: "language=en",
+    },
+    // → src/<Scope>/sys_choice/x_cadso_automate_message_batch_recipient.last_status.delivered/
+    sys_dictionary: {
+      nameTemplate: "{name}.{element}", // collection rows (empty element) → bare table name
+      query: "nameSTARTSWITHx_cadso_",
+    },
   },
 };
 ```
 
+Tables with no script/html-typed field (`sys_choice`, `sys_dictionary`) also need explicit field-file overrides under `includes.<table>` — otherwise the server finds nothing to write and skips the table — and belong in `includes._readOnlyTables` unless you really want `dove push` writing schema. The full row always lands in `metaData.json`.
+
 **Note on differentiatorField**
 
-Folder names are sanitized before they hit disk — any character that is unsafe for the filesystem (e.g. a colon from `sys_id`) triggers an automatic fallback to the record's `sys_id`, so a differentiator value is never written verbatim into a path that would break Windows.
+Folder names are sanitized before they hit disk — any character that is unsafe for the filesystem (e.g. a colon from `sys_id`) triggers an automatic fallback to the record's `sys_id`, so a differentiator value is never written verbatim into a path that would break Windows. `nameTemplate` wins over `displayField`/`differentiatorField` when both are set, and the duplicate-name guard (sys_id suffix + warning) still runs after either.
 
 ## FAQ
 

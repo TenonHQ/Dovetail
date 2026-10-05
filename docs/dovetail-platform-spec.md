@@ -251,7 +251,9 @@ export namespace Sinc {
   interface ITableOptions {
     displayField?: string;
     differentiatorField?: string | string[];
-    query: string;
+    query?: string;
+    scopeQuery?: string;   // replaces the sys_scope filter; {scope} / {scopeId} tokens (scope-less tables, e.g. sys_choice)
+    nameTemplate?: string; // folder name from raw fields, e.g. "{name}.{element}.{value}"; empty tokens dropped
   }
 
   interface FieldConfig {
@@ -828,7 +830,12 @@ module.exports = {
       displayField: "name",
       differentiatorField: "sys_id",
       query: "active=true",
-    }
+    },
+    sys_choice: {                   // no sys_scope on its rows → scope by table-name prefix
+      scopeQuery: "nameSTARTSWITH{scope}_",
+      nameTemplate: "{name}.{element}.{value}",
+      query: "language=en",
+    },
   },
 
   scopes: {                         // Multi-scope support
