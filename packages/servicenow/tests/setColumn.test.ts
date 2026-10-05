@@ -23,6 +23,8 @@ function liveClient(opts: {
   parentTable?: string;
   /** The parent's dictionary row, when `parentTable` defines the column. */
   parentDict?: Record<string, string>;
+  /** Whether a column named by dependentOnField exists on the table. Default true. */
+  dependencyExists?: boolean;
 }) {
   var dict =
     opts.dict === undefined
@@ -79,6 +81,13 @@ function liveClient(opts: {
             query.indexOf("name=" + opts.parentTable) === 0
           ) {
             return opts.parentDict ? [opts.parentDict] : [];
+          }
+          // The dependent_on_field pre-flight looks up a DIFFERENT element on the table.
+          var depMatch = /\^element=(.+)$/.exec(query);
+          if (depMatch && depMatch[1] === "table") {
+            return opts.dependencyExists === false
+              ? []
+              : [{ sys_id: "DEPSYS", element: depMatch[1] }];
           }
           return dict ? [dict] : [];
         }
@@ -318,7 +327,90 @@ describe("setColumn dry-run", function () {
   });
 });
 
-describe("setColumn live", function () {
+describe("setColumn — dependent_on_field", function () {
+  it("maps dependentOnField to sys_dictionary.dependent_on_field, and \"\" clears it", function () {
+    expect(resolveAttributes({ dependentOnField: "table" })).toEqual({
+      dependent_on_field: "table",
+    });
+    expect(resolveAttributes({ dependentOnField: "" })).toEqual({
+      dependent_on_field: "",
+    });
+  });
+
+  it("writes the dependency and reads it back", async function () {
+    var client = liveClient({});
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { dependentOnField: "table" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+    expect(result.verified).toBe(true);
+    expect(result.changes).toEqual([
+      { attribute: "dependent_on_field", from: "", to: "table" },
+    ]);
+    expect(pushesOf(client)).toHaveLength(1);
+    expect(pushesOf(client)[0].fields).toEqual({ dependent_on_field: "table" });
+  });
+
+  it("refuses, before any write, a dependency on a column the table does not have — even on a dry-run", async function () {
+    var client = liveClient({ dependencyExists: false });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { dependentOnField: "table" },
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/dependent_on_field 'table' is not a column on 'x_t'/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("refuses a column that depends on itself, before touching the instance", async function () {
+    await expect(
+      setColumn({
+        client: liveClient({}),
+        table: "x_t",
+        column: "description",
+        attributes: { dependentOnField: "description" },
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/cannot depend on itself/);
+  });
+
+  it("clears a dependency with an empty string and skips the existence check", async function () {
+    var client = liveClient({
+      dict: {
+        sys_id: "COL1",
+        element: "description",
+        internal_type: "document_id",
+        column_label: "Record",
+        mandatory: "false",
+        default_value: "",
+        read_only: "false",
+        max_length: "32",
+        dependent_on_field: "table",
+      },
+      dependencyExists: false,
+    });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { dependentOnField: "" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+    expect(result.changes).toEqual([
+      { attribute: "dependent_on_field", from: "table", to: "" },
+    ]);
+  });
+});
+
+describe("setColumn — live", function () {
   it("writes only the attributes that actually differ", async function () {
     var client = liveClient({});
     var result = await setColumn({
@@ -647,6 +739,24 @@ describe("setColumn hostile inputs and awkward states", function () {
   // sys_documentation (see the "inherited columns" suite). MAX_LENGTH is the one genuine
   // exception, because it is the ancestor's physical column and has no override, and it
   // is what these two always actually exercised. Their names now say so.
+  it("refuses a dependent_on_field change on an inherited column — sys_dictionary_override has no such field", async function () {
+    var client = liveClient({
+      dict: null,
+      parentTable: "x_parent",
+      parentDict: { sys_id: "PCOL", element: "description" },
+    });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "description",
+        attributes: { dependentOnField: "table" },
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/INHERITED from 'x_parent'/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
   it("refuses a max_length change on an inherited column — it is the ancestor's physical column", async function () {
     var client = liveClient({
       dict: null, // nothing on the child

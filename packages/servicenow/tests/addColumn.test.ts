@@ -88,6 +88,15 @@ function liveClient(opts: {
   /** Pin the internal_type the read-back reports, to simulate an instance that
    *  stored a different type than was inserted. Default: echo the inserted type. */
   readBackType?: string;
+  /** Whether the column named by dependent_on_field exists on the table. Default true. */
+  dependencyExists?: boolean;
+  /** Simulate an insert that drops dependent_on_field: the read-back reports it only
+   *  once a pushWithUpdateSet write carries it. */
+  insertDropsDependent?: boolean;
+  /** Pin what the read-back reports for dependent_on_field no matter what is written. */
+  readBackDependent?: string;
+  /** dependent_on_field of the ALREADY-EXISTING column, for drift tests. */
+  existingDependent?: string;
 }): ServiceNowClient {
   // Deliberately NOT the table name — the scope assertion below must fail if
   // addColumn ever passes the table name where the resolved scope name belongs.
@@ -99,10 +108,12 @@ function liveClient(opts: {
     createRecordScope: string;
     createRecordFields: Record<string, unknown>;
     maxLengthWrites: Array<string>;
+    dependentWrites: Array<string>;
   } = {
     createRecordScope: "",
     createRecordFields: {},
     maxLengthWrites: [],
+    dependentWrites: [],
   };
   var c = {
     _calls: calls,
@@ -139,14 +150,36 @@ function liveClient(opts: {
                 : typeof insertedType === "string" && insertedType
                 ? insertedType
                 : "url";
+            // dependent_on_field: a healthy instance keeps what the insert carried, or
+            // what was last written; a sick one reports `readBackDependent` forever.
+            var insertedDependent = opts.insertDropsDependent
+              ? ""
+              : typeof calls.createRecordFields.dependent_on_field === "string"
+              ? String(calls.createRecordFields.dependent_on_field)
+              : "";
+            var writtenDependent = calls.dependentWrites.length
+              ? calls.dependentWrites[calls.dependentWrites.length - 1]
+              : insertedDependent;
+            var reportedDependent =
+              opts.readBackDependent === undefined
+                ? writtenDependent
+                : opts.readBackDependent;
             return [
               {
                 sys_id: "NEWSYS",
                 element: "url",
                 internal_type: reportedType,
                 max_length: reported,
+                dependent_on_field: reportedDependent,
               },
             ];
+          }
+          // The dependency pre-flight: any element other than the column under test.
+          var elementMatch = /\^element=(.+)$/.exec(query);
+          if (elementMatch && elementMatch[1] !== "url") {
+            return opts.dependencyExists === false
+              ? []
+              : [{ sys_id: "DEPSYS", element: elementMatch[1] }];
           }
           return opts.existing
             ? [
@@ -159,6 +192,10 @@ function liveClient(opts: {
                     opts.existingLength === undefined
                       ? ""
                       : opts.existingLength,
+                  dependent_on_field:
+                    opts.existingDependent === undefined
+                      ? ""
+                      : opts.existingDependent,
                 },
               ]
             : [];
@@ -188,6 +225,9 @@ function liveClient(opts: {
       }) {
         if (p && p.fields && p.fields.max_length !== undefined) {
           calls.maxLengthWrites.push(String(p.fields.max_length));
+        }
+        if (p && p.fields && p.fields.dependent_on_field !== undefined) {
+          calls.dependentWrites.push(String(p.fields.dependent_on_field));
         }
         return { sys_id: "" };
       },
@@ -528,6 +568,130 @@ describe("addColumn skip-path drift", function () {
     });
     expect(callsOf(client).maxLengthWrites).toEqual([]);
     expect(callsOf(client).createRecordFields).toEqual({});
+  });
+});
+
+describe("addColumn dependent_on_field", function () {
+  function callsOf(client: ServiceNowClient) {
+    return (
+      client as unknown as {
+        _calls: {
+          createRecordFields: Record<string, unknown>;
+          dependentWrites: Array<string>;
+        };
+      }
+    )._calls;
+  }
+  var documentId = {
+    label: "Record",
+    type: "document_id",
+    name: "url", // the stub's read-back element; the name itself is irrelevant here
+    dependent_on_field: "table",
+  };
+
+  it("names the dependency in the dry-run plan, touching no network", async function () {
+    var result = await addColumn({
+      client: noNetworkClient(),
+      table: "x_cadso_journey",
+      column: documentId,
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.note).toMatch(/dependent on column 'table'/);
+    expect(result.note).toMatch(/must already exist/);
+  });
+
+  it("refuses a column that depends on itself, before any network call", async function () {
+    await expect(
+      addColumn({
+        client: noNetworkClient(),
+        table: "x_cadso_journey",
+        column: { label: "Table", type: "table_name", name: "table", dependent_on_field: "table" },
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/cannot depend on itself/);
+  });
+
+  it("carries dependent_on_field on the insert and verifies it on the read-back", async function () {
+    var client = liveClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: documentId,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(result.verified).toBe(true);
+    expect(callsOf(client).createRecordFields.dependent_on_field).toBe("table");
+    // The insert carried it and the read-back agreed — no patch write was needed.
+    expect(callsOf(client).dependentWrites).toEqual([]);
+    expect(result.note).toMatch(/dependent on 'table'/);
+  });
+
+  it("refuses, writing nothing, when the dependency column does not exist on the table", async function () {
+    var client = liveClient({ dependencyExists: false });
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_journey",
+        column: documentId,
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/dependent_on_field 'table' is not a column on 'x_cadso_journey'/);
+    expect(callsOf(client).createRecordFields).toEqual({});
+  });
+
+  it("patches the dependency ONCE when the insert dropped it, then trusts the read-back", async function () {
+    var client = liveClient({ insertDropsDependent: true });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: documentId,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(result.verified).toBe(true);
+    expect(callsOf(client).dependentWrites).toEqual(["table"]);
+  });
+
+  it("fails loudly when the dependency never takes, rather than reporting a column that resolves against nothing", async function () {
+    var client = liveClient({ readBackDependent: "" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: documentId,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.verified).toBe(false);
+    expect(result.columnSysId).toBe("NEWSYS");
+    expect(result.note).toMatch(/dependent_on_field read back as \(empty\)/);
+  });
+
+  it("refuses to verify a skip when the existing column has a different dependency", async function () {
+    var client = liveClient({ existing: true, existingType: "document_id", existingDependent: "" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: documentId,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(false);
+    expect(result.note).toMatch(/dependent_on_field is \(empty\), not the requested 'table'/);
+    expect(callsOf(client).dependentWrites).toEqual([]);
+  });
+
+  it("verifies a skip when the existing column already carries the dependency", async function () {
+    var client = liveClient({ existing: true, existingType: "document_id", existingDependent: "table" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: documentId,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(true);
   });
 });
 

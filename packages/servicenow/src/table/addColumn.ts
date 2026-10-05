@@ -44,6 +44,30 @@ import { ColumnSpec, normalizeColumns } from "./buildTableSave";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
 
+/** Patch dependent_on_field on a sys_dictionary row, captured in the given update set. */
+async function setDependentOnField(
+  client: ServiceNowClient,
+  columnSysId: string,
+  updateSetSysId: string,
+  dependentOnField: string,
+): Promise<void> {
+  await client.claude.pushWithUpdateSet({
+    update_set_sys_id: updateSetSysId,
+    table: "sys_dictionary",
+    record_sys_id: columnSysId,
+    fields: { dependent_on_field: dependentOnField },
+  });
+}
+
+/** The sys_dictionary columns every read-back asks for. */
+var READ_BACK_FIELDS = [
+  "sys_id",
+  "element",
+  "internal_type",
+  "max_length",
+  "dependent_on_field",
+];
+
 /** Patch max_length on a sys_dictionary row, captured in the given update set. */
 async function setMaxLength(
   client: ServiceNowClient,
@@ -205,6 +229,19 @@ export async function addColumn(
   }
   var col = normalized[0];
   var element = deriveElement(col.label, params.column.name);
+  // The sibling column this one resolves against (document_id -> its table_name
+  // column). Read straight off the raw spec like mandatory/default; "" means none.
+  var wantDependent =
+    typeof params.column.dependent_on_field === "string"
+      ? params.column.dependent_on_field.trim()
+      : "";
+  if (wantDependent === element) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' names the column being added — a column cannot depend on itself.",
+    );
+  }
 
   if (params.dryRun) {
     return {
@@ -226,6 +263,11 @@ export async function addColumn(
         params.table +
         "' via a scope-aware sys_dictionary insert, captured into update set " +
         (params.updateSetSysId ? params.updateSetSysId : "(none provided)") +
+        (wantDependent
+          ? ", dependent on column '" +
+            wantDependent +
+            "' (which must already exist on the table)"
+          : "") +
         ", then read it back.",
     };
   }
@@ -274,6 +316,29 @@ export async function addColumn(
   // Reference (and date) columns carry no max_length at all.
   var wantLength = col.type === "reference" ? "" : col.maxLength;
 
+  // The dependency target must EXIST on this table before the insert. ServiceNow
+  // accepts any string in dependent_on_field without checking it, so a typo would
+  // land silently and every document_id on the table would resolve against nothing.
+  // Only the table's OWN dictionary rows are searched — a dependency on an inherited
+  // column is not supported here; add it on the defining table instead.
+  if (wantDependent) {
+    var dependencyRows = await client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "name=" + resolved.name + "^element=" + wantDependent,
+      { limit: 1, fields: ["sys_id", "element"] },
+    );
+    if (dependencyRows.length === 0) {
+      throw new Error(
+        "add-column: dependent_on_field '" +
+          wantDependent +
+          "' is not a column on '" +
+          resolved.name +
+          "' (its own sys_dictionary rows were searched; inherited columns are not " +
+          "considered). Add that column first, then re-run. Nothing was written.",
+      );
+    }
+  }
+
   // Idempotency: if the column already exists, skip the insert (never duplicate a
   // dictionary row on a re-run). Matched by name+element — the element IS the column's
   // identity; a label is not unique, so matching on one would silently skip a genuinely
@@ -281,13 +346,14 @@ export async function addColumn(
   var existing = await client.table.query<Record<string, unknown>>(
     "sys_dictionary",
     "name=" + resolved.name + "^element=" + element,
-    { limit: 1, fields: ["sys_id", "element", "internal_type", "max_length"] },
+    { limit: 1, fields: READ_BACK_FIELDS },
   );
   if (existing.length > 0) {
     var existingSysId = fieldToString(existing[0].sys_id);
     var existingElement = fieldToString(existing[0].element) || element;
     var existingType = fieldToString(existing[0].internal_type);
     var existingLength = fieldToString(existing[0].max_length);
+    var existingDependent = fieldToString(existing[0].dependent_on_field);
     // "Already there" is not the same as "already what you asked for". Report the column
     // that EXISTS, not the one that was requested, and refuse to call a mismatched column
     // verified — silently green-lighting a column of the wrong type or size is the same
@@ -307,6 +373,15 @@ export async function addColumn(
           (existingLength ? existingLength : "(empty)") +
           ", not the requested " +
           wantLength,
+      );
+    }
+    if (wantDependent && existingDependent !== wantDependent) {
+      drift.push(
+        "dependent_on_field is " +
+          (existingDependent ? "'" + existingDependent + "'" : "(empty)") +
+          ", not the requested '" +
+          wantDependent +
+          "'",
       );
     }
     return {
@@ -354,6 +429,10 @@ export async function addColumn(
   };
   // Reference columns carry the target table NAME (not a sys_id) in `reference`.
   if (col.reference) fields.reference = col.reference;
+  // A plain dictionary-row field (unlike max_length it has no physical side), so it
+  // rides on the insert; the read-back below still proves it stuck, and patches it
+  // once if the insert dropped it.
+  if (wantDependent) fields.dependent_on_field = wantDependent;
 
   var created: { sys_id: string; [k: string]: unknown } | undefined;
   try {
@@ -404,10 +483,7 @@ export async function addColumn(
     rows = await client.table.query<Record<string, unknown>>(
       "sys_dictionary",
       "sys_id=" + columnSysId,
-      {
-        limit: 1,
-        fields: ["sys_id", "element", "internal_type", "max_length"],
-      },
+      { limit: 1, fields: READ_BACK_FIELDS },
     );
     if (rows.length > 0 && wantLength) {
       var builtLength = fieldToString(rows[0].max_length);
@@ -421,10 +497,26 @@ export async function addColumn(
         rows = await client.table.query<Record<string, unknown>>(
           "sys_dictionary",
           "sys_id=" + columnSysId,
-          {
-            limit: 1,
-            fields: ["sys_id", "element", "internal_type", "max_length"],
-          },
+          { limit: 1, fields: READ_BACK_FIELDS },
+        );
+      }
+    }
+    // The dependency rode on the insert. If the row reads back without it, patch it
+    // ONCE as an update (the same trust-the-read-back rule as max_length), then let
+    // the final read-back decide — never assume the patch took either.
+    if (rows.length > 0 && wantDependent) {
+      var landedDependent = fieldToString(rows[0].dependent_on_field);
+      if (landedDependent !== wantDependent) {
+        await setDependentOnField(
+          client,
+          columnSysId,
+          params.updateSetSysId,
+          wantDependent,
+        );
+        rows = await client.table.query<Record<string, unknown>>(
+          "sys_dictionary",
+          "sys_id=" + columnSysId,
+          { limit: 1, fields: READ_BACK_FIELDS },
         );
       }
     }
@@ -452,6 +544,9 @@ export async function addColumn(
   var actualElement = verified ? fieldToString(rows[0].element) : element;
   var readBackType = verified ? fieldToString(rows[0].internal_type) : "";
   var readBackLength = verified ? fieldToString(rows[0].max_length) : "";
+  var readBackDependent = verified
+    ? fieldToString(rows[0].dependent_on_field)
+    : "";
 
   if (verified && wantLength && readBackLength !== wantLength) {
     return failure(
@@ -468,6 +563,24 @@ export async function addColumn(
         "' — the physical column is NOT the size it was declared, so values over the " +
         "real limit would be silently truncated. Fix the column on the instance before " +
         "writing to it.",
+      columnSysId,
+    );
+  }
+
+  if (verified && wantDependent && readBackDependent !== wantDependent) {
+    return failure(
+      resolved,
+      col,
+      element,
+      params.updateSetSysId,
+      "column '" +
+        actualElement +
+        "' materialised but dependent_on_field read back as " +
+        (readBackDependent ? "'" + readBackDependent + "'" : "(empty)") +
+        ", not the requested '" +
+        wantDependent +
+        "' — a document_id with no dependency resolves against nothing. Set it on " +
+        "the instance (set-column --dependent-on-field) before writing to the column.",
       columnSysId,
     );
   }
@@ -515,6 +628,7 @@ export async function addColumn(
     col.type +
     ") to " +
     resolved.name +
+    (wantDependent ? ", dependent on '" + wantDependent + "'" : "") +
     " — verified present in sys_dictionary, captured into update set " +
     params.updateSetSysId +
     (actualElement !== element

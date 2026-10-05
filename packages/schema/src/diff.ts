@@ -86,6 +86,19 @@ function diffField(options: {
     });
   }
 
+  // The column a document_id resolves against. Repointing it changes what every
+  // stored sys_id means; clearing it leaves the values unresolvable from the row alone.
+  if (from.dependent_on_field !== to.dependent_on_field) {
+    changes.push({
+      table,
+      field,
+      change: "dependency_changed",
+      severity: "WARN",
+      from: from.dependent_on_field,
+      to: to.dependent_on_field,
+    });
+  }
+
   if (from.label !== to.label) {
     changes.push({
       table,
@@ -222,6 +235,7 @@ const FIELD_CHANGE_LABEL: { [k: string]: string } = {
   now_optional: "now optional",
   retargeted: "reference retargeted",
   default_changed: "default changed",
+  dependency_changed: "dependency changed",
   label_changed: "label changed",
 };
 

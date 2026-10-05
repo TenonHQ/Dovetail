@@ -373,6 +373,9 @@ export var columnSpecSchema = z.object({
   reference: z.string().optional(),
   mandatory: z.boolean().optional(),
   default: z.string().optional(),
+  // add_column only — the sibling column a document_id resolves against. Must already
+  // exist on the table. Ignored by create_table's form path.
+  dependent_on_field: z.string().optional(),
 });
 
 export var createTableSchema = z.object({
@@ -459,6 +462,8 @@ export var columnAttributesSchema = z.object({
   default: z.string().optional(),
   readOnly: z.boolean().optional(),
   maxLength: z.number().int().positive().optional(),
+  // sys_dictionary.dependent_on_field; "" clears it. Must name a column on the table.
+  dependentOnField: z.string().optional(),
   // Present so a caller can express them and be told WHY they are impossible, rather
   // than having them silently dropped. setColumn refuses both.
   internalType: z.string().optional(),

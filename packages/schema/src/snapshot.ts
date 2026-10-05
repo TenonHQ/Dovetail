@@ -44,6 +44,7 @@ export function normalizeField(raw: any): NormalizedField {
     mandatory: coerceMandatory(raw.mandatory),
     reference: coerceValue(raw.reference),
     default_value: coerceValue(raw.default_value),
+    dependent_on_field: coerceValue(raw.dependent_on_field),
   };
 }
 

@@ -46,13 +46,15 @@ Defaults: `--from` = newest snapshot for the current instance, `--to` = `live`.
 | Change | Severity |
 |---|---|
 | Table removed · field removed · field retyped · `max_length` shrunk · field newly mandatory · reference retargeted | **BREAKING** (exit 1) |
-| `default_value` changed | **WARN** |
+| `default_value` changed · `dependent_on_field` set / repointed / cleared | **WARN** |
 | Table/field added · `max_length` grew · field now optional · label changed | **INFO** |
 
 The diff is **structured** (not textual) and immune to format noise: `type` and
 `reference` are coerced from either a string or a legacy `{link,value}` object,
-and `inherited_from` / `created_at` / `generated_at` are ignored. This lets an
-older object-shaped baseline diff cleanly against a current string-shaped pull.
+and `inherited_from` / `created_at` / `generated_at` are ignored. A baseline that
+predates `dependent_on_field` reads as `""` for it, so only a column that really
+gained, lost, or repointed a dependency is reported. This lets an older
+object-shaped baseline diff cleanly against a current string-shaped pull.
 
 ```
 $ dove schema diff --from ./Tables --to live --scope x_cadso_journey
@@ -210,10 +212,25 @@ Each table JSON file contains:
       "reference": "",
       "default_value": "",
       "inherited_from": "task"
+    },
+    {
+      "name": "document_id",
+      "label": "Record",
+      "type": "document_id",
+      "max_length": "32",
+      "mandatory": false,
+      "reference": "",
+      "default_value": "",
+      "inherited_from": null,
+      "dependent_on_field": "table"
     }
   ]
 }
 ```
+
+`dependent_on_field` (sys_dictionary's column of the same name — the sibling a
+`document_id` column resolves against) is emitted **only when set**, so tables with
+no dependent columns dump byte-for-byte as before.
 
 ## Index Format
 

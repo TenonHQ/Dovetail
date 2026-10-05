@@ -89,14 +89,51 @@ export var OVERRIDABLE: Record<string, OverridableAttribute> = {
  * child, and what that means for the caller.
  *
  * Deliberately max_length-specific rather than a general "attribute X is not
- * overridable" helper: of the five, the other four ARE overridable, so a generic branch
- * would be unreachable code speculating about a case that does not exist. If a sixth
- * attribute is ever added to WRITABLE, this needs revisiting — which a dead generic
- * branch would have quietly hidden.
+ * overridable" helper: of the original five, the other four ARE overridable, so a
+ * generic branch would be unreachable code speculating about a case that does not
+ * exist. The sixth attribute, dependent_on_field, arrived and got its own explainer
+ * above rather than a generic one — same reasoning.
  *
  * Unlike the old blanket refusal this one is true, and it says WHY rather than
  * recommending the destructive alternative as though it were routine.
  */
+/**
+ * The sixth attribute that comment warned about. dependent_on_field is a plain
+ * dictionary-row field on the DEFINING table and sys_dictionary_override has no column
+ * for it, so — like max_length — it cannot be narrowed for one child. Unlike max_length
+ * it is not physical: setting it on the defining table repoints every descendant's
+ * document_id resolution, but moves no data.
+ */
+export function explainDependentOnFieldNotOverridable(
+  table: string,
+  column: string,
+  definedOn: string,
+): string {
+  return (
+    "set-column: refusing to change dependent_on_field of '" +
+    column +
+    "' on '" +
+    table +
+    "' — the column is INHERITED from '" +
+    definedOn +
+    "' and sys_dictionary_override carries no dependent_on_field, so there is no way " +
+    "to set it for '" +
+    table +
+    "' alone. Setting it on '" +
+    definedOn +
+    "' changes what '" +
+    column +
+    "' resolves against on EVERY table that extends '" +
+    definedOn +
+    "'; do that deliberately, with --table " +
+    definedOn +
+    ", if that is what you want. The other attributes (label, mandatory, default, " +
+    "readOnly) CAN be set on '" +
+    table +
+    "' alone."
+  );
+}
+
 export function explainMaxLengthNotOverridable(
   table: string,
   column: string,

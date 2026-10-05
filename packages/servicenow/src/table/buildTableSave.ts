@@ -20,6 +20,13 @@ export interface ColumnSpec {
   mandatory?: boolean;
   /** Default value for the column (add-column). Ignored by the create-table form path. */
   default?: string;
+  /**
+   * sys_dictionary.dependent_on_field — the sibling column this one resolves against
+   * (a `document_id` column depends on its `table_name` column). add-column only;
+   * ignored by the create-table form path. The named column must already exist on
+   * the table — add it first.
+   */
+  dependent_on_field?: string;
 }
 
 /**
