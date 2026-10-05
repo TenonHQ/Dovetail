@@ -168,6 +168,7 @@ export type {
   AddChoicesParams,
   AddChoicesResult,
   ChoiceActionResult,
+  ChoiceFieldRef,
   RemoveChoicesParams,
   RemoveChoicesResult,
   ChoiceRemovalResult,

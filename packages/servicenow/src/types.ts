@@ -60,6 +60,29 @@ export interface AddChoicesParams {
   updateSetSysId: string;
   /** sys_dictionary.choice setting. Defaults to 3 (dropdown). Pass null to leave dictionary alone. */
   choiceType?: ChoiceType | null;
+  /**
+   * Plan only. Every read still happens (the field, the update set and the existing rows
+   * are all verified), but NO write is sent — each row reports the action that WOULD be
+   * taken ("would-create" / "would-update") and the envelope carries `dryRun: true`.
+   */
+  dryRun?: boolean;
+}
+
+/**
+ * The field a choices verb acted on. One shape on BOTH `AddChoicesResult` and
+ * `RemoveChoicesResult`, so a consumer formatting either never special-cases per verb.
+ */
+export interface ChoiceFieldRef {
+  table: string;
+  column: string;
+  /**
+   * remove: the language the lookup was scoped to. add: the default applied to any
+   * choice that omits `language` (individual choices may carry their own).
+   */
+  language: string;
+  /** sys_scope sys_id of the sys_dictionary record — the scope every sys_choice row inherits. */
+  scope: string;
+  dictionarySysId: string;
 }
 
 export interface DictionaryRecord {
@@ -100,13 +123,24 @@ export interface ChoiceActionResult {
    * this", not as a state addChoicesToField can return.
    */
   sysIds?: Array<string>;
-  action: "created" | "updated" | "unchanged";
+  /**
+   * created / updated / unchanged — what happened on the live path.
+   * would-create / would-update — what a dryRun WOULD have done; nothing was written.
+   * "unchanged" is the same in both modes (nothing to write either way). The dry-run
+   * verbs are deliberately distinct values rather than a flag beside "created", so a
+   * consumer reading a planned row can never mistake it for a landed one.
+   */
+  action: "created" | "updated" | "unchanged" | "would-create" | "would-update";
 }
 
 export interface AddChoicesResult {
+  /** Same shape as RemoveChoicesResult.field — see ChoiceFieldRef. */
+  field: ChoiceFieldRef;
+  /**
+   * Add-only: the sys_dictionary.choice transition. Equal when no flip was needed (or
+   * choiceType was null). Under dryRun, `choiceNow` is the value that WOULD be written.
+   */
   dictionary: {
-    sysId: string;
-    scope: string;
     choiceWas: ChoiceType;
     choiceNow: ChoiceType;
   };
@@ -114,6 +148,8 @@ export interface AddChoicesResult {
     sysId: string;
     name: string;
   };
+  /** True when every write was planned and none performed. */
+  dryRun: boolean;
   choices: Array<ChoiceActionResult>;
 }
 
@@ -128,6 +164,11 @@ export interface RemoveChoicesParams {
   language?: string;
   /** Update set sys_id that will capture every write. Required — no default. */
   updateSetSysId: string;
+  /**
+   * Plan only. Every read still happens, but NO write is sent — each live row reports
+   * "would-deactivate" and the envelope carries `dryRun: true`.
+   */
+  dryRun?: boolean;
 }
 
 export interface ChoiceRemovalResult {
@@ -151,24 +192,31 @@ export interface ChoiceRemovalResult {
    */
   sysIds: Array<string>;
   /**
-   * deactivated — was active, now inactive=true.
-   * unchanged   — already inactive; nothing written (idempotent).
-   * missing     — no such value on this field.language; nothing written.
+   * deactivated      — was active, now inactive=true.
+   * unchanged        — already inactive; nothing written (idempotent).
+   * missing          — no such value on this field.language; nothing written.
+   * would-deactivate — dryRun: a live row exists and WOULD be flipped; nothing written.
    */
-  action: "deactivated" | "unchanged" | "missing";
+  action: "deactivated" | "unchanged" | "missing" | "would-deactivate";
+  /**
+   * Only on "missing": values that DO exist on this field.language and differ from the
+   * requested one by letter case alone (e.g. request "DELIVERED", field holds
+   * "delivered"). Matching stays strictly case-sensitive — ServiceNow choice values are —
+   * so this is a hint, never a substitute: a genuinely absent value has no nearMatches,
+   * and a value with an exact match is never reported here at all.
+   */
+  nearMatches?: Array<string>;
 }
 
 export interface RemoveChoicesResult {
-  field: {
-    table: string;
-    column: string;
-    language: string;
-    dictionarySysId: string;
-  };
+  /** Same shape as AddChoicesResult.field — see ChoiceFieldRef. */
+  field: ChoiceFieldRef;
   updateSet: {
     sysId: string;
     name: string;
   };
+  /** True when every write was planned and none performed. */
+  dryRun: boolean;
   choices: Array<ChoiceRemovalResult>;
 }
 

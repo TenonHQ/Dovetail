@@ -127,7 +127,18 @@ npx dove-sn remove-choices \
   --column state \
   --update-set 0083c3bb33d003507b18bc534d5c7b6d \
   --values "expired,failed"
+
+# Preview either verb — reads happen, NOTHING is written
+npx dove-sn add-choices    --table ... --column ... --update-set ... --choices "..." --dry-run
+npx dove-sn remove-choices --table ... --column ... --update-set ... --values  "..." --dry-run
 ```
+
+`--dry-run` still resolves the field and the update set (so a mistyped column or a
+closed update set fails exactly as it would live), then reports what the live run
+would do without sending a single write. Rows are tagged `[would create]` /
+`[would update]` / `[would deactivate]` — never `[created]` — and the header reads
+`(DRY RUN — nothing written)`. The `--json` result carries `dryRun: true` and the
+same `would-*` action values.
 
 JSON payload shape:
 
@@ -154,6 +165,14 @@ place of `choices`.
   left alone — retiring values does not un-make the column a choice field.
 - **Idempotent.** `deactivated` (a live row was flipped) / `unchanged` (already
   inactive) / `missing` (no such value on the field). Re-running writes nothing.
+- **Case-sensitive, with a hint.** `sys_choice.value` is case-sensitive, so
+  `--values DELIVERED` does **not** match a stored `delivered` — it reports
+  `missing`. When the field holds the same spelling in a different case, the row
+  carries `nearMatches` (the stored spelling(s)) and the CLI prints
+  `[missing] DELIVERED — no exact match; did you mean "delivered"? (choice values are case-sensitive)`.
+  Matching is never case-folded: a field holding both `delivered` and
+  `Delivered` treats them as two distinct values, and a request for either one
+  touches only its own row.
 - **Duplicates.** `sys_choice` has no uniqueness constraint on
   `(name, element, value, language)`, so a field can hold several live rows for
   one value. Every live row is deactivated, and `sysIds` lists all of them — a
@@ -181,8 +200,8 @@ var result = await addChoicesToField(client, { /* ... */ });
 
 console.log(result.choices);
 // [
-//   { value: "delivered", label: "Delivered", sysId: "...", action: "created" },
-//   { value: "failed",    label: "Failed",    sysId: "...", action: "created" }
+//   { value: "delivered", label: "Delivered", sysId: "...", sysIds: ["..."], action: "created" },
+//   { value: "failed",    label: "Failed",    sysId: "...", sysIds: ["..."], action: "created" }
 // ]
 
 var removed = await removeChoicesFromField(client, {
@@ -192,7 +211,47 @@ var removed = await removeChoicesFromField(client, {
   values: ["expired"],
 });
 // removed.choices[0] -> { value: "expired", sysId: "...", sysIds: ["..."], action: "deactivated" }
+
+// Plan without writing — identical reads, zero writes, `would-*` actions
+var plan = await addChoicesToField(client, { /* ... */ dryRun: true });
+// plan.dryRun -> true;  plan.choices[0].action -> "would-create" | "would-update" | "unchanged"
 ```
+
+### Result shape
+
+Both verbs return the **same `field` envelope**, so one consumer can format either:
+
+```ts
+interface ChoiceFieldRef {
+  table: string;
+  column: string;
+  language: string;        // remove: the language matched; add: the default for choices without one
+  scope: string;           // sys_scope sys_id of the dictionary record
+  dictionarySysId: string;
+}
+
+interface AddChoicesResult {
+  field: ChoiceFieldRef;
+  dictionary: { choiceWas: ChoiceType; choiceNow: ChoiceType };  // add-only transition
+  updateSet: { sysId: string; name: string };
+  dryRun: boolean;
+  choices: Array<ChoiceActionResult>;    // action: created | updated | unchanged | would-create | would-update
+}
+
+interface RemoveChoicesResult {
+  field: ChoiceFieldRef;
+  updateSet: { sysId: string; name: string };
+  dryRun: boolean;
+  choices: Array<ChoiceRemovalResult>;   // action: deactivated | unchanged | missing | would-deactivate
+}                                        // + nearMatches?: string[] on a case-only "missing"
+```
+
+> **Breaking change (0.0.x).** Earlier releases returned
+> `AddChoicesResult.dictionary: { sysId, scope, choiceWas, choiceNow }` and a
+> `RemoveChoicesResult.field` without `scope`. The dictionary sys_id now lives at
+> `field.dictionarySysId` on both verbs and `scope` at `field.scope`;
+> `dictionary` keeps only the choice-type transition. Consumers reading
+> `result.dictionary.sysId` or `result.dictionary.scope` must move to `result.field`.
 
 Both verbs write one value at a time. If a write fails partway through they
 throw a **`ChoiceWriteError`** carrying `completed` (the values that already

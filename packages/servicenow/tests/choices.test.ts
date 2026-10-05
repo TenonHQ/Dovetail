@@ -248,6 +248,109 @@ describe("addChoicesToField", function () {
     expect(ctx.calls.createRecord[0].fields.label).toBe("New Label");
     expect(result.choices).toHaveLength(1);
   });
+
+  it("dryRun plans every write and sends NONE — would-create / would-update, never created (#296)", async function () {
+    var ctx = makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [dictRow]; // choice "0" -> a flip is due
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_choice") {
+          return [
+            { sys_id: "ch1", value: "delivered", label: "OLD", sequence: "", language: "en", inactive: "false" },
+            { sys_id: "ch2", value: "same", label: "Same", sequence: "", language: "en", inactive: "false" }
+          ];
+        }
+        return [];
+      }
+    });
+
+    var result = await addChoicesToField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      updateSetSysId: "us1",
+      dryRun: true,
+      choices: [
+        { value: "delivered", label: "Delivered" }, // exists, label differs -> would-update
+        { value: "same", label: "Same" }, // exists, identical -> unchanged
+        { value: "failed", label: "Failed" } // absent -> would-create
+      ]
+    });
+
+    // Zero HTTP writes of any kind: no create, no push (not even the dictionary flip).
+    expect(ctx.calls.createRecord).toHaveLength(0);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+    expect(ctx.calls.deleteRecord).toHaveLength(0);
+    // ...but the reads still happened, so the field / update set were verified.
+    expect(ctx.calls.tableQuery.map(function (q) { return q.table; })).toEqual(
+      expect.arrayContaining(["sys_dictionary", "sys_update_set", "sys_choice"])
+    );
+
+    expect(result.dryRun).toBe(true);
+    expect(result.choices.map(function (c) { return c.action; })).toEqual([
+      "would-update",
+      "unchanged",
+      "would-create"
+    ]);
+    // A planned row must never read as a landed one.
+    result.choices.forEach(function (c) {
+      expect(c.action).not.toBe("created");
+      expect(c.action).not.toBe("updated");
+    });
+    // The planned create has no row yet, so no sys_id; the planned update points at
+    // the existing row it would touch.
+    expect(result.choices[2].sysId).toBe("");
+    expect(result.choices[2].sysIds).toEqual([]);
+    expect(result.choices[0].sysIds).toEqual(["ch1"]);
+    // The dictionary flip is reported as what WOULD happen.
+    expect(result.dictionary.choiceWas).toBe(0);
+    expect(result.dictionary.choiceNow).toBe(3);
+  });
+
+  it("dryRun still fails loudly on a missing field — a plan against nothing is not a plan", async function () {
+    var ctx = makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [];
+        if (table === "sys_update_set") return [updateSetRow];
+        return [];
+      }
+    });
+
+    await expect(
+      addChoicesToField(ctx.client, {
+        table: "bogus",
+        column: "column",
+        updateSetSysId: "us1",
+        dryRun: true,
+        choices: [{ value: "x", label: "X" }]
+      })
+    ).rejects.toThrow(/sys_dictionary record not found/);
+    expect(ctx.calls.createRecord).toHaveLength(0);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
+  it("the live path is unchanged when dryRun is omitted — result.dryRun is false", async function () {
+    var ctx = makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [{ ...dictRow, choice: "3" }];
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_choice") return [];
+        return [];
+      }
+    });
+
+    var result = await addChoicesToField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      updateSetSysId: "us1",
+      choices: [{ value: "failed", label: "Failed" }]
+    });
+
+    expect(result.dryRun).toBe(false);
+    expect(result.choices[0].action).toBe("created");
+    expect(ctx.calls.createRecord).toHaveLength(1);
+  });
 });
 
 describe("removeChoicesFromField", function () {
@@ -662,6 +765,160 @@ describe("removeChoicesFromField", function () {
 
     expect(result.choices[0].action).toBe("deactivated");
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+  });
+
+  it("dryRun plans the soft-delete and sends NO write — would-deactivate, never deactivated (#296)", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "live", label: "Live", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "ch2", value: "live", label: "Live", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "ch3", value: "off", label: "Off", sequence: "", language: "en", inactive: "true" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["live", "off", "nope"],
+      updateSetSysId: "us1",
+      dryRun: true
+    });
+
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+    expect(ctx.calls.createRecord).toHaveLength(0);
+    expect(ctx.calls.deleteRecord).toHaveLength(0);
+    expect(result.dryRun).toBe(true);
+    expect(result.choices.map(function (c) { return c.action; })).toEqual([
+      "would-deactivate",
+      "unchanged",
+      "missing"
+    ]);
+    // Both live duplicates are named, so the reader can see what the real run touches.
+    expect(result.choices[0].sysIds).toEqual(["ch1", "ch2"]);
+  });
+
+  it("flags a case-only mismatch as a hint on 'missing' instead of a bare 'missing' (#253)", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "ch1", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["DELIVERED"],
+      updateSetSysId: "us1"
+    });
+
+    // Strict matching holds: nothing is written, the value IS missing...
+    expect(result.choices[0].action).toBe("missing");
+    expect(result.choices[0].sysIds).toEqual([]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+    // ...but the caller is told the stored spelling so the typo is not mistaken for absence.
+    expect(result.choices[0].nearMatches).toEqual(["delivered"]);
+  });
+
+  it("the near-match hint never masks a real exact match — two values differing only in case", async function () {
+    // The field legitimately holds BOTH "delivered" and "Delivered" (sys_choice is
+    // case-sensitive, so these are two distinct choices). Acting on "Delivered" must
+    // touch exactly that row and nothing else; "DELIVERED" matches neither exactly.
+    var ctx = clientWithChoices([
+      { sys_id: "lower", value: "delivered", label: "Delivered (lower)", sequence: "", language: "en", inactive: "false" },
+      { sys_id: "title", value: "Delivered", label: "Delivered (title)", sequence: "", language: "en", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["Delivered", "DELIVERED", "gone"],
+      updateSetSysId: "us1"
+    });
+
+    // Exact match wins outright: deactivated, only its own row, no hint attached.
+    expect(result.choices[0].action).toBe("deactivated");
+    expect(result.choices[0].sysIds).toEqual(["title"]);
+    expect(result.choices[0].nearMatches).toBeUndefined();
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(1);
+    expect(ctx.calls.pushWithUpdateSet[0].record_sys_id).toBe("title");
+    // No exact match: missing, with BOTH stored spellings offered as the hint.
+    expect(result.choices[1].action).toBe("missing");
+    expect(result.choices[1].sysIds).toEqual([]);
+    expect(result.choices[1].nearMatches).toEqual(["delivered", "Delivered"]);
+    // Genuinely absent: missing with no hint at all — the two outcomes stay distinct.
+    expect(result.choices[2].action).toBe("missing");
+    expect(result.choices[2].nearMatches).toBeUndefined();
+  });
+
+  it("the near-match hint respects language — a differently-cased 'fr' row is not offered for an 'en' lookup", async function () {
+    var ctx = clientWithChoices([
+      { sys_id: "fr1", value: "delivered", label: "Livré", sequence: "", language: "fr", inactive: "false" }
+    ]);
+
+    var result = await removeChoicesFromField(ctx.client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["DELIVERED"],
+      updateSetSysId: "us1"
+    });
+
+    expect(result.choices[0].action).toBe("missing");
+    expect(result.choices[0].nearMatches).toBeUndefined();
+  });
+});
+
+describe("choices result envelopes — add and remove share one field block (#253)", function () {
+  var dictRow = {
+    sys_id: "dict1",
+    name: "x_cadso_core_event",
+    element: "state",
+    choice: "3",
+    sys_scope: "scope_core"
+  };
+  var updateSetRow = {
+    sys_id: "us1",
+    name: "Tenon - Core - Sinch DLR Tables",
+    state: "in progress",
+    application: "scope_core"
+  };
+  function client() {
+    return makeClient({
+      query: async function (table: string, _query?: string) {
+        if (table === "sys_dictionary") return [dictRow];
+        if (table === "sys_update_set") return [updateSetRow];
+        if (table === "sys_scope") return [{ sys_id: "scope_core", scope: "x_cadso_core", name: "x_cadso_core" }];
+        if (table === "sys_choice") return [];
+        return [];
+      }
+    });
+  }
+
+  it("both verbs return the same `field` keys with the same values", async function () {
+    var added = await addChoicesToField(client().client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      updateSetSysId: "us1",
+      choices: [{ value: "a", label: "A" }]
+    });
+    var removed = await removeChoicesFromField(client().client, {
+      table: "x_cadso_core_event",
+      column: "state",
+      values: ["a"],
+      updateSetSysId: "us1"
+    });
+
+    var expected = {
+      table: "x_cadso_core_event",
+      column: "state",
+      language: "en",
+      scope: "scope_core",
+      dictionarySysId: "dict1"
+    };
+    expect(added.field).toEqual(expected);
+    expect(removed.field).toEqual(expected);
+    expect(Object.keys(added.field).sort()).toEqual(Object.keys(removed.field).sort());
+    // The add-only dictionary transition lives beside `field`, not inside it.
+    expect(added.dictionary).toEqual({ choiceWas: 3, choiceNow: 3 });
+    expect(Object.keys(added.dictionary).sort()).toEqual(["choiceNow", "choiceWas"]);
+    // Both carry the dryRun flag, false on the live path.
+    expect(added.dryRun).toBe(false);
+    expect(removed.dryRun).toBe(false);
   });
 });
 

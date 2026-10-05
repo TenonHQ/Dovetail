@@ -204,7 +204,10 @@ export function buildDescriptors(
       description:
         "Upsert sys_choice values for a ServiceNow table.column and (optionally) flip " +
         "sys_dictionary.choice so the field renders as a dropdown. Idempotent. Writes are " +
-        "captured in the supplied update set.",
+        "captured in the supplied update set. dryRun:true verifies the field + update set " +
+        "and reports each row as would-create / would-update / unchanged with NO write sent " +
+        "(result.dryRun is true). Result envelope: field {table, column, language, scope, " +
+        "dictionarySysId}, dictionary {choiceWas, choiceNow}, updateSet, dryRun, choices[].",
       shape: addChoicesToFieldSchema.shape,
       handler: async function (args: any) {
         return addChoicesToField(client(), addChoicesToFieldSchema.parse(args));
@@ -223,8 +226,13 @@ export function buildDescriptors(
         "alone. Matching is scoped by LANGUAGE (defaults to 'en'), so a value that exists only " +
         "in another language reports 'missing' and is left untouched — pass `language` to target " +
         "it. Matching is also scoped to this table, so a choice INHERITED from a parent table " +
-        "reports 'missing' rather than being deactivated. Writes are captured in the supplied " +
-        "update set.",
+        "reports 'missing' rather than being deactivated. Matching is CASE-SENSITIVE (choice " +
+        "values are); a 'missing' row whose value exists on the field in a different case " +
+        "carries nearMatches with the stored spelling(s). dryRun:true verifies the field + " +
+        "update set and reports each live row as would-deactivate with NO write sent " +
+        "(result.dryRun is true). Writes are captured in the supplied update set. Result " +
+        "envelope: field {table, column, language, scope, dictionarySysId}, updateSet, dryRun, " +
+        "choices[].",
       shape: removeChoicesFromFieldSchema.shape,
       handler: async function (args: any) {
         return removeChoicesFromField(

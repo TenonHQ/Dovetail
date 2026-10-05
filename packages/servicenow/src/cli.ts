@@ -220,6 +220,11 @@ async function runAddChoices(
     return 1;
   }
   var params = paramsFromFlags(flags);
+  // The flag is parsed for every verb; this verb used to drop it on the floor and WRITE
+  // (#296). Threading it here is what makes --dry-run a real plan, not a label.
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
   var client = createClient({});
   var result = await addChoicesToField(client, params);
   if (flags.json === "true") {
@@ -295,6 +300,9 @@ async function runRemoveChoices(
     return 1;
   }
   var params = removeParamsFromFlags(flags);
+  if (flags["dry-run"] === "true") {
+    params.dryRun = true;
+  }
   var client = createClient({});
   var result = await removeChoicesFromField(client, params);
   if (flags.json === "true") {
@@ -1429,9 +1437,14 @@ function printHelp(): void {
     "dove-sn — ServiceNow platform helpers\n\n" +
       "Commands:\n" +
       "  add-choices        Upsert sys_choice rows for a table.column\n" +
+      "                     (--table <t> --column <c> --choices \"v=Label,v2=Label2\" --update-set <sys_id>\n" +
+      "                      [--choice-type 0|1|3] [--from-json <path>] [--dry-run] [--json])\n" +
+      "                     --dry-run verifies the field + update set and prints [would create] /\n" +
+      "                     [would update] rows; nothing is written.\n" +
       "  remove-choices     Soft-delete (inactive=true) sys_choice values for a table.column\n" +
       "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id>\n" +
-      "                      [--language en] [--from-json <path>] [--json])\n" +
+      "                      [--language en] [--from-json <path>] [--dry-run] [--json])\n" +
+      "                     --dry-run prints [would deactivate] rows; nothing is written.\n" +
       "  create-view        Create a custom view (sys_ui_view)\n" +
       "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
       "  set-list-layout    Set the columns of a list layout\n" +

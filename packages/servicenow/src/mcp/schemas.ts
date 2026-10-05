@@ -65,6 +65,8 @@ export var addChoicesToFieldSchema = z.object({
     .union([z.literal(0), z.literal(1), z.literal(3)])
     .nullable()
     .optional(),
+  /** Plan only: reads happen, no sys_choice / sys_dictionary write is sent. */
+  dryRun: z.boolean().optional(),
 });
 
 export var removeChoicesFromFieldSchema = z.object({
@@ -73,6 +75,8 @@ export var removeChoicesFromFieldSchema = z.object({
   values: z.array(z.string().min(1)).min(1),
   language: z.string().min(1).optional(),
   updateSetSysId: z.string().min(1),
+  /** Plan only: reads happen, no inactive=true write is sent. */
+  dryRun: z.boolean().optional(),
 });
 
 export var viewFlowSchema = z.object({
