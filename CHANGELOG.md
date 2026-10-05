@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 - `tableOptions.<table>.scopeQuery` — sync tables whose rows carry no `sys_scope` (`sys_choice`) by an encoded query with `{scope}`/`{scopeId}` tokens; the server lists such a table for every scope instead of discovering it via `sys_metadata`.
 - `tableOptions.<table>.nameTemplate` — record folder names from raw field values (`"{name}.{element}.{value}"`), so `sys_choice` / `sys_dictionary` records get stable, non-colliding directories. Server `DovetailUtilsMS` + `dovetail-types`.
 
+### Changed
+
+- `dove watch` (`w` / `watchAllScopes`) is hidden from `dove --help` and scrubbed from Claude-facing docs and skills; still fully wired for humans. It now prints a human-only warning when it detects a Claude Code session (`CLAUDECODE` / `CLAUDE_CODE_*`), because a branch switch mid-watch overwrites instance records. Human-facing docs keep it, labelled with the caveat. (#155)
+
 ## [0.0.83] - 2026-04-17
 
 ### Added

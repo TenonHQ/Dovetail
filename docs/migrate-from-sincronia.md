@@ -110,6 +110,11 @@ After applying:
 npx dove status
 
 # Should resolve the renamed config + manifest files
+npx dove refresh
+
+# Human-only local dev (hidden from --help): also resolves the renamed files, but
+# stop it before any git checkout — a branch switch mid-watch overwrites instance
+# records (TenonHQ/Dovetail#155).
 npx dove watch
 ```
 

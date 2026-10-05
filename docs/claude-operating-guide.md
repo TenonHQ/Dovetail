@@ -178,9 +178,10 @@ Same operations are available from the `dove-sn` CLI (§5) for scripted/CI use.
 ### `dove` (package `core`) — sync engine + everything
 Source: `packages/core/src/commander.ts`. Run `npx dove <cmd> --help`.
 
+Sync from Claude is headless and explicit — `push` / `refresh` / `status`, one command per step. Always-on file watching is a human-only local-dev tool and is intentionally not listed here or in `dove --help` (TenonHQ/Dovetail#155).
+
 | Command | Notable flags | Purpose |
 |---|---|---|
-| `watch` (`w`) | `--port`, `--noDashboard`, `--monitorInterval`, `--noMonitoring` | Watch all scopes, auto-sync to SN; dashboard on :3456 |
 | `refresh` (`r`) | `--force`, `--scope`, **`--benchmark`** | Pull latest manifest + files. `--benchmark` logs per-scope/aggregate HTTP latency, bytes, file counts |
 | `push` | **`--diff <branch>`**, **`--clickup <id\|url>`**, `--updateSet <name>`, `--ci` | Push local → SN. `--diff` filters to files changed vs a git branch; `--clickup` creates an update set from a ClickUp task |
 | `build` | `--diff <branch>` | Build app files locally; `--diff` scopes to a branch diff |

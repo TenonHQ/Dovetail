@@ -78,9 +78,19 @@ export function configureCli(cli: Argv): Argv {
         "Write a dovetail-debug-*.log file for this command (off by default; also enabled by DOVETAIL_DEBUG=1).",
     })
     .global("debug")
+    // INTENTIONAL: 'watch' is hidden from help + Claude-facing docs. It
+    // auto-syncs to the instance and a branch switch mid-watch silently
+    // overwrites records. Human-only local-dev tool. Do not re-document for
+    // Claude. See TenonHQ/Dovetail#155.
+    //
+    // A `false` description is yargs' hidden-command pattern: the command stays
+    // fully wired (a human typing `dove watch` / `w` / `watchAllScopes` still
+    // gets it, and `dove watch --help` still prints its flags) but it is omitted
+    // from the `dove --help` command index. The handler itself prints a
+    // human-only warning when it detects a Claude Code session (claudeSession.ts).
     .command(
       ["watch", "w", "watchAllScopes"],
-      "Watch all scopes for file changes and sync to ServiceNow",
+      false,
       (cmdArgs) => {
         cmdArgs.options({
           ...sharedOptions,

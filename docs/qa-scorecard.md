@@ -66,7 +66,7 @@
 |---|----------|--------|----------|
 | 5.1 | Every exported function has JSDoc? | **FAIL** | **106 exports** but only **26 JSDoc comments** (~24% coverage). Worst: `FileUtils.ts` (1/21), `config.ts` (0/17), `commands.ts` (0/9), `snClient.ts` (0/8) |
 | 5.2 | CHANGELOG reflects current version? | **FAIL** | CHANGELOG stops at **0.4.1** (2020-07-06). Current version is **0.4.2-alpha.6**. No entries for any alpha releases. |
-| 5.3 | README documents all CLI commands? | **FAIL** | README missing **10 commands**: `dashboard`, `createUpdateSet`, `switchUpdateSet`, `listUpdateSets`, `currentUpdateSet`, `changeScope`, `currentScope`, `initScopes`, `watchAllScopes`, `schema pull` |
+| 5.3 | README documents all CLI commands? | **FAIL** | README missing **10 commands**: `dashboard`, `createUpdateSet`, `switchUpdateSet`, `listUpdateSets`, `currentUpdateSet`, `changeScope`, `currentScope`, `initScopes`, `watchAllScopes` (alias of the human-only `watch`; intentionally hidden from `--help` since TenonHQ/Dovetail#155), `schema pull` |
 | 5.4 | CLAUDE.md accurately lists all packages? | **FAIL** | CLAUDE.md only mentions 4 packages (`cli`, `core`, `types`, + build plugins). Missing explicit listing of: `dashboard`, `schema`, `babel-plugin-remove-modules`, `babel-preset-servicenow`. Also lists non-existent `cli` package. |
 | 5.5 | LICENSE file present? | **PASS** | `LICENSE` exists at project root |
 

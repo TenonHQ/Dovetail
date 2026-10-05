@@ -11,9 +11,13 @@ Integration platform + Claude Code's action layer for ServiceNow. Bidirectional 
 ```bash
 nvm use 22            # Node 22 LTS required
 npm install
-npx dove watch        # watch all configured scopes, auto-sync
+npx dove status       # confirm instance, scope, user
+npx dove refresh      # pull latest manifest + files from the instance
+npx dove push --diff main   # push only the files changed vs a branch
 npm test              # from a package directory
 ```
+
+Sync is **headless and explicit** from Claude: `push` / `refresh` / `status`, one command per step. There is no always-on sync mode to reach for — file-watching is a human-only local-dev tool and is deliberately absent from Claude-facing docs and from `dove --help` (TenonHQ/Dovetail#155).
 
 Full command reference: see `Essential Commands` further down, or `npx dove --help`.
 
@@ -111,16 +115,16 @@ All POSTs are `application/json`. Update-set ops save/restore the previous updat
 
 ## Commands — the non-obvious bits
 
-Full CLI via `npx dove --help`. The common verbs (`watch`, `push`, `pull`, `refresh`, `status`, `build`, `deploy`, update-set + scope ops) are self-describing there. The few that trip people up:
+Full CLI via `npx dove --help`. The common verbs (`push`, `pull`, `refresh`, `status`, `build`, `deploy`, update-set + scope ops) are self-describing there. The few that trip people up:
 
 - **`--diff <branch>` is a FLAG, not a `dove diff` command.** There is no `dove diff`. `--diff` scopes a `push`/`build` to files changed vs a git branch, e.g. `npx dove push --diff main`.
-- **`refresh --table <name>` narrows the pull to specific tables** (alias `-t`, repeatable or comma-separated; composable with `--scope`) — e.g. `npx dove refresh -s x_cadso_journey -t x_cadso_journey_action`. Two things to know: the table must already be in `includes._tables` (an unsynced name is a **hard error**, not a silent no-op), and the **manifest is still written in full** — only the file download is narrowed, because a narrowed `dove.manifest.<scope>.json` would drop every other table and break `push`/`watch`.
+- **`refresh --table <name>` narrows the pull to specific tables** (alias `-t`, repeatable or comma-separated; composable with `--scope`) — e.g. `npx dove refresh -s x_cadso_journey -t x_cadso_journey_action`. Two things to know: the table must already be in `includes._tables` (an unsynced name is a **hard error**, not a silent no-op), and the **manifest is still written in full** — only the file download is narrowed, because a narrowed `dove.manifest.<scope>.json` would drop every other table and break `push` (and every other manifest-driven command).
 - **`refresh --metadata-only` regenerates just the `metaData.json` files.** No field file is written, no record directory is created (a record the instance has but this branch doesn't is skipped), and the manifest is left untouched — so the resulting git diff is `metaData.json` and nothing else. Use it to settle a mirror after a change to the metadata writer; `--force` would rewrite every source file too and force a hand-revert of the churn. Refuses to combine with `--force`.
 - **`--env <path>` targets a different instance per command** (alias `-e` / `--env-file`) — loads creds from a specific file instead of the project-root `.env`, so one checkout can hit multiple instances. `dove login --env <path>` also _writes_ to that file. Applies to `dove-sn` and the MCP servers too (`--env` / `DOVETAIL_ENV_FILE`). For `dove` and the MCP servers' startup load, already-exported vars (e.g. `SN_INSTANCE`) are never overridden — useful in CI, a footgun otherwise. **`dove-sn` is stricter:** `--env loft` also accepts a bare name (→ `.env.loft` in the cwd, same as the MCP tool's per-call `env`), the file's `SN_*` connection vars replace any already exported, and a missing or incomplete file is an error rather than a silent fallback to the ambient instance.
 - **`npx dove task clear`** — deselect the active task so a `push` doesn't land in a stale update set.
 - **`npx dove migrate`** — Sincronia → Dovetail; dry-run by default, `--apply` to execute.
 
-First-time setup: `npm i -D @tenonhq/dovetail-core` → `npx dove init` → `npx dove configure` (creates `.env`, do not commit) → `npx dove watch`.
+First-time setup: `npm i -D @tenonhq/dovetail-core` → `npx dove init` → `npx dove configure` (creates `.env`, do not commit) → `npx dove status` to confirm the connection → `npx dove refresh` to pull the manifest and files.
 
 ## Plugin System
 

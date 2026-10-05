@@ -32,11 +32,11 @@ Ask the user which symptom they are experiencing (if not already clear):
 
 ### Diagnostic A: Files Not Pushing
 
-1. **Check dev mode is running:** `npx dove dev` or `npx dove watchAllScopes`
+1. **Push explicitly:** saving a file does not sync it on its own. Run `npx dove push --diff <branch>` (or `npx dove push` for everything) and read the per-file output.
 2. **Check the file is in the manifest:** Look in `dove.manifest.json` or `dove.manifest.<scope>.json` for the table/record/field entry. If missing, run `npx dove refresh`.
 3. **Check file extension matches a rule:** The file extension must match a `match` regex in `dove.config.js` rules. If no rule matches, the file content is pushed as-is (no build).
 4. **Check debug logs:** Re-run the command with `--debug` (or `DOVETAIL_DEBUG=1`) to write a `dovetail-debug-*.log` file in the project root, then inspect it. Debug logs are opt-in — without the flag no log file is produced.
-5. **Try manual push:** `npx dove push` to push all files and see errors.
+5. **Confirm on the instance:** `npx dove status` for the connection, then verify the record changed on the instance — never infer success from the push exit code alone.
 
 ### Diagnostic B: Authentication/Connection Failure
 
@@ -63,7 +63,7 @@ Dovetail checks that your local manifest scope matches the active scope on the S
 
 1. **Check current scope:** `npx dove currentScope`
 2. **Change scope:** `npx dove changeScope --scope x_cadso_core`
-3. **For multi-scope watch:** `npx dove watchAllScopes` handles scope switching automatically per file.
+3. **For multi-scope pushes:** `npx dove push` swaps the server session scope once (to the first file's scope) and routes each record through its scope's update set from `.dove-update-sets.json`. Make sure every scope in the push has a mapping (`npx dove switchUpdateSet --scope <scope> ...`), or push one scope at a time with a path target (`npx dove push src/x_cadso_core`).
 4. **Force scope swap on push:** `npx dove push --scopeSwap`
 
 ### Diagnostic D: Build/Transform Errors

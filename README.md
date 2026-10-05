@@ -72,6 +72,8 @@ npx dove init
 npx dove watch
 ```
 
+> **Human-only local dev.** `watch` auto-syncs every saved file to the instance, so **stop it before any `git checkout` / branch switch** — the post-switch file state is otherwise pushed over your records. It is deliberately hidden from `dove --help` and from Claude-facing docs; agents and scripts should use the explicit `push` / `refresh` / `status` flow instead (TenonHQ/Dovetail#155).
+
 ## How does it work?
 
 Dovetail takes a two-pronged approach to managing your ServiceNow scoped app. Architecture, creation of records, deletion of records, metadata and other ServiceNow objects besides your actual source code will be managed normally. Your _source code itself_ will be managed inside of your Dovetail project.
@@ -83,7 +85,7 @@ Dovetail has a few basic commands to help you get the job done
 | Command            | Aliases  | Description                                                                                                                                                 | Usage                           |
 | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | `refresh`          | `r`      | Refreshes the `dove.manifest.json` file and downloads all new files created in ServiceNow since the last refresh. Does not override existing file contents. | `npx dove refresh`              |
-| `watch`            | `w`, `watchAllScopes` | Watches files for changes, then builds and pushes them to the corresponding record. Multi-scope by default. Only works on files in the manifest file. | `npx dove watch`                |
+| `watch`            | `w`, `watchAllScopes` | **Human-only local dev** (hidden from `--help`). Watches files for changes, then builds and pushes them to the corresponding record. Multi-scope by default. Only works on files in the manifest file. Stop it before switching branches — a branch switch mid-watch overwrites instance records. | `npx dove watch`                |
 | `init`             | **none** | Walks you through creating a basic Dovetail project. This is the recommended way to create a Dovetail project from scratch.                               | `npx dove init`                 |
 | `push`             | **none** | Builds and pushes all files in your local Dovetail project to the ServiceNow instance in your `.env` file                                                  | `npx dove push`                 |
 | `download <scope>` | **none** | Downloads the specified scoped app, overwriting all local files in the way. **Only use this if you know what you are doing!**                               | `npx dove download my_test_app` |

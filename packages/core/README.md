@@ -24,7 +24,7 @@ The full command surface is documented in the [root CLAUDE.md](../../CLAUDE.md#e
 Quick reference:
 
 ```bash
-npx dove watch         # multi-scope watch + dashboard
+npx dove watch         # HUMAN-ONLY local dev: multi-scope watch + dashboard (hidden from --help; stop before git checkout — see #155)
 npx dove push          # build + push current files
 npx dove refresh       # pull manifest + new files (aliases: pull, r)
 npx dove build         # local build only
