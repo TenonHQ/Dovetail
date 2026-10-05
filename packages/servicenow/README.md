@@ -769,10 +769,41 @@ already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1`
 args, `2` write landed unverified (or skipped with drift). To **update** an existing
 record instead, use `set-field`.
 
-Both verbs are exported for programmatic use:
+### Delete a record
+
+Delete **one** existing data record by table + sys_id, pinned to an update set,
+with the record read back **before** (so the dry-run shows exactly what would go,
+and a missing record is an error rather than a "successful" delete of nothing) and
+**after** (success is never reported until the record is confirmed gone).
+
+```bash
+# Dry-run (the default) — prints the record snapshot, deletes nothing
+npx dove-sn delete-record \
+  --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> \
+  --update-set <sys_id>
+
+# Apply — deletes, then reads back and verifies the record is gone
+npx dove-sn delete-record \
+  --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> \
+  --update-set <sys_id> --apply --json
+```
+
+`delete-record` wraps the core `deleteRecord` op. It is **dry-run by default** —
+nothing is deleted without `--apply` (`--dry-run` wins if both are given). `--sys-id`
+must be a 32-character lowercase hex id and `--table` a plain table name; both are
+validated before any network call. `--update-set` is **required** so a delete is never
+routed to the session's default update set silently
+([#297](https://github.com/TenonHQ/Dovetail/issues/297)) — note that until #297 ships
+server-side, the op ignores `update_set_sys_id` and captures into the session
+current-app set; the client sends it regardless so callers are ready the moment the
+server honours it. Like its siblings it **refuses** schema tables (`sys_db_object` /
+`sys_dictionary`). Exit codes: `0` deleted / dry-run, `1` bad args or no such record,
+`2` the delete returned but the record is **still present** on read-back.
+
+All three verbs are exported for programmatic use:
 
 ```ts
-import { createClient, setField, createRecord } from "@tenonhq/dovetail-servicenow";
+import { createClient, setField, createRecord, deleteRecord } from "@tenonhq/dovetail-servicenow";
 
 var client = createClient({});
 var r = await setField({
@@ -1027,8 +1058,11 @@ does not exist) / `index_create` (create an index, composite and non-unique incl
 replaying the platform index-creator form; dry-run by default, idempotent, read back from
 `v_db_index` - and **not** captured in an update set, because a database index is a
 physical per-instance change), the record-write verbs `set_field` (update scalar fields on an
-existing record) and `create_record` (insert one record) — both update-set-captured
-and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
+existing record), `create_record` (insert one record) and `delete_record` (delete one
+record — dry-run by default, `confirm:true` to apply, `updateSetSysId` required, the
+record read back before AND after so success is only reported once it is confirmed
+gone) — all update-set-captured and read-back-verified — `host_assets` (deploy a built
+dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step
 scripts, step-level inputs/outputs, data-pill wiring — dry-run by default, and the
@@ -1060,6 +1094,9 @@ npx dove-sn mcp           # run the stdio server (wire into .mcp.json)
 
 This server is separate from `@tenonhq/dovetail-mcp` (the read-only cross-system
 aggregator) — `dovetail-servicenow`'s server is the ServiceNow **write** surface.
+`dovetail-mcp` intentionally does **not** get `delete_record` (or any other ServiceNow
+write): record writes — create, set, delete — live on `dove-sn mcp` only, where every
+one is update-set-pinned, dry-run-gated and read-back-verified.
 
 ## Publishing a Custom Action Type
 

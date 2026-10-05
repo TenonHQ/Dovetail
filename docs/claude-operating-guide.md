@@ -143,6 +143,7 @@ reports every record unchanged).
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
 | `create_record` | Create a record in a given scope + update set | yes |
+| `delete_record` | Delete ONE record by table + 32-hex sys_id, pinned to a **required** update set (#297 — never the session default). Reads the record BEFORE (a missing record is an error, not a no-op) and AFTER (success only once it is confirmed gone). Refuses schema tables. Not on `dovetail-mcp` — writes live here | dry-run **by default**; `confirm:true` deletes |
 
 ### Flows & actions
 
