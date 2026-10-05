@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `dove create sys_update_set --scope <x>` now routes through the scope-correct `createUpdateSet` server op instead of the generic record insert (which let ServiceNow default `application` to the session's current app), reads the set back, and exits non-zero naming requested vs. actual scope if it is mis-scoped. `--scope` is required for `sys_update_set` in `--ci` mode. (#231)
+
 ### Added
 
 - `tableOptions.<table>.scopeQuery` — sync tables whose rows carry no `sys_scope` (`sys_choice`) by an encoded query with `{scope}`/`{scopeId}` tokens; the server lists such a table for every scope instead of discovering it via `sys_metadata`.
