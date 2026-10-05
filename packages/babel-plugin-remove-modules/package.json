@@ -1,6 +1,6 @@
 {
   "name": "@tenonhq/dovetail-babel-plugin-remove-modules",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "engines": {
     "node": ">=22"
   },
@@ -27,7 +27,7 @@
     "@babel/types": "^7.23.0"
   },
   "devDependencies": {
-    "@tenonhq/dovetail-types": "~0.0.21",
+    "@tenonhq/dovetail-types": "~0.0.22",
     "@types/babel__core": "^7.20.2"
   },
   "files": [

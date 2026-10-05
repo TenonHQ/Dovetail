@@ -1,0 +1,30 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.121",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.121",
+  "prev_version": "0.0.120",
+  "published_at": "2026-10-05T19:26:26.940Z",
+  "git": {
+    "sha": "7e59c1a9e074a0e2cb73bc68ff2ddfd423be2c90",
+    "tag": "dovetail-core@0.0.121"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "7e59c1a9e",
+      "subject": "feat(sync): scopeQuery + nameTemplate table options — sync sys_choice/sys_dictionary per scope (#295)",
+      "pr": 295
+    },
+    {
+      "sha": "3c380428b",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "b46e30a86",
+      "subject": "chore(release): publish 7 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
