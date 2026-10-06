@@ -88,3 +88,63 @@ describe("createRecord", function () {
     expect(ctx.calls.createRecord.length).toBe(0);
   });
 });
+
+describe("createRecord read-back tolerates the HTML sanitizer (#300)", function () {
+  it("verifies when the instance entity-encoded an html value (@ → &#64;)", async function () {
+    var ctx = ctxFor({
+      "sys_id=new_1": [{ sys_id: "new_1", name: "a", description: "contact &#64;tenon" }]
+    });
+    var r = await createRecord({
+      client: ctx.client, table: "x_t",
+      fields: { name: "a", description: "contact @tenon" },
+      scope: "x_s", updateSetSysId: US
+    });
+    expect(r.status).toBe("created");
+    expect(r.verified).toBe(true);
+    expect(r.note).toMatch(/verified via read-back\. \(description: the instance HTML-entity-encoded/);
+    // The submitted value is sent untouched — normalization is compare-only.
+    expect(ctx.calls.createRecord[0].fields).toEqual({ name: "a", description: "contact @tenon" });
+  });
+
+  it("still reports failed for a genuinely different html value", async function () {
+    var ctx = ctxFor({
+      "sys_id=new_1": [{ sys_id: "new_1", description: "<p>&#64;beta</p>" }]
+    });
+    var r = await createRecord({
+      client: ctx.client, table: "x_t",
+      fields: { description: "<p>@alpha</p>" },
+      scope: "x_s", updateSetSysId: US
+    });
+    expect(r.status).toBe("failed");
+    expect(r.verified).toBe(false);
+    expect(r.note).toMatch(/\(description\)/);
+  });
+
+  it("keeps the strict compare for a non-entity difference", async function () {
+    var ctx = ctxFor({
+      "sys_id=new_1": [{ sys_id: "new_1", name: "a", order: "" }]
+    });
+    var r = await createRecord({
+      client: ctx.client, table: "x_t",
+      fields: { name: "a", order: "35" },
+      scope: "x_s", updateSetSysId: US
+    });
+    expect(r.status).toBe("failed");
+    expect(r.note).toMatch(/\(order\)/);
+  });
+
+  it("--if-absent treats an entity-encoded existing value as in sync", async function () {
+    var ctx = ctxFor({
+      "name=a": [{ sys_id: "row9", name: "a", description: "contact &#64;tenon" }]
+    });
+    var r = await createRecord({
+      client: ctx.client, table: "x_t",
+      fields: { name: "a", description: "contact @tenon" },
+      scope: "x_s", updateSetSysId: US, ifAbsentQuery: "name=a"
+    });
+    expect(r.status).toBe("skipped");
+    expect(r.verified).toBe(true);
+    expect(r.note).toMatch(/already match\. \(description: the instance HTML-entity-encoded/);
+    expect(ctx.calls.createRecord.length).toBe(0);
+  });
+});

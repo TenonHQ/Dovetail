@@ -14,7 +14,7 @@
 
 import { createClient } from "./client";
 import type { ServiceNowClient } from "./client";
-import { fieldToString, pickFields } from "./setField";
+import { fieldToString, pickFields, verifyReadBack, readBackNote } from "./setField";
 import type { RecordWriteResult } from "./setField";
 
 export interface CreateRecordParams {
@@ -74,12 +74,8 @@ export async function createRecord(params: CreateRecordParams): Promise<CreateRe
     if (existing.length > 0) {
       var existingSysId = fieldToString(existing[0].sys_id);
       var existingValues = pickFields(existing[0], fieldNames);
-      var matches = true;
-      for (var i = 0; i < fieldNames.length; i += 1) {
-        if (existingValues[fieldNames[i]] !== fieldToString(params.fields[fieldNames[i]])) {
-          matches = false;
-        }
-      }
+      var existingCheck = verifyReadBack(params.fields, existingValues);
+      var matches = existingCheck.verified;
       return {
         status: "skipped",
         table: table,
@@ -91,7 +87,7 @@ export async function createRecord(params: CreateRecordParams): Promise<CreateRe
         verified: matches,
         note: matches
           ? "skipped: --if-absent matched " + table + "/" + existingSysId
-            + " and its values already match."
+            + " and its values already match." + readBackNote(existingCheck)
           : "skipped: --if-absent matched " + table + "/" + existingSysId
             + " but its values differ from the requested fields — use set-field to update it."
       };
@@ -142,12 +138,8 @@ export async function createRecord(params: CreateRecordParams): Promise<CreateRe
     fields: readFields
   });
   var after = pickFields(afterRows[0] || {}, fieldNames);
-  var verified = afterRows.length > 0;
-  for (var j = 0; j < fieldNames.length; j += 1) {
-    if (after[fieldNames[j]] !== fieldToString(params.fields[fieldNames[j]])) {
-      verified = false;
-    }
-  }
+  var check = verifyReadBack(params.fields, after);
+  var verified = afterRows.length > 0 && check.verified;
 
   return {
     status: verified ? "created" : "failed",
@@ -159,8 +151,10 @@ export async function createRecord(params: CreateRecordParams): Promise<CreateRe
     after: after,
     verified: verified,
     note: verified
-      ? "Created " + table + "/" + sysId + " and verified via read-back."
+      ? "Created " + table + "/" + sysId + " and verified via read-back." + readBackNote(check)
       : "Insert landed as " + sysId
-        + " but read-back does not match the requested values — check field types / ACLs."
+        + " but read-back does not match the requested values ("
+        + (afterRows.length > 0 ? check.mismatched.join(", ") : "no row read back")
+        + ") — check field types / ACLs."
   };
 }
