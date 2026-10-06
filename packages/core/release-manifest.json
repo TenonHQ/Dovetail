@@ -1,7 +1,29 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-05T19:26:26.993Z",
+  "generated_at": "2026-10-06T16:25:11.503Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.123",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.123",
+      "prev_version": "0.0.122",
+      "published_at": "2026-10-06T16:25:11.496Z",
+      "git": {
+        "sha": "0927c64611ab1901d9ce6b6cbba15cb17eee684e",
+        "tag": "dovetail-core@0.0.123"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "0927c6461",
+          "subject": "fix(core): dove create sys_update_set routes through the scope-correct createUpdateSet op (#306)",
+          "pr": 306
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-types@0.0.22",
@@ -1264,27 +1286,6 @@
         {
           "sha": "2d43ef9f1",
           "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.49 [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.33",
-      "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.33",
-      "prev_version": "0.0.32",
-      "published_at": "2026-08-31T21:34:20.896Z",
-      "git": {
-        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
-        "tag": "dovetail-mcp@0.0.33"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "025e4eb4d",
-          "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
       "exports_delta": null,
