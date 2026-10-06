@@ -421,7 +421,8 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
       logger.warn(failCount + " scope(s) failed — check errors above");
     }
     logger.info("Manifests: dove.manifest.<scope>.json");
-    logger.success("Run 'npx dove watch' to start development");
+    // Headless next step only — the file watcher is human-only (TenonHQ/Dovetail#155).
+    logger.success("Next: edit locally, then 'npx dove push --diff <branch>' to sync the changed files");
   } catch (e) {
     logger.error("Error initializing scopes: " + e);
     throw e;

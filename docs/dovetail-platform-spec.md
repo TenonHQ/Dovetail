@@ -684,7 +684,7 @@ For each selected plugin, calls `plugin.initialize(context)` if defined.
 
 ```
 1. If any plugin failed: "Setup completed with errors. Review the output above."
-2. If all succeeded: "Setup complete! Run dove watch to start."  (human-only local-dev hint; see §8.6 and TenonHQ/Dovetail#155)
+2. If all succeeded: "Setup complete! Run dove status, then dove refresh to pull the manifest and files."  (headless next steps only — the watcher is human-only, see §8.6 and TenonHQ/Dovetail#155)
 ```
 
 ### 4.4 Login Flow (`runLogin`)

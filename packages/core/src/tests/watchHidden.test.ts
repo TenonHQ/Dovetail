@@ -53,6 +53,8 @@ jest.mock("../clickupCommands", () => ({
 
 // --- Imports (after mocks) ---
 
+import * as fs from "fs";
+import * as path from "path";
 import yargsFactory from "yargs/yargs";
 import type { Argv } from "yargs";
 import { configureCli } from "../commander";
@@ -154,5 +156,22 @@ describe("dove watch stays wired for humans", function () {
     const args = mock.mock.calls[0][0] as { noDashboard?: boolean; port?: number };
     expect(args.noDashboard).toBe(true);
     expect(args.port).toBe(4000);
+  });
+});
+
+// The command index is not the only surface Claude reads: `dove init`, `dove login`
+// and `dove initScopes` print next-step hints too. None of them may point at the
+// watcher (#155). Source-level so the check needs no instance and no prompt mocks.
+describe("next-step hints never recommend the watcher", function () {
+  const HINT_SOURCES = ["../initSystem/orchestrator.ts", "../allScopesCommands.ts"];
+  const USER_FACING_WATCH_HINT = /\blogger\.(info|success|warn)\([^;]*\bdove\b[^;]*\bwatch\b/;
+
+  it.each(HINT_SOURCES)("%s prints only headless next steps", function (rel) {
+    const source = fs.readFileSync(path.join(__dirname, rel), "utf8");
+    expect(source.length).toBeGreaterThan(0);
+    const offenders = source.split("\n").filter(function (line) {
+      return USER_FACING_WATCH_HINT.test(line);
+    });
+    expect(offenders).toEqual([]);
   });
 });
