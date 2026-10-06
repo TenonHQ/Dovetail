@@ -110,6 +110,19 @@ file — handy for CI.
 
 ## CLI
 
+### Getting help
+
+```bash
+npx dove-sn help                    # verb index
+npx dove-sn help add-choices        # one verb: required/optional flags, value formats, write gate, example
+npx dove-sn add-choices --help      # same — never loads credentials or touches the instance
+```
+
+Every verb's usage is rendered from one table (`src/cliUsage.ts`), so the help
+and the dispatcher cannot drift — a test fails if a verb is missing an entry. A
+`Missing required flags` error prints that verb's usage block under the error
+line; a mistyped verb lists the closest matches and exits 1.
+
 ```bash
 # Inline form
 npx dove-sn add-choices \
