@@ -331,6 +331,81 @@ describe("MCP registry", function () {
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 
+  it("add_choices_to_field honours dryRun:true — zero writes, would-* actions (#296)", async function () {
+    var ctx = makeMockClient({
+      query: async function (table) {
+        if (table === "sys_update_set") return [US];
+        if (table === "sys_dictionary")
+          return [{ sys_id: "dict1", name: "x_t", element: "state", choice: "0", sys_scope: "scope1" }];
+        if (table === "sys_scope") return [{ sys_id: "scope1", scope: "x_t_scope", name: "x_t_scope" }];
+        if (table === "sys_choice")
+          return [{ sys_id: "ch1", value: "a", label: "OLD", sequence: "", language: "en", inactive: "false" }];
+        return [];
+      },
+    });
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var tool = descriptors.filter(function (d) {
+      return String(d.name) === "add_choices_to_field";
+    })[0];
+    var result = (await tool.handler({
+      table: "x_t",
+      column: "state",
+      updateSetSysId: "us1",
+      dryRun: true,
+      choices: [
+        { value: "a", label: "A" },
+        { value: "b", label: "B" },
+      ],
+    })) as { dryRun: boolean; field: { scope: string }; choices: Array<{ action: string }> };
+    expect(result.dryRun).toBe(true);
+    expect(result.field.scope).toBe("scope1");
+    expect(result.choices.map(function (c) { return c.action; })).toEqual(["would-update", "would-create"]);
+    // The schema must let dryRun through — a stripped key here would silently write.
+    expect(ctx.calls.createRecord).toHaveLength(0);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
+  it("remove_choices_from_field honours dryRun:true and surfaces the case-only hint (#296, #253)", async function () {
+    var ctx = makeMockClient({
+      query: async function (table) {
+        if (table === "sys_update_set") return [US];
+        if (table === "sys_dictionary")
+          return [{ sys_id: "dict1", name: "x_t", element: "state", choice: "3", sys_scope: "scope1" }];
+        if (table === "sys_choice")
+          return [{ sys_id: "ch1", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }];
+        return [];
+      },
+    });
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var tool = descriptors.filter(function (d) {
+      return String(d.name) === "remove_choices_from_field";
+    })[0];
+    var result = (await tool.handler({
+      table: "x_t",
+      column: "state",
+      updateSetSysId: "us1",
+      dryRun: true,
+      values: ["delivered", "DELIVERED"],
+    })) as {
+      dryRun: boolean;
+      field: { scope: string; dictionarySysId: string };
+      choices: Array<{ action: string; nearMatches?: Array<string> }>;
+    };
+    expect(result.dryRun).toBe(true);
+    expect(result.field).toEqual({
+      table: "x_t",
+      column: "state",
+      language: "en",
+      scope: "scope1",
+      dictionarySysId: "dict1",
+    });
+    expect(result.choices[0].action).toBe("would-deactivate");
+    expect(result.choices[1].action).toBe("missing");
+    expect(result.choices[1].nearMatches).toEqual(["delivered"]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+    expect(ctx.calls.createRecord).toHaveLength(0);
+  });
+
   it("add_index handler refuses a composite column list at the tool boundary", async function () {
     var ctx = makeMockClient();
     var descriptors = buildDescriptors({ client: ctx.client });
