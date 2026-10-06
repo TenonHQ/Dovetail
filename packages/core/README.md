@@ -35,14 +35,6 @@ npx dove migrate       # migrate a Sincronia project to Dovetail (dry-run by def
 
 See [`UPDATE_SET_COMMANDS.md`](UPDATE_SET_COMMANDS.md) for the full update-set CLI surface.
 
-### `dove create sys_update_set`
-
-`npx dove create <table>` inserts through the generic `createRecord` endpoint — except for `sys_update_set`. A plain insert lets ServiceNow default the set's `application` to the API session's current app, so `--scope` was silently ignored and the set landed in whatever scope the session was in (TenonHQ/Dovetail#231). Update sets therefore route through the atomic, scope-correct `createUpdateSet` server op (`POST /api/cadso/dovetail_core/createUpdateSet`) and the created set is read back: if its `application` does not match the requested scope the command exits non-zero, naming the requested vs. actual scope and the set's sys_id, so a mis-scoped set is never reported as success.
-
-- `--scope` decides the application. It is **required** with `--ci`; interactively it is confirmed in the summary.
-- Only `name` and `description` map onto the op; other `--field` values are ignored with a warning.
-- The set is created, not activated — use `npx dove switchUpdateSet --name "<name>" -s <scope>` (or `npx dove createUpdateSet`, which creates and activates in one step).
-
 ## Plugins
 
 Dovetail's build pipeline is plugin-driven. Each plugin is an npm package implementing `run(context, content, options) => Promise<PluginResults>`. Shipped plugins live in sibling packages (`@tenonhq/dovetail-typescript-plugin`, `-babel-plugin`, `-webpack-plugin`, `-sass-plugin`, `-eslint-plugin`, `-prettier-plugin`, `-babel-preset-servicenow`, `-babel-plugin-remove-modules`).

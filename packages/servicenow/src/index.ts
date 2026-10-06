@@ -168,7 +168,6 @@ export type {
   AddChoicesParams,
   AddChoicesResult,
   ChoiceActionResult,
-  ChoiceFieldRef,
   RemoveChoicesParams,
   RemoveChoicesResult,
   ChoiceRemovalResult,
@@ -253,8 +252,6 @@ export type {
   SetFieldResult,
 } from "./setField";
 export type { CreateRecordParams, CreateRecordResult } from "./createRecord";
-export { deleteRecord } from "./deleteRecord";
-export type { DeleteRecordParams, DeleteRecordResult } from "./deleteRecord";
 
 export { invokeRest, INVOKE_REST_METHODS } from "./invokeRest";
 export type { InvokeRestParams, InvokeRestResult } from "./invokeRest";

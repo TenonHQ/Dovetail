@@ -242,20 +242,8 @@ export interface ServiceNowClient {
     currentUpdateSet: (scope?: string) => Promise<{ sys_id: string; name: string }>;
     /** GET /api/cadso/dovetail_core/changeUpdateSet?sysId=... — pins the REST session's active update set. */
     changeUpdateSet: (params: { sysId: string }) => Promise<{ [k: string]: any }>;
-    /**
-     * POST /api/cadso/dovetail_core/deleteRecord — body { table, sys_id } plus
-     * `update_set_sys_id` when supplied. Returns the deleted record.
-     *
-     * `update_set_sys_id` pins the DELETE capture to that update set once the
-     * server-side op honours it (TenonHQ/Dovetail#297). Until #297 ships the op
-     * ignores the field and captures into the session's current-app update set —
-     * it is sent anyway so callers are ready the moment the server catches up.
-     */
-    deleteRecord: (params: {
-      table: string;
-      sys_id: string;
-      update_set_sys_id?: string;
-    }) => Promise<{ [k: string]: any }>;
+    /** POST /api/cadso/dovetail_core/deleteRecord — body { table, sys_id }. Returns the deleted record. */
+    deleteRecord: (params: { table: string; sys_id: string }) => Promise<{ [k: string]: any }>;
   };
   now: {
     /**
@@ -677,19 +665,10 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
         return data.result || data;
       },
       deleteRecord: async function (params) {
-        var body: { table: string; sys_id: string; update_set_sys_id?: string } = {
-          table: params.table,
-          sys_id: params.sys_id,
-        };
-        // Only sent when supplied, so the legacy { table, sys_id } body shape is
-        // preserved for callers that do not pin an update set.
-        if (typeof params.update_set_sys_id === "string" && params.update_set_sys_id.length > 0) {
-          body.update_set_sys_id = params.update_set_sys_id;
-        }
         var data = await dovetailRequest<{ result: any }>(
           "POST",
           "deleteRecord",
-          body,
+          { table: params.table, sys_id: params.sys_id },
           null,
           "claude.deleteRecord(" + params.table + ")",
         );

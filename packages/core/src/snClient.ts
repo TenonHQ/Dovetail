@@ -275,19 +275,6 @@ export const processPushResponse = (
   };
 };
 
-/** A Table API reference value: `{ value, link }` without sysparm_display_value. */
-export interface SNReferenceValue {
-  value: string;
-  link?: string;
-}
-
-/** Shape of a `sys_update_set` row read back via `getUpdateSetById`. */
-export interface UpdateSetReadRecord {
-  sys_id: string;
-  name?: string;
-  application?: string | SNReferenceValue;
-}
-
 export const snClient = (
   baseURL: string,
   username: string,
@@ -414,22 +401,6 @@ export const snClient = (
       params: {
         sysparm_query: `sys_id=${scopeSysId}`,
         sysparm_fields: "scope",
-      },
-    });
-  };
-
-  /**
-   * Reads one update set back by sys_id, selecting only `application`, so a
-   * caller can PROVE which application a freshly created set landed in. The
-   * Table API returns the reference as `{ value, link }` (no display value).
-   */
-  const getUpdateSetById = (updateSetSysId: string) => {
-    const endpoint = "api/now/table/sys_update_set";
-    type UpdateSetReadResponse = Sinc.SNAPIResponse<UpdateSetReadRecord[]>;
-    return client.get<UpdateSetReadResponse>(endpoint, {
-      params: {
-        sysparm_query: `sys_id=${updateSetSysId}`,
-        sysparm_fields: "sys_id,name,application",
       },
     });
   };
@@ -726,7 +697,6 @@ export const snClient = (
     updateRecord,
     getScopeId,
     getScopeById,
-    getUpdateSetById,
     getUserSysId,
     getCurrentAppUserPrefSysId,
     updateCurrentAppUserPref,

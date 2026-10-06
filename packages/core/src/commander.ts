@@ -301,7 +301,7 @@ export function configureCli(cli: Argv): Argv {
     )
     .command(
       "create <table>",
-      "Create a new record on the ServiceNow instance (sys_update_set goes through the scope-correct createUpdateSet op; --scope decides its application)",
+      "Create a new record on the ServiceNow instance",
       (cmdArgs: TSFIXME) => {
         cmdArgs.positional("table", {
           describe: "ServiceNow table name (e.g., sys_script_include)",
@@ -317,8 +317,7 @@ export function configureCli(cli: Argv): Argv {
           scope: {
             alias: "s",
             type: "string",
-            describe:
-              "Target scope (e.g., x_cadso_core). For sys_update_set this decides the set's application and is required with --ci",
+            describe: "Target scope (e.g., x_cadso_core)",
           },
           from: {
             alias: "f",

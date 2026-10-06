@@ -79,8 +79,6 @@ import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
 import type { CreateRecordParams } from "./createRecord";
-import { deleteRecord } from "./deleteRecord";
-import type { DeleteRecordParams } from "./deleteRecord";
 import { invokeRest, writeInvokeRestResultFile } from "./invokeRest";
 import type { InvokeRestParams } from "./invokeRest";
 import { publishApp, parsePublishTargets, PUBLISH_TARGETS } from "./publishApp";
@@ -222,11 +220,6 @@ async function runAddChoices(
     return 1;
   }
   var params = paramsFromFlags(flags);
-  // The flag is parsed for every verb; this verb used to drop it on the floor and WRITE
-  // (#296). Threading it here is what makes --dry-run a real plan, not a label.
-  if (flags["dry-run"] === "true") {
-    params.dryRun = true;
-  }
   var client = createClient({});
   var result = await addChoicesToField(client, params);
   if (flags.json === "true") {
@@ -302,9 +295,6 @@ async function runRemoveChoices(
     return 1;
   }
   var params = removeParamsFromFlags(flags);
-  if (flags["dry-run"] === "true") {
-    params.dryRun = true;
-  }
   var client = createClient({});
   var result = await removeChoicesFromField(client, params);
   if (flags.json === "true") {
@@ -1439,14 +1429,9 @@ function printHelp(): void {
     "dove-sn — ServiceNow platform helpers\n\n" +
       "Commands:\n" +
       "  add-choices        Upsert sys_choice rows for a table.column\n" +
-      "                     (--table <t> --column <c> --choices \"v=Label,v2=Label2\" --update-set <sys_id>\n" +
-      "                      [--choice-type 0|1|3] [--from-json <path>] [--dry-run] [--json])\n" +
-      "                     --dry-run verifies the field + update set and prints [would create] /\n" +
-      "                     [would update] rows; nothing is written.\n" +
       "  remove-choices     Soft-delete (inactive=true) sys_choice values for a table.column\n" +
       "                     (--table <t> --column <c> --values a,b,c --update-set <sys_id>\n" +
-      "                      [--language en] [--from-json <path>] [--dry-run] [--json])\n" +
-      "                     --dry-run prints [would deactivate] rows; nothing is written.\n" +
+      "                      [--language en] [--from-json <path>] [--json])\n" +
       "  create-view        Create a custom view (sys_ui_view)\n" +
       "                     (--name <n> --update-set <sys_id> [--title <t>] [--scope <s>] [--dry-run] [--json])\n" +
       "  set-list-layout    Set the columns of a list layout\n" +
@@ -1553,12 +1538,6 @@ function printHelp(): void {
       "                     (--table <t> --scope <s> --update-set <sys_id>\n" +
       '                      (--fields "k=v,k2=v2" | --from-json <path>)\n' +
       "                      [--if-absent <encoded-query>] [--dry-run] [--json])\n" +
-      "  delete-record      Delete ONE EXISTING data record, pinned to an update set, then verify it is GONE\n" +
-      "                     DRY-RUN BY DEFAULT — prints the record snapshot; nothing is deleted without --apply\n" +
-      "                     (--table <t> --sys-id <32-hex> --update-set <sys_id> [--apply] [--dry-run] [--json])\n" +
-      "                     Reads the record BEFORE (missing record = error, not a no-op delete) and\n" +
-      "                     AFTER (exit 2 if it is still present). Refuses schema tables.\n" +
-      "                     --update-set is required (#297) — never routed to the session default.\n" +
       "  host-assets        Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)\n" +
       "                     (--dir <dist> --app <sys_id> --scope <namespace>\n" +
       "                      [--update-set <sys_id>] [--max-bytes <n>] [--allow-oversize] [--dry-run] [--json])\n" +
@@ -2397,78 +2376,6 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
 }
 
 /**
- * dove-sn delete-record:
- *   --table x_cadso_core_metric_point_type
- *   --sys-id <32-hex sys_id>                     (the record to delete)
- *   --update-set <sys_id>                        (required — the delete is captured here, never the
- *                                                 session default; server honours it once #297 ships)
- *   [--apply]                                    (DRY-RUN BY DEFAULT — nothing is deleted without it)
- *   [--dry-run] [--json]                         (--dry-run wins over --apply)
- * Reads the record BEFORE (a missing record is an error, not a no-op delete) and AFTER
- * (success is only reported once the record is confirmed gone).
- * Exit codes: 0 deleted/dry-run, 1 bad args or missing record, 2 delete returned but the
- * record is STILL PRESENT on read-back.
- */
-async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
-  var table = flags.table;
-  var sysId = flags["sys-id"];
-  var updateSet = flags["update-set"];
-  // A forgotten value lands as the literal "true" (see parseArgs) — treat it as missing.
-  if (
-    !table || table === "true" ||
-    !sysId || sysId === "true" ||
-    !updateSet || updateSet === "true"
-  ) {
-    process.stderr.write(
-      "delete-record: --table <t>, --sys-id <32-hex> and --update-set <sys_id> are all required\n",
-    );
-    return 1;
-  }
-  var params: DeleteRecordParams = {
-    client: createClient({}),
-    table: table,
-    sysId: sysId,
-    updateSetSysId: updateSet,
-    confirm: flags.apply === "true",
-  };
-  if (flags["dry-run"] === "true") params.dryRun = true;
-
-  var result: Awaited<ReturnType<typeof deleteRecord>>;
-  try {
-    result = await deleteRecord(params);
-  } catch (err) {
-    var message = err instanceof Error ? err.message : String(err);
-    // deleteRecord's own errors already carry the verb prefix — don't double it.
-    if (message.indexOf("delete-record: ") !== 0) message = "delete-record: " + message;
-    process.stderr.write(message + "\n");
-    return 1;
-  }
-  if (flags.json === "true") {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } else {
-    process.stdout.write(
-      "[" +
-        result.status +
-        "] " +
-        result.table +
-        "/" +
-        result.sysId +
-        " → update set " +
-        result.updateSetSysId +
-        (result.verified ? " — verified gone" : "") +
-        "\n" +
-        result.note +
-        "\n",
-    );
-    if (result.status === "dry-run") {
-      process.stdout.write("Record snapshot:\n" + JSON.stringify(result.before, null, 2) + "\n");
-    }
-  }
-  if (result.status === "failed") return 2;
-  return 0;
-}
-
-/**
  * dove-sn host-assets:
  *   --dir <dist>            Required. Path to the pre-built dist/ directory.
  *   --app <sys_id>          Required. Application record sys_id (m2m `application`).
@@ -3083,9 +2990,6 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "create-record") {
     return await runCreateRecord(parsed.flags);
-  }
-  if (parsed.command === "delete-record") {
-    return await runDeleteRecord(parsed.flags);
   }
   if (parsed.command === "host-assets") {
     return await runHostAssets(parsed.flags);

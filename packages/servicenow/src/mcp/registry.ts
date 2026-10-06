@@ -50,7 +50,6 @@ import {
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
-import { deleteRecord } from "../deleteRecord";
 import { invokeRest } from "../invokeRest";
 import type { InvokeRestParams } from "../invokeRest";
 import { publishApp } from "../publishApp";
@@ -85,7 +84,6 @@ import {
   setTableSchema,
   setFieldSchema,
   createRecordSchema,
-  deleteRecordSchema,
   hostAssetsSchema,
   invokeRestSchema,
   publishAppSchema,
@@ -119,7 +117,6 @@ export var TOOL_NAMES = [
   "set_table",
   "set_field",
   "create_record",
-  "delete_record",
   "host_assets",
   "invoke_rest",
   "app_publish",
@@ -207,10 +204,7 @@ export function buildDescriptors(
       description:
         "Upsert sys_choice values for a ServiceNow table.column and (optionally) flip " +
         "sys_dictionary.choice so the field renders as a dropdown. Idempotent. Writes are " +
-        "captured in the supplied update set. dryRun:true verifies the field + update set " +
-        "and reports each row as would-create / would-update / unchanged with NO write sent " +
-        "(result.dryRun is true). Result envelope: field {table, column, language, scope, " +
-        "dictionarySysId}, dictionary {choiceWas, choiceNow}, updateSet, dryRun, choices[].",
+        "captured in the supplied update set.",
       shape: addChoicesToFieldSchema.shape,
       handler: async function (args: any) {
         return addChoicesToField(client(), addChoicesToFieldSchema.parse(args));
@@ -229,13 +223,8 @@ export function buildDescriptors(
         "alone. Matching is scoped by LANGUAGE (defaults to 'en'), so a value that exists only " +
         "in another language reports 'missing' and is left untouched — pass `language` to target " +
         "it. Matching is also scoped to this table, so a choice INHERITED from a parent table " +
-        "reports 'missing' rather than being deactivated. Matching is CASE-SENSITIVE (choice " +
-        "values are); a 'missing' row whose value exists on the field in a different case " +
-        "carries nearMatches with the stored spelling(s). dryRun:true verifies the field + " +
-        "update set and reports each live row as would-deactivate with NO write sent " +
-        "(result.dryRun is true). Writes are captured in the supplied update set. Result " +
-        "envelope: field {table, column, language, scope, dictionarySysId}, updateSet, dryRun, " +
-        "choices[].",
+        "reports 'missing' rather than being deactivated. Writes are captured in the supplied " +
+        "update set.",
       shape: removeChoicesFromFieldSchema.shape,
       handler: async function (args: any) {
         return removeChoicesFromField(
@@ -841,36 +830,6 @@ export function buildDescriptors(
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
           ifAbsentQuery: p.ifAbsentQuery,
-          dryRun: p.dryRun,
-        });
-      },
-    },
-    {
-      name: "delete_record",
-      annotations: WRITE_OVERWRITE,
-      description:
-        "Delete ONE existing ServiceNow data record by table + sys_id, pinned to a specified update " +
-        "set, with the record READ BACK BEFORE the delete (so the dry-run shows exactly what would go, " +
-        "and a missing record is an error — never a 'successful' delete of nothing) and READ BACK AFTER " +
-        "(success is only reported once the record is confirmed gone). DRY-RUN BY DEFAULT — without " +
-        "confirm:true nothing is deleted and the before-snapshot is returned; dryRun:true forces a " +
-        "dry-run even with confirm. updateSetSysId is REQUIRED so a delete is never routed to the " +
-        "session's default update set silently (TenonHQ/Dovetail#297); NOTE the server-side op ignores " +
-        "it until #297 ships and captures into the session current-app set — the client sends it " +
-        "regardless so callers are ready. sysId must be a 32-char lowercase hex id; table a plain " +
-        "table name. REFUSES schema tables (sys_db_object / sys_dictionary) — dropping a table or " +
-        "column is a lifecycle op, not a record delete. Destructive and irreversible on apply: query " +
-        "first and dry-run before confirming. To change a record use set_field; to add one use " +
-        "create_record.",
-      shape: deleteRecordSchema.shape,
-      handler: async function (args: unknown) {
-        var p = deleteRecordSchema.parse(args);
-        return deleteRecord({
-          client: client(),
-          table: p.table,
-          sysId: p.sysId,
-          updateSetSysId: p.updateSetSysId,
-          confirm: p.confirm,
           dryRun: p.dryRun,
         });
       },
