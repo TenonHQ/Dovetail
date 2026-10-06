@@ -7,6 +7,7 @@ import * as fUtils from "./FileUtils";
 import { setupDotEnv, getLoginInfo } from "./wizard";
 import { defaultClient, unwrapSNResponse } from "./snClient";
 import { setLogLevel } from "./commands";
+import { isClaudeCodeSession, WATCH_HUMAN_ONLY_WARNING } from "./claudeSession";
 import * as path from "path";
 import * as fs from "fs";
 import { spawn, ChildProcess } from "child_process";
@@ -429,6 +430,14 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
 
 export async function watchAllScopesCommand(args: Sinc.WatchCmdArgs) {
   setLogLevel(args);
+
+  // Soft guard, not a hard fail: `watch` is a human-only local-dev tool and a
+  // branch switch mid-watch overwrites instance records. Warn an agent off it
+  // but leave the human path untouched. See TenonHQ/Dovetail#155.
+  if (isClaudeCodeSession()) {
+    logger.warn(WATCH_HUMAN_ONLY_WARNING);
+    fileLogger.warn("dove watch started inside a Claude Code session (TenonHQ/Dovetail#155)");
+  }
 
   var dashboardProcess: ChildProcess | null = null;
 

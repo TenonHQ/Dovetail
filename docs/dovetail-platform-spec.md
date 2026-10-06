@@ -102,7 +102,7 @@ Each wraps one external service with typed clients, API methods, and formatters.
 
 | Package | Purpose |
 |---|---|
-| `dovetail-dashboard` | Express.js web UI for update set management with ClickUp task integration. Port 3456 by default. Launched by `dove dashboard` or embedded in `dove watch`. |
+| `dovetail-dashboard` | Express.js web UI for update set management with ClickUp task integration. Port 3456 by default. Launched by `dove dashboard` or embedded in the human-only `dove watch` (§8.6). |
 
 #### Platform Helpers & Action Layer
 
@@ -684,7 +684,7 @@ For each selected plugin, calls `plugin.initialize(context)` if defined.
 
 ```
 1. If any plugin failed: "Setup completed with errors. Review the output above."
-2. If all succeeded: "Setup complete! Run dove watch to start."
+2. If all succeeded: "Setup complete! Run dove watch to start."  (human-only local-dev hint; see §8.6 and TenonHQ/Dovetail#155)
 ```
 
 ### 4.4 Login Flow (`runLogin`)
@@ -974,7 +974,7 @@ The ServiceNow REST client is built on Axios with these features:
 
 ### 7.1 How It Works
 
-When a file is pushed to ServiceNow (via `dove push` or `dove watch`), it passes through a configurable plugin pipeline before reaching the instance:
+When a file is pushed to ServiceNow (via `dove push`, or via the human-only `dove watch` — §8.6), it passes through a configurable plugin pipeline before reaching the instance:
 
 1. **Match:** The file path is tested against `rules` in `dove.config.js`. First matching rule wins.
 2. **Execute:** Plugins in the matched rule execute sequentially. Output of one becomes input of the next.
@@ -1161,6 +1161,8 @@ Refresh is an incremental download — only fetches files that are missing local
 
 ### 8.6 Watch Flow (`dove watch` / MultiScopeWatcher)
 
+> **Human-only local-dev tool.** `watch` is hidden from `dove --help` and from Claude-facing docs (TenonHQ/Dovetail#155): it auto-syncs the working tree to the instance, so a branch switch mid-watch pushes the post-switch file state over live records. The handler warns when it detects a Claude Code session (`CLAUDECODE` / `CLAUDE_CODE_*` env) but does not block. Agents use `push` / `refresh` / `status`.
+
 ```
 1. Load config, enumerate scopes from scopes key
 2. For each scope:
@@ -1206,7 +1208,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 | Command | Aliases | Description | Key Flags |
 |---|---|---|---|
-| `watch` | `w`, `watchAllScopes` | Watch all scopes for changes and sync | `--noDashboard`, `--port <n>` |
+| `watch` | `w`, `watchAllScopes` | **Human-only local dev** — hidden from `--help` (yargs `false` description), still wired. Watch all scopes for changes and sync. Stop before a branch switch (#155) | `--noDashboard`, `--port <n>` |
 | `refresh` | `r` | Download new files since last refresh | `--logLevel` |
 | `push [target]` | — | Push local files to ServiceNow | `--diff <branch>`, `--updateSet <name>`, `--clickup <id>`, `--ci` |
 | `download <scope>` | — | Download entire scope from ServiceNow | `--logLevel` |
@@ -1332,7 +1334,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 
 **Purpose:** Express.js web UI for update set + ClickUp task management.
 
-**Not a library** — standalone server, no exports. Spawned by `dove dashboard` or embedded in `dove watch`.
+**Not a library** — standalone server, no exports. Spawned by `dove dashboard` or embedded in the human-only `dove watch` (§8.6).
 
 **API endpoints:**
 - `GET /api/scopes` — List configured scopes with selected update sets

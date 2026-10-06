@@ -68,9 +68,9 @@ The dashboard reads scopes from `dove.config.js` and stores selections in `.dove
 
 `createUpdateSet`, `switchUpdateSet`, and `push --updateSet` now write the affected scope's entry into `.dove-update-sets.json` as part of activating the set, so the routing file, the active set, and the push destination stay consistent. Each prints the resolved destination, e.g. `Push routing updated: x_cadso_core -> FEAT-123 (sys_id)`, and every push prints `Update set routing (from .dove-update-sets.json): <scope> -> <name> (<sys_id>)` so you can see exactly where captures land. If you edit `.dove-update-sets.json` by hand, that entry wins until you switch sets again.
 
-### Multi-Scope Update Set Monitoring
+### Multi-Scope Update Set Check
 
-When using `npx dove watchAllScopes`, update set status is automatically checked every 2 minutes. It warns if any scope is using the DEFAULT update set (a common mistake that puts changes in the wrong place).
+Before every push, run `npx dove currentUpdateSet` for each scope you are about to touch (or open the dashboard with `npx dove dashboard`). A scope still on its DEFAULT update set is a common mistake that puts changes in the wrong place — `push` also prints the resolved routing per scope so you can catch it in the output.
 
 ### Recommended Workflow
 
@@ -79,7 +79,7 @@ When using `npx dove watchAllScopes`, update set status is automatically checked
    npx dove createUpdateSet --name "FEAT-123 Add User Dashboard" --scope x_cadso_core
    ```
 
-2. **During development:** Use `npx dove dev` or `npx dove watchAllScopes`. Changes go into the active update set.
+2. **During development:** Edit locally, then `npx dove push --diff <branch>`. Changes go into the active update set for each file's scope.
 
 3. **Check status:** `npx dove currentUpdateSet` to verify you are in the right update set.
 
@@ -90,5 +90,5 @@ When using `npx dove watchAllScopes`, update set status is automatically checked
 ### Common Issues
 
 - **"No update set selected"** -- You are using the Default update set. Create or switch to a named one.
-- **Changes going to wrong scope** -- In multi-scope mode, use `npx dove watchAllScopes` which auto-switches scopes. Single-scope `npx dove dev` only works for one scope.
+- **Changes going to wrong scope** -- `npx dove push` routes each record by its scope's entry in `.dove-update-sets.json`; a scope with no entry falls back to the session's current scope/set. Map every scope you touch (`createUpdateSet` / `switchUpdateSet --scope <scope>`) before a multi-scope push, and check the file sits under the right scope's `sourceDirectory` and in that scope's `dove.manifest.<scope>.json`.
 - **Update set not found** -- Check the scope filter. Update sets are scope-specific.

@@ -69,8 +69,12 @@ dovetail-debug-*.log
 
 #### Start development
 ```bash
-npx dove dev
+npx dove status              # confirm instance, scope, user
+npx dove refresh             # pull the manifest + files
+# ...edit files...
+npx dove push --diff main    # push only what changed vs the branch
 ```
+Sync is headless and explicit: `refresh` before you start, `push` when you are done. There is no always-on sync step in this flow.
 
 ### Scenario 2: Add a New Scope (Multi-Scope Setup)
 
@@ -102,11 +106,13 @@ If hitting rate limits:
 npx dove initScopes --delay 1000
 ```
 
-#### Watch all scopes simultaneously
+#### Sync across all scopes
 ```bash
-npx dove watchAllScopes
+npx dove refresh                 # all declared scopes
+npx dove refresh -s x_cadso_work # one scope
+npx dove push --diff main        # one command for a multi-scope change
 ```
-Watches all scope directories, auto-switches ServiceNow scope context per file, monitors update set status every 2 minutes.
+`push` reads each file's scope from its manifest and, when `.dove-update-sets.json` maps that scope to an update set (`createUpdateSet` / `switchUpdateSet` write the mapping), routes the record into that scope's set server-side. Map every scope you are about to touch first — the server session scope is only swapped once, to the first file's scope, so an unmapped second scope is the thing to avoid. Confirm with `npx dove currentUpdateSet --scope <scope>` before pushing.
 
 #### Download a single scope
 ```bash
@@ -150,6 +156,6 @@ project/
 | `npx dove initScopes` | Download all configured scopes |
 | `npx dove download <scope>` | Download a specific scope (destructive) |
 | `npx dove refresh` | Refresh manifest, download new files only |
-| `npx dove dev` | Start single-scope watch mode |
-| `npx dove watchAllScopes` | Start multi-scope watch mode |
+| `npx dove push --diff <branch>` | Push only the files changed vs a branch (all scopes) |
+| `npx dove push` | Push every local file (all scopes) |
 | `npx dove status` | Show connected instance, scope, user |

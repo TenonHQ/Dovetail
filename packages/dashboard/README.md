@@ -7,7 +7,7 @@ Web-based UI for managing ServiceNow update sets across scopes, with optional Cl
 - Displays all configured scopes from `dove.config.js`
 - Lists in-progress update sets per scope
 - Lets you select, create, close, and clear update sets per scope
-- Persists selections to `.dove-update-sets.json` — **`dove push` and `dove watch` honor these selections** via the `pushWithUpdateSet` REST endpoint
+- Persists selections to `.dove-update-sets.json` — **`dove push` and `dove watch` honor these selections** via the `pushWithUpdateSet` REST endpoint (`dove watch` is a human-only local-dev tool, hidden from `--help`; stop it before a branch switch or the post-switch files get pushed over your records — TenonHQ/Dovetail#155)
 - Optional ClickUp integration: select a task, then either activate update sets manually per scope or use **Start Task** to move the ClickUp status, create every scope's update set, and cut a working branch in one click
 
 ## Setup
@@ -57,7 +57,7 @@ When you select an update set for a scope in the dashboard, it saves the mapping
 }
 ```
 
-The core Dovetail push logic (`appUtils.ts:pushRec`) reads this file on every push. If an update set is mapped for the record's scope, it routes the push through `/api/cadso/dovetail/pushWithUpdateSet` — ensuring the change lands in the correct update set. This works for both `dove push` and `dove watch`.
+The core Dovetail push logic (`appUtils.ts:pushRec`) reads this file on every push. If an update set is mapped for the record's scope, it routes the push through `/api/cadso/dovetail/pushWithUpdateSet` — ensuring the change lands in the correct update set. This works for both `dove push` and the human-only `dove watch`.
 
 ## ClickUp Integration
 

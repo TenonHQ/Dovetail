@@ -9,7 +9,7 @@
 Both of the issues described below were fixed on branch `fix/sincronia-refresh-500-diagnostics`:
 
 1. **Error-logging blindness** — `unwrapSNResponse` now dumps the full Axios response surface (status, URL, ServiceNow error body, headers, scope) to `dovetail-debug-*.log` on every failed REST call. Every future 500 anywhere in Sincronia is now diagnosable in one pass.
-2. **Actual root cause** — turned out to be `POST api/sinc/sincronia/bulkDownload`, **not** `/getManifest`. ServiceNow rejects REST payloads over 10 MB, and the `refresh` code path called `getMissingFiles` in one shot. The `watch` path in `allScopesCommands.ts` already chunked by 5 tables; `processMissingFiles` in `appUtils.ts` now does the same. All 15 scopes on `tenonworkstudio` refresh successfully post-fix.
+2. **Actual root cause** — turned out to be `POST api/sinc/sincronia/bulkDownload`, **not** `/getManifest`. ServiceNow rejects REST payloads over 10 MB, and the `refresh` code path called `getMissingFiles` in one shot. The `watch` path in `allScopesCommands.ts` (human-only local-dev tool, hidden from `--help` — TenonHQ/Dovetail#155) already chunked by 5 tables; `processMissingFiles` in `appUtils.ts` now does the same. All 15 scopes on `tenonworkstudio` refresh successfully post-fix.
 
 The original investigation narrative below is preserved because the methodology — **fix the observability before guessing at root cause** — was correct even though the initial hypothesis about which endpoint was failing was wrong.
 
