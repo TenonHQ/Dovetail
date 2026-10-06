@@ -1,4 +1,4 @@
-import { deleteRecord, snapshotRecord } from "../src/deleteRecord";
+import { deleteRecord, snapshotRecord, UPDATE_SET_CAVEAT } from "../src/deleteRecord";
 import { makeMockClient } from "./mockClient";
 
 var US = "20756100334a03107b18bc534d5c7b2b";
@@ -226,5 +226,25 @@ describe("snapshotRecord", function () {
 
   it("returns an empty map for a non-object", function () {
     expect(snapshotRecord(null as unknown as Record<string, unknown>)).toEqual({});
+  });
+});
+
+// Until TenonHQ/Dovetail#297 ships the server ignores update_set_sys_id, so no result may
+// imply the capture was pinned. Delete this block with UPDATE_SET_CAVEAT when #297 lands.
+describe("deleteRecord — update-set caveat (#297)", function () {
+  it("the dry-run note states the capture lands in the session's current set", async function () {
+    var ctx = ctxFor({ ["sys_id=" + ID]: [{ sys_id: ID, name: "a" }] });
+    var r = await deleteRecord({ client: ctx.client, table: "x_t", sysId: ID, updateSetSysId: US });
+    expect(r.status).toBe("dry-run");
+    expect(r.note).toContain(UPDATE_SET_CAVEAT);
+    expect(r.note).not.toMatch(/capture it into update set/);
+  });
+
+  it("the deleted note carries the same caveat", async function () {
+    var ctx = ctxFor({ ["sys_id=" + ID]: [{ sys_id: ID, name: "a" }] });
+    var r = await deleteRecord({ client: ctx.client, table: "x_t", sysId: ID, updateSetSysId: US, confirm: true });
+    expect(r.status).toBe("deleted");
+    expect(r.note).toContain("#297");
+    expect(r.note).toContain("current update set");
   });
 });

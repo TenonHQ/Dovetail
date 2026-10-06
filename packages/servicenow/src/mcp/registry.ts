@@ -849,15 +849,15 @@ export function buildDescriptors(
       name: "delete_record",
       annotations: WRITE_OVERWRITE,
       description:
-        "Delete ONE existing ServiceNow data record by table + sys_id, pinned to a specified update " +
-        "set, with the record READ BACK BEFORE the delete (so the dry-run shows exactly what would go, " +
-        "and a missing record is an error — never a 'successful' delete of nothing) and READ BACK AFTER " +
-        "(success is only reported once the record is confirmed gone). DRY-RUN BY DEFAULT — without " +
-        "confirm:true nothing is deleted and the before-snapshot is returned; dryRun:true forces a " +
-        "dry-run even with confirm. updateSetSysId is REQUIRED so a delete is never routed to the " +
-        "session's default update set silently (TenonHQ/Dovetail#297); NOTE the server-side op ignores " +
-        "it until #297 ships and captures into the session current-app set — the client sends it " +
-        "regardless so callers are ready. sysId must be a 32-char lowercase hex id; table a plain " +
+        "Delete ONE existing ServiceNow data record by table + sys_id, with the record READ BACK " +
+        "BEFORE the delete (so the dry-run shows exactly what would go, and a missing record is an " +
+        "error — never a 'successful' delete of nothing) and READ BACK AFTER (success is only " +
+        "reported once the record is confirmed gone). DRY-RUN BY DEFAULT — without confirm:true " +
+        "nothing is deleted and the before-snapshot is returned; dryRun:true forces a dry-run even " +
+        "with confirm. updateSetSysId is REQUIRED and sent, but the capture is NOT pinned yet: until " +
+        "TenonHQ/Dovetail#297 ships, the server-side op ignores it and captures the delete into the " +
+        "session's CURRENT update set — make that the set you want before confirming (every result " +
+        "note repeats this). sysId must be a 32-char lowercase hex id; table a plain " +
         "table name. REFUSES schema tables (sys_db_object / sys_dictionary) — dropping a table or " +
         "column is a lifecycle op, not a record delete. Destructive and irreversible on apply: query " +
         "first and dry-run before confirming. To change a record use set_field; to add one use " +
