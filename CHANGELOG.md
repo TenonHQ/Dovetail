@@ -10,6 +10,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `dove-sn help <verb>` / `dove-sn <verb> --help` / `dove-sn --help` — per-verb usage (required and optional flags with value formats, write gate, example) from a single `VERB_USAGE` table; `Missing required flags` errors now print the verb's usage block; help never loads an env file or builds a client. (#302, shipped in #314 via #309)
+- `servicenow_query_table` (`dovetail-mcp`) accepts `offset` → `sysparm_offset`, so result sets past the 1000-row page ceiling can be paged. (#298, shipped in #314 via #310)
+- `delete_record` MCP tool on `dove-sn mcp` + `dove-sn delete-record` verb — read-back before and after, dry-run by default, `--update-set` required. Completes the generic ServiceNow write surface (create / update / delete) that #154 asked for, on `dove-sn mcp` rather than `dovetail-mcp`. (#154, #308)
 - `tableOptions.<table>.scopeQuery` — sync tables whose rows carry no `sys_scope` (`sys_choice`) by an encoded query with `{scope}`/`{scopeId}` tokens; the server lists such a table for every scope instead of discovering it via `sys_metadata`.
 - `tableOptions.<table>.nameTemplate` — record folder names from raw field values (`"{name}.{element}.{value}"`), so `sys_choice` / `sys_dictionary` records get stable, non-colliding directories. Server `DovetailUtilsMS` + `dovetail-types`.
 
