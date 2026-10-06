@@ -1,0 +1,54 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.48",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.48",
+  "prev_version": "0.0.47",
+  "published_at": "2026-10-06T16:45:57.779Z",
+  "git": {
+    "sha": "c3577bb4655d583f4420ada5fc4e91676cf0dd10",
+    "tag": "dovetail-servicenow@0.0.48"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "c3577bb46",
+      "subject": "fix: review findings for #305–#310 (supersedes #309, #310) (#314)",
+      "pr": 314
+    },
+    {
+      "sha": "0b105677d",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.123 [skip ci]"
+    },
+    {
+      "sha": "4ed32c238",
+      "subject": "chore(deps): bump @modelcontextprotocol/sdk from 1.30.0 to 1.32.1 (#311)",
+      "pr": 311
+    },
+    {
+      "sha": "6cea3055a",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    },
+    {
+      "sha": "d6446a18d",
+      "subject": "feat(servicenow): delete_record MCP tool + dove-sn delete-record verb (read-back verified, update-set pinned) (#308)",
+      "pr": 308
+    },
+    {
+      "sha": "5ca0e4561",
+      "subject": "fix(servicenow): add-choices honours --dry-run; converge choices result envelopes + case-only hint (#307)",
+      "pr": 307
+    },
+    {
+      "sha": "5e2a61bcf",
+      "subject": "feat(schema,servicenow): carry and set sys_dictionary.dependent_on_field (#304)",
+      "pr": 304
+    },
+    {
+      "sha": "b46e30a86",
+      "subject": "chore(release): publish 7 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
