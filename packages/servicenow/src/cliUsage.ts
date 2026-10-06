@@ -143,9 +143,13 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         value: "<path>",
         note: 'Replaces the flags above. JSON { "table", "column", "updateSetSysId", "choiceType"?, "choices": [{ "value", "label" }] }.',
       },
+      {
+        flag: "dry-run",
+        note: "Verify the field + update set and print [would create] / [would update] rows; nothing is written.",
+      },
       JSON_FLAG,
     ],
-    gate: "writes",
+    gate: "dry-run-flag",
     gateNote: "Every insert/update is captured into --update-set.",
     example:
       'dove-sn add-choices --table x_cadso_core_event --column state --update-set <sys_id> --choices "delivered=Delivered,failed=Failed"',
@@ -174,9 +178,13 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         value: "<path>",
         note: 'Replaces the flags above. JSON { "table", "column", "updateSetSysId", "values": [...], "language"? } — validated against the MCP schema.',
       },
+      {
+        flag: "dry-run",
+        note: "Verify the field + update set and print [would deactivate] rows; nothing is written.",
+      },
       JSON_FLAG,
     ],
-    gate: "writes",
+    gate: "dry-run-flag",
     gateNote: "Each deactivation is captured into --update-set; a value already inactive is reported, not rewritten.",
     example:
       'dove-sn remove-choices --table x_cadso_core_event --column state --update-set <sys_id> --values "expired,failed"',
@@ -380,9 +388,9 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       },
       { flag: "update-set", value: "<sys_id>", note: "The change is captured here." },
       {
-        flag: "fields | from-json",
-        value: '"k=v,k2=v2" | <path>',
-        note: "At least one. --from-json is a JSON { field: value } object and wins on a shared key; it is the only form for large or multiline values.",
+        flag: "fields | from-json | from-stdin",
+        value: '"k=v,k2=v2" | <path> | (JSON piped on stdin)',
+        note: "At least one. --from-json / --from-stdin (alias --from-json -) take a JSON { field: value } object, win on a shared key, and are the only forms for large or multiline values. stdin is read ONLY with --from-stdin.",
       },
     ],
     optional: [DRY_RUN_FLAG, JSON_FLAG],
@@ -398,9 +406,9 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       { flag: "scope", value: "<x_scope>", note: "The app that owns the new record." },
       { flag: "update-set", value: "<sys_id>", note: "The insert is captured here." },
       {
-        flag: "fields | from-json",
-        value: '"k=v,k2=v2" | <path>',
-        note: "At least one. --from-json is a JSON { field: value } object and wins on a shared key.",
+        flag: "fields | from-json | from-stdin",
+        value: '"k=v,k2=v2" | <path> | (JSON piped on stdin)',
+        note: "At least one. --from-json / --from-stdin (alias --from-json -) take a JSON { field: value } object and win on a shared key. stdin is read ONLY with --from-stdin.",
       },
     ],
     optional: [
@@ -412,6 +420,31 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     example:
       'dove-sn create-record --table x_cadso_core_metric_point_type --scope x_cadso_core --fields "name=avg_parts,label=Avg Parts,order=35" --if-absent "name=avg_parts" --update-set <sys_id>',
     notes: ["Exit 2 when the write landed but the read-back is unverified (or --if-absent skipped with drift)."],
+  },
+  "delete-record": {
+    summary: "Delete ONE EXISTING data record, then read it back to verify it is GONE",
+    required: [
+      { flag: "table", value: "<name>", note: "Plain table name; schema tables (sys_db_object / sys_dictionary) are refused." },
+      { flag: "sys-id", value: "<32-hex>", note: "The record to delete — 32 lowercase hex characters." },
+      {
+        flag: "update-set",
+        value: "<sys_id>",
+        note: "Sent with the delete; see the #297 note below for where the capture lands today.",
+      },
+    ],
+    optional: [
+      { flag: "apply", note: "Delete for real (without it the run is a dry-run)." },
+      { flag: "dry-run", note: "Force a dry-run even with --apply." },
+      JSON_FLAG,
+    ],
+    gate: "apply",
+    gateNote: "The dry-run prints the record snapshot that would be deleted.",
+    example:
+      "dove-sn delete-record --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> --update-set <sys_id> --apply",
+    notes: [
+      "Reads the record BEFORE (a missing record is an error, never a no-op delete) and AFTER (exit 2 if it is still present).",
+      "Until TenonHQ/Dovetail#297 ships server-side the delete op IGNORES --update-set and captures into the session's current update set — make that the set you want before --apply.",
+    ],
   },
   "host-assets": {
     summary: "Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)",

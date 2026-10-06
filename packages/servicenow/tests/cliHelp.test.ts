@@ -340,3 +340,38 @@ describe("main(): missing-flag errors carry the usage block", function () {
     expect(r.stderr).toContain("set-table: --table needs a value");
   });
 });
+
+// #309 was authored before #307 / #308 / #310 landed; these pin the flags those PRs
+// added so the usage table cannot silently fall behind the verbs again.
+describe("usage entries reflect the sibling verb changes", function () {
+  it("add-choices / remove-choices document --dry-run and are not 'writes immediately'", function () {
+    ["add-choices", "remove-choices"].forEach(function (verb) {
+      expect(documentedFlags(verb)).toContain("dry-run");
+      expect(VERB_USAGE[verb].gate).toBe("dry-run-flag");
+      expect(formatVerbUsage(verb)).not.toContain("there is no --dry-run");
+    });
+  });
+
+  it("set-field / create-record document --from-stdin", function () {
+    ["set-field", "create-record"].forEach(function (verb) {
+      expect(documentedFlags(verb)).toContain("from-stdin");
+    });
+  });
+
+  it("delete-record is dry-run by default and states where the capture lands until #297", function () {
+    var block = formatVerbUsage("delete-record");
+    expect(VERB_USAGE["delete-record"].gate).toBe("apply");
+    expect(documentedFlags("delete-record")).toEqual(
+      expect.arrayContaining(["table", "sys-id", "update-set", "apply", "dry-run"]),
+    );
+    expect(block).toContain("#297");
+    expect(block).not.toContain("never routed to the session default");
+  });
+
+  it("dove-sn help delete-record resolves offline", async function () {
+    var r = await run(["help", "delete-record"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("dove-sn delete-record — ");
+    expect(createClient).not.toHaveBeenCalled();
+  });
+});
