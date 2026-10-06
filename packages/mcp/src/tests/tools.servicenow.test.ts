@@ -10,6 +10,8 @@ jest.mock("@tenonhq/dovetail-servicenow", function () {
 });
 
 import { servicenowQueryTable, resolveEnvFilePath } from "../tools/servicenow";
+import { servicenowQueryTableSchema } from "../schemas/servicenow";
+import type { ServicenowQueryTableInput } from "../schemas/servicenow";
 
 function makeDeps(safety: { denyTables: string[]; overrideTables: string[] }, queryImpl: any) {
   return {
@@ -143,5 +145,66 @@ describe("resolveEnvFilePath", function () {
 
   it("rejects traversal tokens", function () {
     expect(function () { resolveEnvFilePath(".env..prod"); }).toThrow();
+  });
+});
+
+describe("servicenow_query_table offset (paging past the 1000-row cap, #298)", function () {
+  var SAFETY = { denyTables: [] as string[], overrideTables: [] as string[] };
+
+  it("forwards offset in the options object alongside fields", async function () {
+    var query = jest.fn().mockResolvedValue([]);
+    var deps = makeDeps(SAFETY, query);
+    var args: ServicenowQueryTableInput = {
+      table: "incident",
+      sysparm_query: "active=true^ORDERBYsys_id",
+      fields: ["sys_id"],
+      limit: 1000,
+      offset: 1000
+    };
+    await servicenowQueryTable(args, deps);
+    expect(query).toHaveBeenCalledWith("incident", "active=true^ORDERBYsys_id", {
+      limit: 1000,
+      fields: ["sys_id"],
+      offset: 1000
+    });
+  });
+
+  it("forwards offset without fields (options form, no fields key, default limit)", async function () {
+    var query = jest.fn().mockResolvedValue([]);
+    var deps = makeDeps(SAFETY, query);
+    var args: ServicenowQueryTableInput = { table: "incident", sysparm_query: "x=1", offset: 2000 };
+    await servicenowQueryTable(args, deps);
+    expect(query).toHaveBeenCalledWith("incident", "x=1", { limit: 100, offset: 2000 });
+  });
+
+  it("sends offset 0 explicitly when asked", async function () {
+    var query = jest.fn().mockResolvedValue([]);
+    var deps = makeDeps(SAFETY, query);
+    var args: ServicenowQueryTableInput = { table: "incident", sysparm_query: "x=1", limit: 5, offset: 0 };
+    await servicenowQueryTable(args, deps);
+    expect(query).toHaveBeenCalledWith("incident", "x=1", { limit: 5, offset: 0 });
+  });
+
+  it("does not send offset when omitted (numeric-limit form, no offset key anywhere)", async function () {
+    var query = jest.fn().mockResolvedValue([]);
+    var deps = makeDeps(SAFETY, query);
+    var args: ServicenowQueryTableInput = { table: "incident", sysparm_query: "x=1", limit: 25 };
+    await servicenowQueryTable(args, deps);
+    expect(query).toHaveBeenCalledWith("incident", "x=1", 25);
+    var withFields: ServicenowQueryTableInput = { table: "incident", sysparm_query: "x=1", fields: ["sys_id"] };
+    await servicenowQueryTable(withFields, deps);
+    var lastOptions: unknown = query.mock.calls[1][2];
+    expect(lastOptions).toEqual({ limit: 100, fields: ["sys_id"] });
+    expect(Object.prototype.hasOwnProperty.call(lastOptions as object, "offset")).toBe(false);
+  });
+
+  it("schema accepts a non-negative integer offset and rejects negative / fractional ones", function () {
+    var base = { table: "incident", sysparm_query: "x=1" };
+    expect(servicenowQueryTableSchema.safeParse(Object.assign({}, base, { offset: 0 })).success).toBe(true);
+    expect(servicenowQueryTableSchema.safeParse(Object.assign({}, base, { offset: 1000 })).success).toBe(true);
+    expect(servicenowQueryTableSchema.safeParse(base).success).toBe(true);
+    expect(servicenowQueryTableSchema.safeParse(Object.assign({}, base, { offset: -1 })).success).toBe(false);
+    expect(servicenowQueryTableSchema.safeParse(Object.assign({}, base, { offset: 1.5 })).success).toBe(false);
+    expect(servicenowQueryTableSchema.safeParse(Object.assign({}, base, { offset: "10" })).success).toBe(false);
   });
 });

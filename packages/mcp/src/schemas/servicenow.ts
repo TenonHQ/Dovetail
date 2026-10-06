@@ -5,6 +5,9 @@ export var servicenowQueryTableSchema = z.object({
   sysparm_query: z.string(),
   fields: z.array(z.string().min(1)).optional(),
   limit: z.number().int().min(1).max(1000).optional(),
+  // Row offset → sysparm_offset. The Table API caps one page at 1000 rows, so
+  // paging past that is offset = page * limit (0-based pages). Omit → not sent.
+  offset: z.number().int().min(0).optional(),
   // Optional per-call instance retarget. Names an env file in the server's
   // working directory: a bare token like "prod" or "workshop" resolves to
   // ".env.<token>", or pass the full ".env.<name>" basename. Path separators

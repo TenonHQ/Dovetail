@@ -255,6 +255,8 @@ export type {
 export type { CreateRecordParams, CreateRecordResult } from "./createRecord";
 export { deleteRecord } from "./deleteRecord";
 export type { DeleteRecordParams, DeleteRecordResult } from "./deleteRecord";
+export { decodeHtmlEntities, hasHtmlEntity, readBackMatches, verifyReadBack } from "./setField";
+export type { ReadBackMatch, ReadBackVerification } from "./setField";
 
 export { invokeRest, INVOKE_REST_METHODS } from "./invokeRest";
 export type { InvokeRestParams, InvokeRestResult } from "./invokeRest";

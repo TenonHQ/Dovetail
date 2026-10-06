@@ -419,7 +419,16 @@ export async function runInit(options?: RunInitOptions): Promise<void> {
     if (failed) {
       logger.warn("  Setup completed with errors. Review the output above.");
     } else {
-      logger.success(chalk.green("  Setup complete!") + " Run " + chalk.cyan("dove watch") + " to start.");
+      // Headless next steps only — the file watcher is human-only and hidden from
+      // Claude-facing output (TenonHQ/Dovetail#155).
+      logger.success(
+        chalk.green("  Setup complete!") +
+          " Run " +
+          chalk.cyan("dove status") +
+          ", then " +
+          chalk.cyan("dove refresh") +
+          " to pull the manifest and files.",
+      );
     }
     logger.info("");
   } catch (e) {
@@ -492,7 +501,8 @@ export async function runLogin(options?: RunLoginOptions): Promise<void> {
     logger.info("");
     logger.info("You can now use:");
     logger.info("  dove init              — Initialize a new project");
-    logger.info("  dove watch             — Watch for changes");
+    logger.info("  dove refresh           — Pull the manifest + new files");
+    logger.info("  dove push --diff main  — Push the files changed vs a branch");
     logger.info("  dove status            — Check instance connection");
     logger.info("");
   } catch (e) {

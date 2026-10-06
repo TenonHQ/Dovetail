@@ -11,7 +11,7 @@
 
 import path from "path";
 import { createClient, createClientFromEnvFile } from "@tenonhq/dovetail-servicenow";
-import type { ServiceNowClient } from "@tenonhq/dovetail-servicenow";
+import type { ServiceNowClient, TableQueryOptions } from "@tenonhq/dovetail-servicenow";
 import type { ServiceNowSafetyConfig } from "../config";
 import { ServicenowQueryTableInput } from "../schemas/servicenow";
 
@@ -79,12 +79,20 @@ export async function servicenowQueryTable(
   }
   var client = resolveClient(deps, args.env);
   var limit = args.limit !== undefined ? args.limit : 100;
+  var hasFields = Boolean(args.fields && args.fields.length > 0);
+  var hasOffset = args.offset !== undefined;
   var records: any[];
-  if (args.fields && args.fields.length > 0) {
-    records = await client.table.query(args.table, args.sysparm_query, {
-      limit: limit,
-      fields: args.fields
-    });
+  if (hasFields || hasOffset) {
+    // Options-object form: fields and/or offset. offset maps to sysparm_offset
+    // inside the client; when omitted it is never sent (instance default 0).
+    var options: TableQueryOptions = { limit: limit };
+    if (hasFields) {
+      options.fields = args.fields;
+    }
+    if (hasOffset) {
+      options.offset = args.offset;
+    }
+    records = await client.table.query(args.table, args.sysparm_query, options);
   } else {
     records = await client.table.query(args.table, args.sysparm_query, limit);
   }

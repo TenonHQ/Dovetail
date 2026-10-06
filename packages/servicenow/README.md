@@ -110,6 +110,19 @@ file — handy for CI.
 
 ## CLI
 
+### Getting help
+
+```bash
+npx dove-sn help                    # verb index
+npx dove-sn help add-choices        # one verb: required/optional flags, value formats, write gate, example
+npx dove-sn add-choices --help      # same — never loads credentials or touches the instance
+```
+
+Every verb's usage is rendered from one table (`src/cliUsage.ts`), so the help
+and the dispatcher cannot drift — a test fails if a verb is missing an entry. A
+`Missing required flags` error prints that verb's usage block under the error
+line; a mistyped verb lists the closest matches and exits 1.
+
 ```bash
 # Inline form
 npx dove-sn add-choices \
@@ -828,10 +841,39 @@ already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1`
 args, `2` write landed unverified (or skipped with drift). To **update** an existing
 record instead, use `set-field`.
 
+#### Field sources (`--fields`, `--from-json`, `--from-stdin`)
+
+Both verbs take their field map from any combination of three sources; on a shared
+key the file / stdin value wins over the inline one.
+
+| Source | Use it for |
+| --- | --- |
+| `--fields "k=v,k2=v2"` | Short scalar values. Splits on commas and trims, so it cannot carry a comma, newline or `=`. |
+| `--from-json <path>` | A flat JSON object `{ "field": "value" }` — any character, any size (script bodies, HTML, JSON blobs). |
+| `--from-stdin` (alias `--from-json -`) | The same JSON object, piped in: `cat fields.json \| npx dove-sn create-record ... --from-stdin`. |
+
+**stdin is read only when you ask for it.** Without `--from-stdin` / `--from-json -`
+no `dove-sn` verb touches stdin at all, so a process launched with an open-but-idle
+stdin pipe (an agent harness running it in the background) returns immediately instead
+of waiting for input that never comes; a missing field source is an immediate usage
+error (exit `1`), never a prompt. `--from-stdin` refuses a terminal stdin and an empty
+stream with an actionable message.
+
+#### Read-back verification and the HTML sanitizer
+
+After the write both verbs re-query the record and compare every requested value to
+what was stored. ServiceNow's HTML sanitizer rewrites characters in `html` /
+`translated_html` / `wiki` fields on save (for example `@` becomes `&#64;`), which used
+to surface as a false **mismatch** on a record that was in fact correct. The compare is
+now strict byte-for-byte first, and only when the **stored** value contains an HTML
+entity reference are both sides entity-decoded and compared again; a match found that
+way is reported as verified with a note naming the normalized field(s). A genuinely
+different value still decodes to something different and still reports `failed`
+(exit `2`), and the failure note names the mismatched field(s).
+
 ### Delete a record
 
-Delete **one** existing data record by table + sys_id, pinned to an update set,
-with the record read back **before** (so the dry-run shows exactly what would go,
+Delete **one** existing data record by table + sys_id, with the record read back **before** (so the dry-run shows exactly what would go,
 and a missing record is an error rather than a "successful" delete of nothing) and
 **after** (success is never reported until the record is confirmed gone).
 
@@ -850,12 +892,12 @@ npx dove-sn delete-record \
 `delete-record` wraps the core `deleteRecord` op. It is **dry-run by default** —
 nothing is deleted without `--apply` (`--dry-run` wins if both are given). `--sys-id`
 must be a 32-character lowercase hex id and `--table` a plain table name; both are
-validated before any network call. `--update-set` is **required** so a delete is never
-routed to the session's default update set silently
-([#297](https://github.com/TenonHQ/Dovetail/issues/297)) — note that until #297 ships
-server-side, the op ignores `update_set_sys_id` and captures into the session
-current-app set; the client sends it regardless so callers are ready the moment the
-server honours it. Like its siblings it **refuses** schema tables (`sys_db_object` /
+validated before any network call. `--update-set` is **required** and sent with the
+delete, but **the capture is not pinned yet**: until
+[#297](https://github.com/TenonHQ/Dovetail/issues/297) ships server-side, the op ignores
+`update_set_sys_id` and captures the delete into the session's **current** update set —
+make that the set you want before `--apply`. Every result note repeats this caveat; the
+client keeps sending the field so it takes effect the moment the server honours it. Like its siblings it **refuses** schema tables (`sys_db_object` /
 `sys_dictionary`). Exit codes: `0` deleted / dry-run, `1` bad args or no such record,
 `2` the delete returned but the record is **still present** on read-back.
 
@@ -1120,7 +1162,9 @@ physical per-instance change), the record-write verbs `set_field` (update scalar
 existing record), `create_record` (insert one record) and `delete_record` (delete one
 record — dry-run by default, `confirm:true` to apply, `updateSetSysId` required, the
 record read back before AND after so success is only reported once it is confirmed
-gone) — all update-set-captured and read-back-verified — `host_assets` (deploy a built
+gone) — all read-back-verified; `set_field` / `create_record` are captured in the
+update set you pass, while `delete_record` captures into the session's current set
+until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `host_assets` (deploy a built
 dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step
@@ -1155,7 +1199,8 @@ This server is separate from `@tenonhq/dovetail-mcp` (the read-only cross-system
 aggregator) — `dovetail-servicenow`'s server is the ServiceNow **write** surface.
 `dovetail-mcp` intentionally does **not** get `delete_record` (or any other ServiceNow
 write): record writes — create, set, delete — live on `dove-sn mcp` only, where every
-one is update-set-pinned, dry-run-gated and read-back-verified.
+one takes an update set, previews before writing and is read-back-verified (the delete's
+update set is honoured server-side once #297 ships).
 
 ## Publishing a Custom Action Type
 

@@ -4,7 +4,7 @@
 >
 > Audience: a Claude Code session (or the developer reading over its shoulder). For *building/contributing* to Dovetail, see [`../ONBOARDING.md`](../ONBOARDING.md). For the platform design, see [`dovetail-platform-spec.md`](dovetail-platform-spec.md).
 
-Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**69 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
+Dovetail is the action layer that lets a Claude session **read and write ServiceNow, ClickUp, Gmail, and Calendar**, surface **plans in a dashboard**, and **author SN views/layouts/flows** — all from the terminal. The capability surface is three MCP servers (**72 tools**), three CLIs (`dove`, `dove-sn`, `dove-claude-plans`), and a set of installable skills.
 
 ---
 
@@ -14,7 +14,7 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
 | **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 25 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, manage prompt drafts, build a session handoff |
-| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 28 | All writes, update-set-captured; **most** support `dryRun` (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
+| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 31 | Writes, update-set-captured (`delete_record` pending #297); **most** preview before writing (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
 
@@ -49,7 +49,7 @@ Source: `packages/mcp/src/registry.ts`. The 4 write tools throw unless `SINC_MCP
 ### ServiceNow — read (1)
 | Tool | What it does | Guardrail |
 |---|---|---|
-| `servicenow_query_table` | Read-only GET against the SN Table API. Required: `table`, `sysparm_query`. Optional: `fields[]`, `limit` (default 100, max 1000) | Sensitive tables (`sys_user_password`, `sys_credential`, …) are denied unless `SINC_MCP_SN_TABLE_OVERRIDE=<table>` is set |
+| `servicenow_query_table` | Read-only GET against the SN Table API. Required: `table`, `sysparm_query`. Optional: `fields[]`, `limit` (default 100, max 1000 — the per-page ceiling), `offset` (→ `sysparm_offset`; page past 1000 rows with `offset = page * limit`) | Sensitive tables (`sys_user_password`, `sys_credential`, …) are denied unless `SINC_MCP_SN_TABLE_OVERRIDE=<table>` is set |
 
 > **For SN *writes*, this server has none** — use the `dovetail-servicenow` MCP (§4) or the `dove`/`dove-sn` CLIs (§5). This is by design: `dovetail-mcp` is read-mostly.
 
@@ -101,24 +101,28 @@ Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders 
 
 ---
 
-## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 28 tools (SN authoring writes)
+## 4. `dovetail-servicenow` MCP (`dove-sn mcp`) — 31 tools (SN authoring writes)
 
 Source: `packages/servicenow/src/mcp/registry.ts` — the registry is the source of
 truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug.
 
-Writes are **captured in the update set you pass** and are **idempotent** (re-running
-reports every record unchanged).
+Writes are **captured in the update set you pass** (exception: `delete_record`, until
+#297 ships — see its row) and are **idempotent** (re-running reports every record
+unchanged).
 
-> **`dryRun` is NOT universal.** 19 of the 28 accept it; the other 9 write (or read)
-> immediately. Check the tool's own schema before assuming you can plan a write. (Both
-> choice verbs accept `dryRun` as of the #296 fix — reads happen, nothing is written, rows
-> report `would-create` / `would-update` / `would-deactivate`.)
+> **Previewing is NOT universal.** Of the 31 tools, 23 accept `dryRun`; 3 more preview
+> by default and need an explicit flag to write (`action_edit` / `flow_edit` →
+> `apply:true`, `flow_test` → `confirm:true`); 3 are read-only (`flow_view`,
+> `action_view`, `index_list`); and **2 write immediately with no preview**
+> (`flow_publish`, `flow_copy`). Check the tool's own schema before assuming you can plan
+> a write. (Both choice verbs accept `dryRun` as of the #296 fix — reads happen, nothing
+> is written, rows report `would-create` / `would-update` / `would-deactivate`.)
 
 ### Layouts & views
 
 | Tool | What it does | `dryRun` |
 |---|---|---|
-| `create_view` | Create a custom view (`sys_ui_view`); existing same-name view returned unchanged | no |
+| `create_view` | Create a custom view (`sys_ui_view`); existing same-name view returned unchanged | yes |
 | `set_list_layout` | Declaratively set a list layout's columns + order for table+view. `prune` (default true) removes columns not in the spec | yes |
 | `set_form_layout` | Declaratively set form sections + fields. First section is primary (omit its caption). `prune` default true | yes |
 | `set_related_lists` | Set which related lists appear on a form. IDs: `"<table>.<field>"` or `"REL:<sys_relationship>"` | yes |
@@ -143,7 +147,7 @@ reports every record unchanged).
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
 | `create_record` | Create a record in a given scope + update set | yes |
-| `delete_record` | Delete ONE record by table + 32-hex sys_id, pinned to a **required** update set (#297 — never the session default). Reads the record BEFORE (a missing record is an error, not a no-op) and AFTER (success only once it is confirmed gone). Refuses schema tables. Not on `dovetail-mcp` — writes live here | dry-run **by default**; `confirm:true` deletes |
+| `delete_record` | Delete ONE record by table + 32-hex sys_id. `updateSetSysId` is **required** and sent, but **not yet honoured**: until #297 ships the delete is captured into the session's **current** update set (every result note says so). Reads the record BEFORE (a missing record is an error, not a no-op) and AFTER (success only once it is confirmed gone). Refuses schema tables. Not on `dovetail-mcp` — writes live here | dry-run **by default**; `confirm:true` deletes |
 
 ### Flows & actions
 
@@ -151,14 +155,14 @@ reports every record unchanged).
 |---|---|---|
 | `flow_view` | Read a flow/subflow's compiled step graph | n/a (read) |
 | `action_view` | Read a custom action type's definition | n/a (read) |
-| `action_edit` | Patch an action type's steps | no |
+| `action_edit` | Patch an action type's steps | dry-run **by default**; `apply:true` writes |
 | `action_clone` | Clone an action type (all steps + step IO) into a scope, then publish + verify; dry-run unless `confirm:true` | yes |
 | `action_define` | Define an existing action type's inputs, outputs and steps (script + REST, data-pill wired) the way the Designer's Save does — one PUT of the full model, read back + verified; `publish:true` also snapshots. Dry-run (planned diff) unless `confirm:true`; idempotent (no PUT when already in effect). The shell comes from `action_clone` or the Designer | yes |
 | `flow_publish` | Publish a flow | no |
 | `flow_copy` | Copy a flow | no |
 | `flow_create` | Author a new flow | yes |
-| `flow_test` | Validate / execute a flow | no |
-| `flow_edit` | Patch + republish a flow step | no |
+| `flow_test` | Validate / execute a flow | validate-only **by default**; `confirm:true` executes |
+| `flow_edit` | Patch + republish a flow step | dry-run **by default**; `apply:true` writes |
 
 ### Platform
 
@@ -250,7 +254,7 @@ Use `--force` to overwrite existing copies.
 
 - **ClickUp writes (dovetail-mcp):** set `SINC_MCP_WRITES_ENABLE=1`; every write is a dry-run preview unless `confirm:true`.
 - **SN writes always go through an update set.** Pass `--update-set` (CLI) or the update-set arg (MCP). Never write scoped SN records via the raw Table API — a Table API POST adopts the API user's session scope and lands in the wrong app. (Dovetail's REST endpoints + `dove createUpdateSet` keep scope correct — see the repo `CLAUDE.md` → Server-Side REST API.)
-- **SN `dryRun` first — where it exists.** Most `dove-sn` write tools preview before writing; use it. But it is not universal (§4), and in particular the choice verbs have no preview, so check the tool's schema rather than assuming a dry run happened.
+- **SN `dryRun` first — where it exists.** Most `dove-sn` write tools preview before writing; use it. But it is not universal (§4) — `flow_publish` and `flow_copy` write immediately — so check the tool's schema rather than assuming a dry run happened.
 - **Plans before presenting.** Push every plan/proposal via `push_plan` with artifacts.
 
 ---

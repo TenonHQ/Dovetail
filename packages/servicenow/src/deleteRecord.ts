@@ -1,17 +1,18 @@
 /**
- * dove-sn delete-record — delete ONE existing data record, pinned to a
- * specified update set, with a read-back BEFORE (so the dry-run shows exactly
- * what would go, and a missing record is an error rather than a no-op delete)
- * and a read-back AFTER (success is never reported until the record is
- * confirmed gone). The DELETE counterpart to `set-field` / `create-record`.
+ * dove-sn delete-record — delete ONE existing data record, with a read-back
+ * BEFORE (so the dry-run shows exactly what would go, and a missing record is
+ * an error rather than a no-op delete) and a read-back AFTER (success is never
+ * reported until the record is confirmed gone). The DELETE counterpart to
+ * `set-field` / `create-record`.
  *
  * Wraps the Dovetail core Scripted REST `deleteRecord` op. DRY-RUN BY DEFAULT:
  * without confirm:true nothing is deleted; dryRun:true forces a dry-run even
- * with confirm. updateSetSysId is REQUIRED so a delete is never routed to the
- * session's default update set silently (TenonHQ/Dovetail#297). NOTE: until
- * #297 ships server-side the op ignores update_set_sys_id and captures into
- * the session current-app set — the client still sends it so callers are
- * ready the moment the server honours it.
+ * with confirm. updateSetSysId is REQUIRED and sent with the delete, but the
+ * capture is NOT pinned yet: until TenonHQ/Dovetail#297 ships server-side the
+ * op ignores update_set_sys_id and captures into the session's current update
+ * set. Every result note says so, so no caller reads "pinned" into a delete
+ * that was not. The client keeps sending the field so it takes effect the
+ * moment the server honours it.
  *
  * NOT for schema tables (sys_db_object / sys_dictionary) — dropping a table or
  * column is a privileged lifecycle op, not a data delete.
@@ -26,7 +27,11 @@ export interface DeleteRecordParams {
   table: string;
   /** sys_id of the record to delete — 32 lowercase hex characters. */
   sysId: string;
-  /** Update set to capture the delete into. Required — never routed to the session default. */
+  /**
+   * Update set the delete should be captured into. Required and sent, but honoured only
+   * once TenonHQ/Dovetail#297 ships — until then the capture lands in the session's
+   * current update set (see UPDATE_SET_CAVEAT).
+   */
   updateSetSysId?: string;
   /** The delete gate: the record is only deleted when confirm is exactly true. */
   confirm?: boolean;
@@ -55,6 +60,16 @@ export var SYS_ID_PATTERN = /^[0-9a-f]{32}$/;
 
 /** Longest field value echoed in the before-snapshot; scripts/XML are truncated. */
 var SNAPSHOT_VALUE_MAX = 200;
+
+/**
+ * Appended to every result note while TenonHQ/Dovetail#297 is open: the server op does not
+ * yet honour update_set_sys_id, so the capture lands in the session's current update set.
+ * Delete this (and its test) when #297 ships.
+ */
+export var UPDATE_SET_CAVEAT =
+  " NOTE: the update set is sent but NOT yet honoured — until TenonHQ/Dovetail#297 ships, "
+  + "the delete is captured into the session's current update set. Make that the set you "
+  + "want before applying.";
 
 export function validateDeleteTable(table: unknown): string {
   if (typeof table !== "string" || table.length === 0) {
@@ -139,8 +154,8 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
   var sysId = validateDeleteSysId(params.sysId);
   if (typeof params.updateSetSysId !== "string" || params.updateSetSysId.length === 0) {
     throw new Error(
-      "delete-record: --update-set <sys_id> is required so the delete is captured into a known "
-        + "update set, never the session default."
+      "delete-record: --update-set <sys_id> is required — it names the update set the delete "
+        + "belongs in (honoured server-side once TenonHQ/Dovetail#297 ships)."
     );
   }
   var updateSetSysId = params.updateSetSysId;
@@ -164,8 +179,8 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
       before: before,
       verified: false,
       note: "dry-run: no delete. Would delete " + table + "/" + sysId
-        + " and capture it into update set " + updateSetSysId
-        + ". Re-run with confirm:true (CLI: --apply) to delete."
+        + " (requested update set " + updateSetSysId + ")."
+        + " Re-run with confirm:true (CLI: --apply) to delete." + UPDATE_SET_CAVEAT
     };
   }
 
@@ -188,6 +203,7 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
     verified: verified,
     note: verified
       ? "Deleted " + table + "/" + sysId + " and verified via read-back (record is gone)."
+        + UPDATE_SET_CAVEAT
       : "deleteRecord returned but " + table + "/" + sysId
         + " is STILL PRESENT on read-back — the delete did not land (ACL / business rule abort?). "
         + "Check the instance before retrying."
