@@ -531,6 +531,22 @@ export var createRecordSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+// delete_record: DRY-RUN BY DEFAULT — the delete only fires with confirm:true
+// (dryRun:true forces a dry-run even then). updateSetSysId is REQUIRED so a
+// delete is never routed to the session default set silently (#297). The
+// table-name / 32-hex sys_id shapes are enforced here AND in deleteRecord so a
+// malformed id is rejected before any network call on either surface.
+export var deleteRecordSchema = z.object({
+  table: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9_]+$/, "table must be a ServiceNow table name (lowercase letters, digits, underscores)"),
+  sysId: z.string().regex(/^[0-9a-f]{32}$/, "sysId must be a 32-character lowercase hex sys_id"),
+  updateSetSysId: z.string().min(1),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
 // app_publish: publish a scoped app to the ServiceNow Store or the company
 // application repository. Deliberately NO credential fields — the Store
 // account resolves from SN_STORE_USERNAME/SN_STORE_PASSWORD inside the verb,
