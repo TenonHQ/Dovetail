@@ -1,54 +1,24 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-06T16:20:27.044Z",
+  "generated_at": "2026-10-06T16:25:11.503Z",
   "events": [
     {
       "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-core@0.0.122",
+      "event_id": "dovetail-core@0.0.123",
       "package": "@tenonhq/dovetail-core",
-      "version": "0.0.122",
-      "prev_version": "0.0.121",
-      "published_at": "2026-10-06T16:20:27.034Z",
+      "version": "0.0.123",
+      "prev_version": "0.0.122",
+      "published_at": "2026-10-06T16:25:11.496Z",
       "git": {
-        "sha": "3d01fbe72191466a74be6d178836c3ae2eeab3e6",
-        "tag": "dovetail-core@0.0.122"
+        "sha": "0927c64611ab1901d9ce6b6cbba15cb17eee684e",
+        "tag": "dovetail-core@0.0.123"
       },
       "semver_bump": "patch",
       "commits": [
         {
-          "sha": "3d01fbe72",
-          "subject": "chore(core): hide the watch command from help + Claude-session guard + doc scrub (#305)",
-          "pr": 305
-        },
-        {
-          "sha": "e1c855911",
-          "subject": "chore(release): publish 11 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-dashboard@0.0.54",
-      "package": "@tenonhq/dovetail-dashboard",
-      "version": "0.0.54",
-      "prev_version": "0.0.53",
-      "published_at": "2026-10-06T16:20:27.034Z",
-      "git": {
-        "sha": "3d01fbe72191466a74be6d178836c3ae2eeab3e6",
-        "tag": "dovetail-dashboard@0.0.54"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "3d01fbe72",
-          "subject": "chore(core): hide the watch command from help + Claude-session guard + doc scrub (#305)",
-          "pr": 305
-        },
-        {
-          "sha": "b46e30a86",
-          "subject": "chore(release): publish 7 packages [skip ci]"
+          "sha": "0927c6461",
+          "subject": "fix(core): dove create sys_update_set routes through the scope-correct createUpdateSet op (#306)",
+          "pr": 306
         }
       ],
       "exports_delta": null,
@@ -1286,6 +1256,36 @@
         {
           "sha": "17624b238",
           "subject": "chore(release): publish 11 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.36",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.36",
+      "prev_version": "0.0.35",
+      "published_at": "2026-08-31T21:34:20.896Z",
+      "git": {
+        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
+        "tag": "dovetail-servicenow@0.0.36"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "81ab50a4e",
+          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
+          "pr": 264
+        },
+        {
+          "sha": "025e4eb4d",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "2d43ef9f1",
+          "subject": "chore(release): @tenonhq/dovetail-dashboard@0.0.49 [skip ci]"
         }
       ],
       "exports_delta": null,

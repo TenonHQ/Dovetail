@@ -1,4 +1,68 @@
-import type { AddChoicesResult, RemoveChoicesResult } from "./types";
+import type {
+  AddChoicesResult,
+  ChoiceActionResult,
+  ChoiceFieldRef,
+  ChoiceRemovalResult,
+  RemoveChoicesResult,
+} from "./types";
+
+/**
+ * The per-row tag shown in square brackets. Dry-run actions are spelled out as a verb
+ * phrase ("would create") so a planned row can never be misread as a landed one — the
+ * live and planned tags share no word.
+ */
+var ACTION_LABELS: Record<
+  ChoiceActionResult["action"] | ChoiceRemovalResult["action"],
+  string
+> = {
+  created: "created",
+  updated: "updated",
+  unchanged: "unchanged",
+  "would-create": "would create",
+  "would-update": "would update",
+  deactivated: "deactivated",
+  missing: "missing",
+  "would-deactivate": "would deactivate",
+};
+
+/** Widest label, so every bracketed tag lines up. */
+var ACTION_PAD = Object.keys(ACTION_LABELS).reduce(function (max, key) {
+  var len = ACTION_LABELS[key as keyof typeof ACTION_LABELS].length;
+  return len > max ? len : max;
+}, 0);
+
+function tag(action: keyof typeof ACTION_LABELS): string {
+  return "[" + ACTION_LABELS[action].padEnd(ACTION_PAD) + "]";
+}
+
+/** The header lines both verbs share — same envelope, same rendering. */
+function fieldHeader(
+  title: string,
+  field: ChoiceFieldRef,
+  updateSet: { sysId: string; name: string },
+  dryRun: boolean,
+): Array<string> {
+  var lines: Array<string> = [];
+  lines.push(
+    title +
+      " — " +
+      field.table +
+      "." +
+      field.column +
+      " [" +
+      field.language +
+      "]" +
+      (dryRun ? "  (DRY RUN — nothing written)" : ""),
+  );
+  lines.push("");
+  lines.push("Update set: " + updateSet.name + " (" + updateSet.sysId + ")");
+  lines.push(
+    "Dictionary: " +
+      field.dictionarySysId +
+      (field.scope ? " [scope " + field.scope + "]" : ""),
+  );
+  return lines;
+}
 
 /**
  * Human-readable one-page summary of an addChoicesToField result.
@@ -7,19 +71,26 @@ import type { AddChoicesResult, RemoveChoicesResult } from "./types";
 export function formatAddChoicesResult(
   table: string,
   column: string,
-  result: AddChoicesResult
+  result: AddChoicesResult,
 ): string {
-  var lines: Array<string> = [];
-  lines.push("ServiceNow choice values — " + table + "." + column);
-  lines.push("");
-  lines.push("Update set: " + result.updateSet.name + " (" + result.updateSet.sysId + ")");
-  lines.push("Dictionary: " + result.dictionary.sysId + " [scope " + result.dictionary.scope + "]");
+  var lines = fieldHeader(
+    "ServiceNow choice values",
+    result.field,
+    result.updateSet,
+    result.dryRun,
+  );
   if (result.dictionary.choiceWas !== result.dictionary.choiceNow) {
     lines.push(
-      "  sys_dictionary.choice: " + result.dictionary.choiceWas + " -> " + result.dictionary.choiceNow
+      "  sys_dictionary.choice: " +
+        result.dictionary.choiceWas +
+        " -> " +
+        result.dictionary.choiceNow +
+        (result.dryRun ? " (would change)" : ""),
     );
   } else {
-    lines.push("  sys_dictionary.choice: " + result.dictionary.choiceNow + " (unchanged)");
+    lines.push(
+      "  sys_dictionary.choice: " + result.dictionary.choiceNow + " (unchanged)",
+    );
   }
   lines.push("");
 
@@ -28,17 +99,36 @@ export function formatAddChoicesResult(
   var unchanged = 0;
   lines.push("Choices:");
   result.choices.forEach(function (row) {
-    if (row.action === "created") created += 1;
-    else if (row.action === "updated") updated += 1;
+    if (row.action === "created" || row.action === "would-create") created += 1;
+    else if (row.action === "updated" || row.action === "would-update") updated += 1;
     else unchanged += 1;
     lines.push(
-      "  [" + row.action.padEnd(9) + "] " + row.value + " -> " + row.label +
-      "  (" + row.sysId + ")"
+      "  " +
+        tag(row.action) +
+        " " +
+        row.value +
+        " -> " +
+        row.label +
+        (row.sysId ? "  (" + row.sysId + ")" : ""),
     );
   });
   lines.push("");
   lines.push(
-    "Summary: " + created + " created, " + updated + " updated, " + unchanged + " unchanged."
+    result.dryRun
+      ? "Summary (dry run): " +
+          created +
+          " would be created, " +
+          updated +
+          " would be updated, " +
+          unchanged +
+          " unchanged. Nothing written."
+      : "Summary: " +
+          created +
+          " created, " +
+          updated +
+          " updated, " +
+          unchanged +
+          " unchanged.",
   );
   return lines.join("\n");
 }
@@ -46,32 +136,20 @@ export function formatAddChoicesResult(
 /**
  * Human-readable one-page summary of a removeChoicesFromField result.
  * Soft-delete semantics: "deactivated" set inactive=true; "unchanged" was already
- * inactive; "missing" was not found on the field.
+ * inactive; "missing" was not found on the field (with a case-only near-match hint
+ * when one exists); "would-deactivate" is the dry-run form of "deactivated".
  */
 export function formatRemoveChoicesResult(
   table: string,
   column: string,
   result: RemoveChoicesResult,
 ): string {
-  var lines: Array<string> = [];
-  lines.push(
-    "ServiceNow choice soft-delete — " +
-      table +
-      "." +
-      column +
-      " [" +
-      result.field.language +
-      "]",
+  var lines = fieldHeader(
+    "ServiceNow choice soft-delete",
+    result.field,
+    result.updateSet,
+    result.dryRun,
   );
-  lines.push("");
-  lines.push(
-    "Update set: " +
-      result.updateSet.name +
-      " (" +
-      result.updateSet.sysId +
-      ")",
-  );
-  lines.push("Dictionary: " + result.field.dictionarySysId);
   lines.push("");
 
   var deactivated = 0;
@@ -79,7 +157,8 @@ export function formatRemoveChoicesResult(
   var missing = 0;
   lines.push("Choices:");
   result.choices.forEach(function (row) {
-    if (row.action === "deactivated") deactivated += 1;
+    if (row.action === "deactivated" || row.action === "would-deactivate")
+      deactivated += 1;
     else if (row.action === "unchanged") unchanged += 1;
     else missing += 1;
     // A value with more than one row is worth saying out loud — the field carries
@@ -91,15 +170,32 @@ export function formatRemoveChoicesResult(
     // both cases.
     var note = "";
     if (row.sysIds.length > 1) {
+      if (row.action === "deactivated") {
+        note = "  [" + row.sysIds.length + " duplicate rows, all now inactive]";
+      } else if (row.action === "would-deactivate") {
+        note =
+          "  [" + row.sysIds.length + " duplicate rows, all would be inactive]";
+      } else {
+        note =
+          "  [" + row.sysIds.length + " duplicate rows, all already inactive]";
+      }
+    }
+    // Case-only near match: the strict lookup found nothing, but the field holds the
+    // same spelling in a different case. Say so, and say WHY it did not match.
+    if (row.action === "missing" && row.nearMatches && row.nearMatches.length > 0) {
       note =
-        row.action === "deactivated"
-          ? "  [" + row.sysIds.length + " duplicate rows, all now inactive]"
-          : "  [" + row.sysIds.length + " duplicate rows, all already inactive]";
+        " — no exact match; did you mean " +
+        row.nearMatches
+          .map(function (v) {
+            return JSON.stringify(v);
+          })
+          .join(" or ") +
+        "? (choice values are case-sensitive)";
     }
     lines.push(
-      "  [" +
-        row.action.padEnd(11) +
-        "] " +
+      "  " +
+        tag(row.action) +
+        " " +
         row.value +
         (row.sysId ? "  (" + row.sysId + ")" : "") +
         note,
@@ -107,13 +203,21 @@ export function formatRemoveChoicesResult(
   });
   lines.push("");
   lines.push(
-    "Summary: " +
-      deactivated +
-      " deactivated, " +
-      unchanged +
-      " unchanged, " +
-      missing +
-      " missing.",
+    result.dryRun
+      ? "Summary (dry run): " +
+          deactivated +
+          " would be deactivated, " +
+          unchanged +
+          " unchanged, " +
+          missing +
+          " missing. Nothing written."
+      : "Summary: " +
+          deactivated +
+          " deactivated, " +
+          unchanged +
+          " unchanged, " +
+          missing +
+          " missing.",
   );
   return lines.join("\n");
 }

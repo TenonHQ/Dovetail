@@ -110,9 +110,9 @@ Writes are **captured in the update set you pass** and are **idempotent** (re-ru
 reports every record unchanged).
 
 > **`dryRun` is NOT universal.** 19 of the 28 accept it; the other 9 write (or read)
-> immediately. Notably **neither choice verb supports `dryRun`** — `remove_choices_from_field`
-> is a soft delete and reversible by re-adding, but it is not previewable. Check the
-> tool's own schema before assuming you can plan a write.
+> immediately. Check the tool's own schema before assuming you can plan a write. (Both
+> choice verbs accept `dryRun` as of the #296 fix — reads happen, nothing is written, rows
+> report `would-create` / `would-update` / `would-deactivate`.)
 
 ### Layouts & views
 
@@ -127,8 +127,8 @@ reports every record unchanged).
 
 | Tool | What it does | `dryRun` |
 |---|---|---|
-| `add_choices_to_field` | Upsert `sys_choice` values and optionally flip `sys_dictionary.choice` to render as a dropdown | no |
-| `remove_choices_from_field` | **Soft**-delete choice values (`inactive=true`); the row is retained and re-adding reverses it. Deactivates every duplicate live row for a value. Leaves `sys_dictionary.choice` alone | no |
+| `add_choices_to_field` | Upsert `sys_choice` values and optionally flip `sys_dictionary.choice` to render as a dropdown. Result: `field {table, column, language, scope, dictionarySysId}`, `dictionary {choiceWas, choiceNow}`, `updateSet`, `dryRun`, `choices[]` | yes |
+| `remove_choices_from_field` | **Soft**-delete choice values (`inactive=true`); the row is retained and re-adding reverses it. Deactivates every duplicate live row for a value. Leaves `sys_dictionary.choice` alone. Case-sensitive — a `missing` row whose value exists in another case carries `nearMatches`. Same `field` envelope as add | yes |
 
 ### Schema & records
 
@@ -143,6 +143,7 @@ reports every record unchanged).
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
 | `create_record` | Create a record in a given scope + update set | yes |
+| `delete_record` | Delete ONE record by table + 32-hex sys_id, pinned to a **required** update set (#297 — never the session default). Reads the record BEFORE (a missing record is an error, not a no-op) and AFTER (success only once it is confirmed gone). Refuses schema tables. Not on `dovetail-mcp` — writes live here | dry-run **by default**; `confirm:true` deletes |
 
 ### Flows & actions
 

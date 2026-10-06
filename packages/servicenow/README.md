@@ -127,7 +127,18 @@ npx dove-sn remove-choices \
   --column state \
   --update-set 0083c3bb33d003507b18bc534d5c7b6d \
   --values "expired,failed"
+
+# Preview either verb — reads happen, NOTHING is written
+npx dove-sn add-choices    --table ... --column ... --update-set ... --choices "..." --dry-run
+npx dove-sn remove-choices --table ... --column ... --update-set ... --values  "..." --dry-run
 ```
+
+`--dry-run` still resolves the field and the update set (so a mistyped column or a
+closed update set fails exactly as it would live), then reports what the live run
+would do without sending a single write. Rows are tagged `[would create]` /
+`[would update]` / `[would deactivate]` — never `[created]` — and the header reads
+`(DRY RUN — nothing written)`. The `--json` result carries `dryRun: true` and the
+same `would-*` action values.
 
 JSON payload shape:
 
@@ -154,6 +165,14 @@ place of `choices`.
   left alone — retiring values does not un-make the column a choice field.
 - **Idempotent.** `deactivated` (a live row was flipped) / `unchanged` (already
   inactive) / `missing` (no such value on the field). Re-running writes nothing.
+- **Case-sensitive, with a hint.** `sys_choice.value` is case-sensitive, so
+  `--values DELIVERED` does **not** match a stored `delivered` — it reports
+  `missing`. When the field holds the same spelling in a different case, the row
+  carries `nearMatches` (the stored spelling(s)) and the CLI prints
+  `[missing] DELIVERED — no exact match; did you mean "delivered"? (choice values are case-sensitive)`.
+  Matching is never case-folded: a field holding both `delivered` and
+  `Delivered` treats them as two distinct values, and a request for either one
+  touches only its own row.
 - **Duplicates.** `sys_choice` has no uniqueness constraint on
   `(name, element, value, language)`, so a field can hold several live rows for
   one value. Every live row is deactivated, and `sysIds` lists all of them — a
@@ -181,8 +200,8 @@ var result = await addChoicesToField(client, { /* ... */ });
 
 console.log(result.choices);
 // [
-//   { value: "delivered", label: "Delivered", sysId: "...", action: "created" },
-//   { value: "failed",    label: "Failed",    sysId: "...", action: "created" }
+//   { value: "delivered", label: "Delivered", sysId: "...", sysIds: ["..."], action: "created" },
+//   { value: "failed",    label: "Failed",    sysId: "...", sysIds: ["..."], action: "created" }
 // ]
 
 var removed = await removeChoicesFromField(client, {
@@ -192,7 +211,47 @@ var removed = await removeChoicesFromField(client, {
   values: ["expired"],
 });
 // removed.choices[0] -> { value: "expired", sysId: "...", sysIds: ["..."], action: "deactivated" }
+
+// Plan without writing — identical reads, zero writes, `would-*` actions
+var plan = await addChoicesToField(client, { /* ... */ dryRun: true });
+// plan.dryRun -> true;  plan.choices[0].action -> "would-create" | "would-update" | "unchanged"
 ```
+
+### Result shape
+
+Both verbs return the **same `field` envelope**, so one consumer can format either:
+
+```ts
+interface ChoiceFieldRef {
+  table: string;
+  column: string;
+  language: string;        // remove: the language matched; add: the default for choices without one
+  scope: string;           // sys_scope sys_id of the dictionary record
+  dictionarySysId: string;
+}
+
+interface AddChoicesResult {
+  field: ChoiceFieldRef;
+  dictionary: { choiceWas: ChoiceType; choiceNow: ChoiceType };  // add-only transition
+  updateSet: { sysId: string; name: string };
+  dryRun: boolean;
+  choices: Array<ChoiceActionResult>;    // action: created | updated | unchanged | would-create | would-update
+}
+
+interface RemoveChoicesResult {
+  field: ChoiceFieldRef;
+  updateSet: { sysId: string; name: string };
+  dryRun: boolean;
+  choices: Array<ChoiceRemovalResult>;   // action: deactivated | unchanged | missing | would-deactivate
+}                                        // + nearMatches?: string[] on a case-only "missing"
+```
+
+> **Breaking change (0.0.x).** Earlier releases returned
+> `AddChoicesResult.dictionary: { sysId, scope, choiceWas, choiceNow }` and a
+> `RemoveChoicesResult.field` without `scope`. The dictionary sys_id now lives at
+> `field.dictionarySysId` on both verbs and `scope` at `field.scope`;
+> `dictionary` keeps only the choice-type transition. Consumers reading
+> `result.dictionary.sysId` or `result.dictionary.scope` must move to `result.field`.
 
 Both verbs write one value at a time. If a write fails partway through they
 throw a **`ChoiceWriteError`** carrying `completed` (the values that already
@@ -769,10 +828,41 @@ already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1`
 args, `2` write landed unverified (or skipped with drift). To **update** an existing
 record instead, use `set-field`.
 
-Both verbs are exported for programmatic use:
+### Delete a record
+
+Delete **one** existing data record by table + sys_id, pinned to an update set,
+with the record read back **before** (so the dry-run shows exactly what would go,
+and a missing record is an error rather than a "successful" delete of nothing) and
+**after** (success is never reported until the record is confirmed gone).
+
+```bash
+# Dry-run (the default) — prints the record snapshot, deletes nothing
+npx dove-sn delete-record \
+  --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> \
+  --update-set <sys_id>
+
+# Apply — deletes, then reads back and verifies the record is gone
+npx dove-sn delete-record \
+  --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> \
+  --update-set <sys_id> --apply --json
+```
+
+`delete-record` wraps the core `deleteRecord` op. It is **dry-run by default** —
+nothing is deleted without `--apply` (`--dry-run` wins if both are given). `--sys-id`
+must be a 32-character lowercase hex id and `--table` a plain table name; both are
+validated before any network call. `--update-set` is **required** so a delete is never
+routed to the session's default update set silently
+([#297](https://github.com/TenonHQ/Dovetail/issues/297)) — note that until #297 ships
+server-side, the op ignores `update_set_sys_id` and captures into the session
+current-app set; the client sends it regardless so callers are ready the moment the
+server honours it. Like its siblings it **refuses** schema tables (`sys_db_object` /
+`sys_dictionary`). Exit codes: `0` deleted / dry-run, `1` bad args or no such record,
+`2` the delete returned but the record is **still present** on read-back.
+
+All three verbs are exported for programmatic use:
 
 ```ts
-import { createClient, setField, createRecord } from "@tenonhq/dovetail-servicenow";
+import { createClient, setField, createRecord, deleteRecord } from "@tenonhq/dovetail-servicenow";
 
 var client = createClient({});
 var r = await setField({
@@ -1027,8 +1117,11 @@ does not exist) / `index_create` (create an index, composite and non-unique incl
 replaying the platform index-creator form; dry-run by default, idempotent, read back from
 `v_db_index` - and **not** captured in an update set, because a database index is a
 physical per-instance change), the record-write verbs `set_field` (update scalar fields on an
-existing record) and `create_record` (insert one record) — both update-set-captured
-and read-back-verified — `host_assets` (deploy a built dist/), plus the Flow Designer
+existing record), `create_record` (insert one record) and `delete_record` (delete one
+record — dry-run by default, `confirm:true` to apply, `updateSetSysId` required, the
+record read back before AND after so success is only reported once it is confirmed
+gone) — all update-set-captured and read-back-verified — `host_assets` (deploy a built
+dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step
 scripts, step-level inputs/outputs, data-pill wiring — dry-run by default, and the
@@ -1060,6 +1153,9 @@ npx dove-sn mcp           # run the stdio server (wire into .mcp.json)
 
 This server is separate from `@tenonhq/dovetail-mcp` (the read-only cross-system
 aggregator) — `dovetail-servicenow`'s server is the ServiceNow **write** surface.
+`dovetail-mcp` intentionally does **not** get `delete_record` (or any other ServiceNow
+write): record writes — create, set, delete — live on `dove-sn mcp` only, where every
+one is update-set-pinned, dry-run-gated and read-back-verified.
 
 ## Publishing a Custom Action Type
 

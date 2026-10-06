@@ -307,6 +307,40 @@ function dedupe(values: Array<string>): Array<string> {
   return out;
 }
 
+/**
+ * Values on the field (same language) that differ from `value` by letter case ALONE.
+ *
+ * sys_choice.value is case-sensitive, so "DELIVERED" is NOT "delivered" and the lookup
+ * must not fold case — but the two outcomes "that value is absent" and "that value is
+ * present, spelled with different casing" are otherwise indistinguishable to the caller.
+ * This surfaces the second so it can be reported as a hint next to "missing".
+ *
+ * Best-effort by design: it inspects the rows the scoped read already returned, and
+ * sends no extra request. ServiceNow's `IN` / `=` on string columns are case-insensitive
+ * at the database layer, which is exactly how a differently-cased row comes back for a
+ * `valueIN DELIVERED` query in the first place.
+ *
+ * Distinct values only, in first-seen order; a value that exactly equals `value` is
+ * excluded — that one is a real match and is handled by the caller before this runs.
+ */
+function findCaseOnlyMatches(
+  rows: Array<ExistingChoice>,
+  language: string,
+  value: string,
+): Array<string> {
+  var wanted = value.toLowerCase();
+  var out: Array<string> = [];
+  rows.forEach(function (row) {
+    if ((row.language || "en") !== language) return;
+    if (typeof row.value !== "string") return;
+    if (row.value === value) return;
+    if (row.value.toLowerCase() !== wanted) return;
+    if (out.indexOf(row.value) !== -1) return;
+    out.push(row.value);
+  });
+  return out;
+}
+
 function buildChoiceFields(
   table: string,
   column: string,
@@ -344,6 +378,11 @@ function isUnchanged(existing: ExistingChoice, choice: ChoiceValue): boolean {
  * Upsert choices for a field and (optionally) toggle sys_dictionary.choice.
  * Idempotent: re-running with the same inputs returns `action: "unchanged"`
  * for every row and skips the dictionary write when no change is required.
+ *
+ * `params.dryRun` plans instead of writing: every read still happens (so a missing field
+ * or a closed update set still fails loudly), but no pushWithUpdateSet / createRecord
+ * call is made, and rows report "would-create" / "would-update" in place of
+ * "created" / "updated". The result's `dryRun` flag is true.
  */
 export async function addChoicesToField(
   client: ServiceNowClient,
@@ -357,6 +396,9 @@ export async function addChoicesToField(
   if (!params.choices || params.choices.length === 0) {
     throw new Error("choices must be a non-empty array.");
   }
+  // Strict equality on purpose: a truthy-but-not-true value (the string "false" from a
+  // mis-parsed flag, say) must not silently turn a planned run into a live write.
+  var dryRun = params.dryRun === true;
 
   var dict = await fetchDictionary(client, params.table, params.column);
   var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
@@ -371,12 +413,14 @@ export async function addChoicesToField(
   var choiceWas = Number(dict.choice) as ChoiceType;
   var choiceNow = choiceWas;
   if (params.choiceType !== null && Number(dict.choice) !== targetChoiceType) {
-    await client.claude.pushWithUpdateSet({
-      update_set_sys_id: params.updateSetSysId,
-      table: "sys_dictionary",
-      record_sys_id: dict.sys_id,
-      fields: { choice: String(targetChoiceType) },
-    });
+    if (!dryRun) {
+      await client.claude.pushWithUpdateSet({
+        update_set_sys_id: params.updateSetSysId,
+        table: "sys_dictionary",
+        record_sys_id: dict.sys_id,
+        fields: { choice: String(targetChoiceType) },
+      });
+    }
     choiceNow = targetChoiceType;
   }
 
@@ -431,6 +475,16 @@ export async function addChoicesToField(
       if (choice.sequence != null) {
         updFields.sequence = String(choice.sequence);
       }
+      if (dryRun) {
+        results.push({
+          value: choice.value,
+          label: choice.label,
+          sysId: matchSysIds[0],
+          sysIds: matchSysIds,
+          action: "would-update",
+        });
+        continue;
+      }
       try {
         for (var s = 0; s < stale.length; s += 1) {
           await client.claude.pushWithUpdateSet({
@@ -449,6 +503,18 @@ export async function addChoicesToField(
         sysId: matchSysIds[0],
         sysIds: matchSysIds,
         action: "updated",
+      });
+      continue;
+    }
+    if (dryRun) {
+      // No row exists yet, so there is no sys_id to report — "" mirrors the layout
+      // verbs' convention for a create that was only planned.
+      results.push({
+        value: choice.value,
+        label: choice.label,
+        sysId: "",
+        sysIds: [],
+        action: "would-create",
       });
       continue;
     }
@@ -478,13 +544,19 @@ export async function addChoicesToField(
   }
 
   return {
-    dictionary: {
-      sysId: dict.sys_id,
+    field: {
+      table: params.table,
+      column: params.column,
+      language: "en",
       scope: dict.sys_scope,
+      dictionarySysId: dict.sys_id,
+    },
+    dictionary: {
       choiceWas: choiceWas,
       choiceNow: choiceNow,
     },
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
+    dryRun: dryRun,
     choices: results,
   };
 }
@@ -499,7 +571,13 @@ export async function addChoicesToField(
  *   - active value     -> "deactivated" (every live row for it flipped to inactive —
  *                         usually one write, but more when the field holds duplicates)
  *   - already inactive -> "unchanged"  (no write)
- *   - value not found  -> "missing"    (no write)
+ *   - value not found  -> "missing"    (no write; `nearMatches` lists any value on the
+ *                         field that differs by letter case alone — matching is strictly
+ *                         case-sensitive, this is a hint so the caller can tell a typo'd
+ *                         casing from a genuinely absent value)
+ *
+ * `params.dryRun` plans instead of writing: reads still happen, no pushWithUpdateSet is
+ * sent, and a live row reports "would-deactivate" in place of "deactivated".
  *
  * The dictionary row is fetched only to PROVE the field exists — without that guard a
  * mistyped column reports every value as "missing", the silent-failure this family
@@ -531,6 +609,8 @@ export async function removeChoicesFromField(
     throw new Error("values must be a non-empty array.");
   }
   var language = params.language || "en";
+  // Strict equality on purpose — see addChoicesToField.
+  var dryRun = params.dryRun === true;
 
   // fetchDictionary throws a clear error when the field does not exist; fetchUpdateSet
   // throws unless the set is in progress. Both mirror the add path's guards.
@@ -556,7 +636,19 @@ export async function removeChoicesFromField(
     var value = values[i];
     var matches = existingByValue[language + "::" + value] || [];
     if (matches.length === 0) {
-      results.push({ value: value, sysId: "", sysIds: [], action: "missing" });
+      // Exact match first, hint second: nearMatches is only ever computed once the
+      // strict lookup has come up empty, so it can never shadow a real match.
+      var missing: ChoiceRemovalResult = {
+        value: value,
+        sysId: "",
+        sysIds: [],
+        action: "missing",
+      };
+      var near = findCaseOnlyMatches(existing, language, value);
+      if (near.length > 0) {
+        missing.nearMatches = near;
+      }
+      results.push(missing);
       continue;
     }
     var sysIds = matches.map(function (row) {
@@ -573,6 +665,15 @@ export async function removeChoicesFromField(
         sysId: sysIds[0],
         sysIds: sysIds,
         action: "unchanged",
+      });
+      continue;
+    }
+    if (dryRun) {
+      results.push({
+        value: value,
+        sysId: sysIds[0],
+        sysIds: sysIds,
+        action: "would-deactivate",
       });
       continue;
     }
@@ -601,9 +702,11 @@ export async function removeChoicesFromField(
       table: params.table,
       column: params.column,
       language: language,
+      scope: dict.sys_scope,
       dictionarySysId: dict.sys_id,
     },
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
+    dryRun: dryRun,
     choices: results,
   };
 }

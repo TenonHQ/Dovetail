@@ -41,6 +41,33 @@ describe("servicenow client — deleteRecord & changeUpdateSet", function () {
     expect(call.data).toEqual({ table: "sys_ui_element", sys_id: "el1" });
   });
 
+  it("deleteRecord sends update_set_sys_id in the body when supplied (#297 pin)", async function () {
+    mockHttp.request.mockResolvedValueOnce(ok({ name: "Old Element" }));
+    var client = createClient();
+
+    await client.claude.deleteRecord({
+      table: "sys_ui_element",
+      sys_id: "el1",
+      update_set_sys_id: "us1",
+    });
+
+    expect(mockHttp.request).toHaveBeenCalledTimes(1);
+    var call = mockHttp.request.mock.calls[0][0];
+    expect(call.method).toBe("POST");
+    expect(call.url).toBe("/api/cadso/dovetail_core/deleteRecord");
+    expect(call.data).toEqual({ table: "sys_ui_element", sys_id: "el1", update_set_sys_id: "us1" });
+  });
+
+  it("deleteRecord omits update_set_sys_id from the body when it is empty", async function () {
+    mockHttp.request.mockResolvedValueOnce(ok({ name: "Old Element" }));
+    var client = createClient();
+
+    await client.claude.deleteRecord({ table: "sys_ui_element", sys_id: "el1", update_set_sys_id: "" });
+
+    var call = mockHttp.request.mock.calls[0][0];
+    expect(call.data).toEqual({ table: "sys_ui_element", sys_id: "el1" });
+  });
+
   it("changeUpdateSet GETs /api/cadso/dovetail_core/changeUpdateSet with the sysId param", async function () {
     mockHttp.request.mockResolvedValueOnce(ok({ sys_id: "us1" }));
     var client = createClient();

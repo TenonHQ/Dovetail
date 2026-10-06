@@ -65,6 +65,8 @@ export var addChoicesToFieldSchema = z.object({
     .union([z.literal(0), z.literal(1), z.literal(3)])
     .nullable()
     .optional(),
+  /** Plan only: reads happen, no sys_choice / sys_dictionary write is sent. */
+  dryRun: z.boolean().optional(),
 });
 
 export var removeChoicesFromFieldSchema = z.object({
@@ -73,6 +75,8 @@ export var removeChoicesFromFieldSchema = z.object({
   values: z.array(z.string().min(1)).min(1),
   language: z.string().min(1).optional(),
   updateSetSysId: z.string().min(1),
+  /** Plan only: reads happen, no inactive=true write is sent. */
+  dryRun: z.boolean().optional(),
 });
 
 export var viewFlowSchema = z.object({
@@ -524,6 +528,22 @@ export var createRecordSchema = z.object({
   scope: z.string().min(1),
   updateSetSysId: z.string().min(1),
   ifAbsentQuery: z.string().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+// delete_record: DRY-RUN BY DEFAULT — the delete only fires with confirm:true
+// (dryRun:true forces a dry-run even then). updateSetSysId is REQUIRED so a
+// delete is never routed to the session default set silently (#297). The
+// table-name / 32-hex sys_id shapes are enforced here AND in deleteRecord so a
+// malformed id is rejected before any network call on either surface.
+export var deleteRecordSchema = z.object({
+  table: z
+    .string()
+    .min(1)
+    .regex(/^[a-z0-9_]+$/, "table must be a ServiceNow table name (lowercase letters, digits, underscores)"),
+  sysId: z.string().regex(/^[0-9a-f]{32}$/, "sysId must be a 32-character lowercase hex sys_id"),
+  updateSetSysId: z.string().min(1),
+  confirm: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
 

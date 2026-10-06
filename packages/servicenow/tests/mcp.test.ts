@@ -6,7 +6,7 @@ import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 30 expected tools", function () {
+  it("registers exactly the 31 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -23,6 +23,7 @@ describe("MCP registry", function () {
       "create_record",
       "create_table",
       "create_view",
+      "delete_record",
       "flow_copy",
       "flow_create",
       "flow_edit",
@@ -42,7 +43,7 @@ describe("MCP registry", function () {
       "set_table",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(30);
+    expect(TOOL_NAMES).toHaveLength(31);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -214,6 +215,83 @@ describe("MCP registry", function () {
     expect(ctx.calls.createRecord[0].scope).toBe("x_cadso_core");
   });
 
+  it("delete_record handler is a dry-run by default — snapshot returned, nothing deleted", async function () {
+    var id = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    var ctx = makeMockClient({
+      query: async function (table: string, query?: string) {
+        if (query === "sys_id=" + id) return [{ sys_id: id, name: "avg_parts" }];
+        return [];
+      },
+    });
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var deleteTool = descriptors.filter(function (d) {
+      return d.name === "delete_record";
+    })[0];
+    var result = await deleteTool.handler({
+      table: "x_cadso_core_metric_point_type",
+      sysId: id,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.before).toEqual({ sys_id: id, name: "avg_parts" });
+    expect(ctx.calls.deleteRecord).toHaveLength(0);
+    expect(ctx.calls.nowInvoke).toHaveLength(0);
+  });
+
+  it("delete_record handler deletes via the injected client when confirm:true and verifies gone", async function () {
+    var id = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    var present = true;
+    var ctx = makeMockClient({
+      query: async function (table: string, query?: string) {
+        if (present && query === "sys_id=" + id) return [{ sys_id: id, name: "avg_parts" }];
+        return [];
+      },
+    });
+    var realDelete = ctx.client.claude.deleteRecord;
+    ctx.client.claude.deleteRecord = async function (params) {
+      present = false;
+      return realDelete(params);
+    };
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var deleteTool = descriptors.filter(function (d) {
+      return d.name === "delete_record";
+    })[0];
+    var result = await deleteTool.handler({
+      table: "x_cadso_core_metric_point_type",
+      sysId: id,
+      updateSetSysId: "us1",
+      confirm: true,
+    });
+    expect(result.status).toBe("deleted");
+    expect(result.verified).toBe(true);
+    expect(ctx.calls.deleteRecord).toHaveLength(1);
+    expect(ctx.calls.deleteRecord[0]).toEqual({
+      table: "x_cadso_core_metric_point_type",
+      sys_id: id,
+      update_set_sys_id: "us1",
+    });
+  });
+
+  it("delete_record schema rejects a malformed sysId / table and requires updateSetSysId before any call", async function () {
+    var ctx = makeMockClient();
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var deleteTool = descriptors.filter(function (d) {
+      return d.name === "delete_record";
+    })[0];
+    var id = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    await expect(
+      deleteTool.handler({ table: "x_t", sysId: "el1", updateSetSysId: "us1", confirm: true })
+    ).rejects.toThrow();
+    await expect(
+      deleteTool.handler({ table: "Bad Table", sysId: id, updateSetSysId: "us1", confirm: true })
+    ).rejects.toThrow();
+    await expect(
+      deleteTool.handler({ table: "x_t", sysId: id, confirm: true })
+    ).rejects.toThrow();
+    expect(ctx.calls.tableQuery).toHaveLength(0);
+    expect(ctx.calls.deleteRecord).toHaveLength(0);
+  });
+
   it("invoke_rest handler is a dry-run by default — nothing is sent", async function () {
     var ctx = makeMockClient();
     var descriptors = buildDescriptors({ client: ctx.client });
@@ -331,6 +409,81 @@ describe("MCP registry", function () {
     expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
   });
 
+  it("add_choices_to_field honours dryRun:true — zero writes, would-* actions (#296)", async function () {
+    var ctx = makeMockClient({
+      query: async function (table) {
+        if (table === "sys_update_set") return [US];
+        if (table === "sys_dictionary")
+          return [{ sys_id: "dict1", name: "x_t", element: "state", choice: "0", sys_scope: "scope1" }];
+        if (table === "sys_scope") return [{ sys_id: "scope1", scope: "x_t_scope", name: "x_t_scope" }];
+        if (table === "sys_choice")
+          return [{ sys_id: "ch1", value: "a", label: "OLD", sequence: "", language: "en", inactive: "false" }];
+        return [];
+      },
+    });
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var tool = descriptors.filter(function (d) {
+      return String(d.name) === "add_choices_to_field";
+    })[0];
+    var result = (await tool.handler({
+      table: "x_t",
+      column: "state",
+      updateSetSysId: "us1",
+      dryRun: true,
+      choices: [
+        { value: "a", label: "A" },
+        { value: "b", label: "B" },
+      ],
+    })) as { dryRun: boolean; field: { scope: string }; choices: Array<{ action: string }> };
+    expect(result.dryRun).toBe(true);
+    expect(result.field.scope).toBe("scope1");
+    expect(result.choices.map(function (c) { return c.action; })).toEqual(["would-update", "would-create"]);
+    // The schema must let dryRun through — a stripped key here would silently write.
+    expect(ctx.calls.createRecord).toHaveLength(0);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+  });
+
+  it("remove_choices_from_field honours dryRun:true and surfaces the case-only hint (#296, #253)", async function () {
+    var ctx = makeMockClient({
+      query: async function (table) {
+        if (table === "sys_update_set") return [US];
+        if (table === "sys_dictionary")
+          return [{ sys_id: "dict1", name: "x_t", element: "state", choice: "3", sys_scope: "scope1" }];
+        if (table === "sys_choice")
+          return [{ sys_id: "ch1", value: "delivered", label: "Delivered", sequence: "", language: "en", inactive: "false" }];
+        return [];
+      },
+    });
+    var descriptors = buildDescriptors({ client: ctx.client });
+    var tool = descriptors.filter(function (d) {
+      return String(d.name) === "remove_choices_from_field";
+    })[0];
+    var result = (await tool.handler({
+      table: "x_t",
+      column: "state",
+      updateSetSysId: "us1",
+      dryRun: true,
+      values: ["delivered", "DELIVERED"],
+    })) as {
+      dryRun: boolean;
+      field: { scope: string; dictionarySysId: string };
+      choices: Array<{ action: string; nearMatches?: Array<string> }>;
+    };
+    expect(result.dryRun).toBe(true);
+    expect(result.field).toEqual({
+      table: "x_t",
+      column: "state",
+      language: "en",
+      scope: "scope1",
+      dictionarySysId: "dict1",
+    });
+    expect(result.choices[0].action).toBe("would-deactivate");
+    expect(result.choices[1].action).toBe("missing");
+    expect(result.choices[1].nearMatches).toEqual(["delivered"]);
+    expect(ctx.calls.pushWithUpdateSet).toHaveLength(0);
+    expect(ctx.calls.createRecord).toHaveLength(0);
+  });
+
   it("add_index handler refuses a composite column list at the tool boundary", async function () {
     var ctx = makeMockClient();
     var descriptors = buildDescriptors({ client: ctx.client });
@@ -358,7 +511,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (30)");
+    expect(out).toContain("Registered tools (31)");
     expect(out).toContain("action_define");
     expect(out).toContain("action_clone");
     expect(out).toContain("add_index");
@@ -370,6 +523,7 @@ describe("MCP registry", function () {
     expect(out).toContain("flow_copy");
     expect(out).toContain("set_field");
     expect(out).toContain("create_record");
+    expect(out).toContain("delete_record");
     expect(out).toContain("invoke_rest");
   });
 });
@@ -421,6 +575,7 @@ describe("MCP registry — annotations", function () {
       "set_column",
       "set_table",
       "add_index",
+      "delete_record",
     ].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(true);
