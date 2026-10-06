@@ -79,7 +79,7 @@ describe("deleteRecord — validation (no network)", function () {
     expect(ctx.calls.deleteRecord.length).toBe(0);
   });
 
-  it("requires an update set — never routed to the session default", async function () {
+  it("requires an update set before any call", async function () {
     var ctx = ctxFor({});
     await expect(
       deleteRecord({ client: ctx.client, table: "x_t", sysId: ID, confirm: true })
