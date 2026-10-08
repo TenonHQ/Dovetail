@@ -34,6 +34,8 @@ npx dove dashboard     # update-set dashboard web UI
 npx dove migrate       # migrate a Sincronia project to Dovetail (dry-run by default; --apply to write)
 ```
 
+`dove watch` refuses to start (exit 1) inside a Claude Code tool shell — any shell with `CLAUDECODE` set — because a branch switch mid-watch overwrites instance records. A human who really means to run it from such a shell (e.g. an IDE terminal that inherited the variable) can set `DOVE_ALLOW_WATCH_IN_CLAUDE=1`. Other `CLAUDE_CODE_*` variables only print a warning.
+
 See [`UPDATE_SET_COMMANDS.md`](UPDATE_SET_COMMANDS.md) for the full update-set CLI surface.
 
 ### `dove create sys_update_set`

@@ -2,7 +2,38 @@
 // guard (claudeSession.ts, TenonHQ/Dovetail#155). Pure-function tests — an
 // explicit env object is passed so the real process.env never leaks in.
 
-import { isClaudeCodeSession, WATCH_HUMAN_ONLY_WARNING } from "../claudeSession";
+import {
+  isClaudeCodeSession,
+  isClaudeCodeToolShell,
+  isWatchInClaudeAllowed,
+  WATCH_HUMAN_ONLY_WARNING,
+} from "../claudeSession";
+
+describe("isClaudeCodeToolShell (hard-block signal)", function () {
+  it("is true only when CLAUDECODE has a value", function () {
+    expect(isClaudeCodeToolShell({ CLAUDECODE: "1" })).toBe(true);
+    expect(isClaudeCodeToolShell({ CLAUDECODE: " " })).toBe(false);
+    expect(isClaudeCodeToolShell({})).toBe(false);
+  });
+
+  it("ignores CLAUDE_CODE_* config variables a human may have in their profile", function () {
+    expect(isClaudeCodeToolShell({ CLAUDE_CODE_USE_BEDROCK: "1" })).toBe(false);
+    expect(isClaudeCodeSession({ CLAUDE_CODE_USE_BEDROCK: "1" })).toBe(true);
+  });
+});
+
+describe("isWatchInClaudeAllowed", function () {
+  it("accepts exactly 1", function () {
+    expect(isWatchInClaudeAllowed({ DOVE_ALLOW_WATCH_IN_CLAUDE: "1" })).toBe(true);
+  });
+
+  it("rejects unset, empty, and other truthy-looking values", function () {
+    expect(isWatchInClaudeAllowed({})).toBe(false);
+    expect(isWatchInClaudeAllowed({ DOVE_ALLOW_WATCH_IN_CLAUDE: "" })).toBe(false);
+    expect(isWatchInClaudeAllowed({ DOVE_ALLOW_WATCH_IN_CLAUDE: "true" })).toBe(false);
+    expect(isWatchInClaudeAllowed({ DOVE_ALLOW_WATCH_IN_CLAUDE: "0" })).toBe(false);
+  });
+});
 
 describe("isClaudeCodeSession", function () {
   it("returns false for an empty environment", function () {
