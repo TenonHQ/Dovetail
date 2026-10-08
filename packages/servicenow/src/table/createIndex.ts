@@ -658,6 +658,23 @@ function result(
 export async function createIndex(
   params: CreateIndexParams,
 ): Promise<CreateIndexResult> {
+  var ctx: RunContext = { identityWarning: "" };
+  var out = await runCreateIndex(params, ctx);
+  if (ctx.identityWarning) {
+    out.note = out.note + " " + ctx.identityWarning;
+  }
+  return out;
+}
+
+/** Facts the run discovers that every result after that point must carry. */
+interface RunContext {
+  identityWarning: string;
+}
+
+async function runCreateIndex(
+  params: CreateIndexParams,
+  ctx: RunContext,
+): Promise<CreateIndexResult> {
   var checked = validateCreateIndex(params);
   var table = checked.table;
   var columns = checked.columns;
@@ -910,12 +927,13 @@ export async function createIndex(
     });
   }
 
-  // ONE IDENTITY OR NOTHING. The pin and its read-back below go through the REST
-  // client, which authenticates with the API key when one is configured; the build is
-  // scheduled by a form session that always logs in as the basic-auth user. The job
-  // captures into the FORM user's current set, so when the two identities differ the
-  // pin "reads back" for one user while the capture lands in the other user's set.
-  // Prove they are the same user BEFORE the first write, or do not write at all.
+  // IDENTITY CHECK (warn, never refuse). The pin and its read-back below go through the
+  // REST client, which authenticates with the API key when one is configured; the build
+  // is scheduled by a form session that always logs in as the basic-auth user, and the
+  // job captures into the FORM user's current set. When the two identities differ the
+  // capture can land outside the pinned set. The run goes ahead regardless; the capture
+  // read-back at the end reports where the row actually landed (captureFoundIn), and
+  // this warning is appended to every result from here on.
   var restIdentity: { userName: string; error: string };
   try {
     restIdentity = await readRestIdentity(params.client);
@@ -924,45 +942,23 @@ export async function createIndex(
   }
   var formUser = String(auth.user || "").trim();
   if (restIdentity.error) {
-    return result({
-      status: "failed",
-      table: table,
-      columns: columns,
-      instance: instance,
-      updateSet: updateSet,
-      note:
-        "Refusing to write: the REST client's identity could not be established (" +
-        restIdentity.error +
-        "), so it cannot be shown to be the form-login user '" +
-        formUser +
-        "' that schedules the build. The pin would be proven for one user while the " +
-        "capture lands in another's current update set. Nothing was sent. " +
-        CAPTURE_NOTE,
-    });
-  }
-  if (restIdentity.userName.toLowerCase() !== formUser.toLowerCase()) {
-    return result({
-      status: "failed",
-      table: table,
-      columns: columns,
-      instance: instance,
-      updateSet: updateSet,
-      note:
-        "Refusing to write: the REST client is authenticated as '" +
-        restIdentity.userName +
-        "' (it would pin and read back the update set) but the index build is " +
-        "scheduled by a form session logged in as '" +
-        formUser +
-        "'. The build job captures into the FORM user's current update set, which " +
-        "the pin never touches — the capture would land in whatever set '" +
-        formUser +
-        "' has current, not in '" +
-        setInfo.name +
-        "'. Run with ONE identity — the REST client must authenticate as the same " +
-        "user the form session logs in as (e.g. basic auth as that user, with no API " +
-        "key, for this run). Nothing was sent. " +
-        CAPTURE_NOTE,
-    });
+    ctx.identityWarning =
+      "IDENTITY WARNING: the REST client's identity could not be established (" +
+      restIdentity.error +
+      "), so it is not proven to be the form-login user '" +
+      formUser +
+      "' whose current update set the build captures into — check captured / captureFoundIn.";
+  } else if (restIdentity.userName.toLowerCase() !== formUser.toLowerCase()) {
+    ctx.identityWarning =
+      "IDENTITY WARNING: the REST client is authenticated as '" +
+      restIdentity.userName +
+      "' (it pinned and read back the update set) but the build was scheduled by a " +
+      "form session logged in as '" +
+      formUser +
+      "'. The build job captures into the FORM user's current update set, so the " +
+      "capture may land outside '" +
+      setInfo.name +
+      "' — check captured / captureFoundIn.";
   }
 
   // PIN THE UPDATE SET. Dovetail's own changeUpdateSet op sets the user's current set

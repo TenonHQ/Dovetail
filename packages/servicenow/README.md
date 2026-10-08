@@ -803,12 +803,12 @@ was a silent no-op for that reason.)
 - **Table-per-hierarchy children are refused.** A table with no `v_db_index` rows of its
   own whose ancestor has them is stored in that ancestor's physical table; the run stops
   before any write and names the root (run against the root if that is what you want).
-- **One identity for the pin and the build.** The pin runs through the REST client (an API
+- **Identity check (warns, never refuses).** The pin runs through the REST client (an API
   key when one is configured) but the build is scheduled by the form session (always
-  `SN_USER`), and the build captures into the *form* user's current set. So before any
-  write the REST caller's own `sys_user` row is read and the run is **refused** unless it
-  is the form-login user - otherwise the pin would read back for one user while the
-  capture landed in another's set.
+  `SN_USER`), and the build captures into the *form* user's current set. The REST caller's
+  own `sys_user` row is read first; when it is not the form-login user (or cannot be read)
+  the run still goes ahead and every result note carries an `IDENTITY WARNING`. The capture
+  read-back then reports where the row actually landed (`captured` / `captureFoundIn`).
 - **The pin is read back.** The set is pinned with Dovetail's own `changeUpdateSet` and
   `currentUpdateSet` is read; a pin that did not take stops the run before the session
   opens.

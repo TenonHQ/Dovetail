@@ -17,9 +17,9 @@
  *     table's application scope and be 'in progress'.
  *   - an index over exactly those columns already present short-circuits to
  *     `already-exists` with NO form session opened and NO pin.
- *   - the REST caller's identity must be the form-login user, proven BEFORE the pin;
- *     a mismatch (API key user vs SN_USER) or an unprovable identity stops the run
- *     with nothing written.
+ *   - the REST caller's identity is compared with the form-login user BEFORE the pin;
+ *     a mismatch (API key user vs SN_USER) or an unprovable identity does NOT stop the
+ *     run — every result note carries an IDENTITY WARNING instead.
  *   - the update set is pinned (changeUpdateSet) and READ BACK (currentUpdateSet)
  *     before the session opens; a pin that did not take stops the run.
  *   - call 1 is IndexCreatorErrorChecker.canCreate; a canCreate:false verdict stops
@@ -545,7 +545,7 @@ describe("createIndex — table-per-hierarchy children", function () {
   });
 });
 
-describe("createIndex — one identity for the pin and the build", function () {
+describe("createIndex — identity check warns, never refuses", function () {
   it("reads the REST caller's own sys_user row before pinning", async function () {
     okSession();
     var ctx = liveClient({
@@ -561,47 +561,62 @@ describe("createIndex — one identity for the pin and the build", function () {
     expect(userRead[0].query).toBe("sys_id=javascript:gs.getUserID()");
   });
 
-  it("refuses BEFORE any write when the REST identity is not the form-login user", async function () {
+  it("proceeds and warns when the REST identity is not the form-login user", async function () {
     okSession();
     var ctx = liveClient({
-      indexes: [[]],
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
       restUsers: [{ sys_id: "usr2", user_name: "api.key.user" }],
     });
     var result = await createIndex(base({ client: ctx.client, confirm: true }));
-    expect(result.status).toBe("failed");
-    expect(result.created).toBe(false);
+    expect(result.status).toBe("created");
+    expect(result.created).toBe(true);
+    expect(result.note).toMatch(/IDENTITY WARNING/);
     expect(result.note).toMatch(/authenticated as 'api\.key\.user'/);
     expect(result.note).toMatch(/logged in as 'u'/);
-    expect(result.note).toMatch(/Nothing was sent/);
-    // No pin, no session, no canCreate, no createSchedule.
-    expect(ctx.calls.changeUpdateSet).toHaveLength(0);
-    expect(openFormSession).not.toHaveBeenCalled();
-    expect(postForm).not.toHaveBeenCalled();
+    // The pin and the build both ran.
+    expect(ctx.calls.changeUpdateSet).toHaveLength(1);
+    expect(openFormSession).toHaveBeenCalled();
+    expect(postForm).toHaveBeenCalled();
   });
 
-  it("refuses when the REST identity cannot be established", async function () {
-    okSession();
-    var ctx = liveClient({ indexes: [[]], restUsers: [] });
-    var result = await createIndex(base({ client: ctx.client, confirm: true }));
-    expect(result.status).toBe("failed");
-    expect(result.note).toMatch(/identity could not be established/);
-    expect(ctx.calls.changeUpdateSet).toHaveLength(0);
-    expect(postForm).not.toHaveBeenCalled();
-  });
-
-  it("refuses when the identity read returns more than one row (an ignored filter)", async function () {
+  it("proceeds and warns when the REST identity cannot be established", async function () {
     okSession();
     var ctx = liveClient({
-      indexes: [[]],
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
+      restUsers: [],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("created");
+    expect(result.note).toMatch(/IDENTITY WARNING: the REST client's identity could not be established/);
+    expect(postForm).toHaveBeenCalled();
+  });
+
+  it("proceeds and warns when the identity read returns more than one row (an ignored filter)", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
       restUsers: [
         { sys_id: "usr1", user_name: "u" },
         { sys_id: "usr2", user_name: "someone.else" },
       ],
     });
     var result = await createIndex(base({ client: ctx.client, confirm: true }));
-    expect(result.status).toBe("failed");
+    expect(result.status).toBe("created");
     expect(result.note).toMatch(/2 rows/);
-    expect(postForm).not.toHaveBeenCalled();
+  });
+
+  it("carries no identity warning when the identities match", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("created");
+    expect(result.note).not.toMatch(/IDENTITY WARNING/);
   });
 
   it("matches the user name case-insensitively, as a login does", async function () {
