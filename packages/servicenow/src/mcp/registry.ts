@@ -764,8 +764,9 @@ export function buildDescriptors(
       description:
         "Update the SCHEMA of an EXISTING column on an EXISTING ServiceNow table — its label, " +
         "mandatory, default, readOnly, maxLength, or dependentOnField (the sibling column a " +
-        "document_id resolves against; must exist on the table; \"\" clears it; not overridable " +
-        "per-child) — captured into a named update set, then READ " +
+        "document_id resolves against; must exist on the table; \"\" clears it) — on an INHERITED " +
+        "column, overridden for that table alone via sys_dictionary_override — captured into a " +
+        "named update set, then READ " +
         "BACK from the instance to verify. This is the schema counterpart to set_field: set_field " +
         "changes a RECORD's value, set_column changes the COLUMN's definition (sys_dictionary). Use " +
         "add_column to CREATE a column. maxLength is PHYSICAL — changing it fires a real ALTER on the " +

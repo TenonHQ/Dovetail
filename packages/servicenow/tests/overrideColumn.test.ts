@@ -16,7 +16,7 @@ import type { ServiceNowClient } from "../src/client";
  * ServiceNow that had never been checked. The facts the stub below encodes:
  *
  *   - a child narrows an inherited column via sys_dictionary_override (mandatory /
- *     read_only / default_value, each needing its `<attr>_override` flag) and
+ *     read_only / default_value / dependent, each needing its `<attr>_override` flag) and
  *     sys_documentation (label), touching neither parent nor siblings;
  *   - base_table is the DEFINING table, not the immediate parent;
  *   - scope follows the CHILD;
@@ -39,6 +39,8 @@ interface StubOpts {
   /** Write the value but leave the override flag off — an INERT override. */
   dropFlags?: boolean;
   updateSetState?: string;
+  /** Elements that do not exist anywhere in the hierarchy (sys_dictionary returns no row). */
+  missingElements?: Array<string>;
 }
 
 interface Recorded {
@@ -104,6 +106,14 @@ function inheritedClient(opts: StubOpts) {
           return [{ scope: "x_cadso_child", name: "Child App" }];
         }
         if (table === "sys_dictionary") {
+          var elementMatch = /\^element=(.+)$/.exec(query);
+          if (
+            elementMatch &&
+            opts.missingElements &&
+            opts.missingElements.indexOf(elementMatch[1]) !== -1
+          ) {
+            return [];
+          }
           // Only x_base defines the column. x_child and x_mid have no row — which is
           // exactly why the old code declared this impossible.
           if (query.indexOf("name=x_base") === 0) return [parentDict];
@@ -400,6 +410,69 @@ describe("setColumn on an inherited column", function () {
     expect(recOf(client).pushes[0].record_sys_id).toBe("OVR9");
   });
 
+  it("OVERRIDES dependent_on_field for the child (dependent + dependent_override), then reads it back", async function () {
+    // This used to be refused, with advice to repoint the column on x_base — which would
+    // repoint it for every table extending x_base. sys_dictionary_override carries
+    // `dependent` / `dependent_override` for exactly this.
+    var client = inheritedClient({});
+    var result = await setColumn({
+      client: client,
+      table: "x_child",
+      column: "description",
+      attributes: { dependentOnField: "table" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+    expect(result.via).toBe("override");
+    expect(result.verified).toBe(true);
+    expect(result.capturedInUpdateSet).toBe(true);
+    expect(result.changes).toEqual([
+      { attribute: "dependent_on_field", from: "", to: "table" },
+    ]);
+    var rec = recOf(client);
+    expect(rec.pushes).toHaveLength(0);
+    expect(rec.creates).toHaveLength(1);
+    expect(rec.creates[0].table).toBe("sys_dictionary_override");
+    expect(rec.creates[0].fields).toEqual({
+      name: "x_child",
+      element: "description",
+      base_table: "x_base",
+      dependent: "table",
+      dependent_override: "true",
+    });
+  });
+
+  it("flags an INERT dependent override (flag dropped) instead of reporting success", async function () {
+    var client = inheritedClient({ dropFlags: true });
+    var result = await setColumn({
+      client: client,
+      table: "x_child",
+      column: "description",
+      attributes: { dependentOnField: "table" },
+      updateSetSysId: "us1",
+    });
+    expect(result.verified).toBe(false);
+    expect(result.note).toMatch(/dependent_override/);
+  });
+
+  it("refuses a dependent_on_field that is not a column anywhere on the child's hierarchy, before writing", async function () {
+    var client = inheritedClient({ missingElements: ["tabel"] });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_child",
+        column: "description",
+        attributes: { dependentOnField: "tabel" },
+        updateSetSysId: "us1",
+        dryRun: true,
+      }),
+    ).rejects.toThrow(
+      /dependent_on_field 'tabel' is not a column on 'x_child'/,
+    );
+    var rec = recOf(client);
+    expect(rec.pushes.concat(rec.creates)).toHaveLength(0);
+  });
+
   it("splits a mixed request across BOTH record types in one call", async function () {
     var client = inheritedClient({});
     var result = await setColumn({
@@ -635,13 +708,20 @@ describe("setColumn on an inherited column", function () {
     ).rejects.toThrow(/cannot be renamed/);
   });
 
-  it("exposes exactly the three attributes ServiceNow lets a child override", function () {
+  it("exposes exactly the four attributes ServiceNow lets a child override", function () {
     // Not label (sys_documentation) and not max_length (physical on the ancestor).
     expect(Object.keys(OVERRIDABLE).sort()).toEqual([
       "default_value",
+      "dependent_on_field",
       "mandatory",
       "read_only",
     ]);
     expect(OVERRIDABLE.default_value.flag).toBe("default_value_override");
+    // The override column is named "dependent", not "dependent_on_field" (verified live:
+    // OOB cmdb_ci_business_process.owned_by overrides dependent=managed_by_group).
+    expect(OVERRIDABLE.dependent_on_field).toEqual({
+      field: "dependent",
+      flag: "dependent_override",
+    });
   });
 });

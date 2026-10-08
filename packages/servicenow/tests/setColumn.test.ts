@@ -733,27 +733,29 @@ describe("setColumn hostile inputs and awkward states", function () {
     ).rejects.toThrow(/Invalid character in query value/);
   });
 
-  // NOTE ON THE TWO TESTS BELOW. They used to assert that an inherited column could not
+  // NOTE ON THE TESTS BELOW. They used to assert that an inherited column could not
   // be changed at all, and had to be changed on the parent. That was false — a child
   // narrows an inherited column for itself via sys_dictionary_override /
   // sys_documentation (see the "inherited columns" suite). MAX_LENGTH is the one genuine
-  // exception, because it is the ancestor's physical column and has no override, and it
-  // is what these two always actually exercised. Their names now say so.
-  it("refuses a dependent_on_field change on an inherited column — sys_dictionary_override has no such field", async function () {
+  // exception, because it is the ancestor's physical column and has no override.
+  // dependent_on_field IS overridable (sys_dictionary_override.dependent).
+  it("routes a dependent_on_field change on an inherited column to a per-child override, not the parent", async function () {
     var client = liveClient({
       dict: null,
       parentTable: "x_parent",
       parentDict: { sys_id: "PCOL", element: "description" },
     });
-    await expect(
-      setColumn({
-        client: client,
-        table: "x_t",
-        column: "description",
-        attributes: { dependentOnField: "table" },
-        updateSetSysId: "us1",
-      }),
-    ).rejects.toThrow(/INHERITED from 'x_parent'/);
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "description",
+      attributes: { dependentOnField: "table" },
+      updateSetSysId: "us1",
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.via).toBe("override");
+    expect(result.note).toMatch(/for x_t ALONE \(sys_dictionary_override\)/);
     expect(pushesOf(client)).toHaveLength(0);
   });
 
