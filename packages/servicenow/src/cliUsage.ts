@@ -467,7 +467,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       {
         flag: "update-set",
         value: "<sys_id>",
-        note: "Sent with the delete; see the #297 note below for where the capture lands today.",
+        note: "Must exist and be in progress (checked on the dry-run too); pinned as current before the delete.",
       },
     ],
     optional: [
@@ -481,7 +481,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       "dove-sn delete-record --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> --update-set <sys_id> --apply",
     notes: [
       "Reads the record BEFORE (a missing record is an error, never a no-op delete) and AFTER (exit 2 if it is still present — including when the server refused the delete with an error).",
-      "Until TenonHQ/Dovetail#297 ships server-side the delete op IGNORES --update-set and captures into the session's current update set — make that the set you want before --apply.",
+      "Until TenonHQ/Dovetail#297 ships server-side the delete op IGNORES --update-set and captures into the session's current update set — so the verb pins --update-set as current first (refusing, nothing deleted, if the pin does not read back) and reads the DELETE row back from sys_update_xml: exit 2 when it is not in the requested set.",
     ],
   },
   "host-assets": {

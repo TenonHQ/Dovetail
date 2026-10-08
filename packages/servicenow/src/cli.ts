@@ -2248,14 +2248,17 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
  * dove-sn delete-record:
  *   --table x_cadso_core_metric_point_type
  *   --sys-id <32-hex sys_id>                     (the record to delete)
- *   --update-set <sys_id>                        (required — the delete is captured here, never the
- *                                                 session default; server honours it once #297 ships)
+ *   --update-set <sys_id>                        (required — must exist and be in progress; pinned as
+ *                                                 the session's current set before the delete, and the
+ *                                                 DELETE capture row is read back from sys_update_xml)
  *   [--apply]                                    (DRY-RUN BY DEFAULT — nothing is deleted without it)
  *   [--dry-run] [--json]                         (--dry-run wins over --apply)
  * Reads the record BEFORE (a missing record is an error, not a no-op delete) and AFTER
  * (success is only reported once the record is confirmed gone).
- * Exit codes: 0 deleted/dry-run, 1 bad args or missing record, 2 the record is STILL PRESENT
- * on read-back (including a delete the server refused with an error) or its state is unknown.
+ * Exit codes: 0 deleted (and captured in the requested set) / dry-run, 1 bad args, missing
+ * record or unknown/closed update set, 2 the record is STILL PRESENT on read-back (including a
+ * delete the server refused with an error), its state is unknown, the update-set pin did not
+ * take (nothing deleted), or it was deleted but the DELETE capture is not in the requested set.
  */
 async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
@@ -2303,7 +2306,9 @@ async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
         result.sysId +
         " → update set " +
         result.updateSetSysId +
+        (result.updateSetName ? " (" + result.updateSetName + ")" : "") +
         (result.verified ? " — verified gone" : "") +
+        (result.status === "deleted" ? (result.captured ? ", capture verified" : ", NOT captured in that set") : "") +
         "\n" +
         result.note +
         "\n",
@@ -2313,6 +2318,8 @@ async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
     }
   }
   if (result.status === "failed") return 2;
+  // Gone but the DELETE is not in the requested set: the set would promote without it.
+  if (result.status === "deleted" && !result.captured) return 2;
   return 0;
 }
 

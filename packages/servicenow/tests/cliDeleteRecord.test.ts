@@ -1,10 +1,11 @@
 /**
- * dove-sn delete-record — CLI exit codes when the delete call itself throws (R-2).
+ * dove-sn delete-record — CLI exit codes.
  *
  * The client factory is mocked to hand back an in-memory client and the env loader is
  * mocked out, so no credentials are read and nothing reaches the network. Exit 1 means
- * "bad args / no such record"; a delete the server refused (row still present) must be
- * exit 2, and a delete that landed despite a transport error must be exit 0.
+ * "bad args / no such record / unusable update set"; a delete the server refused (row
+ * still present), a pin that did not take, and a delete captured outside the requested
+ * update set are exit 2; only a delete verified gone AND captured in the set is exit 0.
  */
 import type { ServiceNowClient } from "../src/client";
 import { makeMockClient } from "./mockClient";
@@ -33,6 +34,7 @@ import { main } from "../src/cli";
 
 var US = "20756100334a03107b18bc534d5c7b2b";
 var ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+var DEFAULT_SET = "fedcba9876543210fedcba9876543210";
 
 interface Captured {
   code: number;
@@ -63,19 +65,56 @@ async function run(argv: Array<string>): Promise<Captured> {
   }
 }
 
-/** A client whose delete always throws `message`; `removes` decides if the row goes first. */
-function throwingDeleteClient(message: string, removes: boolean) {
+interface Scenario {
+  /** The delete call throws this after (maybe) landing. */
+  deleteThrows?: string;
+  /** Whether the delete removes the row (and writes its capture row). Default true. */
+  removes?: boolean;
+  /** changeUpdateSet answers but the current set does not move. */
+  pinIgnored?: boolean;
+  /** The DELETE capture row lands here whatever the pin says. */
+  captureInto?: string;
+}
+
+/**
+ * An in-memory instance: one record on x_t, the requested set (in progress) plus Default,
+ * a shared "current set" for changeUpdateSet / currentUpdateSet, and a DELETE capture row
+ * written into the current (or forced) set when the delete lands.
+ */
+function scenarioClient(sc: Scenario) {
   var present = true;
+  var current = DEFAULT_SET;
+  var captures: Array<Record<string, unknown>> = [];
+  var names: Record<string, string> = {};
+  names[US] = "Journey set";
+  names[DEFAULT_SET] = "Default";
   var ctx = makeMockClient({
-    query: async function (_table: string, query?: string) {
+    query: async function (table: string, query?: string) {
+      if (table === "sys_update_set") {
+        var id = (query || "").replace(/^sys_id=/, "");
+        return names[id] ? [{ sys_id: id, name: names[id], state: "in progress" }] : [];
+      }
+      if (table === "sys_update_xml") return captures.slice().reverse();
       if (present && query === "sys_id=" + ID) return [{ sys_id: ID, name: "a" }];
       return [];
     },
   });
+  ctx.client.claude.changeUpdateSet = async function (params) {
+    ctx.calls.changeUpdateSet.push(params);
+    if (!sc.pinIgnored) current = params.sysId;
+    return { sys_id: params.sysId };
+  };
+  ctx.client.claude.currentUpdateSet = async function () {
+    return { sys_id: current, name: names[current] || "" };
+  };
   ctx.client.claude.deleteRecord = async function (params) {
     ctx.calls.deleteRecord.push(params);
-    if (removes) present = false;
-    throw new Error(message);
+    if (sc.removes !== false) {
+      present = false;
+      captures.push({ name: params.table + "_" + params.sys_id, action: "DELETE", update_set: sc.captureInto || current });
+    }
+    if (sc.deleteThrows) throw new Error(sc.deleteThrows);
+    return { sys_id: params.sys_id };
   };
   return ctx;
 }
@@ -88,7 +127,7 @@ afterEach(function () {
 
 describe("dove-sn delete-record — exit codes when the delete call throws", function () {
   it("server refusal (SN 500) with the record still present → exit 2, status failed", async function () {
-    var ctx = throwingDeleteClient("SN 500 on claude.deleteRecord(x_t) — retries exhausted.", false);
+    var ctx = scenarioClient({ deleteThrows: "SN 500 on claude.deleteRecord(x_t) — retries exhausted.", removes: false });
     mockClientRef.current = ctx.client;
     var r = await run(ARGS);
     expect(r.code).toBe(2);
@@ -100,7 +139,7 @@ describe("dove-sn delete-record — exit codes when the delete call throws", fun
   });
 
   it("transport error (ECONNRESET) after the delete landed → exit 0, status deleted", async function () {
-    var ctx = throwingDeleteClient("SN network error on claude.deleteRecord(x_t): read ECONNRESET", true);
+    var ctx = scenarioClient({ deleteThrows: "SN network error on claude.deleteRecord(x_t): read ECONNRESET" });
     mockClientRef.current = ctx.client;
     var r = await run(ARGS);
     expect(r.code).toBe(0);
@@ -108,5 +147,57 @@ describe("dove-sn delete-record — exit codes when the delete call throws", fun
     expect(parsed.status).toBe("deleted");
     expect(parsed.verified).toBe(true);
     expect(parsed.note).toContain("ECONNRESET");
+  });
+});
+
+describe("dove-sn delete-record — update set pinned and the capture read back", function () {
+  it("deleted AND captured in the requested set → exit 0", async function () {
+    var ctx = scenarioClient({});
+    mockClientRef.current = ctx.client;
+    var r = await run(ARGS);
+    expect(r.code).toBe(0);
+    var parsed = JSON.parse(r.stdout);
+    expect(parsed.status).toBe("deleted");
+    expect(parsed.captured).toBe(true);
+    expect(parsed.capturedInto).toEqual({ sysId: US, name: "Journey set" });
+  });
+
+  it("deleted but the DELETE row is in another set → exit 2, captured:false", async function () {
+    var ctx = scenarioClient({ captureInto: DEFAULT_SET });
+    mockClientRef.current = ctx.client;
+    var r = await run(ARGS);
+    expect(r.code).toBe(2);
+    var parsed = JSON.parse(r.stdout);
+    expect(parsed.status).toBe("deleted");
+    expect(parsed.captured).toBe(false);
+    expect(parsed.capturedInto).toEqual({ sysId: DEFAULT_SET, name: "Default" });
+  });
+
+  it("the pin does not read back → exit 2 and no delete call", async function () {
+    var ctx = scenarioClient({ pinIgnored: true });
+    mockClientRef.current = ctx.client;
+    var r = await run(ARGS);
+    expect(r.code).toBe(2);
+    expect(JSON.parse(r.stdout).status).toBe("failed");
+    expect(ctx.calls.deleteRecord.length).toBe(0);
+  });
+
+  it("an unknown update set fails the DRY-RUN with exit 1", async function () {
+    var ctx = scenarioClient({});
+    mockClientRef.current = ctx.client;
+    var r = await run(["delete-record", "--table", "x_t", "--sys-id", ID, "--update-set", "99999999999999999999999999999999"]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toMatch(/update set 9+ not found/);
+    expect(ctx.calls.changeUpdateSet.length).toBe(0);
+    expect(ctx.calls.deleteRecord.length).toBe(0);
+  });
+
+  it("the human-readable line says whether the capture was verified", async function () {
+    var ctx = scenarioClient({ captureInto: DEFAULT_SET });
+    mockClientRef.current = ctx.client;
+    var r = await run(["delete-record", "--table", "x_t", "--sys-id", ID, "--update-set", US, "--apply"]);
+    expect(r.code).toBe(2);
+    expect(r.stdout).toContain("(Journey set)");
+    expect(r.stdout).toContain("NOT captured in that set");
   });
 });

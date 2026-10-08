@@ -552,9 +552,9 @@ export var createRecordSchema = z.object({
 });
 
 // delete_record: DRY-RUN BY DEFAULT — the delete only fires with confirm:true
-// (dryRun:true forces a dry-run even then). updateSetSysId is REQUIRED and sent,
-// but the server op honours it only once #297 ships — until then the capture
-// lands in the session's current update set. The
+// (dryRun:true forces a dry-run even then). updateSetSysId is REQUIRED; the server
+// op ignores it until #297 ships, so deleteRecord pins it as the session's current
+// set and reads the DELETE capture row back from sys_update_xml. The
 // table-name / 32-hex sys_id shapes are enforced here AND in deleteRecord so a
 // malformed id is rejected before any network call on either surface.
 export var deleteRecordSchema = z.object({

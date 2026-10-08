@@ -923,10 +923,13 @@ export function buildDescriptors(
         "error — never a 'successful' delete of nothing) and READ BACK AFTER (success is only " +
         "reported once the record is confirmed gone). DRY-RUN BY DEFAULT — without confirm:true " +
         "nothing is deleted and the before-snapshot is returned; dryRun:true forces a dry-run even " +
-        "with confirm. updateSetSysId is REQUIRED and sent, but the capture is NOT pinned yet: until " +
-        "TenonHQ/Dovetail#297 ships, the server-side op ignores it and captures the delete into the " +
-        "session's CURRENT update set — make that the set you want before confirming (every result " +
-        "note repeats this). sysId must be a 32-char lowercase hex id; table a plain " +
+        "with confirm. updateSetSysId is REQUIRED and must be an existing in-progress update set " +
+        "(checked on the dry-run too). Until TenonHQ/Dovetail#297 ships the server-side op ignores it " +
+        "and captures into the session's CURRENT update set, so the tool pins the set as current " +
+        "first (refusing to delete if the pin does not read back) and afterwards reads the DELETE " +
+        "row back from sys_update_xml: captured:true only when it is in the requested set, " +
+        "capturedInto names the set it actually landed in. A deleted record with captured:false " +
+        "will NOT travel with that set. sysId must be a 32-char lowercase hex id; table a plain " +
         "table name. REFUSES schema tables (sys_db_object / sys_dictionary) — dropping a table or " +
         "column is a lifecycle op, not a record delete. Destructive and irreversible on apply: query " +
         "first and dry-run before confirming. To change a record use set_field; to add one use " +

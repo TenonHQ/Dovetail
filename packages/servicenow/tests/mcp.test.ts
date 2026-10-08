@@ -218,8 +218,12 @@ describe("MCP registry", function () {
 
   it("delete_record handler is a dry-run by default — snapshot returned, nothing deleted", async function () {
     var id = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    var us = "20756100334a03107b18bc534d5c7b2b";
     var ctx = makeMockClient({
       query: async function (table: string, query?: string) {
+        if (table === "sys_update_set") {
+          return query === "sys_id=" + us ? [{ sys_id: us, name: "Journey set", state: "in progress" }] : [];
+        }
         if (query === "sys_id=" + id) return [{ sys_id: id, name: "avg_parts" }];
         return [];
       },
@@ -231,23 +235,40 @@ describe("MCP registry", function () {
     var result = await deleteTool.handler({
       table: "x_cadso_core_metric_point_type",
       sysId: id,
-      updateSetSysId: "us1",
+      updateSetSysId: us,
     });
     expect(result.status).toBe("dry-run");
+    expect(result.updateSetName).toBe("Journey set");
     expect(result.before).toEqual({ sys_id: id, name: "avg_parts" });
     expect(ctx.calls.deleteRecord).toHaveLength(0);
     expect(ctx.calls.nowInvoke).toHaveLength(0);
   });
 
-  it("delete_record handler deletes via the injected client when confirm:true and verifies gone", async function () {
+  it("delete_record handler pins the set, deletes via the injected client when confirm:true, verifies gone and captured", async function () {
     var id = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    var us = "20756100334a03107b18bc534d5c7b2b";
     var present = true;
+    var current = "";
     var ctx = makeMockClient({
       query: async function (table: string, query?: string) {
+        if (table === "sys_update_set") {
+          return query === "sys_id=" + us ? [{ sys_id: us, name: "Journey set", state: "in progress" }] : [];
+        }
+        if (table === "sys_update_xml") {
+          return present ? [] : [{ name: "x_cadso_core_metric_point_type_" + id, action: "DELETE", update_set: current }];
+        }
         if (present && query === "sys_id=" + id) return [{ sys_id: id, name: "avg_parts" }];
         return [];
       },
     });
+    ctx.client.claude.changeUpdateSet = async function (params) {
+      ctx.calls.changeUpdateSet.push(params);
+      current = params.sysId;
+      return { sys_id: params.sysId };
+    };
+    ctx.client.claude.currentUpdateSet = async function () {
+      return { sys_id: current, name: "Journey set" };
+    };
     var realDelete = ctx.client.claude.deleteRecord;
     ctx.client.claude.deleteRecord = async function (params) {
       present = false;
@@ -260,16 +281,18 @@ describe("MCP registry", function () {
     var result = await deleteTool.handler({
       table: "x_cadso_core_metric_point_type",
       sysId: id,
-      updateSetSysId: "us1",
+      updateSetSysId: us,
       confirm: true,
     });
     expect(result.status).toBe("deleted");
     expect(result.verified).toBe(true);
+    expect(result.captured).toBe(true);
+    expect(ctx.calls.changeUpdateSet).toEqual([{ sysId: us }]);
     expect(ctx.calls.deleteRecord).toHaveLength(1);
     expect(ctx.calls.deleteRecord[0]).toEqual({
       table: "x_cadso_core_metric_point_type",
       sys_id: id,
-      update_set_sys_id: "us1",
+      update_set_sys_id: us,
     });
   });
 
