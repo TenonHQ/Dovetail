@@ -535,7 +535,13 @@ export function buildDescriptors(
         "table NAME; element is derived from label unless column.name is given. dependent_on_field names " +
         "the sibling column a document_id column resolves against (its table_name column) — it must " +
         "already exist on the table, is verified on the read-back, and is refused when absent. " +
-        "updateSetSysId is required on the live path. dryRun:true returns the plan with no writes.",
+        "scope must match the table's scope unless crossScope:true, which opts in to a column OWNED " +
+        "by scope on another app's table (the platform's cross-scope field: element becomes " +
+        "<scope>_<name>, the dictionary row and its update-set capture land in scope); the table " +
+        "must allow new fields from other scopes (sys_db_object.alter_access) and updateSetSysId " +
+        "must belong to scope — both checked on dryRun too, and the stored element + sys_scope are " +
+        "read back. updateSetSysId is required on the live path. dryRun:true returns the plan with " +
+        "no writes.",
       shape: addColumnSchema.shape,
       handler: async function (args: any) {
         var p = addColumnSchema.parse(args);
@@ -557,6 +563,7 @@ export function buildDescriptors(
           table: p.table,
           column: p.column,
           scope: p.scope,
+          crossScope: p.crossScope,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
           debug: p.debug,

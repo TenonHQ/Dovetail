@@ -251,7 +251,15 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         value: "<element>",
         note: "Sibling column a document_id resolves against (its table_name column); must already exist.",
       },
-      { flag: "scope", value: "<x_scope>", note: "Owning app scope when it cannot be inferred from the table." },
+      {
+        flag: "scope",
+        value: "<x_scope>",
+        note: "Owning app scope. Must match the table's scope unless --cross-scope is passed.",
+      },
+      {
+        flag: "cross-scope",
+        note: "Opt in to a column OWNED by --scope, which differs from the table's scope (element becomes <scope>_<name>; the table must allow new fields; --update-set must be in --scope).",
+      },
       { flag: "update-set", value: "<sys_id>", note: "REQUIRED on the live path (only --dry-run works without one)." },
       DRY_RUN_FLAG,
       DEBUG_FLAG,
@@ -261,7 +269,10 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     gateNote: "--update-set is required unless --dry-run.",
     example:
       "dove-sn add-column --table x_cadso_journey --label URL --type url --max-length 1024 --update-set <sys_id>",
-    notes: ["Exit 2 when the write landed but the read-back does not show the column."],
+    notes: [
+      "Exit 2 when the write landed but the read-back does not show the column.",
+      "Cross-scope: dove-sn add-column --table x_cadso_automate_email_batch --label 'Instance Step' --name instance_step --type reference --reference x_cadso_journey_instance_step --scope x_cadso_journey --cross-scope --update-set <journey set>",
+    ],
   },
   "set-column": {
     summary: "Update an EXISTING column's schema (label/mandatory/default/read-only/max-length/dependent-on-field), then verify",
