@@ -90,6 +90,11 @@ async function run(args: string[]): Promise<ParseResult> {
 
 beforeEach(function () {
   jest.clearAllMocks();
+  process.exitCode = undefined;
+});
+
+afterEach(function () {
+  process.exitCode = undefined;
 });
 
 describe("dove pull", function () {
@@ -97,6 +102,7 @@ describe("dove pull", function () {
     const { error } = await run(["pull"]);
     expect(error).toBeUndefined();
     expect(refreshCommand).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBeUndefined();
   });
 
   it("still routes the canonical `refresh` and its `r` alias", async function () {
@@ -147,6 +153,31 @@ describe("dove pull", function () {
     expect(argv.sysId).toEqual(["94243ee5c3f78f10d4ddf1db050131a6"]);
     expect(argv.sysIds).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2");
     expect(pullRecordCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a bare `pull --dry-run` instead of running a real full refresh", async function () {
+    const { error } = await run(["pull", "--dry-run"]);
+    expect(error).toBeDefined();
+    expect(String(error)).toMatch(/--dry-run needs a table/);
+    expect(String(error)).toMatch(/full refresh/);
+    expect(process.exitCode).toBe(1);
+    expect(refreshCommand).not.toHaveBeenCalled();
+    expect(pullRecordCommand).not.toHaveBeenCalled();
+  });
+
+  it("refuses `pull --sys-ids <id>` with no table instead of running a full refresh", async function () {
+    const { error } = await run(["pull", "--sys-ids", "94243ee5c3f78f10d4ddf1db050131a6"]);
+    expect(error).toBeDefined();
+    expect(String(error)).toMatch(/needs a table/);
+    expect(String(error)).toMatch(/full refresh/);
+    expect(refreshCommand).not.toHaveBeenCalled();
+    expect(pullRecordCommand).not.toHaveBeenCalled();
+  });
+
+  it("refuses a bare `pull -t <table> --dry-run` (refresh has no dry run)", async function () {
+    const { error } = await run(["pull", "-t", "sys_script_include", "--dry-run"]);
+    expect(error).toBeDefined();
+    expect(refreshCommand).not.toHaveBeenCalled();
   });
 
   it("routes `pull --from-update-set` (no table) to the per-record pull", async function () {

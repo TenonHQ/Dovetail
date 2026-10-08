@@ -47,6 +47,30 @@ import { knowledgeDiffCommand } from "./knowledgeDiffCommand";
 import yargs, { Argv } from "yargs";
 
 /**
+ * @description A bare `dove pull` (no table, no --from-update-set) is a real,
+ * all-scope refresh, and refresh has no dry run. Per-record-only flags must
+ * never fall through to it: a forgotten table would otherwise overwrite local
+ * edits across every scope.
+ * @param {Record<string, unknown>} argv - Parsed `pull` arguments.
+ * @returns {string | undefined} The refusal message, or undefined when the invocation is fine.
+ */
+function barePullRefusal(argv: Record<string, unknown>): string | undefined {
+  if (argv.table || argv.fromUpdateSet) return undefined;
+  const hasValue = function (v: unknown): boolean {
+    if (Array.isArray(v)) return v.some(hasValue);
+    if (typeof v === "string") return v.trim() !== "";
+    return v !== undefined && v !== null && v !== false;
+  };
+  const dryRun = argv.dryRun === true;
+  if (!dryRun && !hasValue(argv.sysId) && !hasValue(argv.sysIds) && !hasValue(argv["sys-ids"])) return undefined;
+  return (
+    (dryRun ? "--dry-run" : "--sys-ids") +
+    " needs a table: a per-record pull is 'dove pull <table> <sys_id...>' (or --from-update-set <sys_id>). " +
+    "A bare 'dove pull' is a full refresh of every scope and has no dry run, so nothing was run."
+  );
+}
+
+/**
  * @description Registers every `dove` command, the global options, and the
  * parser-strictness rules on a yargs instance. Split out from initCommands so
  * tests can drive a fresh, non-exiting parser (see tests/commanderStrict.test.ts).
@@ -229,11 +253,22 @@ export function configureCli(cli: Argv): Argv {
               default: false,
               describe: "Per-record only: list the files and manifest keys the pull would touch, write nothing",
             },
+          })
+          .check(function (argv) {
+            const refusal = barePullRefusal(argv as Record<string, unknown>);
+            if (refusal !== undefined) throw new Error(refusal);
+            return true;
           });
         return cmdArgs;
       },
       async (args: TSFIXME) => {
         const pullArgs = args as PullRecordCmdArgs;
+        if (barePullRefusal(args as Record<string, unknown>) !== undefined) {
+          // The builder's .check() has already reported it; never fall through
+          // to a real refresh even when the parser was told not to exit.
+          process.exitCode = 1;
+          return;
+        }
         if (!pullArgs.table && !pullArgs.fromUpdateSet) {
           // Bare pull == refresh. The refresh-only flags arrive undeclared
           // (strictCommands tolerates them, yargs still camel-cases them), so
