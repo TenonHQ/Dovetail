@@ -612,6 +612,40 @@ describe("addColumn dependent_on_field", function () {
     ).rejects.toThrow(/cannot depend on itself/);
   });
 
+  it("refuses a dependent_on_field carrying encoded-query operators, before any network call", async function () {
+    await expect(
+      addColumn({
+        client: noNetworkClient(),
+        table: "x_cadso_journey",
+        column: Object.assign({}, documentId, { dependent_on_field: "nope^ORelement=sys_id" }),
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/dependent_on_field 'nope\^ORelement=sys_id' is not a valid column name/);
+  });
+
+  it("refuses when the dependency lookup returns a DIFFERENT element than requested", async function () {
+    var client = liveClient({});
+    var table = (client as unknown as {
+      table: { query: (t: string, q: string, o?: unknown) => Promise<Array<Record<string, unknown>>> };
+    }).table;
+    var realQuery = table.query;
+    table.query = async function (t: string, q: string, o?: unknown) {
+      if (t === "sys_dictionary" && q.indexOf("^element=table") > 0) {
+        return [{ sys_id: "OTHER", element: "sys_id" }];
+      }
+      return realQuery(t, q, o);
+    };
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_journey",
+        column: documentId,
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/dependent_on_field 'table' is not a column on 'x_cadso_journey'/);
+    expect(callsOf(client).createRecordFields).toEqual({});
+  });
+
   it("carries dependent_on_field on the insert and verifies it on the read-back", async function () {
     var client = liveClient({});
     var result = await addColumn({

@@ -73,6 +73,8 @@ import {
 } from "./updateSetGuard";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
+/** A dictionary element name — spliced into an encoded query, so nothing else is allowed. */
+var ELEMENT_NAME = /^[a-z0-9_]+$/;
 
 /** Patch dependent_on_field on a sys_dictionary row, captured in the given update set. */
 async function setDependentOnField(
@@ -564,6 +566,15 @@ async function addColumnInner(
     typeof params.column.dependent_on_field === "string"
       ? params.column.dependent_on_field.trim()
       : "";
+  // It is spliced into the existence-check query, so an operator (^OR, =) would turn the
+  // check into "does ANY matching row exist" — refuse anything but a plain element name.
+  if (wantDependent && !ELEMENT_NAME.test(wantDependent)) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' is not a valid column name (lowercase letters, digits and underscores only).",
+    );
+  }
   if (wantDependent === element) {
     throw new Error(
       "add-column: dependent_on_field '" +
@@ -662,7 +673,11 @@ async function addColumnInner(
       "name=" + resolved.name + "^element=" + wantDependent,
       { limit: 1, fields: ["sys_id", "element"] },
     );
-    if (dependencyRows.length === 0) {
+    // The row found must BE the requested element, not merely some row the query matched.
+    if (
+      dependencyRows.length === 0 ||
+      fieldToString(dependencyRows[0].element) !== wantDependent
+    ) {
       throw new Error(
         "add-column: dependent_on_field '" +
           wantDependent +
