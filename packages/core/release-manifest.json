@@ -1,7 +1,54 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-08T04:32:46.555Z",
+  "generated_at": "2026-10-08T05:02:17.898Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.50",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.50",
+      "prev_version": "0.0.49",
+      "published_at": "2026-10-08T05:02:17.884Z",
+      "git": {
+        "sha": "f26838f012f509d489c1fa7321e32bf89cf5c078",
+        "tag": "dovetail-servicenow@0.0.50"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "f26838f01",
+          "subject": "feat(servicenow): flag and ensure cross-scope Design Access records (#318)",
+          "pr": 318
+        },
+        {
+          "sha": "73c35c0c0",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.48",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.48",
+      "prev_version": "0.0.47",
+      "published_at": "2026-10-08T05:02:17.884Z",
+      "git": {
+        "sha": "f26838f012f509d489c1fa7321e32bf89cf5c078",
+        "tag": "dovetail-mcp@0.0.48"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "73c35c0c0",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.49",
@@ -1254,48 +1301,6 @@
       "git": {
         "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
         "tag": "dovetail-babel-plugin@0.0.13"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "17624b238",
-          "subject": "chore(release): publish 11 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-babel-plugin-remove-modules@0.0.13",
-      "package": "@tenonhq/dovetail-babel-plugin-remove-modules",
-      "version": "0.0.13",
-      "prev_version": "0.0.12",
-      "published_at": "2026-08-31T21:34:20.896Z",
-      "git": {
-        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
-        "tag": "dovetail-babel-plugin-remove-modules@0.0.13"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "17624b238",
-          "subject": "chore(release): publish 11 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-babel-preset-servicenow@0.0.13",
-      "package": "@tenonhq/dovetail-babel-preset-servicenow",
-      "version": "0.0.13",
-      "prev_version": "0.0.12",
-      "published_at": "2026-08-31T21:34:20.896Z",
-      "git": {
-        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
-        "tag": "dovetail-babel-preset-servicenow@0.0.13"
       },
       "semver_bump": "patch",
       "commits": [
