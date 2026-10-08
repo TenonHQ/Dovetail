@@ -408,9 +408,23 @@ export var addColumnSchema = z.object({
   // scope (a Journey field on an Automate table). Without it a mismatched scope is
   // refused — on dryRun and live alike — because that is the classic wrong-scope slip.
   crossScope: z.boolean().optional(),
+  // Cross-scope only: create the missing sys_scope_design_access record (scope -> the
+  // table's scope) first, in the same update set. Without it a missing record is flagged.
+  ensureDesignAccess: z.boolean().optional(),
   updateSetSysId: z.string().optional(),
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional(),
+});
+
+// design_access: ensure the sys_scope_design_access record that lets sourceScope author
+// in targetScope's tables. updateSetSysId (an update set in sourceScope) is optional in
+// the schema because dryRun needs none; the live-path requirement is enforced at the tool
+// boundary (registry.ts), matching add_column.
+export var designAccessSchema = z.object({
+  sourceScope: z.string().min(1),
+  targetScope: z.string().min(1),
+  updateSetSysId: z.string().optional(),
+  dryRun: z.boolean().optional(),
 });
 
 // add-index keeps a column LIST because an index is conceptually multi-column, but the

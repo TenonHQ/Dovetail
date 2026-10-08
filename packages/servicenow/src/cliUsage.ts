@@ -260,6 +260,10 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         flag: "cross-scope",
         note: "Opt in to a column OWNED by --scope, which differs from the table's scope (element becomes <scope>_<name>; the table must allow new fields; --update-set must be in --scope).",
       },
+      {
+        flag: "ensure-design-access",
+        note: "Cross-scope only: create the missing sys_scope_design_access record (--scope -> table's scope) first, in the same update set. Without it a missing record is only flagged.",
+      },
       { flag: "update-set", value: "<sys_id>", note: "REQUIRED on the live path (only --dry-run works without one)." },
       DRY_RUN_FLAG,
       DEBUG_FLAG,
@@ -272,6 +276,27 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     notes: [
       "Exit 2 when the write landed but the read-back does not show the column.",
       "Cross-scope: dove-sn add-column --table x_cadso_automate_email_batch --label 'Instance Step' --name instance_step --type reference --reference x_cadso_journey_instance_step --scope x_cadso_journey --cross-scope --update-set <journey set>",
+    ],
+  },
+  "design-access": {
+    summary: "Ensure the sys_scope_design_access record that lets one app author in another app's tables (required by the UI for cross-scope columns)",
+    required: [
+      { flag: "source", value: "<x_scope>", note: "The AUTHORING app (owns the record and its update set)." },
+      { flag: "target", value: "<x_scope>", note: "The app that OWNS the tables." },
+    ],
+    optional: [
+      { flag: "update-set", value: "<sys_id>", note: "Update set in --source. REQUIRED on the live path." },
+      DRY_RUN_FLAG,
+      JSON_FLAG,
+    ],
+    gate: "dry-run-flag",
+    gateNote: "--update-set is required unless --dry-run; --dry-run reports exists/missing only.",
+    example:
+      "dove-sn design-access --source x_cadso_journey --target x_cadso_automate --update-set <journey set>",
+    notes: [
+      "Idempotent: an existing record is reported and nothing is written.",
+      "Symptom it fixes: \"Invalid 'Table' selected on the Dictionary Entry record ... can only select '<app>' tables with read access enabled\" — the table's own access flags are NOT the gate.",
+      "Exit 2 when the record could not be created or verified on read-back.",
     ],
   },
   "set-column": {

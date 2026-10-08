@@ -41,6 +41,7 @@ import { testFlow } from "../flowDesigner/testFlow";
 import {
   createTable,
   addColumn,
+  ensureDesignAccess,
   addIndex,
   listIndexes,
   createIndex,
@@ -78,6 +79,7 @@ import {
   editFlowSchema,
   createTableSchema,
   addColumnSchema,
+  designAccessSchema,
   addIndexSchema,
   listIndexesSchema,
   createIndexSchema,
@@ -112,6 +114,7 @@ export var TOOL_NAMES = [
   "flow_edit",
   "create_table",
   "add_column",
+  "design_access",
   "add_index",
   "index_list",
   "index_create",
@@ -540,7 +543,11 @@ export function buildDescriptors(
         "<scope>_<name>, the dictionary row and its update-set capture land in scope); the table " +
         "must allow new fields from other scopes (sys_db_object.alter_access) and updateSetSysId " +
         "must belong to scope — both checked on dryRun too, and the stored element + sys_scope are " +
-        "read back. updateSetSysId is required on the live path. dryRun:true returns the plan with " +
+        "read back. A cross-scope result carries designAccess { present, sysId, created }: the " +
+        "platform UI refuses cross-scope authoring without a sys_scope_design_access record " +
+        "(scope -> the table's scope), so a missing one is FLAGGED (not blocking — the headless " +
+        "insert works without it); ensureDesignAccess:true creates it first in the same update " +
+        "set. updateSetSysId is required on the live path. dryRun:true returns the plan with " +
         "no writes.",
       shape: addColumnSchema.shape,
       handler: async function (args: any) {
@@ -564,9 +571,45 @@ export function buildDescriptors(
           column: p.column,
           scope: p.scope,
           crossScope: p.crossScope,
+          ensureDesignAccess: p.ensureDesignAccess,
           updateSetSysId: p.updateSetSysId,
           dryRun: p.dryRun,
           debug: p.debug,
+        });
+      },
+    },
+    {
+      name: "design_access",
+      annotations: WRITE_CREATE,
+      description:
+        "Ensure the sys_scope_design_access record that lets sourceScope (the AUTHORING app) " +
+        "design in targetScope's tables (the app that OWNS them). The platform UI requires it " +
+        "for cross-scope columns — the symptom is \"Invalid 'Table' selected on the Dictionary " +
+        "Entry record ... can only select '<app>' tables with read access enabled\", and the " +
+        "table's own access flags are NOT the gate. Scopes are names or sys_scope sys_ids. " +
+        "Idempotent: an existing record returns status 'exists' and nothing is written. Live " +
+        "creates it via the scope-aware createRecord op switched to sourceScope, captured in " +
+        "updateSetSysId (must belong to sourceScope), then reads it back and asserts " +
+        "source/target. updateSetSysId is required on the live path; dryRun:true only reports " +
+        "exists / missing.",
+      shape: designAccessSchema.shape,
+      handler: async function (args: unknown) {
+        var p = designAccessSchema.parse(args);
+        if (
+          p.dryRun !== true &&
+          (!p.updateSetSysId || !p.updateSetSysId.trim())
+        ) {
+          throw new Error(
+            "design_access: updateSetSysId (an update set in sourceScope) is required on " +
+              "the live path — set dryRun:true to only check whether the record exists.",
+          );
+        }
+        return ensureDesignAccess({
+          client: client(),
+          sourceScope: p.sourceScope,
+          targetScope: p.targetScope,
+          updateSetSysId: p.updateSetSysId,
+          dryRun: p.dryRun,
         });
       },
     },

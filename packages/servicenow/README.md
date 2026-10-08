@@ -1154,7 +1154,14 @@ Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `add_column` (same-scope by default; `crossScope: true` with `scope` adds a column OWNED
 by another app — a Journey field on an Automate table, element `<scope>_<name>` —
 guarded by `sys_db_object.alter_access` and the update set's scope, with the stored
-element and `sys_scope` read back; the CLI flag is `--cross-scope`) /
+element and `sys_scope` read back; the CLI flag is `--cross-scope`. A cross-scope
+result also carries `designAccess`: the platform UI refuses cross-scope authoring
+without a `sys_scope_design_access` record (column scope -> table scope), so a missing
+one is FLAGGED — not blocking, the headless insert works without it — and
+`ensureDesignAccess: true` / `--ensure-design-access` creates it first in the same
+update set) / `design_access` (ensure that record on its own — idempotent, created in
+the SOURCE app's update set and read back; CLI `dove-sn design-access --source <app>
+--target <app> --update-set <sys_id>`, `--dry-run` only reports exists/missing) /
 `add_index` (a single-column unique index via `sys_dictionary.unique`,
 read back from the `v_db_index` view - uniqueness enforcement is always reported
 unverified) / `index_list` (read-only: a table's database indexes from `v_db_index`,

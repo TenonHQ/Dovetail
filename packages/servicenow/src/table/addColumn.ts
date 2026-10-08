@@ -34,6 +34,14 @@
  * is accepted as-is) and the element ServiceNow actually stored is read back and
  * reported, together with a `sys_scope` assertion on the read-back row.
  *
+ * DESIGN ACCESS. Since the Zurich bw40 hotfix the platform UI also requires a
+ * `sys_scope_design_access` record (source = the column's scope, target = the table's)
+ * before one app may author in another's tables. The headless insert here does not hit
+ * that check, so a missing record does not block the column — but it is FLAGGED on every
+ * cross-scope result (`designAccess`), because the next UI edit of the column, and the
+ * target instance, will. `ensureDesignAccess: true` creates it first, in the same update
+ * set (see ./designAccess.ts).
+ *
  * SIZING THE PHYSICAL COLUMN. A max_length carried on the INSERT sets the dictionary
  * row but NOT the column ServiceNow actually builds — it materialises at the platform
  * default regardless. An insert declaring string(4000) therefore leaves a varchar(255)
@@ -56,6 +64,7 @@
 import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
 import { ColumnSpec, normalizeColumns } from "./buildTableSave";
+import { ensureDesignAccess, findDesignAccess } from "./designAccess";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
 
@@ -119,12 +128,34 @@ export interface AddColumnParams {
    * and the update set must belong to the column's scope.
    */
   crossScope?: boolean;
+  /**
+   * Cross-scope only: create the sys_scope_design_access record (column scope -> table
+   * scope) when it is missing, captured in the same update set, BEFORE the column insert.
+   * Without it a missing record is only flagged on the result.
+   */
+  ensureDesignAccess?: boolean;
   /** Update set sys_id to capture the insert into. REQUIRED on the live path (dry-run doesn't need it). */
   updateSetSysId?: string;
   /** Emit diagnostic detail in the result note. */
   debug?: boolean;
   /** Plan only — no writes. Pure + deterministic. */
   dryRun?: boolean;
+}
+
+/** Design Access state for a cross-scope column (absent on a same-scope add). */
+export interface DesignAccessFlag {
+  /** Always true when reported: a cross-scope column needs the record for UI/Studio work. */
+  required: true;
+  /** true = record exists (or was created); false = missing; null = could not be read. */
+  present: boolean | null;
+  /** sys_scope_design_access sys_id ("" when missing / unknown). */
+  sysId: string;
+  /** Authoring scope (the column's owner). */
+  sourceScope: string;
+  /** Table-owning scope. */
+  targetScope: string;
+  /** True when THIS run created the record. */
+  created: boolean;
 }
 
 export interface AddColumnResult {
@@ -152,6 +183,8 @@ export interface AddColumnResult {
   verified: boolean;
   /** Human-readable note (success summary, the read-back result, or the failure body). */
   note: string;
+  /** Cross-scope only: whether the Design Access record the platform UI requires exists. */
+  designAccess?: DesignAccessFlag;
 }
 
 /**
@@ -284,6 +317,8 @@ interface ColumnPlan {
   crossScope: boolean;
   /** The element to insert and pre-check — scope-prefixed on a cross-scope column. */
   element: string;
+  /** Cross-scope only: the Design Access state found while planning. */
+  designAccess?: DesignAccessFlag;
 }
 
 /**
@@ -394,12 +429,34 @@ async function planColumnScope(
   // element; an already-prefixed name is accepted as-is.
   var prefix = owner.name + "_";
   var prefixed = element.indexOf(prefix) === 0 ? element : prefix + element;
+  // Flag — never block on — the Design Access record the platform UI requires. A read
+  // failure is reported as UNKNOWN (null), not as missing: a blind check is not evidence.
+  var present: boolean | null = null;
+  var daSysId = "";
+  try {
+    daSysId = await findDesignAccess({
+      client: client,
+      sourceScopeSysId: owner.sysId,
+      targetScopeSysId: resolved.scopeSysId,
+    });
+    present = daSysId !== "";
+  } catch (e) {
+    present = null;
+  }
   return {
     resolved: resolved,
     scopeName: owner.name,
     scopeSysId: owner.sysId,
     crossScope: true,
     element: prefixed,
+    designAccess: {
+      required: true,
+      present: present,
+      sysId: daSysId,
+      sourceScope: owner.name,
+      targetScope: tableScopeName,
+      created: false,
+    },
   };
 }
 
@@ -417,8 +474,80 @@ async function resolveScopeName(
   return rows.length > 0 ? fieldToString(rows[0].scope) : "";
 }
 
+/**
+ * The Design Access sentence appended to a cross-scope result's note ("" when none).
+ * Exported for tests.
+ */
+export function designAccessNote(
+  da: DesignAccessFlag | undefined,
+  ensureRequested: boolean,
+  isDryRun: boolean,
+): string {
+  if (!da) return "";
+  var pair = "'" + da.sourceScope + "' -> '" + da.targetScope + "'";
+  if (da.created) {
+    return (
+      " Design Access " +
+      pair +
+      " was created (sys_scope_design_access " +
+      da.sysId +
+      ")."
+    );
+  }
+  if (da.present === true) {
+    return (
+      " Design Access " +
+      pair +
+      " is present (sys_scope_design_access " +
+      da.sysId +
+      ")."
+    );
+  }
+  var state =
+    da.present === null
+      ? "could NOT be read (sys_scope_design_access query failed) — check it on the instance"
+      : "is MISSING";
+  if (isDryRun && ensureRequested && da.present === false) {
+    return (
+      " DESIGN ACCESS REQUIRED: " +
+      pair +
+      " " +
+      state +
+      " — would create it first, in the same update set."
+    );
+  }
+  return (
+    " DESIGN ACCESS REQUIRED: " +
+    pair +
+    " " +
+    state +
+    ". The headless insert does not need it, but UI/Studio edits of this column and the " +
+    "target instance will refuse it — re-run with --ensure-design-access (MCP: " +
+    "ensureDesignAccess:true) or create it with dove-sn design-access."
+  );
+}
+
 export async function addColumn(
   params: AddColumnParams,
+): Promise<AddColumnResult> {
+  var daOut: { value?: DesignAccessFlag } = {};
+  var result = await addColumnInner(params, daOut);
+  // The dry-run path attaches its own flag + note; every live return is decorated here so
+  // no exit path (created / skipped / any failure) can drop the flag.
+  if (!result.designAccess && daOut.value) {
+    result.designAccess = daOut.value;
+    result.note += designAccessNote(
+      daOut.value,
+      params.ensureDesignAccess === true,
+      false,
+    );
+  }
+  return result;
+}
+
+async function addColumnInner(
+  params: AddColumnParams,
+  daOut: { value?: DesignAccessFlag },
 ): Promise<AddColumnResult> {
   validate(params);
   var client = params.client;
@@ -469,7 +598,8 @@ export async function addColumn(
       : SYS_ID.test(params.table)
       ? params.table
       : "";
-    return {
+    var dryDa = planned ? planned.designAccess : undefined;
+    var dryResult: AddColumnResult = {
       status: "dry-run",
       table: planTable,
       tableSysId: planTableSysId,
@@ -500,8 +630,11 @@ export async function addColumn(
             wantDependent +
             "' (which must already exist on the table)"
           : "") +
-        ", then read it back.",
+        ", then read it back." +
+        designAccessNote(dryDa, params.ensureDesignAccess === true, true),
     };
+    if (dryDa) dryResult.designAccess = dryDa;
+    return dryResult;
   }
 
   // ---- LIVE PATH ------------------------------------------------------------
@@ -521,6 +654,42 @@ export async function addColumn(
   var resolved = plan.resolved;
   var scopeName = plan.scopeName;
   element = plan.element;
+
+  // Create the missing Design Access record FIRST when asked — nothing about the column
+  // has been written yet, so a failure here stops cleanly with the instance untouched
+  // (or, if the record landed but did not verify, says exactly that).
+  var da = plan.designAccess;
+  if (da && da.present !== true && params.ensureDesignAccess === true) {
+    var ensured = await ensureDesignAccess({
+      client: client,
+      sourceScope: da.sourceScope,
+      targetScope: da.targetScope,
+      updateSetSysId: params.updateSetSysId,
+    });
+    da = {
+      required: true,
+      present: ensured.present,
+      sysId: ensured.sysId,
+      sourceScope: da.sourceScope,
+      targetScope: da.targetScope,
+      created: ensured.status === "created",
+    };
+    if (ensured.status === "failed") {
+      var daFail = failure(
+        resolved,
+        col,
+        element,
+        params.updateSetSysId,
+        "Design Access could not be ensured, so the column was NOT added: " +
+          ensured.note,
+        undefined,
+        scopeName,
+      );
+      daFail.designAccess = da;
+      return daFail;
+    }
+  }
+  if (da) daOut.value = da;
 
   // max_length is deliberately NOT sent on the insert — see the sizing step below.
   // Reference (and date) columns carry no max_length at all.

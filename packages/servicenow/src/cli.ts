@@ -56,6 +56,7 @@ import { testFlow } from "./flowDesigner/testFlow";
 import {
   createTable,
   addColumn,
+  ensureDesignAccess,
   addIndex,
   listIndexes,
   createIndex,
@@ -1526,14 +1527,64 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
 }
 
 /**
+ * dove-sn design-access:
+ *   --source x_cadso_journey --target x_cadso_automate
+ *   [--update-set <sys_id in source>] [--dry-run] [--json]
+ * Ensures the sys_scope_design_access record that lets the SOURCE app author in the
+ * TARGET app's tables (required by the platform UI for cross-scope columns). Idempotent;
+ * --dry-run only reports whether it exists. --update-set is required unless --dry-run.
+ */
+async function runDesignAccess(flags: Record<string, string>): Promise<number> {
+  if (!flags.source || !flags.target) {
+    process.stderr.write(
+      "design-access: --source (authoring app) and --target (app that owns the tables) are required\n",
+    );
+    return 1;
+  }
+  var isDryRun = flags["dry-run"] === "true";
+  if (!isDryRun && !flags["update-set"]) {
+    process.stderr.write(
+      "design-access: --update-set (an update set in --source) is required on the live path (only --dry-run works without one)\n",
+    );
+    return 1;
+  }
+  var result = await ensureDesignAccess({
+    client: createClient({}),
+    sourceScope: flags.source,
+    targetScope: flags.target,
+    updateSetSysId: flags["update-set"],
+    dryRun: isDryRun,
+  });
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      "[" +
+        result.status +
+        "] " +
+        result.sourceScope +
+        " -> " +
+        result.targetScope +
+        (result.sysId ? " (" + result.sysId + ")" : "") +
+        "\n" +
+        result.note +
+        "\n",
+    );
+  }
+  if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
  * dove-sn add-column:
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
  *   [--mandatory] [--default <value>] [--dependent-on-field <element>]
- *   [--scope x_cadso_journey] [--cross-scope] [--update-set <sys_id>]
- *   [--from-json <spec.json>] [--dry-run] [--debug] [--json]
+ *   [--scope x_cadso_journey] [--cross-scope] [--ensure-design-access]
+ *   [--update-set <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
  * --update-set is required unless --dry-run. --cross-scope opts in to a column
- * OWNED by --scope when that differs from the table's scope.
+ * OWNED by --scope when that differs from the table's scope; a missing Design Access
+ * record is flagged, and --ensure-design-access creates it first.
  */
 async function runAddColumn(flags: Record<string, string>): Promise<number> {
   var spec: Partial<AddColumnParams> = {};
@@ -1570,6 +1621,12 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   if (scope) params.scope = scope;
   if (flags["cross-scope"] === "true" || spec.crossScope === true) {
     params.crossScope = true;
+  }
+  if (
+    flags["ensure-design-access"] === "true" ||
+    spec.ensureDesignAccess === true
+  ) {
+    params.ensureDesignAccess = true;
   }
   var us = flags["update-set"] || spec.updateSetSysId;
   if (us) params.updateSetSysId = us;
@@ -2904,6 +2961,9 @@ async function dispatch(parsed: ParsedArgs): Promise<number> {
   }
   if (parsed.command === "add-column") {
     return await runAddColumn(parsed.flags);
+  }
+  if (parsed.command === "design-access") {
+    return await runDesignAccess(parsed.flags);
   }
   if (parsed.command === "add-index") {
     return await runAddIndex(parsed.flags);
