@@ -80,8 +80,14 @@ export type {
 export {
   createIndex,
   validateCreateIndex,
-  DEFAULT_INDEX_FORM_PATH,
-  NOT_IN_UPDATE_SET,
+  captureRowName,
+  parseAjaxAnswer,
+  parseCanCreate,
+  buildCanCreateFields,
+  buildCreateScheduleFields,
+  XMLHTTP_PATH,
+  DEFAULT_ACCESS_METHOD,
+  CAPTURE_NOTE,
 } from "./createIndex";
 export type { CreateIndexParams, CreateIndexResult } from "./createIndex";
 

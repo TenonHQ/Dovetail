@@ -1737,16 +1737,19 @@ async function runIndexList(flags: Record<string, string>): Promise<number> {
 
 /**
  * dove-sn index-create:
- *   --table x_cadso_core_u_smoke --columns a,b [--unique] [--access-method <m>]
- *   [--confirm] [--dry-run] [--poll-attempts <n>] [--poll-interval-ms <n>]
- *   [--debug] [--json]
+ *   --table x_cadso_core_u_smoke --columns a,b --update-set <sys_id> [--unique]
+ *   [--access-method <m>] [--confirm] [--dry-run] [--poll-attempts <n>]
+ *   [--poll-interval-ms <n>] [--debug] [--json]
  *
  * DRY-RUN BY DEFAULT — nothing is sent (and nothing is even READ) without --confirm;
- * --dry-run forces a plan even with it. There is deliberately NO --update-set: a
- * database index is physical and is not captured in one.
+ * --dry-run forces a plan even with it. --update-set is REQUIRED on the live path:
+ * the build job captures the index definition (sys_update_xml type=Indexes) into the
+ * user's CURRENT update set, so the verb pins that set first and reads the capture
+ * row back from it afterwards.
  *
  * Exit codes: 0 created / already-exists / dry-run, 1 bad args, 2 failed (which
- * includes "the form was posted but no index was read back").
+ * includes "scheduled but no index was read back") — and 2 when the index was read
+ * back but its capture row was NOT found in the pinned set.
  */
 async function runIndexCreate(flags: Record<string, string>): Promise<number> {
   var columns = splitList(flags.columns || "");
@@ -1756,11 +1759,13 @@ async function runIndexCreate(flags: Record<string, string>): Promise<number> {
     );
     return 1;
   }
-  if (flags["update-set"]) {
+  // DRY-RUN BY DEFAULT: --confirm is what sends; --dry-run forces a plan even with it.
+  var indexDryRun = flags["dry-run"] === "true" || flags.confirm !== "true";
+  if (!indexDryRun && !flags["update-set"]) {
     process.stderr.write(
-      "index-create: --update-set is not accepted. A database index is a PHYSICAL, " +
-        "PER-INSTANCE change — it is NOT captured in an update set and does not " +
-        "travel with a promotion. Run index-create against each environment.\n",
+      "index-create: --update-set is required on the live path — the index " +
+        "definition is captured into the user's CURRENT update set, so it must be " +
+        "pinned first (only a dry-run works without one)\n",
     );
     return 1;
   }
@@ -1774,7 +1779,7 @@ async function runIndexCreate(flags: Record<string, string>): Promise<number> {
   };
   if (flags.name !== undefined) params.name = flags.name;
   if (flags["access-method"]) params.accessMethod = flags["access-method"];
-  if (flags["form-path"]) params.formPath = flags["form-path"];
+  if (flags["update-set"]) params.updateSetSysId = flags["update-set"];
   if (flags.debug === "true") params.debug = true;
   // A non-integer poll setting would make the bounded wait unbounded (or zero).
   // Reject it here with a named message instead of letting NaN reach the loop.
@@ -1814,6 +1819,12 @@ async function runIndexCreate(flags: Record<string, string>): Promise<number> {
         (result.name ? " -> " + result.name : "") +
         (result.instance ? " on " + result.instance : "") +
         (result.verified ? " — verified" : "") +
+        (result.updateSet
+          ? " [update set " +
+            (result.updateSet.name || result.updateSet.sysId) +
+            (result.captured ? " — captured" : " — capture NOT verified") +
+            "]"
+          : "") +
         "\n" +
         result.note +
         "\nUNVERIFIED: " +
@@ -1822,6 +1833,9 @@ async function runIndexCreate(flags: Record<string, string>): Promise<number> {
     );
   }
   if (result.status === "failed") return 2;
+  // An index that exists but whose definition was not captured will not travel —
+  // surface that as a non-zero exit, the same way an unread-back index is.
+  if (result.status === "created" && !result.captured) return 2;
   return 0;
 }
 

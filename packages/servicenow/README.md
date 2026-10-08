@@ -736,7 +736,7 @@ admin, and `sys_index_column` does not exist at all (HTTP 400 `Invalid table`), 
 is no two-table index model to join and nothing to cross-check against.
 
 Each row comes back as `{ name, columns, type, rawColumns }`. `columns` is the view's
-bracketed `column_names` cell (`"[phone]"`, `"[a,b]"`) **parsed** into a list - never
+bracketed `column_names` cell (`"[phone]"`, `"[a;b]"` - semicolon-separated when composite) **parsed** into a list - never
 substring-matched, because `"[owner_id]"` contains `"owner"`. `type` is `access_method`.
 
 **Uniqueness is not readable.** `v_db_index` has no uniqueness field, so a unique index
@@ -747,49 +747,73 @@ is wrong than that the table is unindexed - every physical table has a `PRIMARY`
 
 ### Create an index (composite and non-unique included)
 
-> **A DATABASE INDEX IS A PHYSICAL, PER-INSTANCE CHANGE. IT IS NOT CAPTURED IN AN UPDATE
-> SET AND DOES NOT TRAVEL WITH A PROMOTION.** Re-run `index-create` against every
-> environment that needs the index (dev, test, uat, staging, prod). There is deliberately
-> no `--update-set` - passing one is an error, not a silent no-op.
+> **An index IS captured in an update set.** The platform's build job writes a
+> `sys_update_xml` row (`type=Indexes`, name `sys_index_<table>_<col>_<col>…`) into the
+> session user's **current** update set - the Database Indexes dialog says so itself, and
+> it was read back live on tenonworkstudio 2026-10-08. `--update-set` is therefore
+> **required** on the live path: the verb pins that set as current first and reads the
+> capture row back from it afterwards. The physical index is still built per instance;
+> committing the set elsewhere rebuilds it there.
 
 ```bash
-# Dry-run (the DEFAULT) - sends nothing and reads nothing
+# Dry-run (the DEFAULT) - sends nothing and reads nothing; no update set needed
 npx dove-sn index-create --table x_cadso_journey_instance --columns state,created_on
 
 # Send it
 npx dove-sn index-create \
-  --table x_cadso_journey_instance --columns state,created_on --confirm --json
+  --table x_cadso_journey_instance --columns state,created_on \
+  --update-set <sys_id> --confirm --json
 ```
 
 This is what `add-index` cannot do. `sys_dictionary.unique` - the only record-shaped lever
 - is **per-column and unique-only**, so composite and plain indexes have no record path at
-all. `index-create` instead replays the platform's own index-creator form
-(`sys_action=create_index`, `sysparm_index_table`, `sysparm_fields`,
-`sysparm_unique_index_SKIP`) over a form-login session. That contract is lifted from the
-instance's shipped `index_creator_information` UI macro, not from a guess, and the POST
-target is taken from the rendered page's own `<form action>`.
+all (`sys_index` is API-level-ACL 403, `sys_index_column` does not exist). `index-create`
+instead replays the two GlideAjax calls the platform's own Database Indexes dialog makes
+on `xmlhttp.do` over a form-login session - taken from a HAR of the Studio dialog plus the
+`dialog_index_create` UI page's client script, both read live:
+
+1. `IndexCreatorErrorChecker` / `canCreate` - the dialog's pre-flight (`sysparm_table_name`,
+   `sysparm_field_names`, `sysparm_unique`, `sysparm_access_method`). A `canCreate:false`
+   verdict is returned verbatim with its `errorCode` and nothing is scheduled.
+2. `ScheduleCreator` / `createSchedule` - schedules the build (`sysparm_table`,
+   `sysparm_fields`, `sysparm_access_method` - default `btree`, exactly as the dialog's
+   client JS does - `sysparm_unique` `true|false`, empty `sysparm_email` = no
+   notification, empty `sysparm_schedule_name`).
+
+(The `index_creator_dialog` page's `sys_action=create_index` form is inert - the browser
+never submits it, and the UI page has no processing script. The earlier form-POST replay
+was a silent no-op for that reason.)
 
 - **Dry-run by default.** Without `--confirm` nothing is sent *and nothing is read*;
   `--dry-run` forces a plan even with `--confirm`.
+- **Target checks before anything else.** The table must exist; the update set must exist,
+  be `in progress`, and belong to the table's application scope - a set in another scope
+  is refused, because the capture row would land in the wrong scope.
 - **Idempotent.** On the live path `v_db_index` is read first, and an index over *exactly*
-  these columns short-circuits to `already-exists` with no form session and no write.
-  Column **order** is part of an index's identity - `[a,b]` is not `[b,a]`.
-- **`--name` is refused.** The platform's form has no name input; ServiceNow names the
-  index itself. Reporting a name the instance does not carry would be a lie, so the
-  created index's *real* name is returned in `name` instead.
-- **The read-back is the proof.** After the POST the index is polled for in `v_db_index`
-  (default 10 checks, 3 s apart - a build on a populated table is asynchronous). If it
-  never appears the status is `failed`: a form processor returning a page is not evidence
-  an ALTER ran, and a unique index cannot build over duplicate values (EMPTY counts).
+  these columns short-circuits to `already-exists` with no pin, no form session and no
+  write. Column **order** is part of an index's identity - `[a;b]` is not `[b;a]`.
+- **The pin is read back.** The set is pinned with Dovetail's own `changeUpdateSet` and
+  `currentUpdateSet` is read; a pin that did not take stops the run before the session
+  opens.
+- **`--name` is refused.** The dialog has no name input; ServiceNow names the index after
+  its leading column (live: `[sys_created_on;status;version_step;version]` → index
+  `sys_created_on`). The created index's *real* name is returned in `name`.
+- **The read-back is the proof.** After scheduling, the index is polled for in `v_db_index`
+  (default 10 checks, 3 s apart). If it never appears the status is `failed`: an accepted
+  schedule is not evidence an ALTER ran, and a unique index cannot build over duplicate
+  values (EMPTY counts). Then the capture row is looked for in the pinned set:
+  `captured:true` only when it was read back; an index that exists but was not captured
+  is `created:true, captured:false` with `update-set-capture` in `unverified` - and
+  exit code 2, because it will not travel.
 - **Uniqueness is still never claimed.** `uniqueness-enforced` stays in `unverified` on
   every status.
 
-**Requires a username+password identity that can form-log-in.** An instance on
-API-key-only auth, SSO or MFA rejects the form login however valid the API key is; the
-verb fails at the session with that diagnosis rather than a mystery 302, and no `.do`
-replay (including `create-table`'s) can work in that state.
+**Requires a username+password identity that can form-log-in.** `xmlhttp.do` ignores
+Basic auth and API keys, so an API-key-only, SSO or MFA identity fails at the session with
+that diagnosis (TenonHQ/Dovetail#292).
 
-Exit codes: `0` created / already-exists / dry-run, `1` bad args, `2` failed.
+Exit codes: `0` created / already-exists / dry-run, `1` bad args, `2` failed - and `2`
+when the index was created but its capture row was not found in the pinned set.
 
 ### Set a field on a record
 
@@ -1160,9 +1184,9 @@ read back from the `v_db_index` view - uniqueness enforcement is always reported
 unverified) / `index_list` (read-only: a table's database indexes from `v_db_index`,
 the only index read surface - `sys_index` is API-level-ACL 403 and `sys_index_column`
 does not exist) / `index_create` (create an index, composite and non-unique included, by
-replaying the platform index-creator form; dry-run by default, idempotent, read back from
-`v_db_index` - and **not** captured in an update set, because a database index is a
-physical per-instance change), the record-write verbs `set_field` (update scalar fields on an
+replaying the Database Indexes dialog's own processor calls; dry-run by default, idempotent,
+pinned to a required update set, read back from `v_db_index` and the capture row read back
+from `sys_update_xml`), the record-write verbs `set_field` (update scalar fields on an
 existing record), `create_record` (insert one record) and `delete_record` (delete one
 record — dry-run by default, `confirm:true` to apply, `updateSetSysId` required, the
 record read back before AND after so success is only reported once it is confirmed

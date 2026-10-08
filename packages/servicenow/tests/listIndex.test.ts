@@ -4,7 +4,7 @@
  * The contract this pins:
  *   - `v_db_index` is the ONLY surface read. sys_index is API-level-ACL 403 and
  *     sys_index_column does not exist, so neither is ever touched.
- *   - `column_names` arrives BRACKETED ("[phone]", "[a, b]") and is PARSED, never
+ *   - `column_names` arrives BRACKETED ("[phone]", "[a;b]" — semicolons live) and is PARSED, never
  *     handed back raw as if it were a column name.
  *   - UNIQUENESS IS NEVER CLAIMED: the view has no uniqueness field, so `unique` is
  *     left absent and "uniqueness-enforced" is in `unverified` on every result.
@@ -120,6 +120,25 @@ describe("listIndexes — column_names parsing", function () {
   it("parses a composite list with no spacing", async function () {
     var result = await listWith([row("ab", "[a,b]")]);
     expect(result.indexes[0].columns).toEqual(["a", "b"]);
+  });
+
+  it("parses the LIVE semicolon-separated composite form", async function () {
+    // Read from tenonworkstudio 2026-10-08: a 4-column btree index.
+    var result = await listWith([
+      row("sys_created_on", "[sys_created_on;status;version_step;version]"),
+    ]);
+    expect(result.indexes[0].columns).toEqual([
+      "sys_created_on",
+      "status",
+      "version_step",
+      "version",
+    ]);
+  });
+
+  it("a semicolon composite is NOT one column with a semicolon in it", async function () {
+    var result = await listWith([row("ab", "[a;b]")]);
+    expect(result.indexes[0].columns).not.toEqual(["a;b"]);
+    expect(result.indexes[0].columns).toHaveLength(2);
   });
 
   it("tolerates an unbracketed cell", async function () {
