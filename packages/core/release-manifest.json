@@ -1,7 +1,54 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-08T05:02:17.898Z",
+  "generated_at": "2026-10-08T05:20:00.147Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-servicenow@0.0.51",
+      "package": "@tenonhq/dovetail-servicenow",
+      "version": "0.0.51",
+      "prev_version": "0.0.50",
+      "published_at": "2026-10-08T05:20:00.134Z",
+      "git": {
+        "sha": "2582df4a010a7bc4a8d1d5ec7e5da08fcf92dd32",
+        "tag": "dovetail-servicenow@0.0.51"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "2582df4a0",
+          "subject": "fix(servicenow): index-create replays the Database Indexes dialog's AJAX calls and pins a required update set (#320)",
+          "pr": 320
+        },
+        {
+          "sha": "6579c6d00",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.49",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.49",
+      "prev_version": "0.0.48",
+      "published_at": "2026-10-08T05:20:00.134Z",
+      "git": {
+        "sha": "2582df4a010a7bc4a8d1d5ec7e5da08fcf92dd32",
+        "tag": "dovetail-mcp@0.0.49"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "6579c6d00",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.50",
@@ -1260,53 +1307,6 @@
         {
           "sha": "4576c072f",
           "subject": "chore(release): publish 15 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-types@0.0.21",
-      "package": "@tenonhq/dovetail-types",
-      "version": "0.0.21",
-      "prev_version": "0.0.20",
-      "published_at": "2026-08-31T21:34:20.896Z",
-      "git": {
-        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
-        "tag": "dovetail-types@0.0.21"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "81ab50a4e",
-          "subject": "feat: SN_API_KEY inbound API-key auth mode across all ServiceNow clients (#264)",
-          "pr": 264
-        },
-        {
-          "sha": "17624b238",
-          "subject": "chore(release): publish 11 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-babel-plugin@0.0.13",
-      "package": "@tenonhq/dovetail-babel-plugin",
-      "version": "0.0.13",
-      "prev_version": "0.0.12",
-      "published_at": "2026-08-31T21:34:20.896Z",
-      "git": {
-        "sha": "81ab50a4e0fc105445ffc6d6983bc93a1483859d",
-        "tag": "dovetail-babel-plugin@0.0.13"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "17624b238",
-          "subject": "chore(release): publish 11 packages [skip ci]"
         }
       ],
       "exports_delta": null,
