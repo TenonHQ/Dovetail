@@ -647,9 +647,37 @@ async function addColumnInner(
   var scopeName = plan.scopeName;
   element = plan.element;
 
-  // Create the missing Design Access record FIRST when asked — nothing about the column
-  // has been written yet, so a failure here stops cleanly with the instance untouched
-  // (or, if the record landed but did not verify, says exactly that).
+  // max_length is deliberately NOT sent on the insert — see the sizing step below.
+  // Reference (and date) columns carry no max_length at all.
+  var wantLength = col.type === "reference" ? "" : col.maxLength;
+
+  // The dependency target must EXIST on this table before the insert. ServiceNow
+  // accepts any string in dependent_on_field without checking it, so a typo would
+  // land silently and every document_id on the table would resolve against nothing.
+  // Only the table's OWN dictionary rows are searched — a dependency on an inherited
+  // column is not supported here; add it on the defining table instead.
+  if (wantDependent) {
+    var dependencyRows = await client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "name=" + resolved.name + "^element=" + wantDependent,
+      { limit: 1, fields: ["sys_id", "element"] },
+    );
+    if (dependencyRows.length === 0) {
+      throw new Error(
+        "add-column: dependent_on_field '" +
+          wantDependent +
+          "' is not a column on '" +
+          resolved.name +
+          "' (its own sys_dictionary rows were searched; inherited columns are not " +
+          "considered). Add that column first, then re-run. Nothing was written.",
+      );
+    }
+  }
+
+  // Create the missing Design Access record when asked — AFTER every check that can still
+  // refuse the request (scope, update set, dependency), so a refusal never leaves a record
+  // behind, and BEFORE the column, so nothing about the column has been written yet: a
+  // failure here stops cleanly (or, if the record landed but did not verify, says so).
   var da = plan.designAccess;
   if (da && da.present !== true && params.ensureDesignAccess === true) {
     var ensured = await ensureDesignAccess({
@@ -682,33 +710,6 @@ async function addColumnInner(
     }
   }
   if (da) daOut.value = da;
-
-  // max_length is deliberately NOT sent on the insert — see the sizing step below.
-  // Reference (and date) columns carry no max_length at all.
-  var wantLength = col.type === "reference" ? "" : col.maxLength;
-
-  // The dependency target must EXIST on this table before the insert. ServiceNow
-  // accepts any string in dependent_on_field without checking it, so a typo would
-  // land silently and every document_id on the table would resolve against nothing.
-  // Only the table's OWN dictionary rows are searched — a dependency on an inherited
-  // column is not supported here; add it on the defining table instead.
-  if (wantDependent) {
-    var dependencyRows = await client.table.query<Record<string, unknown>>(
-      "sys_dictionary",
-      "name=" + resolved.name + "^element=" + wantDependent,
-      { limit: 1, fields: ["sys_id", "element"] },
-    );
-    if (dependencyRows.length === 0) {
-      throw new Error(
-        "add-column: dependent_on_field '" +
-          wantDependent +
-          "' is not a column on '" +
-          resolved.name +
-          "' (its own sys_dictionary rows were searched; inherited columns are not " +
-          "considered). Add that column first, then re-run. Nothing was written.",
-      );
-    }
-  }
 
   // Idempotency: if the column already exists, skip the insert (never duplicate a
   // dictionary row on a re-run). Matched by name+element — the element IS the column's

@@ -1260,6 +1260,25 @@ describe("addColumn cross-scope Design Access", function () {
     expect(result.note).toMatch(/column was NOT added/);
     expect(crossCallsOf(client).createRecordCount).toBe(0);
   });
+  it("ensureDesignAccess writes nothing when the column's dependency is missing", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn(
+        Object.assign({}, base, {
+          client: client,
+          ensureDesignAccess: true,
+          column: {
+            label: "Doc",
+            name: "doc",
+            type: "document_id",
+            dependent_on_field: "no_such_column",
+          },
+        }),
+      ),
+    ).rejects.toThrow(/dependent_on_field 'no_such_column' is not a column .* Nothing was written/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
   it("reports an unreadable record as UNKNOWN (null), not missing", async function () {
     var client = crossScopeClient({ designAccess: "error" });
     var result = await addColumn(Object.assign({ client: client }, base));
