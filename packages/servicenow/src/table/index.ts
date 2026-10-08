@@ -54,7 +54,18 @@ export type {
 } from "./formSession";
 
 export { addColumn, deriveElement } from "./addColumn";
-export type { AddColumnParams, AddColumnResult } from "./addColumn";
+export type { AddColumnParams, AddColumnResult, DesignAccessFlag } from "./addColumn";
+export {
+  ensureDesignAccess,
+  findDesignAccess,
+  resolveScopeRef,
+  DESIGN_ACCESS_TABLE,
+} from "./designAccess";
+export type {
+  EnsureDesignAccessParams,
+  EnsureDesignAccessResult,
+  ResolvedScopeRef,
+} from "./designAccess";
 
 export {
   addIndex,

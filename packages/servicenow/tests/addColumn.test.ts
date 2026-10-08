@@ -761,6 +761,8 @@ type CrossCalls = {
   createRecordFields: Record<string, unknown>;
   createRecordCount: number;
   dictionaryQueries: Array<string>;
+  designAccessCreates: Array<Record<string, unknown>>;
+  designAccessUpdateSet: string;
 };
 function crossCallsOf(client: ServiceNowClient): CrossCalls {
   return (client as unknown as { _calls: CrossCalls })._calls;
@@ -778,7 +780,12 @@ function crossScopeClient(opts: {
   readBackScope?: string;
   readBackElement?: string;
   knownScope?: boolean;
+  /** Design Access JOURNEY -> AUTOMATE: present, missing (default), or the query throws. */
+  designAccess?: "present" | "missing" | "error";
+  /** Make the design-access insert throw. */
+  designAccessInsertFails?: boolean;
 }): ServiceNowClient {
+  var designAccess = opts.designAccess === undefined ? "missing" : opts.designAccess;
   var alterAccess = opts.alterAccess === undefined ? "true" : opts.alterAccess;
   var knownScope = opts.knownScope === undefined ? true : opts.knownScope;
   var calls: CrossCalls = {
@@ -786,6 +793,8 @@ function crossScopeClient(opts: {
     createRecordFields: {},
     createRecordCount: 0,
     dictionaryQueries: [],
+    designAccessCreates: [],
+    designAccessUpdateSet: "",
   };
   var c = {
     _calls: calls,
@@ -802,9 +811,29 @@ function crossScopeClient(opts: {
           ];
         }
         if (table === "sys_scope") {
-          if (query === "sys_id=AUTOSYS") return [{ sys_id: "AUTOSYS", scope: "x_cadso_automate" }];
+          if (query === "sys_id=AUTOSYS" || query === "scope=x_cadso_automate") {
+            return [{ sys_id: "AUTOSYS", scope: "x_cadso_automate" }];
+          }
           if (query === "scope=x_cadso_journey" || query === "sys_id=JOURNEYSYS") {
             return knownScope ? [{ sys_id: "JOURNEYSYS", scope: "x_cadso_journey" }] : [];
+          }
+          return [];
+        }
+        if (table === "sys_scope_design_access") {
+          if (query === "sys_id=DASYS") {
+            var made = calls.designAccessCreates[calls.designAccessCreates.length - 1] || {};
+            return [
+              {
+                sys_id: "DASYS",
+                source_scope: { value: made.source_scope },
+                target_package: { value: made.target_package },
+              },
+            ];
+          }
+          if (designAccess === "error") throw new Error("403 on sys_scope_design_access");
+          if (query === "source_scope=JOURNEYSYS^target_package=AUTOSYS") {
+            if (designAccess === "present") return [{ sys_id: "DAEXIST" }];
+            if (calls.designAccessCreates.length > 0) return [{ sys_id: "DASYS" }];
           }
           return [];
         }
@@ -865,7 +894,18 @@ function crossScopeClient(opts: {
       },
     },
     claude: {
-      createRecord: async function (p: { scope?: string; fields?: Record<string, unknown> }) {
+      createRecord: async function (p: {
+        table?: string;
+        scope?: string;
+        fields?: Record<string, unknown>;
+        update_set_sys_id?: string;
+      }) {
+        if (p.table === "sys_scope_design_access") {
+          if (opts.designAccessInsertFails) throw new Error("ACL denied");
+          calls.designAccessCreates.push(p.fields || {});
+          calls.designAccessUpdateSet = p.update_set_sys_id || "";
+          return { sys_id: "DASYS" };
+        }
         calls.createRecordCount += 1;
         calls.createRecordScope = p.scope || "";
         calls.createRecordFields = p.fields || {};
@@ -1132,5 +1172,88 @@ describe("addColumn dry-run runs the scope guards", function () {
         dryRun: true,
       }),
     ).rejects.toThrow(/does not belong to the column's scope/);
+  });
+});
+
+describe("addColumn cross-scope Design Access", function () {
+  var base = {
+    table: "x_cadso_automate_email_batch",
+    column: CROSS_COLUMN,
+    scope: "x_cadso_journey",
+    crossScope: true,
+    updateSetSysId: "usj",
+  };
+  it("FLAGS a missing record without blocking the column", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn(Object.assign({ client: client }, base));
+    expect(result.status).toBe("created");
+    expect(result.designAccess).toEqual({
+      required: true,
+      present: false,
+      sysId: "",
+      sourceScope: "x_cadso_journey",
+      targetScope: "x_cadso_automate",
+      created: false,
+    });
+    expect(result.note).toMatch(/DESIGN ACCESS REQUIRED: 'x_cadso_journey' -> 'x_cadso_automate' is MISSING/);
+    expect(result.note).toMatch(/--ensure-design-access/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+  });
+  it("reports a present record and writes nothing for it", async function () {
+    var client = crossScopeClient({ designAccess: "present" });
+    var result = await addColumn(Object.assign({ client: client, ensureDesignAccess: true }, base));
+    expect(result.designAccess && result.designAccess.present).toBe(true);
+    expect(result.designAccess && result.designAccess.sysId).toBe("DAEXIST");
+    expect(result.note).toMatch(/Design Access .* is present/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+  });
+  it("ensureDesignAccess creates the record FIRST, in the column's update set, then adds the column", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn(Object.assign({ client: client, ensureDesignAccess: true }, base));
+    expect(result.status).toBe("created");
+    var calls = crossCallsOf(client);
+    expect(calls.designAccessCreates).toEqual([{ source_scope: "JOURNEYSYS", target_package: "AUTOSYS" }]);
+    expect(calls.designAccessUpdateSet).toBe("usj");
+    expect(calls.createRecordCount).toBe(1);
+    expect(result.designAccess && result.designAccess.created).toBe(true);
+    expect(result.designAccess && result.designAccess.sysId).toBe("DASYS");
+    expect(result.note).toMatch(/Design Access .* was created/);
+  });
+  it("does NOT add the column when the record cannot be created", async function () {
+    var client = crossScopeClient({ designAccessInsertFails: true });
+    var result = await addColumn(Object.assign({ client: client, ensureDesignAccess: true }, base));
+    expect(result.status).toBe("failed");
+    expect(result.columnSysId).toBe("");
+    expect(result.note).toMatch(/column was NOT added/);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("reports an unreadable record as UNKNOWN (null), not missing", async function () {
+    var client = crossScopeClient({ designAccess: "error" });
+    var result = await addColumn(Object.assign({ client: client }, base));
+    expect(result.status).toBe("created");
+    expect(result.designAccess && result.designAccess.present).toBe(null);
+    expect(result.note).toMatch(/could NOT be read/);
+  });
+  it("dry-run flags it, and says it would create it when asked, writing nothing", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn(
+      Object.assign({ client: client, ensureDesignAccess: true, dryRun: true }, base),
+    );
+    expect(result.status).toBe("dry-run");
+    expect(result.designAccess && result.designAccess.present).toBe(false);
+    expect(result.note).toMatch(/would create it first/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("a same-scope add carries no designAccess flag", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: { label: "Note", name: "note", type: "string" },
+      updateSetSysId: "usa",
+    });
+    expect(result.designAccess).toBeUndefined();
+    expect(result.note).not.toMatch(/DESIGN ACCESS/);
   });
 });
