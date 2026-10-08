@@ -792,6 +792,12 @@ was a silent no-op for that reason.)
 - **Idempotent.** On the live path `v_db_index` is read first, and an index over *exactly*
   these columns short-circuits to `already-exists` with no pin, no form session and no
   write. Column **order** is part of an index's identity - `[a;b]` is not `[b;a]`.
+- **One identity for the pin and the build.** The pin runs through the REST client (an API
+  key when one is configured) but the build is scheduled by the form session (always
+  `SN_USER`), and the build captures into the *form* user's current set. So before any
+  write the REST caller's own `sys_user` row is read and the run is **refused** unless it
+  is the form-login user - otherwise the pin would read back for one user while the
+  capture landed in another's set.
 - **The pin is read back.** The set is pinned with Dovetail's own `changeUpdateSet` and
   `currentUpdateSet` is read; a pin that did not take stops the run before the session
   opens.
@@ -804,7 +810,8 @@ was a silent no-op for that reason.)
   values (EMPTY counts). Then the capture row is looked for in the pinned set:
   `captured:true` only when it was read back; an index that exists but was not captured
   is `created:true, captured:false` with `update-set-capture` in `unverified` - and
-  exit code 2, because it will not travel.
+  exit code 2, because it will not travel. In that case the capture name is searched
+  across every set and the set(s) it actually landed in come back in `captureFoundIn`.
 - **Uniqueness is still never claimed.** `uniqueness-enforced` stays in `unverified` on
   every status.
 

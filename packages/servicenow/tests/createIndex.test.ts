@@ -17,6 +17,9 @@
  *     table's application scope and be 'in progress'.
  *   - an index over exactly those columns already present short-circuits to
  *     `already-exists` with NO form session opened and NO pin.
+ *   - the REST caller's identity must be the form-login user, proven BEFORE the pin;
+ *     a mismatch (API key user vs SN_USER) or an unprovable identity stops the run
+ *     with nothing written.
  *   - the update set is pinned (changeUpdateSet) and READ BACK (currentUpdateSet)
  *     before the session opens; a pin that did not take stops the run.
  *   - call 1 is IndexCreatorErrorChecker.canCreate; a canCreate:false verdict stops
@@ -25,7 +28,8 @@
  *     empty sysparm_email and sysparm_schedule_name.
  *   - a read-back that never sees the index is a FAILURE, not a caveat.
  *   - the capture row (sys_update_xml, type=Indexes) is read back from the pinned
- *     set; missing → created:true, captured:false, "update-set-capture" unverified.
+ *     set; missing → created:true, captured:false, "update-set-capture" unverified,
+ *     and the set(s) the row DID land in are named in `captureFoundIn`.
  *   - `name` is REFUSED, because the dialog has no name input.
  *   - "uniqueness-enforced" is in `unverified` on every status.
  */
@@ -110,6 +114,8 @@ function liveClient(opts: {
   setRows?: Array<Record<string, string>>;
   indexError?: Error;
   captureError?: Error;
+  /** The REST caller's own sys_user row(s). Default: the form-login user "u". */
+  restUsers?: Array<Record<string, string>>;
 }) {
   var indexCall = 0;
   var captureCall = 0;
@@ -125,6 +131,11 @@ function liveClient(opts: {
     query: async function (table: string) {
       if (table === "sys_db_object") return tableRows;
       if (table === "sys_update_set") return setRows;
+      if (table === "sys_user") {
+        return opts.restUsers !== undefined
+          ? opts.restUsers
+          : [{ sys_id: "usr1", user_name: "u" }];
+      }
       if (table === "v_db_index") {
         if (opts.indexError) throw opts.indexError;
         var rows =
@@ -445,6 +456,77 @@ describe("createIndex — idempotency", function () {
   });
 });
 
+describe("createIndex — one identity for the pin and the build", function () {
+  it("reads the REST caller's own sys_user row before pinning", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("created");
+    var userRead = ctx.calls.tableQuery.filter(function (c) {
+      return c.table === "sys_user";
+    });
+    expect(userRead).toHaveLength(1);
+    expect(userRead[0].query).toBe("sys_id=javascript:gs.getUserID()");
+  });
+
+  it("refuses BEFORE any write when the REST identity is not the form-login user", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[]],
+      restUsers: [{ sys_id: "usr2", user_name: "api.key.user" }],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("failed");
+    expect(result.created).toBe(false);
+    expect(result.note).toMatch(/authenticated as 'api\.key\.user'/);
+    expect(result.note).toMatch(/logged in as 'u'/);
+    expect(result.note).toMatch(/Nothing was sent/);
+    // No pin, no session, no canCreate, no createSchedule.
+    expect(ctx.calls.changeUpdateSet).toHaveLength(0);
+    expect(openFormSession).not.toHaveBeenCalled();
+    expect(postForm).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the REST identity cannot be established", async function () {
+    okSession();
+    var ctx = liveClient({ indexes: [[]], restUsers: [] });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/identity could not be established/);
+    expect(ctx.calls.changeUpdateSet).toHaveLength(0);
+    expect(postForm).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the identity read returns more than one row (an ignored filter)", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[]],
+      restUsers: [
+        { sys_id: "usr1", user_name: "u" },
+        { sys_id: "usr2", user_name: "someone.else" },
+      ],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/2 rows/);
+    expect(postForm).not.toHaveBeenCalled();
+  });
+
+  it("matches the user name case-insensitively, as a login does", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
+      restUsers: [{ sys_id: "usr1", user_name: "U" }],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("created");
+  });
+});
+
 describe("createIndex — the update-set pin", function () {
   it("pins the set via changeUpdateSet BEFORE the session opens, and reads it back", async function () {
     okSession();
@@ -673,6 +755,56 @@ describe("createIndex — the read-back is the proof", function () {
     });
     var result = await createIndex(base({ client: ctx.client, confirm: true }));
     expect(result.captured).toBe(false);
+  });
+
+  it("captured:false names the update set the capture actually landed in", async function () {
+    okSession();
+    var DEFAULT_SET = "ffffffffffffffffffffffffffffffff";
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      // First read: the pinned set holds nothing. Second: the cross-set search.
+      captures: [[], [captureRow(["owner"], DEFAULT_SET)]],
+      setRows: [
+        { sys_id: SET, name: SET_NAME, application: SCOPE, state: "in progress" },
+        { sys_id: DEFAULT_SET, name: "Default", application: "global", state: "in progress" },
+      ],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("created");
+    expect(result.captured).toBe(false);
+    expect(result.captureFoundIn).toEqual([{ sysId: DEFAULT_SET, name: "Default" }]);
+    expect(result.note).toMatch(/WAS found in update set 'Default'/);
+    expect(result.note).toMatch(/WRONG set/);
+    var xmlReads = ctx.calls.tableQuery.filter(function (c) {
+      return c.table === "sys_update_xml";
+    });
+    expect(xmlReads).toHaveLength(2);
+    // The second search is NOT restricted to the pinned set.
+    expect(xmlReads[1].query).not.toMatch(/update_set=/);
+    expect(xmlReads[1].query).toMatch(/^type=Indexes\^name=sys_index_/);
+  });
+
+  it("captured:false with no row anywhere says so", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[]],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.captured).toBe(false);
+    expect(result.captureFoundIn).toEqual([]);
+    expect(result.note).toMatch(/in ANY update set/);
+  });
+
+  it("a captured result carries an empty captureFoundIn", async function () {
+    okSession();
+    var ctx = liveClient({
+      indexes: [[], [indexRow("owner", "[owner]")]],
+      captures: [[captureRow(["owner"])]],
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.captured).toBe(true);
+    expect(result.captureFoundIn).toEqual([]);
   });
 
   it("a failed capture read is reported, not thrown", async function () {

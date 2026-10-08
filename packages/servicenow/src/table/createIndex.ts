@@ -36,6 +36,11 @@
  * xmlhttp.do (publishApp established that), so an API-key-only identity still cannot
  * run this verb — see TenonHQ/Dovetail#292.
  *
+ * ONE IDENTITY. The pin and its read-back run through the REST client (API key when
+ * one is configured); the build is scheduled by the form session (always SN_USER) and
+ * captures into THAT user's current set. So the live path reads the REST caller's own
+ * sys_user row first and REFUSES, before any write, unless it is the form-login user.
+ *
  * THERE IS NO INDEX-NAME INPUT the dialog exposes (`sysparm_schedule_name` is wired
  * to a hidden `index_name` the index-creator page never populates); the platform
  * names the index after its leading column (live: columns
@@ -146,6 +151,12 @@ export interface CreateIndexResult {
   captured: boolean;
   /** The pinned update set (sys_id + name), or null before one was resolved. */
   updateSet: { sysId: string; name: string } | null;
+  /**
+   * Set ONLY when `captured` is false: the update set(s) OTHER than the pinned one that
+   * hold a sys_update_xml row under the expected capture name, newest first — i.e.
+   * where the capture actually landed. Empty when none was found (or not looked for).
+   */
+  captureFoundIn: Array<{ sysId: string; name: string }>;
   /** The host the write was aimed at — an index is per-instance, so this matters. */
   instance: string;
   /** Always includes "uniqueness-enforced"; adds "update-set-capture" when unproven. */
@@ -380,6 +391,90 @@ async function readCaptureRow(
   return { found: false, name: expected };
 }
 
+/** How many other sets a missing capture is reported in — enough to locate it. */
+var CAPTURE_ELSEWHERE_LIMIT = 5;
+
+/**
+ * When the capture row is NOT in the pinned set, find where it DID land: the same
+ * capture name searched across every update set, newest first. Each set is named
+ * best-effort (an unreadable set keeps its sys_id with an empty name).
+ */
+async function findCaptureElsewhere(
+  client: ServiceNowClient,
+  pinnedSetSysId: string,
+  table: string,
+  columns: Array<string>,
+): Promise<Array<{ sysId: string; name: string }>> {
+  var expected = captureRowName(table, columns);
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_update_xml",
+    "type=Indexes^name=" +
+      encodeQueryValue(expected) +
+      "^ORDERBYDESCsys_created_on",
+    {
+      limit: CAPTURE_ELSEWHERE_LIMIT,
+      fields: ["sys_id", "name", "type", "update_set", "sys_created_on"],
+    },
+  );
+  var safe = Array.isArray(rows) ? rows : [];
+  var out: Array<{ sysId: string; name: string }> = [];
+  var seen: Record<string, boolean> = {};
+  for (var i = 0; i < safe.length; i += 1) {
+    var row = safe[i] && typeof safe[i] === "object" ? safe[i] : {};
+    // Re-check the name: an encoded query the instance did not understand returns
+    // the unfiltered set, and an unrelated row must never be reported as "the capture".
+    if (fieldToString(row.name) !== expected) continue;
+    var setId = fieldToString(row.update_set).trim();
+    if (!SYS_ID.test(setId)) continue;
+    var key = setId.toLowerCase();
+    if (key === pinnedSetSysId.toLowerCase() || seen[key]) continue;
+    seen[key] = true;
+    var setName = "";
+    try {
+      setName = (await readUpdateSet(client, setId)).name;
+    } catch (e) {
+      setName = "";
+    }
+    out.push({ sysId: setId, name: setName });
+  }
+  return out;
+}
+
+/**
+ * The user the REST client is authenticated as — which is NOT necessarily the form
+ * login: the REST client prefers an inbound API key (whose identity is the key's
+ * user), while the form session always logs in as SN_USER. Resolved by asking the
+ * instance for the CALLER's own sys_user row (`gs.getUserID()` evaluated server-side
+ * for the REST identity). Anything but exactly one row with a user_name is reported as
+ * an error, never guessed at: an unevaluated or ignored filter returns zero rows or
+ * the unfiltered table.
+ */
+async function readRestIdentity(
+  client: ServiceNowClient,
+): Promise<{ userName: string; error: string }> {
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_user",
+    "sys_id=javascript:gs.getUserID()",
+    { limit: 2, fields: ["sys_id", "user_name"] },
+  );
+  var safe = Array.isArray(rows) ? rows : [];
+  if (safe.length !== 1) {
+    return {
+      userName: "",
+      error:
+        "the caller's own sys_user row read back as " +
+        safe.length +
+        " rows (expected exactly 1)",
+    };
+  }
+  var row = safe[0] && typeof safe[0] === "object" ? safe[0] : {};
+  var userName = fieldToString(row.user_name).trim();
+  if (!userName) {
+    return { userName: "", error: "the caller's sys_user row has no user_name" };
+  }
+  return { userName: userName, error: "" };
+}
+
 /**
  * Parse the `answer` attribute out of a GlideAjax envelope
  * (`<xml answer="…"/>`). Returns "" when absent — the caller decides what that means.
@@ -544,6 +639,10 @@ function result(
     verified: partial.verified === true,
     captured: partial.captured === true,
     updateSet: partial.updateSet ? partial.updateSet : null,
+    captureFoundIn:
+      partial.captured !== true && Array.isArray(partial.captureFoundIn)
+        ? partial.captureFoundIn.slice()
+        : [],
     instance: partial.instance,
     unverified: unverified,
     httpStatus: partial.httpStatus ? partial.httpStatus : 0,
@@ -747,6 +846,61 @@ export async function createIndex(
         "row (if any) was NOT looked for in " +
         setInfo.name +
         ". " +
+        CAPTURE_NOTE,
+    });
+  }
+
+  // ONE IDENTITY OR NOTHING. The pin and its read-back below go through the REST
+  // client, which authenticates with the API key when one is configured; the build is
+  // scheduled by a form session that always logs in as the basic-auth user. The job
+  // captures into the FORM user's current set, so when the two identities differ the
+  // pin "reads back" for one user while the capture lands in the other user's set.
+  // Prove they are the same user BEFORE the first write, or do not write at all.
+  var restIdentity: { userName: string; error: string };
+  try {
+    restIdentity = await readRestIdentity(params.client);
+  } catch (e) {
+    restIdentity = { userName: "", error: errorMessage(e) };
+  }
+  var formUser = String(auth.user || "").trim();
+  if (restIdentity.error) {
+    return result({
+      status: "failed",
+      table: table,
+      columns: columns,
+      instance: instance,
+      updateSet: updateSet,
+      note:
+        "Refusing to write: the REST client's identity could not be established (" +
+        restIdentity.error +
+        "), so it cannot be shown to be the form-login user '" +
+        formUser +
+        "' that schedules the build. The pin would be proven for one user while the " +
+        "capture lands in another's current update set. Nothing was sent. " +
+        CAPTURE_NOTE,
+    });
+  }
+  if (restIdentity.userName.toLowerCase() !== formUser.toLowerCase()) {
+    return result({
+      status: "failed",
+      table: table,
+      columns: columns,
+      instance: instance,
+      updateSet: updateSet,
+      note:
+        "Refusing to write: the REST client is authenticated as '" +
+        restIdentity.userName +
+        "' (it would pin and read back the update set) but the index build is " +
+        "scheduled by a form session logged in as '" +
+        formUser +
+        "'. The build job captures into the FORM user's current update set, which " +
+        "the pin never touches — the capture would land in whatever set '" +
+        formUser +
+        "' has current, not in '" +
+        setInfo.name +
+        "'. Run with ONE identity — the REST client must authenticate as the same " +
+        "user the form session logs in as (e.g. basic auth as that user, with no API " +
+        "key, for this run). Nothing was sent. " +
         CAPTURE_NOTE,
     });
   }
@@ -998,6 +1152,39 @@ export async function createIndex(
     captureError = errorMessage(e);
   }
 
+  // NOT IN THE PINNED SET? Then say where it DID land. A capture in another set is
+  // the wrong-set outcome this verb exists to prevent, and the caller has to move it
+  // before promoting — "not found here" alone would leave them hunting for it.
+  var elsewhere: Array<{ sysId: string; name: string }> = [];
+  var elsewhereError = "";
+  if (!capture.found) {
+    try {
+      elsewhere = await findCaptureElsewhere(
+        params.client,
+        updateSetSysId,
+        table,
+        columns,
+      );
+    } catch (e) {
+      elsewhereError = errorMessage(e);
+    }
+  }
+  var elsewhereNote = capture.found
+    ? ""
+    : elsewhere.length > 0
+      ? "It WAS found in " +
+        elsewhere
+          .map(function (s) {
+            return "update set '" + (s.name || "(name unreadable)") + "' (" + s.sysId + ")";
+          })
+          .join(", ") +
+        " — the capture landed in the WRONG set; move it into '" +
+        setInfo.name +
+        "' before promoting. "
+      : elsewhereError
+        ? "Where it landed instead could not be checked (" + elsewhereError + "). "
+        : "No sys_update_xml row by that name exists in ANY update set. ";
+
   return result({
     status: "created",
     created: true,
@@ -1008,6 +1195,7 @@ export async function createIndex(
     name: observed.name,
     verified: true,
     captured: capture.found,
+    captureFoundIn: elsewhere,
     httpStatus: posted.status,
     note:
       "Created a " +
@@ -1036,7 +1224,8 @@ export async function createIndex(
           "'" +
           (captureError ? " (" + captureError + ")" : "") +
           " — the index exists on this instance but its definition may not " +
-          "travel; check sys_update_xml before promoting. ") +
+          "travel; check sys_update_xml before promoting. " +
+          elsewhereNote) +
       "NOT VERIFIED: that it REJECTS duplicates — v_db_index carries no uniqueness " +
       "field, so enforcement is provable only by a duplicate-insert test. " +
       CAPTURE_NOTE +

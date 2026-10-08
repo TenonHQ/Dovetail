@@ -735,7 +735,10 @@ export function buildDescriptors(
         "duplicate values, EMPTY included. verified:true means a matching row was READ BACK; " +
         "captured:true means the sys_update_xml row was READ BACK from the pinned set (an " +
         "index that exists but was not captured is created:true, captured:false with " +
-        "'update-set-capture' in unverified). 'uniqueness-enforced' is ALWAYS in " +
+        "'update-set-capture' in unverified, and captureFoundIn names the set(s) the row " +
+        "actually landed in). The live path REFUSES before any write unless the REST " +
+        "identity is the form-login user, because the build captures into the form " +
+        "user's current set. 'uniqueness-enforced' is ALWAYS in " +
         "unverified: v_db_index has no uniqueness field. Requires a username+password identity " +
         "that can form-log-in; xmlhttp.do ignores Basic auth and API keys, so an API-key-only " +
         "or SSO/MFA identity fails at the session with a diagnosis (TenonHQ/Dovetail#292).",
