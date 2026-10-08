@@ -457,11 +457,13 @@ export var listIndexesSchema = z.object({
 // earns the explanation that the platform's index-creator form has no name input (the
 // same contract set-column uses for internalType/element); createIndex refuses it.
 // confirm is the write gate: without confirm:true the tool is a pure dry-run that sends
-// nothing and reads nothing. There is deliberately NO updateSetSysId — a database index is
-// physical and is not captured in an update set.
+// nothing and reads nothing. updateSetSysId is optional here because a dry-run needs none;
+// the live path requires it (createIndex refuses without one) because the build job
+// captures the index definition into the user's CURRENT update set.
 export var createIndexSchema = z.object({
   table: z.string().min(1),
   columns: z.array(z.string().min(1)).min(1),
+  updateSetSysId: z.string().min(1).optional(),
   unique: z.boolean().optional(),
   name: z.string().optional(),
   accessMethod: z.string().min(1).optional(),

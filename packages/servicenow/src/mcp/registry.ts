@@ -689,7 +689,7 @@ export function buildDescriptors(
         "admin (an ACL that refuses GET refuses POST), and sys_index_column does not exist at " +
         "all (HTTP 400 'Invalid table') — there is no two-table index model to join. Each row " +
         "returns { name, columns, type, rawColumns }: `columns` is v_db_index's bracketed " +
-        "`column_names` cell ('[phone]', '[a,b]') PARSED into a list, never substring-matched, " +
+        "`column_names` cell ('[phone]', '[a;b]' — semicolon-separated when composite) PARSED into a list, never substring-matched, " +
         "and `type` is access_method (btree for essentially everything). UNIQUENESS IS NOT " +
         "READABLE: v_db_index carries no uniqueness field, so a unique index and an ordinary " +
         "one are indistinguishable in it — `unique` is therefore left ABSENT rather than " +
@@ -707,28 +707,38 @@ export function buildDescriptors(
       annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
         "Create a DATABASE INDEX on an EXISTING ServiceNow table — including the COMPOSITE and " +
-        "NON-UNIQUE indexes add_index cannot build. A DATABASE INDEX IS A PHYSICAL, PER-INSTANCE " +
-        "CHANGE: IT IS NOT CAPTURED IN AN UPDATE SET AND DOES NOT TRAVEL WITH A PROMOTION, so it " +
-        "must be re-run against every environment that needs it — which is why this tool takes " +
-        "no updateSetSysId. There is no record path to an index (sys_index is API-level-ACL 403, " +
-        "sys_index_column does not exist, and sys_dictionary.unique — the add_index lever — is " +
-        "per-column and unique-only), so this replays the platform's own index-creator form " +
-        "(sys_action=create_index) over a form-login session. DRY-RUN BY DEFAULT: without " +
-        "confirm:true NOTHING is sent and nothing is read; dryRun:true forces a dry-run even " +
-        "with confirm. IDEMPOTENT: on the live path v_db_index is read first, and an index over " +
-        "exactly these columns returns 'already-exists' with no write. `columns` is ORDERED — " +
-        "order is part of an index's identity and is preserved verbatim. `name` is REFUSED: the " +
-        "platform's form has no name input (ServiceNow names the index itself), so accepting one " +
-        "would mean reporting a name the instance does not carry — the created index's real name " +
-        "comes back in `name`. After the POST the index is polled for in v_db_index (default 10 " +
-        "checks, 3s apart, since a build on a populated table is asynchronous); if it never " +
-        "appears the result is 'failed', because a form processor returning a page is not " +
-        "evidence an ALTER ran — and a unique index cannot build over duplicate values, EMPTY " +
-        "included. verified:true means a matching row was READ BACK. 'uniqueness-enforced' is " +
-        "ALWAYS in unverified: v_db_index has no uniqueness field, so enforcement is provable " +
-        "only by a duplicate-insert test. Requires a username+password identity that can form-" +
-        "log-in; an instance on API-key-only auth or SSO/MFA will fail at the session with a " +
-        "diagnosis, because no .do replay can work there.",
+        "NON-UNIQUE indexes add_index cannot build. AN INDEX IS CAPTURED IN AN UPDATE SET: the " +
+        "platform's build job writes a sys_update_xml row (type=Indexes, name " +
+        "sys_index_<table>_<col>_…) into the session user's CURRENT update set, so " +
+        "updateSetSysId is REQUIRED on the live path — the tool pins that set as current " +
+        "(Dovetail changeUpdateSet, read back) BEFORE scheduling, refuses a set outside the " +
+        "table's application scope or not 'in progress', and reads the capture row back " +
+        "from that set afterwards. The physical index is still built per instance; committing " +
+        "the set elsewhere rebuilds it. There is no record path to an index (sys_index is " +
+        "API-level-ACL 403, sys_index_column does not exist, and sys_dictionary.unique — the " +
+        "add_index lever — is per-column and unique-only), so this replays the two GlideAjax " +
+        "calls the platform's own Database Indexes dialog makes on xmlhttp.do over a " +
+        "form-login session: IndexCreatorErrorChecker.canCreate (the dialog's pre-flight; a " +
+        "canCreate:false verdict is returned verbatim with its errorCode and nothing is " +
+        "scheduled) then ScheduleCreator.createSchedule (sysparm_table, sysparm_fields, " +
+        "sysparm_access_method — default btree — sysparm_unique true|false, no email, no " +
+        "name). DRY-RUN BY DEFAULT: without confirm:true NOTHING is sent and nothing is read; " +
+        "dryRun:true forces a dry-run even with confirm. IDEMPOTENT: on the live path " +
+        "v_db_index is read first, and an index over exactly these columns returns " +
+        "'already-exists' with no write. `columns` is ORDERED — order is part of an " +
+        "index's identity and is preserved verbatim. `name` is REFUSED: the dialog has no " +
+        "name input (ServiceNow names the index after its leading column), so accepting one " +
+        "would mean reporting a name the instance does not carry — the real name comes back " +
+        "in `name`. After scheduling, the index is polled for in v_db_index (default 10 " +
+        "checks, 3s apart); if it never appears the result is 'failed', because an accepted " +
+        "schedule is not evidence an ALTER ran — and a unique index cannot build over " +
+        "duplicate values, EMPTY included. verified:true means a matching row was READ BACK; " +
+        "captured:true means the sys_update_xml row was READ BACK from the pinned set (an " +
+        "index that exists but was not captured is created:true, captured:false with " +
+        "'update-set-capture' in unverified). 'uniqueness-enforced' is ALWAYS in " +
+        "unverified: v_db_index has no uniqueness field. Requires a username+password identity " +
+        "that can form-log-in; xmlhttp.do ignores Basic auth and API keys, so an API-key-only " +
+        "or SSO/MFA identity fails at the session with a diagnosis (TenonHQ/Dovetail#292).",
       shape: createIndexSchema.shape,
       handler: async function (args: unknown) {
         var p = createIndexSchema.parse(args);
@@ -736,6 +746,7 @@ export function buildDescriptors(
           client: client(),
           table: p.table,
           columns: p.columns,
+          updateSetSysId: p.updateSetSysId,
           unique: p.unique,
           name: p.name,
           accessMethod: p.accessMethod,

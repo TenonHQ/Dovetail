@@ -320,7 +320,13 @@ function describeDuplicates(scan: DuplicateScan): string {
   );
 }
 
-/** Parse a v_db_index `column_names` cell ("[a]", "[a,b]") into its column list. */
+/**
+ * Parse a v_db_index `column_names` cell into its column list. The live view
+ * separates a composite index's columns with a SEMICOLON — "[a;b;c]" (read live
+ * from tenonworkstudio 2026-10-08: "[sys_created_on;status;version_step;version]").
+ * A comma is tolerated too, so an older fixture or a differently-rendered cell
+ * still parses; a cell that is one bare name ("[a]") is a one-column list.
+ */
 export function parseIndexColumns(raw: string): Array<string> {
   var text = String(raw === undefined || raw === null ? "" : raw).trim();
   if (
@@ -332,7 +338,7 @@ export function parseIndexColumns(raw: string): Array<string> {
   }
   if (!text) return [];
   return text
-    .split(",")
+    .split(/[;,]/)
     .map(function (part) {
       return part.trim();
     })

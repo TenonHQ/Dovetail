@@ -388,14 +388,15 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     ],
   },
   "index-create": {
-    summary: "Create a DATABASE index (composite and non-unique included) by replaying the platform index-creator form, then read it back",
+    summary: "Create a DATABASE index (composite and non-unique included) by replaying the platform Database Indexes dialog's processor calls, pinned to an update set, then read it back",
     required: [
       { flag: "table", value: "<name>" },
       { flag: "columns", value: "<a[,b,...]>", note: "Comma-separated column elements, in index order." },
+      { flag: "update-set", value: "<sys_id>", note: "Required on the live path; the index definition is captured into it. Must be in the table's application scope." },
     ],
     optional: [
       { flag: "unique" },
-      { flag: "access-method", value: "<m>", note: "Platform access method (default: the form's default)." },
+      { flag: "access-method", value: "<m>", note: "Platform access method (default: btree, as the dialog does)." },
       CONFIRM_FLAG,
       FORCE_DRY_RUN_FLAG,
       { flag: "poll-attempts", value: "<n>", note: "Positive integer." },
@@ -405,11 +406,12 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     ],
     gate: "confirm",
     gateNote: "Nothing is sent OR read without --confirm.",
-    example: "dove-sn index-create --table x_cadso_journey_instance --columns state,created_on --confirm",
+    example: "dove-sn index-create --table x_cadso_journey_instance --columns state,created_on --update-set <sys_id> --confirm",
     notes: [
-      "A DATABASE INDEX IS PHYSICAL AND PER-INSTANCE: not captured in an update set, does not travel with a promotion — re-run it against every environment. --update-set is therefore REFUSED.",
-      "Idempotent: an index over exactly those columns returns already-exists with no write. --name is refused (the form has no name input; the real name is returned).",
-      "Needs a username+password identity that can form-log-in.",
+      "An index IS captured in an update set: the build job writes a sys_update_xml row (type=Indexes) into the user's CURRENT set, so --update-set is pinned first and the capture row is read back from it. The physical index is still built per instance; committing the set elsewhere rebuilds it.",
+      "Replays the dialog's own xmlhttp.do calls: IndexCreatorErrorChecker.canCreate (pre-flight) then ScheduleCreator.createSchedule. Idempotent: an index over exactly those columns returns already-exists with no write. --name is refused (the dialog has no name input; the real name is returned).",
+      "Needs a username+password identity that can form-log-in (xmlhttp.do ignores Basic auth / API keys).",
+      "Exit 2 when the index was scheduled but never read back from v_db_index, and when it was read back but its capture row was not found in the pinned set.",
     ],
   },
 
