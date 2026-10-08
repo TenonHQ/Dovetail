@@ -4,8 +4,9 @@
  * The client factory is mocked to hand back an in-memory client and the env loader is
  * mocked out, so no credentials are read and nothing reaches the network. Exit 1 means
  * "bad args / no such record / unusable update set"; a delete the server refused (row
- * still present), a pin that did not take, and a delete captured outside the requested
- * update set are exit 2; only a delete verified gone AND captured in the set is exit 0.
+ * still present), a pin that did not take, a delete captured outside the requested update
+ * set, and an unreadable capture are exit 2. A delete verified gone AND captured in the set
+ * is exit 0, and so is one on a table that writes no update-set capture at all (note only).
  */
 import type { ServiceNowClient } from "../src/client";
 import { makeMockClient } from "./mockClient";
@@ -74,6 +75,10 @@ interface Scenario {
   pinIgnored?: boolean;
   /** The DELETE capture row lands here whatever the pin says. */
   captureInto?: string;
+  /** The table writes no sys_update_xml capture row at all. */
+  noCapture?: boolean;
+  /** Reading sys_update_xml throws. */
+  captureReadThrows?: boolean;
 }
 
 /**
@@ -94,7 +99,10 @@ function scenarioClient(sc: Scenario) {
         var id = (query || "").replace(/^sys_id=/, "");
         return names[id] ? [{ sys_id: id, name: names[id], state: "in progress" }] : [];
       }
-      if (table === "sys_update_xml") return captures.slice().reverse();
+      if (table === "sys_update_xml") {
+        if (sc.captureReadThrows) throw new Error("SN 403 reading sys_update_xml");
+        return captures.slice().reverse();
+      }
       if (present && query === "sys_id=" + ID) return [{ sys_id: ID, name: "a" }];
       return [];
     },
@@ -111,7 +119,7 @@ function scenarioClient(sc: Scenario) {
     ctx.calls.deleteRecord.push(params);
     if (sc.removes !== false) {
       present = false;
-      captures.push({ name: params.table + "_" + params.sys_id, action: "DELETE", update_set: sc.captureInto || current });
+      if (!sc.noCapture) captures.push({ name: params.table + "_" + params.sys_id, action: "DELETE", update_set: sc.captureInto || current });
     }
     if (sc.deleteThrows) throw new Error(sc.deleteThrows);
     return { sys_id: params.sys_id };
@@ -160,6 +168,7 @@ describe("dove-sn delete-record — update set pinned and the capture read back"
     expect(parsed.status).toBe("deleted");
     expect(parsed.captured).toBe(true);
     expect(parsed.capturedInto).toEqual({ sysId: US, name: "Journey set" });
+    expect(parsed.captureState).toBe("in-set");
   });
 
   it("deleted but the DELETE row is in another set → exit 2, captured:false", async function () {
@@ -171,6 +180,29 @@ describe("dove-sn delete-record — update set pinned and the capture read back"
     expect(parsed.status).toBe("deleted");
     expect(parsed.captured).toBe(false);
     expect(parsed.capturedInto).toEqual({ sysId: DEFAULT_SET, name: "Default" });
+    expect(parsed.captureState).toBe("other-set");
+  });
+
+  it("a table with no update-set capture at all → exit 0, captureState none", async function () {
+    var ctx = scenarioClient({ noCapture: true });
+    mockClientRef.current = ctx.client;
+    var r = await run(ARGS);
+    expect(r.code).toBe(0);
+    var parsed = JSON.parse(r.stdout);
+    expect(parsed.status).toBe("deleted");
+    expect(parsed.captured).toBe(false);
+    expect(parsed.captureState).toBe("none");
+    expect(parsed.note).toMatch(/NOT CAPTURED/);
+  });
+
+  it("the capture read-back fails → exit 2, captureState unverified", async function () {
+    var ctx = scenarioClient({ captureReadThrows: true });
+    mockClientRef.current = ctx.client;
+    var r = await run(ARGS);
+    expect(r.code).toBe(2);
+    var parsed = JSON.parse(r.stdout);
+    expect(parsed.status).toBe("deleted");
+    expect(parsed.captureState).toBe("unverified");
   });
 
   it("the pin does not read back → exit 2 and no delete call", async function () {

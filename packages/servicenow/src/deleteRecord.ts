@@ -62,6 +62,13 @@ export interface DeleteRecordResult {
   captured: boolean;
   /** The update set the DELETE capture row actually landed in; null when none was found. */
   capturedInto: { sysId: string; name: string } | null;
+  /**
+   * Where the DELETE capture stands: "in-set" (captured in the requested set), "other-set"
+   * (captured, but into a different set — the requested set promotes without it),
+   * "none" (no capture row anywhere — the table is likely not recorded in update sets),
+   * "unverified" (the capture read-back failed), or "n/a" (dry-run / nothing deleted).
+   */
+  captureState: "in-set" | "other-set" | "none" | "unverified" | "n/a";
   note: string;
 }
 
@@ -316,6 +323,7 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
       verified: false,
       captured: false,
       capturedInto: null,
+      captureState: "n/a" as const,
       note: "dry-run: no delete. Would pin update set '" + setInfo.name + "' (" + setInfo.sysId
         + ") as current, delete " + table + "/" + sysId + ", then verify the record is gone and "
         + "the DELETE capture row is in that set."
@@ -332,6 +340,7 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
       verified: false,
       captured: false,
       capturedInto: null,
+      captureState: "n/a" as const,
       note: "Nothing deleted — " + pinProblem + ". " + table + "/" + sysId + " is untouched."
     });
   }
@@ -364,6 +373,7 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
       verified: false,
       captured: false,
       capturedInto: null,
+      captureState: "n/a" as const,
       note: "The post-delete read-back of " + table + "/" + sysId + " FAILED (" + readMsg + ")"
         + (deleteError ? " and the deleteRecord call reported an error (" + deleteError + ")" : "")
         + " — whether the record is gone is UNKNOWN. Check the instance before retrying."
@@ -376,19 +386,23 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
     var captureNote: string;
     var capturedInto: { sysId: string; name: string } | null = null;
     var captured = false;
+    var captureState: "in-set" | "other-set" | "none" | "unverified" = "unverified";
     try {
       var capture = await readDeleteCapture(client, table, sysId);
       if (capture === null) {
+        captureState = "none";
         captureNote = " NOT CAPTURED: no sys_update_xml DELETE row named " + table + "_" + sysId
           + " was found — the delete will NOT travel with '" + setInfo.name + "' (is " + table
           + " recorded in update sets at all?). Check before promoting.";
       } else if (capture.sysId === setInfo.sysId) {
         captured = true;
+        captureState = "in-set";
         capturedInto = { sysId: setInfo.sysId, name: setInfo.name };
         captureNote = " DELETE captured into update set '" + setInfo.name + "' (" + setInfo.sysId
           + "), read back from sys_update_xml.";
       } else {
         var otherName = await updateSetNameOf(client, capture.sysId);
+        captureState = "other-set";
         capturedInto = { sysId: capture.sysId, name: otherName };
         captureNote = " WRONG SET: the DELETE was captured into update set '"
           + (otherName || "(unknown name)") + "' (" + (capture.sysId || "none") + "), NOT the "
@@ -404,6 +418,7 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
       verified: true,
       captured: captured,
       capturedInto: capturedInto,
+      captureState: captureState,
       note: "Deleted " + table + "/" + sysId + " and verified via read-back (record is gone)."
         + (deleteError
           ? " The deleteRecord call reported an error (" + deleteError + "), but the record is "
@@ -418,6 +433,7 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
     verified: false,
     captured: false,
     capturedInto: null,
+    captureState: "n/a" as const,
     note: deleteError
       ? "deleteRecord FAILED (" + deleteError + ") and " + table + "/" + sysId
         + " is STILL PRESENT on read-back — the server refused the delete (business rule abort / "

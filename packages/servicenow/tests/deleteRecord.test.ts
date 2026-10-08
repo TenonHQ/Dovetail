@@ -459,6 +459,7 @@ describe("deleteRecord — update set resolved, pinned and the capture read back
     expect(r.status).toBe("deleted");
     expect(r.captured).toBe(false);
     expect(r.capturedInto).toBeNull();
+    expect(r.captureState).toBe("none");
     expect(r.note).toMatch(/NOT CAPTURED/);
   });
 

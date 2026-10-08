@@ -2258,7 +2258,8 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
  * Exit codes: 0 deleted (and captured in the requested set) / dry-run, 1 bad args, missing
  * record or unknown/closed update set, 2 the record is STILL PRESENT on read-back (including a
  * delete the server refused with an error), its state is unknown, the update-set pin did not
- * take (nothing deleted), or it was deleted but the DELETE capture is not in the requested set.
+ * take (nothing deleted), or it was deleted but the DELETE capture landed in a different set or
+ * could not be read back. A table with no update-set capture at all exits 0 with a note.
  */
 async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
@@ -2308,7 +2309,13 @@ async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
         result.updateSetSysId +
         (result.updateSetName ? " (" + result.updateSetName + ")" : "") +
         (result.verified ? " — verified gone" : "") +
-        (result.status === "deleted" ? (result.captured ? ", capture verified" : ", NOT captured in that set") : "") +
+        (result.status === "deleted"
+          ? (result.captureState === "in-set"
+            ? ", capture verified"
+            : result.captureState === "none"
+              ? ", no update-set capture (table not recorded?)"
+              : ", NOT captured in that set")
+          : "") +
         "\n" +
         result.note +
         "\n",
@@ -2318,8 +2325,11 @@ async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
     }
   }
   if (result.status === "failed") return 2;
-  // Gone but the DELETE is not in the requested set: the set would promote without it.
-  if (result.status === "deleted" && !result.captured) return 2;
+  // Gone but the DELETE landed in ANOTHER set (the requested set would promote without it),
+  // or the capture could not be read back: neither may read as success to a script. A table
+  // that is not recorded in update sets at all ("none") is a plain data delete — exit 0, and
+  // the note says the delete will not travel.
+  if (result.status === "deleted" && (result.captureState === "other-set" || result.captureState === "unverified")) return 2;
   return 0;
 }
 
