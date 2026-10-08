@@ -26,7 +26,8 @@ Quick reference:
 ```bash
 npx dove watch         # HUMAN-ONLY local dev: multi-scope watch + dashboard (hidden from --help; stop before git checkout — see #155)
 npx dove push          # build + push current files
-npx dove refresh       # pull manifest + new files (aliases: pull, r)
+npx dove refresh       # pull manifest + new files, scope-wide (alias: r; bare `dove pull` does the same)
+npx dove pull <table> <sys_id>   # mirror ONE record: its folder + its manifest key, nothing else (--dry-run, --sys-ids, --from-update-set)
 npx dove build         # local build only
 npx dove deploy        # deploy built artifacts
 npx dove dashboard     # update-set dashboard web UI
