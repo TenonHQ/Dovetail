@@ -28,6 +28,7 @@ import {
 import { initClaudeCommand } from "./claudeCommand";
 import { createRecordCommand } from "./createRecordCommand";
 import { deleteRecordCommand } from "./deleteRecordCommand";
+import { pullRecordCommand, PullRecordCmdArgs } from "./pullRecordCommand";
 import { reconcileCommand } from "./reconcileCommand";
 import { migrateCommand } from "./migrateCommand";
 import {
@@ -122,10 +123,8 @@ export function configureCli(cli: Argv): Argv {
       },
     )
     .command(
-      // `pull` is the verb people reach for ("pull before push") and it appears
-      // in downstream docs and scripts — alias it rather than silently no-op.
-      ["refresh", "r", "pull"],
-      "Pull latest manifest and file contents from the ServiceNow instance",
+      ["refresh", "r"],
+      "Pull latest manifest and file contents from the ServiceNow instance (scope-wide; for one record see `dove pull <table> <sysId>`)",
       (cmdArgs) => {
         cmdArgs.options({
           ...sharedOptions,
@@ -174,6 +173,87 @@ export function configureCli(cli: Argv): Argv {
           benchmark?: boolean;
           table?: string | string[];
         });
+      },
+    )
+    .command(
+      // Two commands in one verb, chosen by the positional:
+      //   dove pull                       → the historic alias of `dove refresh`
+      //                                     ("pull before push" is in dozens of
+      //                                     docs and scripts), scope-wide.
+      //   dove pull <table> <sysId...>    → per-record mirror (TenonHQ/Dovetail#319):
+      //                                     ONE record folder + ONE manifest entry,
+      //                                     every other entry byte-identical.
+      // The refresh-only flags (-t/--table, --metadata-only, --benchmark) are
+      // deliberately NOT declared here: -t would collide with the positional
+      // table, and strictCommands tolerates undeclared flags, so the handler
+      // turns a stray -t into an error instead of a silent no-op.
+      "pull [table] [sysId..]",
+      "Mirror one or more records by sys_id into the repo without a scope refresh; with no table, same as `dove refresh`",
+      (cmdArgs) => {
+        cmdArgs
+          .positional("table", {
+            type: "string",
+            describe: "ServiceNow table of the record(s), e.g. sys_security_acl",
+          })
+          // Singular on purpose: yargs camel-cases `--sys-ids` to `sysIds`, and a
+          // positional of the same name would swallow the flag.
+          .positional("sysId", {
+            type: "string",
+            describe: "One or more record sys_ids (space- or comma-separated)",
+          })
+          .options({
+            ...sharedOptions,
+            "sys-ids": {
+              type: "string",
+              describe: "Comma-separated sys_ids (alternative to the positional list)",
+            },
+            "from-update-set": {
+              type: "string",
+              describe:
+                "Pull every per-record capture (<table>_<sys_id>) in this update set; schema/choice-set captures are reported and skipped",
+            },
+            scope: {
+              alias: "s",
+              type: "string",
+              describe:
+                "Target scope. Per-record: every record must belong to it (a mismatch refuses the whole pull). Bare pull: refresh this scope only.",
+            },
+            force: {
+              alias: "f",
+              type: "boolean",
+              default: false,
+              describe: "Overwrite local files even when content matches the instance",
+            },
+            "dry-run": {
+              type: "boolean",
+              default: false,
+              describe: "Per-record only: list the files and manifest keys the pull would touch, write nothing",
+            },
+          });
+        return cmdArgs;
+      },
+      async (args: TSFIXME) => {
+        const pullArgs = args as PullRecordCmdArgs;
+        if (!pullArgs.table && !pullArgs.fromUpdateSet) {
+          // Bare pull == refresh. The refresh-only flags arrive undeclared
+          // (strictCommands tolerates them, yargs still camel-cases them), so
+          // they pass straight through; a bare `-t <table>` is re-mapped to
+          // refresh's --table so the old `dove pull -t x` spelling keeps working.
+          const refreshArgs = args as Sinc.SharedCmdArgs & {
+            force?: boolean;
+            metadataOnly?: boolean;
+            scope?: string;
+            benchmark?: boolean;
+            table?: string | string[];
+          };
+          const stray = pullArgs.t;
+          if (typeof stray === "string" || Array.isArray(stray)) {
+            refreshArgs.table = stray as string | string[];
+          }
+          await refreshCommand(refreshArgs);
+          return;
+        }
+        await pullRecordCommand(pullArgs);
       },
     )
     .command(

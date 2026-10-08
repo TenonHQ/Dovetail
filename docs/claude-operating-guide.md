@@ -188,6 +188,7 @@ Sync from Claude is headless and explicit — `push` / `refresh` / `status`, one
 | Command | Notable flags | Purpose |
 |---|---|---|
 | `refresh` (`r`) | `--force`, `--scope`, **`--benchmark`** | Pull latest manifest + files. `--benchmark` logs per-scope/aggregate HTTP latency, bytes, file counts |
+| `pull <table> <sys_id...>` | `--sys-ids a,b`, `--from-update-set <sys_id>`, `--scope`, **`--dry-run`**, `--force` | Per-record mirror: writes only that record's folder + its manifest key, every other entry byte-identical. Refuses a record outside `--scope` and writes nothing. Bare `pull` = `refresh` (#319) |
 | `push` | **`--diff <branch>`**, **`--clickup <id\|url>`**, `--updateSet <name>`, `--ci` | Push local → SN. `--diff` filters to files changed vs a git branch; `--clickup` creates an update set from a ClickUp task |
 | `build` | `--diff <branch>` | Build app files locally; `--diff` scopes to a branch diff |
 | `deploy` | | Deploy local build to the scoped app |

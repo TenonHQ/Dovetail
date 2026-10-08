@@ -34,6 +34,7 @@ jest.mock("../schemaCommand", () => ({
 jest.mock("../claudeCommand", () => ({ initClaudeCommand: jest.fn() }));
 jest.mock("../createRecordCommand", () => ({ createRecordCommand: jest.fn() }));
 jest.mock("../deleteRecordCommand", () => ({ deleteRecordCommand: jest.fn() }));
+jest.mock("../pullRecordCommand", () => ({ pullRecordCommand: jest.fn() }));
 jest.mock("../reconcileCommand", () => ({ reconcileCommand: jest.fn() }));
 jest.mock("../migrateCommand", () => ({ migrateCommand: jest.fn() }));
 jest.mock("../loginCommand", () => ({ loginCommand: jest.fn() }));
@@ -56,6 +57,7 @@ import yargsFactory from "yargs/yargs";
 import type { Argv } from "yargs";
 import { configureCli } from "../commander";
 import { refreshCommand, statusCommand, pushCommand } from "../commands";
+import { pullRecordCommand } from "../pullRecordCommand";
 
 interface ParseResult {
   error: Error | undefined;
@@ -110,6 +112,49 @@ describe("dove pull", function () {
     expect(argv.scope).toBe("x_cadso_core");
     expect(argv.force).toBe(true);
     expect(refreshCommand).toHaveBeenCalledTimes(1);
+    expect(pullRecordCommand).not.toHaveBeenCalled();
+  });
+
+  it("re-maps a bare `pull -t <table>` to refresh --table (the old spelling keeps working)", async function () {
+    const { error } = await run(["pull", "-t", "sys_script_include", "--metadata-only"]);
+    expect(error).toBeUndefined();
+    expect(refreshCommand).toHaveBeenCalledTimes(1);
+    const passed = (refreshCommand as jest.Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(passed.table).toBe("sys_script_include");
+    expect(passed.metadataOnly).toBe(true);
+    expect(pullRecordCommand).not.toHaveBeenCalled();
+  });
+
+  it("routes `pull <table> <sysId...>` to the per-record pull, not refresh", async function () {
+    const { error, argv } = await run([
+      "pull", "sys_security_acl", "94243ee5c3f78f10d4ddf1db050131a6", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+      "--scope", "x_cadso_journey", "--dry-run",
+    ]);
+    expect(error).toBeUndefined();
+    expect(argv.table).toBe("sys_security_acl");
+    expect(argv.sysId).toEqual(["94243ee5c3f78f10d4ddf1db050131a6", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"]);
+    expect(argv.dryRun).toBe(true);
+    expect(pullRecordCommand).toHaveBeenCalledTimes(1);
+    expect(refreshCommand).not.toHaveBeenCalled();
+  });
+
+  it("keeps --sys-ids distinct from the positional list", async function () {
+    const { error, argv } = await run([
+      "pull", "sys_security_acl", "94243ee5c3f78f10d4ddf1db050131a6",
+      "--sys-ids", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2",
+    ]);
+    expect(error).toBeUndefined();
+    expect(argv.sysId).toEqual(["94243ee5c3f78f10d4ddf1db050131a6"]);
+    expect(argv.sysIds).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2");
+    expect(pullRecordCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes `pull --from-update-set` (no table) to the per-record pull", async function () {
+    const { error, argv } = await run(["pull", "--from-update-set", "dddddddddddddddddddddddddddddddd"]);
+    expect(error).toBeUndefined();
+    expect(argv.fromUpdateSet).toBe("dddddddddddddddddddddddddddddddd");
+    expect(pullRecordCommand).toHaveBeenCalledTimes(1);
+    expect(refreshCommand).not.toHaveBeenCalled();
   });
 });
 

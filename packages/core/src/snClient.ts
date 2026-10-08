@@ -288,6 +288,28 @@ export interface UpdateSetReadRecord {
   application?: string | SNReferenceValue;
 }
 
+/**
+ * Shape of the single-record read `getRecordScope` performs: just enough to
+ * place a record (class + owning scope) without pulling any field content.
+ * `sys_scope.scope` is a dot-walked field, so it comes back as a flat
+ * string under that literal key; an empty reference comes back as "".
+ */
+export interface RecordScopeReadRecord {
+  sys_id: string;
+  sys_class_name?: string;
+  sys_scope?: string | SNReferenceValue;
+  "sys_scope.scope"?: string;
+}
+
+/** Shape of a `sys_update_xml` row read via `getUpdateSetMembers`. */
+export interface UpdateXmlReadRecord {
+  sys_id: string;
+  name: string;
+  action?: string;
+  target_name?: string;
+  type?: string;
+}
+
 export const snClient = (
   baseURL: string,
   username: string,
@@ -430,6 +452,42 @@ export const snClient = (
       params: {
         sysparm_query: `sys_id=${updateSetSysId}`,
         sysparm_fields: "sys_id,name,application",
+      },
+    });
+  };
+
+  /**
+   * Reads ONE record by sys_id, selecting only its class and owning scope, so a
+   * per-record pull can resolve (and refuse) the target scope before it fetches
+   * any content. Plain Table API read — no Dovetail server op involved.
+   */
+  const getRecordScope = (table: string, sysId: string) => {
+    const endpoint =
+      "api/now/table/" + encodeURIComponent(table) + "/" + encodeURIComponent(sysId);
+    type RecordScopeResponse = Sinc.SNAPIResponse<RecordScopeReadRecord>;
+    return client.get<RecordScopeResponse>(endpoint, {
+      params: {
+        sysparm_fields: "sys_id,sys_class_name,sys_scope,sys_scope.scope",
+        sysparm_display_value: "false",
+      },
+    });
+  };
+
+  /**
+   * One page of a update set's customer updates (`sys_update_xml`), ordered by
+   * name so paging is stable. The caller pages with offset/limit; the instance
+   * caps a single page at 1000 rows.
+   */
+  const getUpdateSetMembers = (updateSetSysId: string, offset: number, limit: number) => {
+    const endpoint = "api/now/table/sys_update_xml";
+    type UpdateXmlResponse = Sinc.SNAPIResponse<UpdateXmlReadRecord[]>;
+    return client.get<UpdateXmlResponse>(endpoint, {
+      params: {
+        sysparm_query: "update_set=" + updateSetSysId + "^ORDERBYname",
+        sysparm_fields: "sys_id,name,action,target_name,type",
+        sysparm_display_value: "false",
+        sysparm_limit: limit,
+        sysparm_offset: offset,
       },
     });
   };
@@ -727,6 +785,8 @@ export const snClient = (
     getScopeId,
     getScopeById,
     getUpdateSetById,
+    getRecordScope,
+    getUpdateSetMembers,
     getUserSysId,
     getCurrentAppUserPrefSysId,
     updateCurrentAppUserPref,
