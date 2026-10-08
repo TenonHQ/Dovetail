@@ -16,8 +16,23 @@
  *
  * The scope arg passed to `createRecord` is the scope NAME (e.g. "x_cadso_core"),
  * not the sys_scope sys_id — the server-side changeScope matches on the scope name.
- * A column always belongs to its table's scope, so the name is resolved from the
- * table; an explicit `scope` override must match it.
+ * By default a column belongs to its table's scope, so the name is resolved from the
+ * table and an explicit `scope` override must match it.
+ *
+ * CROSS-SCOPE COLUMNS (`crossScope: true`). ServiceNow lets one app add a column to
+ * another app's table — Studio with app = Journey adding a field to an Automate table
+ * — and prefixes the element with the OWNING scope: `x_cadso_journey_instance_step`
+ * on `x_cadso_automate_email_batch`, dictionary row owned by x_cadso_journey. This is
+ * the column-ownership rule for Tenon's layered apps, so it is supported here as an
+ * explicit opt-in: `scope` names the column's scope, `crossScope: true` acknowledges it
+ * differs from the table's. The insert runs through the same scope-aware op switched
+ * to the COLUMN's scope, so the dictionary row and its update-set capture both land
+ * in the column's scope. Guards, run on dry-run and live alike: the override scope
+ * must exist; the table must allow new fields from other scopes
+ * (`sys_db_object.alter_access`); the update set must belong to the column's scope.
+ * The element is sent already prefixed (`<scope>_<name>`; an already-prefixed name
+ * is accepted as-is) and the element ServiceNow actually stored is read back and
+ * reported, together with a `sys_scope` assertion on the read-back row.
  *
  * SIZING THE PHYSICAL COLUMN. A max_length carried on the INSERT sets the dictionary
  * row but NOT the column ServiceNow actually builds — it materialises at the platform
@@ -66,6 +81,7 @@ var READ_BACK_FIELDS = [
   "internal_type",
   "max_length",
   "dependent_on_field",
+  "sys_scope",
 ];
 
 /** Patch max_length on a sys_dictionary row, captured in the given update set. */
@@ -90,8 +106,19 @@ export interface AddColumnParams {
   table: string;
   /** The single column to add. `name` (the element) is optional; derived from label when omitted. */
   column: ColumnSpec;
-  /** Scope name or sys_scope sys_id. Must match the table's own scope (a column lives there). */
+  /**
+   * Scope name or sys_scope sys_id. Must match the table's own scope (a column lives
+   * there) — unless `crossScope` is true, in which case it names the scope that will OWN
+   * the column (e.g. "x_cadso_journey" for a Journey column on an Automate table).
+   */
   scope?: string;
+  /**
+   * Explicit opt-in to a column owned by a different scope than its table. Requires
+   * `scope`. The element is prefixed with the owning scope (`x_cadso_journey_<name>`),
+   * the table must allow new fields from other scopes (sys_db_object.alter_access),
+   * and the update set must belong to the column's scope.
+   */
+  crossScope?: boolean;
   /** Update set sys_id to capture the insert into. REQUIRED on the live path (dry-run doesn't need it). */
   updateSetSysId?: string;
   /** Emit diagnostic detail in the result note. */
@@ -112,6 +139,11 @@ export interface AddColumnResult {
   label: string;
   /** Resolved ServiceNow internal_type (friendly -> internal). */
   internalType: string;
+  /**
+   * Scope NAME that owns the column ("" on a network-free dry-run). Equals the table's
+   * scope unless `crossScope` was used, in which case it is the override scope.
+   */
+  scope: string;
   /** sys_id of the sys_dictionary row (the insert's, or the existing row's on "skipped"). */
   columnSysId: string;
   /** Update set the write was captured into ("" on dry-run). */
@@ -172,16 +204,24 @@ function validate(params: AddColumnParams): void {
     throw new Error("add-column: column is required.");
 }
 
-/** Resolve the table by name or sys_id; returns its name, sys_id, and sys_scope sys_id. */
+interface ResolvedTable {
+  name: string;
+  sysId: string;
+  scopeSysId: string;
+  /** sys_db_object.alter_access ("Allow new fields") — gates cross-scope columns. */
+  alterAccess: string;
+}
+
+/** Resolve the table by name or sys_id; returns its name, sys_id, scope, and alter_access. */
 async function resolveTable(
   client: ServiceNowClient,
   table: string,
-): Promise<{ name: string; sysId: string; scopeSysId: string }> {
+): Promise<ResolvedTable> {
   var query = SYS_ID.test(table) ? "sys_id=" + table : "name=" + table;
   var rows = await client.table.query<Record<string, unknown>>(
     "sys_db_object",
     query,
-    { limit: 1, fields: ["sys_id", "name", "sys_scope"] },
+    { limit: 1, fields: ["sys_id", "name", "sys_scope", "alter_access"] },
   );
   if (rows.length === 0) {
     throw new Error(
@@ -192,6 +232,174 @@ async function resolveTable(
     name: fieldToString(rows[0].name) || table,
     sysId: fieldToString(rows[0].sys_id),
     scopeSysId: fieldToString(rows[0].sys_scope),
+    alterAccess: fieldToString(rows[0].alter_access),
+  };
+}
+
+/** Resolve a scope by NAME or sys_id to both; empty strings when not found. */
+async function resolveScope(
+  client: ServiceNowClient,
+  scope: string,
+): Promise<{ name: string; sysId: string }> {
+  var query = SYS_ID.test(scope) ? "sys_id=" + scope : "scope=" + scope;
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_scope",
+    query,
+    { limit: 1, fields: ["sys_id", "scope"] },
+  );
+  if (rows.length === 0) return { name: "", sysId: "" };
+  return {
+    name: fieldToString(rows[0].scope),
+    sysId: fieldToString(rows[0].sys_id),
+  };
+}
+
+/** Resolve an update set's owning application (sys_scope sys_id); "" when not found. */
+async function resolveUpdateSetScope(
+  client: ServiceNowClient,
+  updateSetSysId: string,
+): Promise<{ found: boolean; applicationSysId: string; name: string }> {
+  var rows = await client.table.query<Record<string, unknown>>(
+    "sys_update_set",
+    "sys_id=" + updateSetSysId,
+    { limit: 1, fields: ["sys_id", "name", "application"] },
+  );
+  if (rows.length === 0)
+    return { found: false, applicationSysId: "", name: "" };
+  return {
+    found: true,
+    applicationSysId: fieldToString(rows[0].application),
+    name: fieldToString(rows[0].name),
+  };
+}
+
+/** Where the column will live: its owning scope, and the element it will be stored under. */
+interface ColumnPlan {
+  resolved: ResolvedTable;
+  /** Scope NAME the insert is switched to (the column's owner). */
+  scopeName: string;
+  /** sys_scope sys_id stamped on the dictionary row. */
+  scopeSysId: string;
+  /** True when the owner differs from the table's scope. */
+  crossScope: boolean;
+  /** The element to insert and pre-check — scope-prefixed on a cross-scope column. */
+  element: string;
+}
+
+/**
+ * Resolve the table + decide which scope owns the column, running every scope guard.
+ * Shared by the dry-run and live paths so a request that would fail live fails the
+ * dry-run the same way — a dry-run that skips the guards is worse than none.
+ */
+async function planColumnScope(
+  client: ServiceNowClient,
+  params: AddColumnParams,
+  element: string,
+): Promise<ColumnPlan> {
+  var resolved = await resolveTable(client, params.table);
+  var tableScopeName = await resolveScopeName(client, resolved.scopeSysId);
+  if (!tableScopeName) {
+    throw new Error(
+      "add-column: could not resolve the scope name for table '" +
+        resolved.name +
+        "' (sys_scope " +
+        (resolved.scopeSysId || "(none)") +
+        ") — needed to scope the insert correctly.",
+    );
+  }
+  var override = params.scope ? params.scope.trim() : "";
+  var wantsCross = params.crossScope === true;
+  if (wantsCross && !override) {
+    throw new Error(
+      "add-column: crossScope requires --scope naming the scope that will OWN the column " +
+        "(e.g. x_cadso_journey for a Journey column on an Automate table).",
+    );
+  }
+  var sameScope =
+    !override ||
+    override === tableScopeName ||
+    override === resolved.scopeSysId;
+  if (sameScope) {
+    return {
+      resolved: resolved,
+      scopeName: tableScopeName,
+      scopeSysId: resolved.scopeSysId,
+      crossScope: false,
+      element: element,
+    };
+  }
+  // The override names a scope other than the table's. Without the explicit opt-in
+  // this is the classic wrong-scope mistake, so refuse — on dry-run and live alike.
+  if (!wantsCross) {
+    throw new Error(
+      "add-column: --scope '" +
+        override +
+        "' does not match table '" +
+        resolved.name +
+        "' scope '" +
+        tableScopeName +
+        "' — a column lives in its table's scope. Omit --scope or set it to '" +
+        tableScopeName +
+        "'. To add a column OWNED by '" +
+        override +
+        "' (a cross-scope field, element prefixed '" +
+        override +
+        "_'), pass --cross-scope.",
+    );
+  }
+  var owner = await resolveScope(client, override);
+  if (!owner.name || !owner.sysId) {
+    throw new Error(
+      "add-column: cross-scope owner '" +
+        override +
+        "' was not found in sys_scope — pass the scope name (x_cadso_journey) or its sys_id.",
+    );
+  }
+  if (resolved.alterAccess !== "true") {
+    throw new Error(
+      "add-column: table '" +
+        resolved.name +
+        "' does not allow new fields from other scopes (sys_db_object.alter_access is '" +
+        (resolved.alterAccess || "(empty)") +
+        "'). Enable 'Allow new fields' on the table in its own scope, or add the column " +
+        "in scope '" +
+        tableScopeName +
+        "' instead.",
+    );
+  }
+  if (params.updateSetSysId && params.updateSetSysId.trim()) {
+    var us = await resolveUpdateSetScope(client, params.updateSetSysId.trim());
+    if (!us.found) {
+      throw new Error(
+        "add-column: update set '" +
+          params.updateSetSysId +
+          "' was not found in sys_update_set.",
+      );
+    }
+    if (us.applicationSysId !== owner.sysId) {
+      throw new Error(
+        "add-column: update set '" +
+          (us.name || params.updateSetSysId) +
+          "' does not belong to the column's scope '" +
+          owner.name +
+          "' — a cross-scope column is captured in an update set of the scope that OWNS " +
+          "it, not the table's. Pass an update set in '" +
+          owner.name +
+          "'.",
+      );
+    }
+  }
+  // ServiceNow stores a cross-scope element as <owner>_<name>. Send it already
+  // prefixed so the pre-check, the insert, and the read-back all agree on the one
+  // element; an already-prefixed name is accepted as-is.
+  var prefix = owner.name + "_";
+  var prefixed = element.indexOf(prefix) === 0 ? element : prefix + element;
+  return {
+    resolved: resolved,
+    scopeName: owner.name,
+    scopeSysId: owner.sysId,
+    crossScope: true,
+    element: prefixed,
   };
 }
 
@@ -244,24 +452,48 @@ export async function addColumn(
   }
 
   if (params.dryRun) {
+    // A plain dry-run (no scope named) is pure + deterministic — no network — so it
+    // can plan without an instance. Once a scope IS named, the plan depends on the
+    // instance (does the table allow it? does the update set match?), so the dry-run
+    // runs the SAME guards as the live path and fails the same way. It used to skip
+    // them, so a cross-scope request dry-ran clean and only failed live.
+    var hasScopeAsk =
+      (params.scope !== undefined && params.scope.trim() !== "") ||
+      params.crossScope === true;
+    var planned: ColumnPlan | undefined;
+    if (hasScopeAsk) planned = await planColumnScope(client, params, element);
+    var planElement = planned ? planned.element : element;
+    var planTable = planned ? planned.resolved.name : params.table;
+    var planTableSysId = planned
+      ? planned.resolved.sysId
+      : SYS_ID.test(params.table)
+      ? params.table
+      : "";
     return {
       status: "dry-run",
-      table: params.table,
-      tableSysId: SYS_ID.test(params.table) ? params.table : "",
-      element: element,
+      table: planTable,
+      tableSysId: planTableSysId,
+      element: planElement,
       label: col.label,
       internalType: col.type,
+      scope: planned ? planned.scopeName : "",
       columnSysId: "",
       updateSetSysId: params.updateSetSysId ? params.updateSetSysId : "",
       verified: false,
       note:
         "dry-run: no write. Would add column '" +
-        element +
+        planElement +
         "' (" +
         col.type +
         ") to '" +
-        params.table +
-        "' via a scope-aware sys_dictionary insert, captured into update set " +
+        planTable +
+        "'" +
+        (planned && planned.crossScope
+          ? " OWNED BY scope '" +
+            planned.scopeName +
+            "' (cross-scope: the table allows new fields and the update set is in that scope)"
+          : "") +
+        " via a scope-aware sys_dictionary insert, captured into update set " +
         (params.updateSetSysId ? params.updateSetSysId : "(none provided)") +
         (wantDependent
           ? ", dependent on column '" +
@@ -282,35 +514,13 @@ export async function addColumn(
     );
   }
 
-  var resolved = await resolveTable(client, params.table);
-  var scopeName = await resolveScopeName(client, resolved.scopeSysId);
-  if (!scopeName) {
-    throw new Error(
-      "add-column: could not resolve the scope name for table '" +
-        resolved.name +
-        "' (sys_scope " +
-        (resolved.scopeSysId || "(none)") +
-        ") — needed to scope the insert correctly.",
-    );
-  }
-  // A column lives in its table's scope. An explicit override must match it (by name
-  // or sys_id); we never write a column into a scope other than its table's.
-  if (params.scope && params.scope.trim()) {
-    var override = params.scope.trim();
-    if (override !== scopeName && override !== resolved.scopeSysId) {
-      throw new Error(
-        "add-column: --scope '" +
-          override +
-          "' does not match table '" +
-          resolved.name +
-          "' scope '" +
-          scopeName +
-          "' — a column must live in its table's scope. Omit --scope or set it to '" +
-          scopeName +
-          "'.",
-      );
-    }
-  }
+  // Resolve the table and decide which scope OWNS the column — the table's by default,
+  // the override's under crossScope. Every scope guard runs inside planColumnScope, the
+  // same code the dry-run ran, so nothing can pass dry-run and fail here on scope.
+  var plan = await planColumnScope(client, params, element);
+  var resolved = plan.resolved;
+  var scopeName = plan.scopeName;
+  element = plan.element;
 
   // max_length is deliberately NOT sent on the insert — see the sizing step below.
   // Reference (and date) columns carry no max_length at all.
@@ -391,6 +601,7 @@ export async function addColumn(
       element: existingElement,
       label: col.label,
       internalType: existingType || col.type,
+      scope: scopeName,
       columnSysId: existingSysId,
       updateSetSysId: params.updateSetSysId,
       verified: drift.length === 0,
@@ -425,7 +636,10 @@ export async function addColumn(
     default_value:
       typeof params.column.default === "string" ? params.column.default : "",
     active: "true",
-    sys_scope: resolved.scopeSysId,
+    // The COLUMN's owner — the table's scope by default, the override's under
+    // crossScope. The createRecord `scope` below is switched to the same owner so the
+    // dictionary row and its update-set capture agree on who owns the column.
+    sys_scope: plan.scopeSysId,
   };
   // Reference columns carry the target table NAME (not a sys_id) in `reference`.
   if (col.reference) fields.reference = col.reference;
@@ -450,6 +664,8 @@ export async function addColumn(
       params.updateSetSysId,
       "sys_dictionary insert failed: " +
         (e && (e as Error).message ? (e as Error).message : String(e)),
+      undefined,
+      scopeName,
     );
   }
   var columnSysId = fieldToString(created && created.sys_id);
@@ -460,6 +676,8 @@ export async function addColumn(
       element,
       params.updateSetSysId,
       "createRecord returned no sys_id — the insert may not have landed; check the instance.",
+      undefined,
+      scopeName,
     );
   }
 
@@ -533,6 +751,7 @@ export async function addColumn(
         " — the column EXISTS but may not be the size it was declared, so treat it as " +
         "unsafe to write to until it is checked on the instance.",
       columnSysId,
+      scopeName,
     );
   }
 
@@ -547,6 +766,32 @@ export async function addColumn(
   var readBackDependent = verified
     ? fieldToString(rows[0].dependent_on_field)
     : "";
+  var readBackScope = verified ? fieldToString(rows[0].sys_scope) : "";
+
+  // Ownership is part of the column's identity: a cross-scope row that reads back in
+  // the TABLE's scope was prefixed for nothing and will ship in the wrong update set.
+  // Asserted whenever the instance reports a scope (a read-back that omits it, as in
+  // older stubs, is not evidence either way).
+  if (verified && readBackScope && readBackScope !== plan.scopeSysId) {
+    return failure(
+      resolved,
+      col,
+      element,
+      params.updateSetSysId,
+      "column '" +
+        actualElement +
+        "' materialised but sys_scope read back as '" +
+        readBackScope +
+        "', not the requested '" +
+        plan.scopeSysId +
+        "' (" +
+        scopeName +
+        ") — the column is owned by the wrong app and its capture will not promote with " +
+        "the right scope. Reconcile it on the instance before writing to it.",
+      columnSysId,
+      scopeName,
+    );
+  }
 
   if (verified && wantLength && readBackLength !== wantLength) {
     return failure(
@@ -564,6 +809,7 @@ export async function addColumn(
         "real limit would be silently truncated. Fix the column on the instance before " +
         "writing to it.",
       columnSysId,
+      scopeName,
     );
   }
 
@@ -582,6 +828,7 @@ export async function addColumn(
         "' — a document_id with no dependency resolves against nothing. Set it on " +
         "the instance (set-column --dependent-on-field) before writing to the column.",
       columnSysId,
+      scopeName,
     );
   }
 
@@ -596,6 +843,7 @@ export async function addColumn(
         " but no sys_dictionary row was found on read-back — the column may not have " +
         "materialised; check the instance.",
       columnSysId,
+      scopeName,
     );
   }
 
@@ -618,6 +866,7 @@ export async function addColumn(
         "' — the column that exists is not the column that was asked for. Reconcile it " +
         "on the instance before writing to it.",
       columnSysId,
+      scopeName,
     );
   }
 
@@ -629,6 +878,9 @@ export async function addColumn(
     ") to " +
     resolved.name +
     (wantDependent ? ", dependent on '" + wantDependent + "'" : "") +
+    (plan.crossScope
+      ? " owned by scope '" + scopeName + "' (cross-scope field)"
+      : "") +
     " — verified present in sys_dictionary, captured into update set " +
     params.updateSetSysId +
     (actualElement !== element
@@ -646,7 +898,11 @@ export async function addColumn(
       " scopeName=" +
       scopeName +
       " sys_scope=" +
-      resolved.scopeSysId +
+      plan.scopeSysId +
+      " crossScope=" +
+      String(plan.crossScope) +
+      " readBackScope=" +
+      (readBackScope || "(none)") +
       " readBackType=" +
       (readBackType || "(none)") +
       "]";
@@ -659,6 +915,7 @@ export async function addColumn(
     element: actualElement,
     label: col.label,
     internalType: col.type,
+    scope: scopeName,
     columnSysId: columnSysId,
     updateSetSysId: params.updateSetSysId,
     verified: true,
@@ -674,6 +931,7 @@ function failure(
   updateSetSysId: string,
   note: string,
   columnSysId?: string,
+  scope?: string,
 ): AddColumnResult {
   return {
     status: "failed",
@@ -682,6 +940,7 @@ function failure(
     element: element,
     label: col.label,
     internalType: col.type,
+    scope: scope ? scope : "",
     columnSysId: columnSysId ? columnSysId : "",
     updateSetSysId: updateSetSysId,
     verified: false,

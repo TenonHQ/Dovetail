@@ -1151,7 +1151,11 @@ console.log(formatLayoutResult("form layout", result));
 `dove-sn mcp` runs a self-contained MCP stdio server exposing the tools to
 Claude Code and agents: `create_view`, `set_list_layout`, `set_form_layout`,
 `set_related_lists`, `add_choices_to_field`, the schema verbs `create_table` /
-`add_column` / `add_index` (a single-column unique index via `sys_dictionary.unique`,
+`add_column` (same-scope by default; `crossScope: true` with `scope` adds a column OWNED
+by another app — a Journey field on an Automate table, element `<scope>_<name>` —
+guarded by `sys_db_object.alter_access` and the update set's scope, with the stored
+element and `sys_scope` read back; the CLI flag is `--cross-scope`) /
+`add_index` (a single-column unique index via `sys_dictionary.unique`,
 read back from the `v_db_index` view - uniqueness enforcement is always reported
 unverified) / `index_list` (read-only: a table's database indexes from `v_db_index`,
 the only index read surface - `sys_index` is API-level-ACL 403 and `sys_index_column`

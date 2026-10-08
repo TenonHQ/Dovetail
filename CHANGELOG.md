@@ -6,10 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `add-column --dry-run` / `add_column { dryRun: true }` now runs the same scope guards as the live path whenever a `scope` is named, so a mismatched or cross-scope request fails the dry-run the way it fails live instead of planning clean and failing on the write. A dry-run with no scope named stays network-free. (#316)
 - `dove create sys_update_set --scope <x>` now routes through the scope-correct `createUpdateSet` server op instead of the generic record insert (which let ServiceNow default `application` to the session's current app), reads the set back, and exits non-zero naming requested vs. actual scope if it is mis-scoped. `--scope` is required for `sys_update_set` in `--ci` mode. (#231)
 
 ### Added
 
+- `dove-sn add-column --cross-scope` / MCP `add_column { crossScope: true }` — add a column OWNED by a different app scope than its table (ServiceNow's cross-scope field: a Journey column on an Automate table, element `x_cadso_journey_<name>`). The insert runs through the scope-aware `createRecord` op switched to the column's scope, so the dictionary row and its Dictionary + Field Label captures land in the column's scope; the stored element and `sys_scope` are read back. Guards: the owner scope must exist, the table must allow new fields from other scopes (`sys_db_object.alter_access`), and the update set must belong to the column's scope. Without the opt-in a mismatched `--scope` is still refused. Verified live on workstudio. (#316)
 - `dove-sn help <verb>` / `dove-sn <verb> --help` / `dove-sn --help` — per-verb usage (required and optional flags with value formats, write gate, example) from a single `VERB_USAGE` table; `Missing required flags` errors now print the verb's usage block; help never loads an env file or builds a client. (#302, shipped in #314 via #309)
 - `servicenow_query_table` (`dovetail-mcp`) accepts `offset` → `sysparm_offset`, so result sets past the 1000-row page ceiling can be paged. (#298, shipped in #314 via #310)
 - `delete_record` MCP tool on `dove-sn mcp` + `dove-sn delete-record` verb — read-back before and after, dry-run by default, `--update-set` required. Completes the generic ServiceNow write surface (create / update / delete) that #154 asked for, on `dove-sn mcp` rather than `dovetail-mcp`. (#154, #308)

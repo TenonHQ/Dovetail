@@ -1530,9 +1530,10 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
  *   [--mandatory] [--default <value>] [--dependent-on-field <element>]
- *   [--scope x_cadso_journey] [--update-set <sys_id>]
+ *   [--scope x_cadso_journey] [--cross-scope] [--update-set <sys_id>]
  *   [--from-json <spec.json>] [--dry-run] [--debug] [--json]
- * --update-set is required unless --dry-run.
+ * --update-set is required unless --dry-run. --cross-scope opts in to a column
+ * OWNED by --scope when that differs from the table's scope.
  */
 async function runAddColumn(flags: Record<string, string>): Promise<number> {
   var spec: Partial<AddColumnParams> = {};
@@ -1567,6 +1568,9 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
   };
   var scope = flags.scope || spec.scope;
   if (scope) params.scope = scope;
+  if (flags["cross-scope"] === "true" || spec.crossScope === true) {
+    params.crossScope = true;
+  }
   var us = flags["update-set"] || spec.updateSetSysId;
   if (us) params.updateSetSysId = us;
   if (flags["dry-run"] === "true" || spec.dryRun === true) params.dryRun = true;

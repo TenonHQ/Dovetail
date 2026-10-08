@@ -404,6 +404,10 @@ export var addColumnSchema = z.object({
   table: z.string().min(1),
   column: columnSpecSchema,
   scope: z.string().optional(),
+  // Explicit opt-in to a column OWNED by `scope` when that differs from the table's
+  // scope (a Journey field on an Automate table). Without it a mismatched scope is
+  // refused — on dryRun and live alike — because that is the classic wrong-scope slip.
+  crossScope: z.boolean().optional(),
   updateSetSysId: z.string().optional(),
   dryRun: z.boolean().optional(),
   debug: z.boolean().optional(),

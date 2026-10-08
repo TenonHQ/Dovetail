@@ -749,3 +749,388 @@ describe("addColumn validation", function () {
     ).rejects.toThrow(/updateSetSysId is required/);
   });
 });
+
+/**
+ * CROSS-SCOPE COLUMNS. A Journey column on an Automate table: the dictionary row is
+ * owned by x_cadso_journey, the element is prefixed `x_cadso_journey_`, the insert is
+ * switched to the column's scope, and the capture lands in a Journey update set.
+ * Opt-in only (`crossScope: true`); the guards run on dry-run and live alike.
+ */
+type CrossCalls = {
+  createRecordScope: string;
+  createRecordFields: Record<string, unknown>;
+  createRecordCount: number;
+  dictionaryQueries: Array<string>;
+};
+function crossCallsOf(client: ServiceNowClient): CrossCalls {
+  return (client as unknown as { _calls: CrossCalls })._calls;
+}
+
+/**
+ * Stub instance: table x_cadso_automate_email_batch (scope AUTOSYS / x_cadso_automate,
+ * alter_access per opts), scope x_cadso_journey (JOURNEYSYS), update set "usj" in
+ * Journey and "usa" in Automate. The read-back echoes the inserted element + sys_scope
+ * unless pinned by opts.
+ */
+function crossScopeClient(opts: {
+  alterAccess?: string;
+  existingPrefixed?: boolean;
+  readBackScope?: string;
+  readBackElement?: string;
+  knownScope?: boolean;
+}): ServiceNowClient {
+  var alterAccess = opts.alterAccess === undefined ? "true" : opts.alterAccess;
+  var knownScope = opts.knownScope === undefined ? true : opts.knownScope;
+  var calls: CrossCalls = {
+    createRecordScope: "",
+    createRecordFields: {},
+    createRecordCount: 0,
+    dictionaryQueries: [],
+  };
+  var c = {
+    _calls: calls,
+    table: {
+      query: async function (table: string, query: string) {
+        if (table === "sys_db_object") {
+          return [
+            {
+              sys_id: "TBL",
+              name: "x_cadso_automate_email_batch",
+              sys_scope: { value: "AUTOSYS" },
+              alter_access: alterAccess,
+            },
+          ];
+        }
+        if (table === "sys_scope") {
+          if (query === "sys_id=AUTOSYS") return [{ sys_id: "AUTOSYS", scope: "x_cadso_automate" }];
+          if (query === "scope=x_cadso_journey" || query === "sys_id=JOURNEYSYS") {
+            return knownScope ? [{ sys_id: "JOURNEYSYS", scope: "x_cadso_journey" }] : [];
+          }
+          return [];
+        }
+        if (table === "sys_update_set") {
+          if (query === "sys_id=usj") return [{ sys_id: "usj", name: "Journey set", application: { value: "JOURNEYSYS" } }];
+          if (query === "sys_id=usa") return [{ sys_id: "usa", name: "Automate set", application: { value: "AUTOSYS" } }];
+          return [];
+        }
+        if (table === "sys_dictionary") {
+          calls.dictionaryQueries.push(query);
+          if (query.indexOf("sys_id=") === 0) {
+            var insertedElement = calls.createRecordFields.element;
+            var insertedScope = calls.createRecordFields.sys_scope;
+            return [
+              {
+                sys_id: "NEWSYS",
+                element:
+                  opts.readBackElement !== undefined
+                    ? opts.readBackElement
+                    : typeof insertedElement === "string"
+                    ? insertedElement
+                    : "",
+                internal_type: calls.createRecordFields.internal_type,
+                max_length: "",
+                sys_scope: {
+                  value:
+                    opts.readBackScope !== undefined
+                      ? opts.readBackScope
+                      : typeof insertedScope === "string"
+                      ? insertedScope
+                      : "",
+                },
+              },
+            ];
+          }
+          // Pre-check by name+element: only the PREFIXED element "exists".
+          if (opts.existingPrefixed && query.indexOf("element=x_cadso_journey_instance_step") > 0) {
+            return [
+              {
+                sys_id: "EXIST",
+                element: "x_cadso_journey_instance_step",
+                internal_type: "reference",
+                max_length: "",
+              },
+            ];
+          }
+          return [];
+        }
+        return [];
+      },
+    },
+    buildAgent: {
+      runQuery: async function () {
+        return [];
+      },
+      getTableSchema: async function () {
+        throw new Error("nope");
+      },
+    },
+    claude: {
+      createRecord: async function (p: { scope?: string; fields?: Record<string, unknown> }) {
+        calls.createRecordCount += 1;
+        calls.createRecordScope = p.scope || "";
+        calls.createRecordFields = p.fields || {};
+        return { sys_id: "NEWSYS" };
+      },
+      pushWithUpdateSet: async function () {
+        return { sys_id: "" };
+      },
+      currentUpdateSet: async function () {
+        return { sys_id: "", name: "" };
+      },
+      changeUpdateSet: async function () {
+        return {};
+      },
+      deleteRecord: async function () {
+        return {};
+      },
+    },
+    attachment: {
+      listFor: async function () {
+        return [];
+      },
+      upload: async function () {
+        return { sys_id: "att", file_name: "", content_type: "" };
+      },
+      remove: async function () {
+        return undefined;
+      },
+    },
+    now: {
+      get: async function () {
+        throw new Error("nope");
+      },
+      post: async function () {
+        throw new Error("nope");
+      },
+    },
+  };
+  return c as unknown as ServiceNowClient;
+}
+
+var CROSS_COLUMN = {
+  label: "Instance Step",
+  name: "instance_step",
+  type: "reference",
+  reference: "x_cadso_journey_instance_step",
+};
+
+describe("addColumn cross-scope", function () {
+  it("inserts in the COLUMN's scope with a prefixed element and verifies sys_scope", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: CROSS_COLUMN,
+      scope: "x_cadso_journey",
+      crossScope: true,
+      updateSetSysId: "usj",
+    });
+    expect(result.status).toBe("created");
+    expect(result.verified).toBe(true);
+    expect(result.element).toBe("x_cadso_journey_instance_step");
+    expect(result.scope).toBe("x_cadso_journey");
+    var calls = crossCallsOf(client);
+    expect(calls.createRecordScope).toBe("x_cadso_journey");
+    expect(calls.createRecordFields.sys_scope).toBe("JOURNEYSYS");
+    expect(calls.createRecordFields.element).toBe("x_cadso_journey_instance_step");
+    expect(calls.createRecordFields.name).toBe("x_cadso_automate_email_batch");
+    expect(result.note).toMatch(/owned by scope 'x_cadso_journey'/);
+  });
+  it("accepts an already-prefixed name without double-prefixing", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: { label: "Instance Step", name: "x_cadso_journey_instance_step", type: "reference", reference: "x_cadso_journey_instance_step" },
+      scope: "x_cadso_journey",
+      crossScope: true,
+      updateSetSysId: "usj",
+    });
+    expect(result.status).toBe("created");
+    expect(crossCallsOf(client).createRecordFields.element).toBe("x_cadso_journey_instance_step");
+  });
+  it("reports the element ServiceNow actually stored when it differs", async function () {
+    var client = crossScopeClient({ readBackElement: "x_cadso_journey_instance_step_1" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: CROSS_COLUMN,
+      scope: "x_cadso_journey",
+      crossScope: true,
+      updateSetSysId: "usj",
+    });
+    expect(result.status).toBe("created");
+    expect(result.element).toBe("x_cadso_journey_instance_step_1");
+    expect(result.note).toMatch(/stored element 'x_cadso_journey_instance_step_1'/);
+  });
+  it("skips (no insert) when the PREFIXED column already exists", async function () {
+    var client = crossScopeClient({ existingPrefixed: true });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: CROSS_COLUMN,
+      scope: "x_cadso_journey",
+      crossScope: true,
+      updateSetSysId: "usj",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(true);
+    expect(result.element).toBe("x_cadso_journey_instance_step");
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("fails (column exists) when the read-back sys_scope is the TABLE's scope, not the column's", async function () {
+    var client = crossScopeClient({ readBackScope: "AUTOSYS" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: CROSS_COLUMN,
+      scope: "x_cadso_journey",
+      crossScope: true,
+      updateSetSysId: "usj",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.verified).toBe(false);
+    expect(result.columnSysId).toBe("NEWSYS");
+    expect(result.note).toMatch(/sys_scope read back as 'AUTOSYS', not the requested 'JOURNEYSYS'/);
+  });
+  it("still refuses a mismatched --scope WITHOUT the opt-in, and names the flag", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({}),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        updateSetSysId: "usj",
+      }),
+    ).rejects.toThrow(/does not match table .* pass --cross-scope/);
+  });
+  it("refuses crossScope without a scope to own the column", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({}),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        crossScope: true,
+        updateSetSysId: "usj",
+      }),
+    ).rejects.toThrow(/crossScope requires --scope/);
+  });
+  it("refuses an owner scope that does not exist", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({ knownScope: false }),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        updateSetSysId: "usj",
+      }),
+    ).rejects.toThrow(/was not found in sys_scope/);
+  });
+  it("refuses when the table does not allow new fields from other scopes", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({ alterAccess: "false" }),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        updateSetSysId: "usj",
+      }),
+    ).rejects.toThrow(/does not allow new fields from other scopes/);
+  });
+  it("refuses an update set that belongs to the table's scope, not the column's", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({}),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        updateSetSysId: "usa",
+      }),
+    ).rejects.toThrow(/does not belong to the column's scope 'x_cadso_journey'/);
+  });
+  it("treats crossScope + the table's OWN scope as a plain same-scope add", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: { label: "Note", name: "note", type: "string" },
+      scope: "x_cadso_automate",
+      crossScope: true,
+      updateSetSysId: "usa",
+    });
+    expect(result.status).toBe("created");
+    expect(result.element).toBe("note");
+    expect(result.scope).toBe("x_cadso_automate");
+    expect(crossCallsOf(client).createRecordScope).toBe("x_cadso_automate");
+  });
+});
+
+describe("addColumn dry-run runs the scope guards", function () {
+  it("a plain dry-run (no scope named) still touches no network", async function () {
+    var result = await addColumn({
+      client: noNetworkClient(),
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "url" },
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.scope).toBe("");
+  });
+  it("a mismatched --scope fails the DRY-RUN the same way it fails live", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({}),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/does not match table/);
+  });
+  it("a cross-scope dry-run plans the prefixed element + owner scope and writes nothing", async function () {
+    var client = crossScopeClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_automate_email_batch",
+      column: CROSS_COLUMN,
+      scope: "x_cadso_journey",
+      crossScope: true,
+      updateSetSysId: "usj",
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.element).toBe("x_cadso_journey_instance_step");
+    expect(result.scope).toBe("x_cadso_journey");
+    expect(result.table).toBe("x_cadso_automate_email_batch");
+    expect(result.note).toMatch(/OWNED BY scope 'x_cadso_journey'/);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("a cross-scope dry-run refuses a table that disallows new fields", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({ alterAccess: "false" }),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/does not allow new fields/);
+  });
+  it("a cross-scope dry-run with a wrong-scope update set is refused too", async function () {
+    await expect(
+      addColumn({
+        client: crossScopeClient({}),
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        updateSetSysId: "usa",
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/does not belong to the column's scope/);
+  });
+});
