@@ -1772,7 +1772,14 @@ async function runIndexList(flags: Record<string, string>): Promise<number> {
     return 0;
   }
   process.stdout.write(
-    result.table + " — " + result.indexes.length + " index(es)\n",
+    result.table +
+      " — " +
+      result.indexes.length +
+      " index(es)" +
+      (result.storageTable && result.storageTable !== result.table
+        ? " (stored in " + result.storageTable + "'s physical table — these are its indexes)"
+        : "") +
+      "\n",
   );
   for (var i = 0; i < result.indexes.length; i += 1) {
     var idx = result.indexes[i];

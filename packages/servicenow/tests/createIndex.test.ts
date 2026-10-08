@@ -456,6 +456,95 @@ describe("createIndex — idempotency", function () {
   });
 });
 
+describe("createIndex — table-per-hierarchy children", function () {
+  var ROOT = "task";
+  var ROOT_ID = "33333333333333333333333333333333";
+
+  /** TABLE extends task and has NO v_db_index rows of its own; task has them. */
+  function tphClient() {
+    var ctx = makeMockClient({
+      query: async function (table: string, query?: string) {
+        var q = String(query || "");
+        if (table === "sys_db_object") {
+          if (q === "name=" + TABLE) {
+            return [
+              { sys_id: "t1", name: TABLE, sys_scope: SCOPE, super_class: { value: ROOT_ID } },
+            ];
+          }
+          if (q === "sys_id=" + ROOT_ID) {
+            return [{ sys_id: ROOT_ID, name: ROOT, sys_scope: "global", super_class: "" }];
+          }
+          return [];
+        }
+        if (table === "sys_update_set") {
+          return [{ sys_id: SET, name: SET_NAME, application: SCOPE, state: "in progress" }];
+        }
+        if (table === "sys_user") return [{ sys_id: "usr1", user_name: "u" }];
+        if (table === "v_db_index") {
+          if (q === "table_name=" + ROOT) {
+            return [indexRow("PRIMARY", "[sys_id]", ROOT), indexRow("owner", "[owner]", ROOT)];
+          }
+          return [];
+        }
+        throw new Error("unexpected table " + table);
+      },
+    });
+    ctx.client.claude.currentUpdateSet = async function () {
+      return { sys_id: SET, name: SET_NAME };
+    };
+    return ctx;
+  }
+
+  it("refuses on the live path, names the storage root, and schedules nothing", async function () {
+    okSession();
+    var ctx = tphClient();
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("failed");
+    expect(result.created).toBe(false);
+    expect(result.note).toMatch(/stored in 'task''s physical table/);
+    expect(result.note).toMatch(/table-per-hierarchy/);
+    expect(result.note).toMatch(/run index-create against task/);
+    expect(result.note).toMatch(/Nothing was sent/);
+    expect(ctx.calls.changeUpdateSet).toHaveLength(0);
+    expect(openFormSession).not.toHaveBeenCalled();
+    expect(postForm).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the hierarchy cannot be read", async function () {
+    okSession();
+    var ctx = makeMockClient({
+      query: async function (table: string, query?: string) {
+        var q = String(query || "");
+        if (table === "sys_db_object" && q === "name=" + TABLE) {
+          // readTableScope succeeds; the hierarchy walk's own read fails.
+          if (ctx.calls.tableQuery.filter(function (c) {
+            return c.table === "sys_db_object";
+          }).length > 1) {
+            throw new Error("HTTP 500 sys_db_object");
+          }
+          return [{ sys_id: "t1", name: TABLE, sys_scope: SCOPE }];
+        }
+        if (table === "sys_update_set") {
+          return [{ sys_id: SET, name: SET_NAME, application: SCOPE, state: "in progress" }];
+        }
+        if (table === "v_db_index") return [];
+        throw new Error("unexpected table " + table);
+      },
+    });
+    var result = await createIndex(base({ client: ctx.client, confirm: true }));
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/hierarchy could not be read/);
+    expect(ctx.calls.changeUpdateSet).toHaveLength(0);
+    expect(postForm).not.toHaveBeenCalled();
+  });
+
+  it("the dry-run says the live path refuses a table-per-hierarchy child", async function () {
+    var result = await createIndex(base({ client: noNetworkClient() }));
+    expect(result.status).toBe("dry-run");
+    expect(result.note).toMatch(/table-per-hierarchy/);
+  });
+});
+
 describe("createIndex — one identity for the pin and the build", function () {
   it("reads the REST caller's own sys_user row before pinning", async function () {
     okSession();

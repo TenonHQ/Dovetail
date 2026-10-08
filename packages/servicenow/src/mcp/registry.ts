@@ -694,8 +694,11 @@ export function buildDescriptors(
         "READABLE: v_db_index carries no uniqueness field, so a unique index and an ordinary " +
         "one are indistinguishable in it — `unique` is therefore left ABSENT rather than " +
         "guessed, and 'uniqueness-enforced' is always reported in unverified. Only a " +
-        "duplicate-insert test proves enforcement. An empty result more likely means the table " +
-        "name is wrong than that the table is unindexed (every physical table has a PRIMARY).",
+        "duplicate-insert test proves enforcement. A table stored in an ancestor's physical " +
+        "table (table-per-hierarchy, e.g. anything extending task) has no rows of its own: its " +
+        "super_class chain is walked and the storage root's indexes are listed, with " +
+        "`storageTable` and the note naming the root. An empty result for a table that does " +
+        "not exist says the name is wrong (every physical table has a PRIMARY).",
       shape: listIndexesSchema.shape,
       handler: async function (args: unknown) {
         var p = listIndexesSchema.parse(args);

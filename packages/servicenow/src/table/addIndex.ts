@@ -58,6 +58,13 @@
 import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
 import { encodeQueryValue } from "../choices";
+// listIndexes imports parseIndexColumns from this module. The cycle is safe under the
+// package's CommonJS output: both sides only touch the other's exports at CALL time.
+import {
+  readTableIndexes,
+  findIndexStorageRoot,
+  describeStorageRoot,
+} from "./listIndexes";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
 /** A dictionary element is a plain identifier. Anything else is rejected before it
@@ -188,14 +195,19 @@ function validate(params: AddIndexParams): string {
 async function resolveTable(
   client: ServiceNowClient,
   table: string,
-): Promise<{ name: string; sysId: string; scopeSysId: string }> {
+): Promise<{
+  name: string;
+  sysId: string;
+  scopeSysId: string;
+  superClass: string;
+}> {
   var query = SYS_ID.test(table)
     ? "sys_id=" + encodeQueryValue(table)
     : "name=" + encodeQueryValue(table);
   var rows = await client.table.query<Record<string, unknown>>(
     "sys_db_object",
     query,
-    { limit: 1, fields: ["sys_id", "name", "sys_scope"] },
+    { limit: 1, fields: ["sys_id", "name", "sys_scope", "super_class"] },
   );
   if (rows.length === 0) {
     throw new Error(
@@ -206,6 +218,7 @@ async function resolveTable(
     name: fieldToString(rows[0].name) || table,
     sysId: fieldToString(rows[0].sys_id),
     scopeSysId: fieldToString(rows[0].sys_scope),
+    superClass: fieldToString(rows[0].super_class),
   };
 }
 
@@ -577,7 +590,8 @@ export async function addIndex(
         "] in v_db_index. A dry-run does NOT check that the column exists, that its " +
         "values are free of duplicates (a unique index cannot build over them, empty " +
         "values included), or that an index is already there — the live path does all " +
-        "three before it writes.",
+        "three before it writes, and REFUSES a table stored in an ancestor's physical " +
+        "table (table-per-hierarchy), naming the ancestor its indexes live on.",
     };
   }
 
@@ -622,6 +636,51 @@ export async function addIndex(
     indexName: "",
     extraUnverified: [],
   };
+
+  // TABLE-PER-HIERARCHY. A table that extends another and has NO v_db_index rows of
+  // its own is stored in an ancestor's physical table: the index the flag builds
+  // would land on that root, and the read-back (by this table's name) could never see
+  // it — every run would end as the "lying row" failure, with the flag already
+  // written. Refuse before writing, naming the root. A table with no super_class has
+  // its own storage, so the probe only runs for extended tables. A probe that cannot
+  // read is NOT a refusal: the read-back below reports an unreadable view as such.
+  if (resolved.superClass) {
+    var storageRoot = "";
+    var storageNote = "";
+    try {
+      var own = await readTableIndexes(client, resolved.name);
+      if (own.length === 0) {
+        var storage = await findIndexStorageRoot(client, resolved.name);
+        if (storage.root) {
+          storageRoot = storage.root;
+          storageNote = describeStorageRoot(resolved.name, storage);
+        }
+      }
+    } catch (e) {
+      storageRoot = "";
+    }
+    if (storageRoot) {
+      return finish(
+        state,
+        "failed",
+        "Refusing to write: " +
+          storageNote +
+          " A unique index for " +
+          resolved.name +
+          "." +
+          column +
+          " would be built on " +
+          storageRoot +
+          ", where this verb's read-back (by " +
+          resolved.name +
+          ") could never see it — the flag would be left claiming unique=true with " +
+          "no index this verb can verify. Nothing was written." +
+          (params.debug
+            ? " [debug: scope=" + scopeName + " tableSysId=" + resolved.sysId + "]"
+            : ""),
+      );
+    }
+  }
 
   var dictRows = await client.table.query<Record<string, unknown>>(
     "sys_dictionary",

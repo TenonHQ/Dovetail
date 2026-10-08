@@ -742,8 +742,16 @@ substring-matched, because `"[owner_id]"` contains `"owner"`. `type` is `access_
 **Uniqueness is not readable.** `v_db_index` has no uniqueness field, so a unique index
 and an ordinary one are indistinguishable in it: `unique` is left **absent** rather than
 guessed, and `uniqueness-enforced` is reported in `unverified` on every result. Only a
-duplicate-insert test proves enforcement. An empty result more likely means the table name
-is wrong than that the table is unindexed - every physical table has a `PRIMARY`.
+duplicate-insert test proves enforcement. An empty result for a table that does not exist
+means the table name is wrong - every physical table has a `PRIMARY`.
+
+**Table-per-hierarchy children list their storage root's indexes.** `v_db_index` lists
+indexes by *physical* table, and a table stored in an ancestor's physical table (anything
+extending `task`, for example) has no rows under its own name. When the table exists but
+has no rows, its `super_class` chain is walked to the first ancestor that has them, and
+that root's indexes are listed - with `storageTable` and the note naming the root.
+`index-create` and `add-index` **refuse** such a child on the live path, naming the root,
+rather than build on it or report a false "NOT created".
 
 ### Create an index (composite and non-unique included)
 
@@ -792,6 +800,9 @@ was a silent no-op for that reason.)
 - **Idempotent.** On the live path `v_db_index` is read first, and an index over *exactly*
   these columns short-circuits to `already-exists` with no pin, no form session and no
   write. Column **order** is part of an index's identity - `[a;b]` is not `[b;a]`.
+- **Table-per-hierarchy children are refused.** A table with no `v_db_index` rows of its
+  own whose ancestor has them is stored in that ancestor's physical table; the run stops
+  before any write and names the root (run against the root if that is what you want).
 - **One identity for the pin and the build.** The pin runs through the REST client (an API
   key when one is configured) but the build is scheduled by the form session (always
   `SN_USER`), and the build captures into the *form* user's current set. So before any

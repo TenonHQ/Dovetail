@@ -177,7 +177,16 @@ interface LiveOpts {
    * SCAN_MAX_PAGES pages means the scan never reached the end of the column.
    */
   fullDataPages?: number;
+  /**
+   * TABLE extends `task` (sys_id TPH_ROOT_ID). With `tphRootOnly` the table has NO
+   * v_db_index rows of its own and `task` does — a table-per-hierarchy child.
+   * Without it, TABLE extends task but keeps its own storage (its own rows).
+   */
+  extendsTask?: boolean;
+  tphRootOnly?: boolean;
 }
+
+var TPH_ROOT_ID = "33333333333333333333333333333333";
 
 /**
  * Stub client for the LIVE path. Resolves TABLE in scope SCOPE_NAME, serves the column's
@@ -221,7 +230,17 @@ function liveClient(opts: LiveOpts): ServiceNowClient {
       );
     }
     if (table === "sys_db_object") {
-      return [{ sys_id: "TBL", name: TABLE, sys_scope: { value: "SCOPESYS" } }];
+      if (opts.extendsTask && query === "sys_id=" + TPH_ROOT_ID) {
+        return [{ sys_id: TPH_ROOT_ID, name: "task", super_class: "" }];
+      }
+      return [
+        {
+          sys_id: "TBL",
+          name: TABLE,
+          sys_scope: { value: "SCOPESYS" },
+          super_class: opts.extendsTask ? { value: TPH_ROOT_ID } : "",
+        },
+      ];
     }
     if (table === "sys_scope") {
       return scopeName ? [{ scope: scopeName }] : [];
@@ -240,6 +259,11 @@ function liveClient(opts: LiveOpts): ServiceNowClient {
     }
     if (table === "v_db_index") {
       if (opts.indexReadError) throw new Error(opts.indexReadError);
+      if (opts.tphRootOnly) {
+        return query === "table_name=task"
+          ? [{ table_name: "task", column_names: "[sys_id]", index_name: "PRIMARY", access_method: "btree" }]
+          : [];
+      }
       return indexRows as unknown as Array<Record<string, unknown>>;
     }
     if (table === TABLE) {
@@ -769,6 +793,50 @@ describe("addIndex idempotency and scope", function () {
 // The CLI (cli.ts) and the MCP registry both import the table verbs from the
 // ../src/table barrel — addColumn is exported there at table/index.ts:53.
 // ---------------------------------------------------------------------------
+describe("addIndex table-per-hierarchy children", function () {
+  it("refuses a child stored in its parent's physical table, names the root, writes nothing", async function () {
+    var client = liveClient({ extendsTask: true, tphRootOnly: true });
+    var result = await addIndex(liveParams(client));
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/stored in 'task''s physical table/);
+    expect(result.note).toMatch(/table-per-hierarchy/);
+    expect(result.note).toMatch(/Nothing was written/);
+    expect(result.unverified).toContain("uniqueness-enforced");
+    expect(callsOf(client).pushes).toHaveLength(0);
+    // Refused before the dictionary read and the duplicate scan.
+    expect(queriedTable(client, "sys_dictionary")).toBe(false);
+    expect(queriedTable(client, TABLE)).toBe(false);
+  });
+
+  it("an extended table with its OWN storage proceeds as before", async function () {
+    var client = liveClient({ extendsTask: true });
+    var result = await addIndex(liveParams(client));
+    expect(result.status).toBe("created");
+    expect(callsOf(client).pushes).toHaveLength(1);
+  });
+
+  it("a table with no super_class is never probed", async function () {
+    var client = liveClient({});
+    await addIndex(liveParams(client));
+    var dbObjectReads = callsOf(client).queries.filter(function (q) {
+      return q.table === "sys_db_object";
+    });
+    expect(dbObjectReads).toHaveLength(1);
+  });
+
+  it("the dry-run says the live path refuses a table-per-hierarchy child", async function () {
+    var result = await addIndex({
+      client: noNetworkClient(),
+      table: TABLE,
+      columns: [COLUMN],
+      unique: true,
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.note).toMatch(/table-per-hierarchy/);
+  });
+});
+
 describe("table barrel", function () {
   it("re-exports addIndex so cli.ts and the MCP registry can import it", function () {
     var barrel = tableBarrel as unknown as Record<string, unknown>;

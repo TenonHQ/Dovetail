@@ -64,7 +64,12 @@ import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
 import { encodeQueryValue } from "../choices";
 import { indexMatchesColumns, parseIndexColumns } from "./addIndex";
-import { assertTableName } from "./listIndexes";
+import {
+  assertTableName,
+  findIndexStorageRoot,
+  describeStorageRoot,
+} from "./listIndexes";
+import type { IndexStorageRoot } from "./listIndexes";
 import {
   resolveFormAuth,
   openFormSession,
@@ -693,7 +698,9 @@ export async function createIndex(
         " ms apart, and read the capture row back from sys_update_xml. A dry-run " +
         "does NOT check that the table, columns or update set exist, and does NOT " +
         "check whether the index is already there — the live path does all of that " +
-        "before it writes. Pass confirm:true to write. " +
+        "before it writes, and REFUSES a table stored in an ancestor's physical table " +
+        "(table-per-hierarchy), naming the ancestor its indexes live on. Pass " +
+        "confirm:true to write. " +
         CAPTURE_NOTE,
     });
   }
@@ -823,6 +830,59 @@ export async function createIndex(
         CAPTURE_NOTE,
     });
   }
+  // TABLE-PER-HIERARCHY. A table stored in an ancestor's physical table has NO
+  // v_db_index rows under its own name, so the idempotency check above can never match
+  // and the read-back poll below would never see the new index: the run would report
+  // "NOT created" and a retry would schedule a second build. Find the storage root and
+  // refuse, naming it — building on the root is a decision for the caller, not this verb.
+  if (existing.length === 0) {
+    var storage: IndexStorageRoot;
+    try {
+      storage = await findIndexStorageRoot(params.client, table);
+    } catch (e) {
+      return result({
+        status: "failed",
+        table: table,
+        columns: columns,
+        instance: instance,
+        updateSet: updateSet,
+        note:
+          "Refusing to write: v_db_index has no rows for " +
+          table +
+          " and its table hierarchy could not be read, so where its indexes " +
+          "physically live is UNKNOWN: " +
+          errorMessage(e) +
+          ". Nothing was sent. " +
+          CAPTURE_NOTE,
+      });
+    }
+    if (storage.root) {
+      return result({
+        status: "failed",
+        table: table,
+        columns: columns,
+        instance: instance,
+        updateSet: updateSet,
+        note:
+          "Refusing to write: " +
+          describeStorageRoot(table, storage) +
+          " An index built for " +
+          table +
+          " would land on " +
+          storage.root +
+          ", where this verb could neither match an existing index nor read the new " +
+          "one back. Nothing was sent — if the index belongs on " +
+          storage.root +
+          ", run index-create against " +
+          storage.root +
+          " (with an update set in " +
+          storage.root +
+          "'s scope). " +
+          CAPTURE_NOTE,
+      });
+    }
+  }
+
   var already = findMatch(existing, columns);
   if (already) {
     return result({
