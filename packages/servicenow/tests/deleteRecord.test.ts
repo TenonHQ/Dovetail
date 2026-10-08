@@ -208,6 +208,57 @@ describe("deleteRecord — apply + read-back", function () {
   });
 });
 
+describe("deleteRecord — a delete call that throws still gets a read-back (R-2)", function () {
+  it("server refusal (SN 500) with the row still present → failed, verified:false, error in the note", async function () {
+    var ctx = ctxFor({ ["sys_id=" + ID]: [{ sys_id: ID, name: "a" }] });
+    ctx.client.claude.deleteRecord = async function (params) {
+      ctx.calls.deleteRecord.push(params);
+      throw new Error("SN 500 on claude.deleteRecord(x_t) — retries exhausted.");
+    };
+    var r = await deleteRecord({ client: ctx.client, table: "x_t", sysId: ID, updateSetSysId: US, confirm: true });
+    expect(r.status).toBe("failed");
+    expect(r.verified).toBe(false);
+    expect(r.note).toMatch(/STILL PRESENT/);
+    expect(r.note).toContain("SN 500 on claude.deleteRecord(x_t)");
+    expect(ctx.calls.deleteRecord.length).toBe(1);
+  });
+
+  it("transport error (ECONNRESET) after the delete landed → deleted, with the error noted", async function () {
+    var present = true;
+    var ctx = makeMockClient({
+      query: async function (_table: string, query?: string) {
+        if (present && query === "sys_id=" + ID) return [{ sys_id: ID, name: "a" }];
+        return [];
+      }
+    });
+    ctx.client.claude.deleteRecord = async function (params) {
+      ctx.calls.deleteRecord.push(params);
+      present = false;
+      throw new Error("SN network error on claude.deleteRecord(x_t): read ECONNRESET");
+    };
+    var r = await deleteRecord({ client: ctx.client, table: "x_t", sysId: ID, updateSetSysId: US, confirm: true });
+    expect(r.status).toBe("deleted");
+    expect(r.verified).toBe(true);
+    expect(r.note).toContain("ECONNRESET");
+    expect(r.note).toMatch(/reported an error/);
+  });
+
+  it("a read-back that itself fails → failed (state unknown), never a success or a throw", async function () {
+    var reads = 0;
+    var ctx = makeMockClient({
+      query: async function () {
+        reads += 1;
+        if (reads === 1) return [{ sys_id: ID, name: "a" }];
+        throw new Error("SN auth error 403 on table.query(x_t) — check creds");
+      }
+    });
+    var r = await deleteRecord({ client: ctx.client, table: "x_t", sysId: ID, updateSetSysId: US, confirm: true });
+    expect(r.status).toBe("failed");
+    expect(r.verified).toBe(false);
+    expect(r.note).toMatch(/UNKNOWN/);
+  });
+});
+
 describe("snapshotRecord", function () {
   it("flattens reference objects and truncates long values", function () {
     var long = new Array(260).join("x");

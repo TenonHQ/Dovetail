@@ -184,26 +184,70 @@ export async function deleteRecord(params: DeleteRecordParams): Promise<DeleteRe
     };
   }
 
-  await client.claude.deleteRecord({
-    table: table,
-    sys_id: sysId,
-    update_set_sys_id: updateSetSysId
-  });
+  // The delete call's own outcome is NOT the verdict — the read-back is. A server
+  // refusal (business rule abort → HTTP 500, retried then thrown) and a transport
+  // error AFTER the delete landed both throw here; either way the record's actual
+  // state decides the result, so the error is captured and the read-back always runs.
+  var deleteError = "";
+  try {
+    await client.claude.deleteRecord({
+      table: table,
+      sys_id: sysId,
+      update_set_sys_id: updateSetSysId
+    });
+  } catch (err) {
+    deleteError = err instanceof Error ? err.message : String(err);
+    if (!deleteError) deleteError = "unknown error";
+  }
 
-  // Read AFTER: success only when the record is confirmed gone.
-  var afterRow = await readRecord(client, table, sysId, ["sys_id"]);
+  // Read AFTER: success only when the record is confirmed gone. A read-back that
+  // itself fails leaves the outcome unknown — that is a failure, never a success.
+  var afterRow: Record<string, unknown> | null;
+  try {
+    afterRow = await readRecord(client, table, sysId, ["sys_id"]);
+  } catch (readErr) {
+    var readMsg = readErr instanceof Error ? readErr.message : String(readErr);
+    return {
+      status: "failed",
+      table: table,
+      sysId: sysId,
+      updateSetSysId: updateSetSysId,
+      before: before,
+      verified: false,
+      note: "The post-delete read-back of " + table + "/" + sysId + " FAILED (" + readMsg + ")"
+        + (deleteError ? " and the deleteRecord call reported an error (" + deleteError + ")" : "")
+        + " — whether the record is gone is UNKNOWN. Check the instance before retrying."
+    };
+  }
   var verified = afterRow === null;
 
+  if (verified) {
+    return {
+      status: "deleted",
+      table: table,
+      sysId: sysId,
+      updateSetSysId: updateSetSysId,
+      before: before,
+      verified: true,
+      note: "Deleted " + table + "/" + sysId + " and verified via read-back (record is gone)."
+        + (deleteError
+          ? " The deleteRecord call reported an error (" + deleteError + "), but the record is "
+            + "gone — e.g. a transport error after the server had already deleted it."
+          : "")
+        + UPDATE_SET_CAVEAT
+    };
+  }
   return {
-    status: verified ? "deleted" : "failed",
+    status: "failed",
     table: table,
     sysId: sysId,
     updateSetSysId: updateSetSysId,
     before: before,
-    verified: verified,
-    note: verified
-      ? "Deleted " + table + "/" + sysId + " and verified via read-back (record is gone)."
-        + UPDATE_SET_CAVEAT
+    verified: false,
+    note: deleteError
+      ? "deleteRecord FAILED (" + deleteError + ") and " + table + "/" + sysId
+        + " is STILL PRESENT on read-back — the server refused the delete (business rule abort / "
+        + "server-side refusal?). Check the instance before retrying."
       : "deleteRecord returned but " + table + "/" + sysId
         + " is STILL PRESENT on read-back — the delete did not land (ACL / business rule abort?). "
         + "Check the instance before retrying."

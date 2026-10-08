@@ -2254,8 +2254,8 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
  *   [--dry-run] [--json]                         (--dry-run wins over --apply)
  * Reads the record BEFORE (a missing record is an error, not a no-op delete) and AFTER
  * (success is only reported once the record is confirmed gone).
- * Exit codes: 0 deleted/dry-run, 1 bad args or missing record, 2 delete returned but the
- * record is STILL PRESENT on read-back.
+ * Exit codes: 0 deleted/dry-run, 1 bad args or missing record, 2 the record is STILL PRESENT
+ * on read-back (including a delete the server refused with an error) or its state is unknown.
  */
 async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;

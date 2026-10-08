@@ -480,7 +480,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     example:
       "dove-sn delete-record --table x_cadso_core_metric_point_type --sys-id <32-hex sys_id> --update-set <sys_id> --apply",
     notes: [
-      "Reads the record BEFORE (a missing record is an error, never a no-op delete) and AFTER (exit 2 if it is still present).",
+      "Reads the record BEFORE (a missing record is an error, never a no-op delete) and AFTER (exit 2 if it is still present — including when the server refused the delete with an error).",
       "Until TenonHQ/Dovetail#297 ships server-side the delete op IGNORES --update-set and captures into the session's current update set — make that the set you want before --apply.",
     ],
   },
