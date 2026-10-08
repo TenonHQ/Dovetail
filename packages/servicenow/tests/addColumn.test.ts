@@ -827,6 +827,7 @@ function crossScopeClient(opts: {
                 sys_id: "DASYS",
                 source_scope: { value: made.source_scope },
                 target_package: { value: made.target_package },
+                sys_scope: { value: made.source_scope },
               },
             ];
           }

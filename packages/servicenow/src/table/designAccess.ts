@@ -18,7 +18,7 @@
  * a missing record and can create it; this module is that check + create.
  *
  * Read-back discipline matches add-column: a created record is read back by the returned
- * sys_id and its source/target asserted before it is called verified. ES6 only, no
+ * sys_id and its source/target and owning sys_scope asserted before it is called verified. ES6 only, no
  * optional chaining, no `any`.
  */
 
@@ -287,7 +287,10 @@ export async function ensureDesignAccess(
     rows = await client.table.query<Record<string, unknown>>(
       DESIGN_ACCESS_TABLE,
       "sys_id=" + newSysId,
-      { limit: 1, fields: ["sys_id", "source_scope", "target_package"] },
+      {
+        limit: 1,
+        fields: ["sys_id", "source_scope", "target_package", "sys_scope"],
+      },
     );
   } catch (e) {
     return failed(
@@ -325,6 +328,26 @@ export async function ensureDesignAccess(
         "' / '" +
         pair.target.sysId +
         "'. Fix or delete it on the instance.",
+    );
+  }
+  // The record must be OWNED by the source app (the scope switch took), or it is captured
+  // in — and ships with — the wrong app even though source/target look right.
+  var gotScope = fieldToString(rows[0].sys_scope);
+  if (gotScope !== pair.source.sysId) {
+    return failed(
+      base,
+      us,
+      newSysId,
+      "record " +
+        newSysId +
+        " is owned by sys_scope '" +
+        (gotScope || "(empty)") +
+        "', not the source scope '" +
+        pair.source.name +
+        "' (" +
+        pair.source.sysId +
+        ") — the scope switch did not take, so it is captured in the wrong app. Fix or " +
+        "delete it on the instance.",
     );
   }
   return {

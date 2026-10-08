@@ -590,7 +590,7 @@ export function buildDescriptors(
         "Idempotent: an existing record returns status 'exists' and nothing is written. Live " +
         "creates it via the scope-aware createRecord op switched to sourceScope, captured in " +
         "updateSetSysId (must belong to sourceScope and be in progress), then reads it back and asserts " +
-        "source/target. updateSetSysId is required on the live path; dryRun:true only reports " +
+        "source/target and that it is owned by sourceScope. updateSetSysId is required on the live path; dryRun:true only reports " +
         "exists / missing.",
       shape: designAccessSchema.shape,
       handler: async function (args: unknown) {

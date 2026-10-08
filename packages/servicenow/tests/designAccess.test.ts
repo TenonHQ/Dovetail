@@ -6,7 +6,8 @@ import type { ServiceNowClient } from "../src/client";
  * update set "usj" in Journey, "usa" in Automate (both in progress), "usc" a COMPLETE
  * set in Journey. Design Access JOURNEY -> AUTOMATE is
  * present or missing per opts; a created record reads back with the fields it was
- * inserted with unless `readBackSource` pins a different source_scope.
+ * inserted with (owned by the source scope) unless `readBackSource` / `readBackScope` pin
+ * a different source_scope / sys_scope.
  */
 type Calls = {
   creates: Array<{
@@ -22,6 +23,8 @@ function stub(opts: {
   insertThrows?: boolean;
   noSysId?: boolean;
   readBackSource?: string;
+  /** Pin the read-back sys_scope (default: the inserted source_scope). */
+  readBackScope?: string;
 }): { client: ServiceNowClient; calls: Calls } {
   var calls: Calls = { creates: [], queries: [] };
   var client = {
@@ -78,6 +81,12 @@ function stub(opts: {
                       : made.fields.source_scope,
                 },
                 target_package: { value: made.fields.target_package },
+                sys_scope: {
+                  value:
+                    opts.readBackScope !== undefined
+                      ? opts.readBackScope
+                      : made.fields.source_scope,
+                },
               },
             ];
           }
@@ -244,6 +253,16 @@ describe("ensureDesignAccess", function () {
     expect(r.status).toBe("failed");
     expect(r.sysId).toBe("DASYS");
     expect(r.note).toMatch(/read back as source_scope 'AUTOSYS'/);
+  });
+  it("returns failed (with the sys_id) when the record is owned by the wrong scope", async function () {
+    var s = stub({ readBackScope: "AUTOSYS" });
+    var r = await ensureDesignAccess(
+      Object.assign({ client: s.client, updateSetSysId: "usj" }, PAIR),
+    );
+    expect(r.status).toBe("failed");
+    expect(r.present).toBe(false);
+    expect(r.sysId).toBe("DASYS");
+    expect(r.note).toMatch(/owned by sys_scope 'AUTOSYS'/);
   });
 });
 
