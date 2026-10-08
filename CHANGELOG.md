@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `dove-sn sync-ux-events` verb + `sync_ux_events` MCP tool — reads a component's `now-ui.json` and registers every declared action as a `sys_ux_event` in the macroponent's scope, appending it to the macroponent's `dispatched_events` (append-only, update-set-captured, read-back verified). Dry-run by default; drift, orphans and ambiguous events are reported, never changed. Replaces the manual Studio step after a component deploy adds a new dispatched action.
+
 ### Fixed
 
 - Release commits are rebuilt on the latest `main` tip again (#288 re-landed), and the publisher now refuses to push a release commit that touches anything beyond the lockfile, package `version` / `@tenonhq/*` ranges and release metadata. A stale-checkout release commit had silently reverted #287, #288, #290 and #311.

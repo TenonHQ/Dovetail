@@ -484,6 +484,33 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       "Until TenonHQ/Dovetail#297 ships server-side the delete op IGNORES --update-set and captures into the session's current update set — so the verb pins --update-set as current first (refusing, nothing deleted, if the pin does not read back) and reads the DELETE row back from sys_update_xml: exit 2 when it landed in a different set or the read-back failed. A table that writes no update-set capture at all exits 0 with a note (captureState \"none\") — that delete will not travel.",
     ],
   },
+  "sync-ux-events": {
+    summary: "Register a UI component's now-ui.json actions as sys_ux_event records on its macroponent",
+    required: [
+      { flag: "file", value: "<now-ui.json>", note: "Path to the component's now-ui.json; every component with `actions` is synced." },
+    ],
+    optional: [
+      { flag: "component", value: "<tag>", note: "Limit to one component tag, e.g. cadso-journey-builder." },
+      {
+        flag: "update-set",
+        value: "<sys_id>",
+        note: "Required with --apply — the event creates and the macroponent edit are captured here.",
+      },
+      { flag: "apply", note: "Write (without it the run is a dry-run)." },
+      { flag: "dry-run", note: "Force a dry-run even with --apply." },
+      JSON_FLAG,
+    ],
+    gate: "apply",
+    gateNote: "The dry-run prints each action as ok / create / link / drift / ambiguous, plus orphans.",
+    example:
+      "dove-sn sync-ux-events --file path/to/now-ui.json --component cadso-journey-builder --update-set <sys_id> --apply",
+    notes: [
+      "Macroponent = sys_ux_macroponent whose root_component is the sys_ux_lib_component with that tag (category component). Events are created in the macroponent's scope.",
+      "Append-only: missing events are created and their sys_ids appended to dispatched_events; existing entries are never dropped or reordered. Label/description drift and orphaned (linked but undeclared) events are reported, never changed.",
+      "Exit codes: 0 in sync / dry-run / applied and verified, 1 bad args or unreadable file, 2 unresolved or ambiguous component/event, or a write that did not verify.",
+    ],
+    stringFlags: ["file", "component", "update-set"],
+  },
   "host-assets": {
     summary: "Deploy a built dist/ to ServiceNow (carrier sys_ui_script + attachment + m2m)",
     required: [
