@@ -10,6 +10,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as ConfigManager from "./config";
 import { getActiveTaskPath, getUpdateSetsConfigPath } from "./projectFiles";
+import { readGitHead } from "./gitHead";
 
 const DEBOUNCE_MS = 300;
 
@@ -48,6 +49,12 @@ class MultiScopeWatcherManager {
   private cachedScope: string | null = null;
   private pendingScopes: Map<string, number> = new Map(); // scope -> first change timestamp
   private globalProcessQueue: ReturnType<typeof debounce> | null = null;
+  // Branch-switch guard: the git HEAD the watcher started on. The watcher
+  // cannot tell a `git checkout` from real edits, so it re-reads HEAD before
+  // every push and halts if it moved. null = not a git work tree (guard off).
+  private gitRootDir: string | null = null;
+  private gitHeadAtStart: string | null = null;
+  private syncHalted = false;
 
   async startWatchingAllScopes(options?: WatcherOptions) {
     var opts = options || { monitorIntervalMs: 120000 };
@@ -60,6 +67,8 @@ class MultiScopeWatcherManager {
         logger.error("No scopes defined in dove.config.js");
         throw new Error("No scopes defined in configuration");
       }
+
+      await this.recordGitHeadAtStart();
 
       const scopes = Object.keys(config.scopes);
       logger.info(`Starting multi-scope watch for ${scopes.length} scopes: ${scopes.join(", ")}`);
@@ -123,6 +132,7 @@ class MultiScopeWatcherManager {
     }
 
     watcher.on("change", (filePath: string) => {
+      if (this.syncHalted) return;
       logger.info(`[${scopeName}] File changed: ${path.relative(sourceDirectory, filePath)}`);
       scopeWatcher.pushQueue.push(filePath);
       if (!this.pendingScopes.has(scopeName)) {
@@ -132,6 +142,7 @@ class MultiScopeWatcherManager {
     });
 
     watcher.on("add", (filePath: string) => {
+      if (this.syncHalted) return;
       logger.info(`[${scopeName}] File added: ${path.relative(sourceDirectory, filePath)}`);
       scopeWatcher.pushQueue.push(filePath);
       if (!this.pendingScopes.has(scopeName)) {
@@ -376,6 +387,11 @@ class MultiScopeWatcherManager {
   }
 
   private async processAllPendingScopes() {
+    if (this.syncHalted) {
+      this.dropPendingChanges();
+      return;
+    }
+
     // Sort scopes by first file change timestamp (FIFO)
     var sorted = Array.from(this.pendingScopes.entries()).sort(function (a, b) {
       return a[1] - b[1];
@@ -386,9 +402,84 @@ class MultiScopeWatcherManager {
       var scopeName = sorted[i][0];
       var scopeWatcher = this.scopeWatchers.get(scopeName);
       if (scopeWatcher && scopeWatcher.pushQueue.length > 0) {
+        // Re-check right before every push: a checkout can land mid-flush.
+        if (!(await this.isGitHeadUnchanged())) {
+          return;
+        }
         await this.processScopeQueue(scopeWatcher);
       }
     }
+  }
+
+  // Records the git HEAD of the project root so later flushes can detect a
+  // branch switch. Outside a git work tree the guard is off (today's behaviour).
+  private async recordGitHeadAtStart(): Promise<void> {
+    this.syncHalted = false;
+    this.gitRootDir = null;
+    this.gitHeadAtStart = null;
+    var rootDir: string | null = null;
+    try {
+      rootDir = ConfigManager.getRootDir();
+    } catch (e) {
+      rootDir = null;
+    }
+    if (typeof rootDir !== "string" || rootDir === "") {
+      logger.debug("[MultiScope] No project root — branch-switch guard off");
+      return;
+    }
+    var head = await readGitHead(rootDir);
+    if (!head) {
+      logger.debug("[MultiScope] Not a git work tree — branch-switch guard off");
+      return;
+    }
+    this.gitRootDir = rootDir;
+    this.gitHeadAtStart = head;
+    logger.debug("[MultiScope] Branch-switch guard armed at HEAD " + head);
+  }
+
+  // True when it is safe to push: no guard (not a git work tree) or HEAD is
+  // where it was at start. Otherwise halts syncing and returns false.
+  private async isGitHeadUnchanged(): Promise<boolean> {
+    if (this.syncHalted) {
+      this.dropPendingChanges();
+      return false;
+    }
+    if (!this.gitHeadAtStart || !this.gitRootDir) {
+      return true;
+    }
+    var current = await readGitHead(this.gitRootDir);
+    if (current === this.gitHeadAtStart) {
+      return true;
+    }
+    this.haltForBranchChange(current);
+    return false;
+  }
+
+  private dropPendingChanges(): number {
+    var dropped = 0;
+    this.scopeWatchers.forEach(function (scopeWatcher) {
+      dropped += scopeWatcher.pushQueue.length;
+      scopeWatcher.pushQueue = [];
+    });
+    this.pendingScopes.clear();
+    return dropped;
+  }
+
+  // HEAD moved (or can no longer be read): the queued "changes" are most
+  // likely the other branch's files, so pushing them would overwrite live
+  // records. Drop them and pause until the user restarts the watcher.
+  private haltForBranchChange(currentHead: string | null) {
+    this.syncHalted = true;
+    var dropped = this.dropPendingChanges();
+    var from = this.gitHeadAtStart ? this.gitHeadAtStart.slice(0, 12) : "unknown";
+    var to = currentHead ? currentHead.slice(0, 12) : "unreadable";
+    logger.error(
+      "Git HEAD changed since the watcher started (" + from + " -> " + to + "). " +
+        "A branch switch or checkout rewrites the working tree, so pushing now would " +
+        "overwrite instance records with that tree. Dropped " + dropped +
+        " queued file(s); nothing was pushed. Syncing is PAUSED — stop the watcher " +
+        "(Ctrl+C) and restart it on the branch you mean to sync.",
+    );
   }
 
   private async processScopeQueue(scopeWatcher: ScopeWatcher) {
@@ -640,6 +731,9 @@ class MultiScopeWatcherManager {
       this.globalProcessQueue = null;
     }
     this.pendingScopes.clear();
+    this.syncHalted = false;
+    this.gitRootDir = null;
+    this.gitHeadAtStart = null;
 
     // Stop update set monitoring
     if (this.updateSetCheckInterval) {

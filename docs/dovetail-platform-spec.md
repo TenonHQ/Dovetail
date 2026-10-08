@@ -1161,7 +1161,7 @@ Refresh is an incremental download — only fetches files that are missing local
 
 ### 8.6 Watch Flow (`dove watch` / MultiScopeWatcher)
 
-> **Human-only local-dev tool.** `watch` is hidden from `dove --help` and from Claude-facing docs (TenonHQ/Dovetail#155): it auto-syncs the working tree to the instance, so a branch switch mid-watch pushes the post-switch file state over live records. The handler refuses to start (exit 1) in a Claude Code tool shell (`CLAUDECODE` set) unless a human sets `DOVE_ALLOW_WATCH_IN_CLAUDE=1`; a `CLAUDE_CODE_*` variable alone only warns. Agents use `push` / `refresh` / `status`.
+> **Human-only local-dev tool.** `watch` is hidden from `dove --help` and from Claude-facing docs (TenonHQ/Dovetail#155): it auto-syncs the working tree to the instance, so a branch switch mid-watch pushes the post-switch file state over live records. The handler refuses to start (exit 1) in a Claude Code tool shell (`CLAUDECODE` set) unless a human sets `DOVE_ALLOW_WATCH_IN_CLAUDE=1`; a `CLAUDE_CODE_*` variable alone only warns. The watcher records git `HEAD` at start and re-reads it before every push; if it moved, it drops the queue, pushes nothing and pauses until restarted. Agents use `push` / `refresh` / `status`.
 
 ```
 1. Load config, enumerate scopes from scopes key
