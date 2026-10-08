@@ -21,6 +21,15 @@ describe("createRecord", function () {
     expect(ctx.calls.createRecord.length).toBe(0);
   });
 
+  it("refuses sys_update_set before any client call (createRecord op cannot set its application)", async function () {
+    var ctx = ctxFor({});
+    await expect(
+      createRecord({ client: ctx.client, table: "sys_update_set", fields: { name: "Foo" }, scope: "x_s", updateSetSysId: US })
+    ).rejects.toThrow(/dove createUpdateSet/);
+    expect(ctx.calls.createRecord.length).toBe(0);
+    expect(ctx.calls.tableQuery.length).toBe(0);
+  });
+
   it("requires at least one field", async function () {
     var ctx = ctxFor({});
     await expect(

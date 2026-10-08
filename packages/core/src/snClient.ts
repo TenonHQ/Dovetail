@@ -755,6 +755,20 @@ export const snClient = (
         ),
       );
     }
+    // Guard: the generic createRecord op never sets `application`, so an
+    // update set inserted through it lands in the session app (and a
+    // name-only read-back still passes). Update sets must go through the
+    // scope-correct createUpdateSet op.
+    if (params && params.table === "sys_update_set") {
+      return Promise.reject(
+        new Error(
+          "Refusing to insert sys_update_set via createRecord: the generic " +
+            "createRecord op does not set the update set's application, so it " +
+            "would land in the session app. Use `dove createUpdateSet --name " +
+            "<name> --scope <scope>` instead.",
+        ),
+      );
+    }
     return _callDovetailApi<CreateRecordResponse>("createRecord", (endpoint) =>
       client.post<CreateRecordResponse>(endpoint, params),
     );

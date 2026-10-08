@@ -9,7 +9,8 @@
  * The INSERT counterpart to `set-field`.
  *
  * NOT for schema tables (sys_db_object / sys_dictionary) — that's
- * create-table / add-column. To UPDATE an existing record, use `set-field`.
+ * create-table / add-column. NOT for sys_update_set — that's
+ * `dove createUpdateSet`. To UPDATE an existing record, use `set-field`.
  */
 
 import { createClient } from "./client";
@@ -40,6 +41,12 @@ export interface CreateRecordResult extends RecordWriteResult {
 // the dedicated schema verbs instead so we never orphan or corrupt metadata.
 var REFUSED_TABLES = ["sys_db_object", "sys_dictionary"];
 
+// The generic createRecord op never sets `application`, so an update set
+// inserted through it lands in the session app while the read-back (name only)
+// still reports success. Update sets go through the scope-correct
+// createUpdateSet op instead.
+var UPDATE_SET_TABLE = "sys_update_set";
+
 export async function createRecord(params: CreateRecordParams): Promise<CreateRecordResult> {
   var client = params.client || createClient({});
   var table = params.table;
@@ -50,6 +57,13 @@ export async function createRecord(params: CreateRecordParams): Promise<CreateRe
     throw new Error(
       "create-record: refusing to write " + table + " as data — it is a schema table. "
         + "Use add-column / create-table for schema changes."
+    );
+  }
+  if (table === UPDATE_SET_TABLE) {
+    throw new Error(
+      "create-record: refusing to create a sys_update_set record — the generic createRecord op "
+        + "does not set its application, so the set would land in the session app. "
+        + "Use `dove createUpdateSet --name <name> --scope <scope>` instead."
     );
   }
   var fieldNames = params.fields ? Object.keys(params.fields) : [];

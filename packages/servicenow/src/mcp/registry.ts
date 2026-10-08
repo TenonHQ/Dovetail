@@ -895,7 +895,8 @@ export function buildDescriptors(
         "specified update set, then READ BACK to verify. Wraps the scope- and update-set-aware " +
         "createRecord core op (switches app scope + update set server-side, inserts, restores both — " +
         "so the record lands in the right scope without sys_user_preference mutation). REFUSES schema " +
-        "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those. fields is a " +
+        "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those — and " +
+        "sys_update_set (the op cannot set its application; use `dove createUpdateSet`). fields is a " +
         "flat name->string map; scope and updateSetSysId are required; ifAbsentQuery makes re-runs " +
         "idempotent (skips the insert when it already matches a row); dryRun:true returns the plan " +
         "without writing. To UPDATE an existing record use set_field.",
