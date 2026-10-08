@@ -405,6 +405,30 @@ function applyManifestDeltas(deltas) {
  * resets onto the latest tip, re-applies only the field-level edits this run
  * made, and regenerates the lockfile and release manifest from that tip.
  */
+/**
+ * Fail closed before pushing the release commit: it is pushed with a key that
+ * bypasses review, so verify it only touches the lockfile, package manifests
+ * (version + @tenonhq/* ranges) and release metadata. A stale-checkout release
+ * commit once reverted unrelated merged PRs; this stops the next variant.
+ */
+function assertReleaseCommitScope(branch) {
+  const base = "origin/" + branch;
+  const out = capture("git", ["diff", "--name-only", base, "HEAD"]);
+  const files = out ? out.split("\n").filter(function (f) { return f.trim() !== ""; }) : [];
+  const violations = releaseDelta.releaseCommitViolations(files, function (rel) {
+    const before = captureSafe("git", ["show", base + ":" + rel]);
+    const after = captureSafe("git", ["show", "HEAD:" + rel]);
+    return {
+      before: before ? JSON.parse(before) : {},
+      after: after ? JSON.parse(after) : {},
+    };
+  });
+  if (violations.length > 0) {
+    throw new Error("Release commit touches more than version bumps — refusing to push:\n  "
+      + violations.join("\n  "));
+  }
+}
+
 function commitVersionBumps(published, range, headSha) {
   console.log("\nCommitting version bumps onto the latest branch tip...");
   const deltas = captureManifestDeltas(published, headSha);
@@ -432,6 +456,7 @@ function commitVersionBumps(published, range, headSha) {
       return;
     }
     run("git", ["commit", "-m", message]);
+    assertReleaseCommitScope(branch);
     try {
       run("git", ["push", "origin", "HEAD:" + branch]);
       pushed = true;

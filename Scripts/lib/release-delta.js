@@ -111,9 +111,101 @@ function applyManifestDelta(tip, delta) {
   return result;
 }
 
+/** Paths a release commit may touch: the lockfile, package manifests, and release metadata. */
+const RELEASE_PATH_PATTERNS = [
+  /^package-lock\.json$/,
+  /^packages\/[^/]+\/package\.json$/,
+  /^packages\/core\/release-manifest\.json$/,
+  /^release-events\/[^/]+\.json$/,
+];
+
+function isReleasePath(path) {
+  for (let i = 0; i < RELEASE_PATH_PATTERNS.length; i++) {
+    if (RELEASE_PATH_PATTERNS[i].test(path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Stable JSON for comparing two values regardless of key order. */
+function canonical(value) {
+  if (Array.isArray(value)) {
+    return "[" + value.map(canonical).join(",") + "]";
+  }
+  if (isObject(value)) {
+    const keys = Object.keys(value).sort();
+    return "{" + keys.map(function (k) { return JSON.stringify(k) + ":" + canonical(value[k]); }).join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Fields a release commit changed in one package.json beyond what the
+ * publisher is allowed to move (`version` and `@tenonhq/*` dependency ranges).
+ * Returns an array of human-readable violations; empty means the edit is clean.
+ */
+function manifestScopeViolations(rel, before, after) {
+  const prev = isObject(before) ? before : {};
+  const next = isObject(after) ? after : {};
+  const violations = [];
+  const keys = {};
+  Object.keys(prev).concat(Object.keys(next)).forEach(function (k) { keys[k] = true; });
+  Object.keys(keys).forEach(function (key) {
+    if (key === "version") {
+      return;
+    }
+    if (DEP_GROUPS.indexOf(key) !== -1) {
+      const prevGroup = isObject(prev[key]) ? prev[key] : {};
+      const nextGroup = isObject(next[key]) ? next[key] : {};
+      const names = {};
+      Object.keys(prevGroup).concat(Object.keys(nextGroup)).forEach(function (n) { names[n] = true; });
+      Object.keys(names).forEach(function (name) {
+        if (prevGroup[name] !== nextGroup[name] && name.indexOf("@tenonhq/") !== 0) {
+          violations.push(rel + ": " + key + "." + name + " changed (" + prevGroup[name] + " -> " + nextGroup[name] + ")");
+        }
+      });
+      return;
+    }
+    if (canonical(prev[key]) !== canonical(next[key])) {
+      violations.push(rel + ": field \"" + key + "\" changed");
+    }
+  });
+  return violations;
+}
+
+/**
+ * Fail-closed check run on the release commit before it is pushed. `files` is
+ * the list of paths the commit changes relative to the branch tip; `readPair`
+ * returns { before, after } parsed JSON for a package.json path. Returns every
+ * violation found — a non-empty result means the commit must not be pushed.
+ */
+function releaseCommitViolations(files, readPair) {
+  const list = Array.isArray(files) ? files : [];
+  const violations = [];
+  for (let i = 0; i < list.length; i++) {
+    const rel = list[i];
+    if (!isReleasePath(rel)) {
+      violations.push(rel + ": not a release file");
+      continue;
+    }
+    if (/^packages\/[^/]+\/package\.json$/.test(rel)) {
+      const pair = readPair(rel);
+      const found = manifestScopeViolations(rel, pair && pair.before, pair && pair.after);
+      for (let v = 0; v < found.length; v++) {
+        violations.push(found[v]);
+      }
+    }
+  }
+  return violations;
+}
+
 module.exports = {
   manifestDelta: manifestDelta,
   applyManifestDelta: applyManifestDelta,
   isEmptyDelta: isEmptyDelta,
   pinnedVersion: pinnedVersion,
+  isReleasePath: isReleasePath,
+  manifestScopeViolations: manifestScopeViolations,
+  releaseCommitViolations: releaseCommitViolations,
 };

@@ -94,3 +94,69 @@ test("pinnedVersion reads single-operator pins and rejects compound ranges", fun
   assert.strictEqual(rd.pinnedVersion(">=1.0.0 <2.0.0"), null);
   assert.strictEqual(rd.pinnedVersion("workspace:*"), null);
 });
+
+// R-288-2: the release commit is pushed past review, so it must never carry
+// anything beyond version bumps. These pin the fail-closed scope check.
+function pairs(map) {
+  return function (rel) {
+    return map[rel] || { before: {}, after: {} };
+  };
+}
+
+test("releaseCommitViolations accepts a clean release commit", function () {
+  const files = [
+    "package-lock.json",
+    "packages/core/package.json",
+    "packages/core/release-manifest.json",
+    "release-events/dovetail-core@0.0.126.json",
+  ];
+  const read = pairs({
+    "packages/core/package.json": {
+      before: { name: "x", version: "0.0.125", dependencies: { "@tenonhq/dovetail-schema": "~0.0.15", axios: "^1.20.0" } },
+      after: { name: "x", version: "0.0.126", dependencies: { "@tenonhq/dovetail-schema": "~0.0.16", axios: "^1.20.0" } },
+    },
+  });
+  assert.deepStrictEqual(rd.releaseCommitViolations(files, read), []);
+});
+
+test("releaseCommitViolations refuses a workflow or source file", function () {
+  const found = rd.releaseCommitViolations(
+    [".github/workflows/publish.yml", "Scripts/lib/release-delta.js", "packages/core/src/index.ts"],
+    pairs({})
+  );
+  assert.strictEqual(found.length, 3);
+  assert.ok(found[0].indexOf(".github/workflows/publish.yml") === 0);
+});
+
+test("releaseCommitViolations refuses a third-party range change in a manifest", function () {
+  const read = pairs({
+    "packages/mcp/package.json": {
+      before: { version: "0.0.50", dependencies: { "@modelcontextprotocol/sdk": "^1.32.1" } },
+      after: { version: "0.0.51", dependencies: { "@modelcontextprotocol/sdk": "^1.30.0" } },
+    },
+  });
+  const found = rd.releaseCommitViolations(["packages/mcp/package.json"], read);
+  assert.strictEqual(found.length, 1);
+  assert.ok(found[0].indexOf("@modelcontextprotocol/sdk") !== -1);
+});
+
+test("releaseCommitViolations refuses any other manifest field change", function () {
+  const read = pairs({
+    "packages/gmail/package.json": {
+      before: { version: "0.0.13", engines: { node: ">=22.12" } },
+      after: { version: "0.0.14", engines: { node: ">=22" } },
+    },
+  });
+  const found = rd.releaseCommitViolations(["packages/gmail/package.json"], read);
+  assert.deepStrictEqual(found, ["packages/gmail/package.json: field \"engines\" changed"]);
+});
+
+test("releaseCommitViolations ignores key order in unchanged fields", function () {
+  const read = pairs({
+    "packages/core/package.json": {
+      before: { version: "1.0.0", scripts: { a: "1", b: "2" } },
+      after: { scripts: { b: "2", a: "1" }, version: "1.0.1" },
+    },
+  });
+  assert.deepStrictEqual(rd.releaseCommitViolations(["packages/core/package.json"], read), []);
+});
