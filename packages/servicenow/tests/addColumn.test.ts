@@ -1314,6 +1314,46 @@ describe("addColumn cross-scope Design Access", function () {
     expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
     expect(crossCallsOf(client).createRecordCount).toBe(0);
   });
+  it("a scoped dry-run refuses a missing dependency the same way the live run does", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn(
+        Object.assign({}, base, {
+          client: client,
+          ensureDesignAccess: true,
+          dryRun: true,
+          column: {
+            label: "Doc",
+            name: "doc",
+            type: "document_id",
+            dependent_on_field: "no_such_column",
+          },
+        }),
+      ),
+    ).rejects.toThrow(/dependent_on_field 'no_such_column' is not a column/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("catches a self-dependency on the PREFIXED cross-scope element, dry-run and live", async function () {
+    var selfDep = {
+      label: "Doc",
+      name: "doc",
+      type: "document_id",
+      dependent_on_field: "x_cadso_journey_doc",
+    };
+    var dryClient = crossScopeClient({});
+    await expect(
+      addColumn(Object.assign({}, base, { client: dryClient, dryRun: true, column: selfDep })),
+    ).rejects.toThrow(/'x_cadso_journey_doc' names the column being added/);
+    var liveCl = crossScopeClient({});
+    await expect(
+      addColumn(
+        Object.assign({}, base, { client: liveCl, ensureDesignAccess: true, column: selfDep }),
+      ),
+    ).rejects.toThrow(/'x_cadso_journey_doc' names the column being added/);
+    expect(crossCallsOf(liveCl).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(liveCl).createRecordCount).toBe(0);
+  });
   it("reports an unreadable record as UNKNOWN (null), not missing", async function () {
     var client = crossScopeClient({ designAccess: "error" });
     var result = await addColumn(Object.assign({ client: client }, base));

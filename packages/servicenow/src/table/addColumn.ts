@@ -521,6 +521,49 @@ export function designAccessNote(
   );
 }
 
+/**
+ * Refuse a dependent_on_field that names the column being added (as it will be STORED —
+ * scope-prefixed on a cross-scope column) or that is not a column on the table. ServiceNow
+ * accepts any string in dependent_on_field without checking it, so a typo would land
+ * silently and every document_id on the table would resolve against nothing. Only the
+ * table's OWN dictionary rows are searched — a dependency on an inherited column is not
+ * supported here; add it on the defining table instead. `wantDependent` has already been
+ * validated as a plain element name. Shared by the scoped dry-run and the live path.
+ */
+async function assertDependencyExists(
+  client: ServiceNowClient,
+  tableName: string,
+  plannedElement: string,
+  wantDependent: string,
+): Promise<void> {
+  if (wantDependent === plannedElement) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' names the column being added — a column cannot depend on itself.",
+    );
+  }
+  var dependencyRows = await client.table.query<Record<string, unknown>>(
+    "sys_dictionary",
+    "name=" + tableName + "^element=" + wantDependent,
+    { limit: 1, fields: ["sys_id", "element"] },
+  );
+  // The row found must BE the requested element, not merely some row the query matched.
+  if (
+    dependencyRows.length === 0 ||
+    fieldToString(dependencyRows[0].element) !== wantDependent
+  ) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' is not a column on '" +
+        tableName +
+        "' (its own sys_dictionary rows were searched; inherited columns are not " +
+        "considered). Add that column first, then re-run. Nothing was written.",
+    );
+  }
+}
+
 export async function addColumn(
   params: AddColumnParams,
 ): Promise<AddColumnResult> {
@@ -594,6 +637,17 @@ async function addColumnInner(
       params.crossScope === true;
     var planned: ColumnPlan | undefined;
     if (hasScopeAsk) planned = await planColumnScope(client, params, element);
+    // Once the dry-run is talking to the instance, check the dependency too — otherwise a
+    // missing (or, cross-scope, self-referencing prefixed) dependency dry-runs clean and
+    // only fails live.
+    if (planned && wantDependent) {
+      await assertDependencyExists(
+        client,
+        planned.resolved.name,
+        planned.element,
+        wantDependent,
+      );
+    }
     var planElement = planned ? planned.element : element;
     var planTable = planned ? planned.resolved.name : params.table;
     var planTableSysId = planned
@@ -662,31 +716,10 @@ async function addColumnInner(
   // Reference (and date) columns carry no max_length at all.
   var wantLength = col.type === "reference" ? "" : col.maxLength;
 
-  // The dependency target must EXIST on this table before the insert. ServiceNow
-  // accepts any string in dependent_on_field without checking it, so a typo would
-  // land silently and every document_id on the table would resolve against nothing.
-  // Only the table's OWN dictionary rows are searched — a dependency on an inherited
-  // column is not supported here; add it on the defining table instead.
+  // The dependency target must EXIST on this table before anything is written — the
+  // same check the scoped dry-run ran, against the element the plan will store.
   if (wantDependent) {
-    var dependencyRows = await client.table.query<Record<string, unknown>>(
-      "sys_dictionary",
-      "name=" + resolved.name + "^element=" + wantDependent,
-      { limit: 1, fields: ["sys_id", "element"] },
-    );
-    // The row found must BE the requested element, not merely some row the query matched.
-    if (
-      dependencyRows.length === 0 ||
-      fieldToString(dependencyRows[0].element) !== wantDependent
-    ) {
-      throw new Error(
-        "add-column: dependent_on_field '" +
-          wantDependent +
-          "' is not a column on '" +
-          resolved.name +
-          "' (its own sys_dictionary rows were searched; inherited columns are not " +
-          "considered). Add that column first, then re-run. Nothing was written.",
-      );
-    }
+    await assertDependencyExists(client, resolved.name, element, wantDependent);
   }
 
   // Create the missing Design Access record when asked — AFTER every check that can still
