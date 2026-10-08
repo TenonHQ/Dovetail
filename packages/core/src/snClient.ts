@@ -418,15 +418,35 @@ export const snClient = (
     return client.patch(endpoint, fields);
   };
 
-  const getScopeId = (scopeName: string) => {
+  // Resolve a scope name to its sys_scope sys_id. `scope=<name>` is not unique
+  // on every instance: `scope=global` also matches sys_app rows (their scope
+  // column is "global"), so the real Global scope is addressed by its fixed
+  // sys_id, and any other ambiguous name is refused rather than guessed.
+  const getScopeId = async (
+    scopeName: string,
+  ): Promise<AxiosResponse<Sinc.SNAPIResponse<SN.ScopeRecord[]>>> => {
     const endpoint = "api/now/table/sys_scope";
     type ScopeResponse = Sinc.SNAPIResponse<SN.ScopeRecord[]>;
-    return client.get<ScopeResponse>(endpoint, {
+    const query =
+      scopeName === "global" ? "sys_id=global" : `scope=${scopeName}`;
+    const resp = await client.get<ScopeResponse>(endpoint, {
       params: {
-        sysparm_query: `scope=${scopeName}`,
+        sysparm_query: query,
         sysparm_fields: "sys_id",
       },
     });
+    const rows =
+      resp && resp.data && Array.isArray(resp.data.result)
+        ? resp.data.result
+        : [];
+    if (rows.length > 1) {
+      const ids = rows.map((row) => (row && row.sys_id) || "?").join(", ");
+      throw new Error(
+        `Scope "${scopeName}" is ambiguous: ${rows.length} sys_scope rows match ` +
+          `(${ids}). Refusing to guess which one owns the change.`,
+      );
+    }
+    return resp;
   };
 
   const getScopeById = (scopeSysId: string) => {
