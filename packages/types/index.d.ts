@@ -54,6 +54,10 @@ export namespace Sinc {
      * carry no sys_scope (sys_choice). `{scope}` → the app scope name, `{scopeId}` → its
      * sys_id. A table with a scopeQuery is also added to every scope's table list, since
      * it cannot be discovered through sys_metadata. Example: "nameSTARTSWITH{scope}_".
+     * Fails closed: the server returns no records for the table (and logs a warning) unless
+     * the query carries a {scope}/{scopeId} token, has no ^NQ, and every term's field is a
+     * real column on the table (no dot-walks) — ServiceNow ignores an unknown column, which
+     * would otherwise return the whole table.
      */
     scopeQuery?: string;
     /**

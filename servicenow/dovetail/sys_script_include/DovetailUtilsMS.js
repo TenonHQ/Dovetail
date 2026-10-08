@@ -87,6 +87,98 @@ DovetailUtilsMS.prototype = {
       .replace(/\{scopeId\}/g, scopeId || "");
   },
 
+  // Fail-closed gate for a `scopeQuery`. ServiceNow silently drops an encoded-query
+  // term on an unknown column, so a typo'd scopeQuery would return the WHOLE table
+  // (sys_choice: >200k rows) — and because the table is listed for every scope, every
+  // scope's manifest/bulk download would walk it. Returns { ok, query, reason }; the
+  // caller must not run the query unless ok is true.
+  //
+  // Rules: the template must carry {scope} or {scopeId}, and each token it uses must
+  // render non-empty; ^NQ is refused; every ^ / ^OR term must be "<field><operator>…"
+  // (or ORDERBY/ORDERBYDESC<field>) with a field recGR.isValidField() accepts.
+  // Dot-walked fields cannot be verified here, so they are refused.
+  validateScopeQuery: function (recGR, scopeQuery, scopeName, scopeId) {
+    var template = String(scopeQuery);
+    var usesScope = template.indexOf("{scope}") !== -1;
+    var usesScopeId = template.indexOf("{scopeId}") !== -1;
+
+    if (!usesScope && !usesScopeId) {
+      return {
+        ok: false,
+        reason: "it has no {scope} or {scopeId} token, so it would pull the same rows into every scope"
+      };
+    }
+
+    if ((usesScope && !scopeName) || (usesScopeId && !scopeId)) {
+      return {
+        ok: false,
+        reason: "a scope token renders empty (scope name or sys_id not resolved)"
+      };
+    }
+
+    if (!recGR || typeof recGR.isValidField !== "function") {
+      return { ok: false, reason: "field names cannot be verified on this table" };
+    }
+
+    var query = this.resolveScopeQuery(template, scopeName, scopeId);
+
+    if (query.indexOf("^NQ") !== -1) {
+      return { ok: false, reason: "^NQ (new query) is not allowed — it escapes the scope bound" };
+    }
+
+    var terms = query.split("^");
+
+    for (var t = 0; t < terms.length; t++) {
+      var term = terms[t];
+      var field = "";
+
+      if (term === "") {
+        return { ok: false, reason: "it contains an empty term (^^ or a leading/trailing ^)" };
+      }
+
+      if (term.indexOf("ORDERBYDESC") === 0) {
+        field = term.substring("ORDERBYDESC".length);
+      } else if (term.indexOf("ORDERBY") === 0) {
+        field = term.substring("ORDERBY".length);
+      } else {
+        if (t > 0 && term.indexOf("OR") === 0) {
+          term = term.substring(2);
+        }
+
+        var fieldMatch = /^[a-z0-9_.]+/.exec(term);
+        field = fieldMatch ? fieldMatch[0] : "";
+        var rest = term.substring(field.length);
+
+        if (field === "") {
+          return { ok: false, reason: "term '" + terms[t] + "' does not start with a field name" };
+        }
+
+        if (rest === "" || !/^[A-Z=!<>]/.test(rest)) {
+          return {
+            ok: false,
+            reason: "term '" + terms[t] + "' has no recognisable operator after field '" + field + "'"
+          };
+        }
+      }
+
+      if (field.indexOf(".") !== -1) {
+        return {
+          ok: false,
+          reason: "dot-walked field '" + field + "' cannot be verified — use a column on the table itself"
+        };
+      }
+
+      if (field === "" || !recGR.isValidField(field)) {
+        return {
+          ok: false,
+          reason: "field '" + field + "' does not exist on the table (ServiceNow would ignore the term and return every row)"
+        };
+      }
+    }
+
+    return { ok: true, query: query };
+  },
+
   getManifest: function (config) {
     var scopeName = config.scopeName;
     var getContents = config.getContents === undefined ? false : config.getContents;
@@ -159,8 +251,25 @@ DovetailUtilsMS.prototype = {
     // Scope membership. Platform-config tables that carry no sys_scope (sys_choice)
     // declare a `scopeQuery` instead — an encoded query with a {scope} token, e.g.
     // "nameSTARTSWITH{scope}_" — which replaces the sys_scope filter outright.
+    // The query is validated first and refused (empty map, query() never runs) if
+    // it cannot be proven to stay inside the scope — see validateScopeQuery.
     if (typeof tableOptions.scopeQuery === "string" && tableOptions.scopeQuery !== "") {
-      recGR.addEncodedQuery(this.resolveScopeQuery(tableOptions.scopeQuery, scopeName, scopeId));
+      var scopeCheck = this.validateScopeQuery(recGR, tableOptions.scopeQuery, scopeName, scopeId);
+
+      if (!scopeCheck.ok) {
+        gs.warn(
+          "DovetailUtilsMS: refusing scopeQuery for " +
+            tableName +
+            " ('" +
+            tableOptions.scopeQuery +
+            "'): " +
+            scopeCheck.reason +
+            ". No records returned for this table."
+        );
+        return results;
+      }
+
+      recGR.addEncodedQuery(scopeCheck.query);
     } else {
       recGR.addQuery("sys_scope", scopeId);
     }
