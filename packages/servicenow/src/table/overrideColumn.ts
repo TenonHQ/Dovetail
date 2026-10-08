@@ -14,9 +14,11 @@
  * established live on tenonworkshed, 2026-07-16, by querying real rows:
  *
  *   - sys_dictionary_override carries a VALUE column and a paired `<attr>_override`
- *     boolean, for mandatory / read_only / default_value (plus calculation, dependent,
- *     reference_qual, attributes — outside this verb's five). The boolean is what
- *     ACTIVATES the override: a value written without its flag is inert.
+ *     boolean, for mandatory / read_only / default_value / dependent (plus calculation,
+ *     reference_qual, attributes — outside this verb). The boolean is what ACTIVATES the
+ *     override: a value written without its flag is inert. `dependent` is the override
+ *     of sys_dictionary.dependent_on_field — note the different column name (verified
+ *     live: OOB cmdb_ci_business_process.owned_by overrides dependent=managed_by_group).
  *
  *   - There is NO max_length override and NO label override on that table. max_length is
  *     physical on the defining table's column, so it genuinely cannot be narrowed per
@@ -74,7 +76,9 @@ export interface OverridableAttribute {
 
 /**
  * The inherited attributes a child can narrow for itself, keyed by the sys_dictionary
- * column set-column diffs on. Anything absent is NOT overridable per-child:
+ * column set-column diffs on. `field` is the sys_dictionary_override column, which is
+ * NOT always the same name (dependent_on_field -> dependent). Anything absent is NOT
+ * overridable per-child:
  *   - column_label -> sys_documentation instead (see applyLabelOverride)
  *   - max_length   -> physical on the defining table; no override exists at all
  */
@@ -82,58 +86,20 @@ export var OVERRIDABLE: Record<string, OverridableAttribute> = {
   mandatory: { field: "mandatory", flag: "mandatory_override" },
   default_value: { field: "default_value", flag: "default_value_override" },
   read_only: { field: "read_only", flag: "read_only_override" },
+  dependent_on_field: { field: "dependent", flag: "dependent_override" },
 };
 
 /**
- * Why max_length — alone among set-column's five attributes — cannot be narrowed on a
- * child, and what that means for the caller.
+ * Why max_length — alone among set-column's attributes — cannot be narrowed on a child,
+ * and what that means for the caller.
  *
  * Deliberately max_length-specific rather than a general "attribute X is not
- * overridable" helper: of the original five, the other four ARE overridable, so a
- * generic branch would be unreachable code speculating about a case that does not
- * exist. The sixth attribute, dependent_on_field, arrived and got its own explainer
- * above rather than a generic one — same reasoning.
+ * overridable" helper: every other attribute set-column supports IS overridable, so a
+ * generic branch would be unreachable code speculating about a case that does not exist.
  *
  * Unlike the old blanket refusal this one is true, and it says WHY rather than
  * recommending the destructive alternative as though it were routine.
  */
-/**
- * The sixth attribute that comment warned about. dependent_on_field is a plain
- * dictionary-row field on the DEFINING table and sys_dictionary_override has no column
- * for it, so — like max_length — it cannot be narrowed for one child. Unlike max_length
- * it is not physical: setting it on the defining table repoints every descendant's
- * document_id resolution, but moves no data.
- */
-export function explainDependentOnFieldNotOverridable(
-  table: string,
-  column: string,
-  definedOn: string,
-): string {
-  return (
-    "set-column: refusing to change dependent_on_field of '" +
-    column +
-    "' on '" +
-    table +
-    "' — the column is INHERITED from '" +
-    definedOn +
-    "' and sys_dictionary_override carries no dependent_on_field, so there is no way " +
-    "to set it for '" +
-    table +
-    "' alone. Setting it on '" +
-    definedOn +
-    "' changes what '" +
-    column +
-    "' resolves against on EVERY table that extends '" +
-    definedOn +
-    "'; do that deliberately, with --table " +
-    definedOn +
-    ", if that is what you want. The other attributes (label, mandatory, default, " +
-    "readOnly) CAN be set on '" +
-    table +
-    "' alone."
-  );
-}
-
 export function explainMaxLengthNotOverridable(
   table: string,
   column: string,

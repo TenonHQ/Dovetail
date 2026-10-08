@@ -7,7 +7,13 @@ import * as fUtils from "./FileUtils";
 import { setupDotEnv, getLoginInfo } from "./wizard";
 import { defaultClient, unwrapSNResponse } from "./snClient";
 import { setLogLevel } from "./commands";
-import { isClaudeCodeSession, WATCH_HUMAN_ONLY_WARNING } from "./claudeSession";
+import {
+  isClaudeCodeSession,
+  isClaudeCodeToolShell,
+  isWatchInClaudeAllowed,
+  WATCH_BLOCKED_IN_CLAUDE_ERROR,
+  WATCH_HUMAN_ONLY_WARNING,
+} from "./claudeSession";
 import * as path from "path";
 import * as fs from "fs";
 import { spawn, ChildProcess } from "child_process";
@@ -432,9 +438,18 @@ export async function initScopesCommand(args: Sinc.SharedCmdArgs & { delay?: num
 export async function watchAllScopesCommand(args: Sinc.WatchCmdArgs) {
   setLogLevel(args);
 
-  // Soft guard, not a hard fail: `watch` is a human-only local-dev tool and a
-  // branch switch mid-watch overwrites instance records. Warn an agent off it
-  // but leave the human path untouched. See TenonHQ/Dovetail#155.
+  // `watch` is a human-only local-dev tool and a branch switch mid-watch
+  // overwrites instance records. An agent's shell call blocks on (or
+  // backgrounds) the daemon, so a warning alone can't stop it: fail closed in
+  // a Claude Code tool shell (CLAUDECODE) unless a human sets the override.
+  // The broader CLAUDE_CODE_* signal also matches humans' config variables,
+  // so it only warns. See TenonHQ/Dovetail#155.
+  if (isClaudeCodeToolShell() && !isWatchInClaudeAllowed()) {
+    logger.error(WATCH_BLOCKED_IN_CLAUDE_ERROR);
+    fileLogger.warn("watch refused inside a Claude Code tool shell (TenonHQ/Dovetail#155)");
+    process.exit(1);
+    return;
+  }
   if (isClaudeCodeSession()) {
     logger.warn(WATCH_HUMAN_ONLY_WARNING);
     fileLogger.warn("dove watch started inside a Claude Code session (TenonHQ/Dovetail#155)");

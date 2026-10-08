@@ -612,6 +612,40 @@ describe("addColumn dependent_on_field", function () {
     ).rejects.toThrow(/cannot depend on itself/);
   });
 
+  it("refuses a dependent_on_field carrying encoded-query operators, before any network call", async function () {
+    await expect(
+      addColumn({
+        client: noNetworkClient(),
+        table: "x_cadso_journey",
+        column: Object.assign({}, documentId, { dependent_on_field: "nope^ORelement=sys_id" }),
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/dependent_on_field 'nope\^ORelement=sys_id' is not a valid column name/);
+  });
+
+  it("refuses when the dependency lookup returns a DIFFERENT element than requested", async function () {
+    var client = liveClient({});
+    var table = (client as unknown as {
+      table: { query: (t: string, q: string, o?: unknown) => Promise<Array<Record<string, unknown>>> };
+    }).table;
+    var realQuery = table.query;
+    table.query = async function (t: string, q: string, o?: unknown) {
+      if (t === "sys_dictionary" && q.indexOf("^element=table") > 0) {
+        return [{ sys_id: "OTHER", element: "sys_id" }];
+      }
+      return realQuery(t, q, o);
+    };
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_journey",
+        column: documentId,
+        updateSetSysId: "us1",
+      }),
+    ).rejects.toThrow(/dependent_on_field 'table' is not a column on 'x_cadso_journey'/);
+    expect(callsOf(client).createRecordFields).toEqual({});
+  });
+
   it("carries dependent_on_field on the insert and verifies it on the read-back", async function () {
     var client = liveClient({});
     var result = await addColumn({
@@ -771,7 +805,7 @@ function crossCallsOf(client: ServiceNowClient): CrossCalls {
 /**
  * Stub instance: table x_cadso_automate_email_batch (scope AUTOSYS / x_cadso_automate,
  * alter_access per opts), scope x_cadso_journey (JOURNEYSYS), update set "usj" in
- * Journey and "usa" in Automate. The read-back echoes the inserted element + sys_scope
+ * Journey and "usa" in Automate (both in progress), "usc" a COMPLETE set in Journey. The read-back echoes the inserted element + sys_scope
  * unless pinned by opts.
  */
 function crossScopeClient(opts: {
@@ -827,6 +861,7 @@ function crossScopeClient(opts: {
                 sys_id: "DASYS",
                 source_scope: { value: made.source_scope },
                 target_package: { value: made.target_package },
+                sys_scope: { value: made.source_scope },
               },
             ];
           }
@@ -838,8 +873,9 @@ function crossScopeClient(opts: {
           return [];
         }
         if (table === "sys_update_set") {
-          if (query === "sys_id=usj") return [{ sys_id: "usj", name: "Journey set", application: { value: "JOURNEYSYS" } }];
-          if (query === "sys_id=usa") return [{ sys_id: "usa", name: "Automate set", application: { value: "AUTOSYS" } }];
+          if (query === "sys_id=usj") return [{ sys_id: "usj", name: "Journey set", application: { value: "JOURNEYSYS" }, state: "in progress" }];
+          if (query === "sys_id=usa") return [{ sys_id: "usa", name: "Automate set", application: { value: "AUTOSYS" }, state: "in progress" }];
+          if (query === "sys_id=usc") return [{ sys_id: "usc", name: "Closed Journey set", application: { value: "JOURNEYSYS" }, state: "complete" }];
           return [];
         }
         if (table === "sys_dictionary") {
@@ -1091,6 +1127,38 @@ describe("addColumn cross-scope", function () {
       }),
     ).rejects.toThrow(/does not belong to the column's scope 'x_cadso_journey'/);
   });
+  it("refuses a closed update set in the column's scope and writes nothing", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        ensureDesignAccess: true,
+        updateSetSysId: "usc",
+      }),
+    ).rejects.toThrow(/'Closed Journey set' is 'complete', not 'in progress'/);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+  });
+  it("a cross-scope dry-run with a closed update set is refused too", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        updateSetSysId: "usc",
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/not 'in progress'/);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+  });
   it("treats crossScope + the table's OWN scope as a plain same-scope add", async function () {
     var client = crossScopeClient({});
     var result = await addColumn({
@@ -1226,6 +1294,65 @@ describe("addColumn cross-scope Design Access", function () {
     expect(result.columnSysId).toBe("");
     expect(result.note).toMatch(/column was NOT added/);
     expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("ensureDesignAccess writes nothing when the column's dependency is missing", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn(
+        Object.assign({}, base, {
+          client: client,
+          ensureDesignAccess: true,
+          column: {
+            label: "Doc",
+            name: "doc",
+            type: "document_id",
+            dependent_on_field: "no_such_column",
+          },
+        }),
+      ),
+    ).rejects.toThrow(/dependent_on_field 'no_such_column' is not a column .* Nothing was written/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("a scoped dry-run refuses a missing dependency the same way the live run does", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn(
+        Object.assign({}, base, {
+          client: client,
+          ensureDesignAccess: true,
+          dryRun: true,
+          column: {
+            label: "Doc",
+            name: "doc",
+            type: "document_id",
+            dependent_on_field: "no_such_column",
+          },
+        }),
+      ),
+    ).rejects.toThrow(/dependent_on_field 'no_such_column' is not a column/);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+  });
+  it("catches a self-dependency on the PREFIXED cross-scope element, dry-run and live", async function () {
+    var selfDep = {
+      label: "Doc",
+      name: "doc",
+      type: "document_id",
+      dependent_on_field: "x_cadso_journey_doc",
+    };
+    var dryClient = crossScopeClient({});
+    await expect(
+      addColumn(Object.assign({}, base, { client: dryClient, dryRun: true, column: selfDep })),
+    ).rejects.toThrow(/'x_cadso_journey_doc' names the column being added/);
+    var liveCl = crossScopeClient({});
+    await expect(
+      addColumn(
+        Object.assign({}, base, { client: liveCl, ensureDesignAccess: true, column: selfDep }),
+      ),
+    ).rejects.toThrow(/'x_cadso_journey_doc' names the column being added/);
+    expect(crossCallsOf(liveCl).designAccessCreates).toHaveLength(0);
+    expect(crossCallsOf(liveCl).createRecordCount).toBe(0);
   });
   it("reports an unreadable record as UNKNOWN (null), not missing", async function () {
     var client = crossScopeClient({ designAccess: "error" });

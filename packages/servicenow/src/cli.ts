@@ -1772,7 +1772,14 @@ async function runIndexList(flags: Record<string, string>): Promise<number> {
     return 0;
   }
   process.stdout.write(
-    result.table + " — " + result.indexes.length + " index(es)\n",
+    result.table +
+      " — " +
+      result.indexes.length +
+      " index(es)" +
+      (result.storageTable && result.storageTable !== result.table
+        ? " (stored in " + result.storageTable + "'s physical table — these are its indexes)"
+        : "") +
+      "\n",
   );
   for (var i = 0; i < result.indexes.length; i += 1) {
     var idx = result.indexes[i];
@@ -2241,14 +2248,18 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
  * dove-sn delete-record:
  *   --table x_cadso_core_metric_point_type
  *   --sys-id <32-hex sys_id>                     (the record to delete)
- *   --update-set <sys_id>                        (required — the delete is captured here, never the
- *                                                 session default; server honours it once #297 ships)
+ *   --update-set <sys_id>                        (required — must exist and be in progress; pinned as
+ *                                                 the session's current set before the delete, and the
+ *                                                 DELETE capture row is read back from sys_update_xml)
  *   [--apply]                                    (DRY-RUN BY DEFAULT — nothing is deleted without it)
  *   [--dry-run] [--json]                         (--dry-run wins over --apply)
  * Reads the record BEFORE (a missing record is an error, not a no-op delete) and AFTER
  * (success is only reported once the record is confirmed gone).
- * Exit codes: 0 deleted/dry-run, 1 bad args or missing record, 2 delete returned but the
- * record is STILL PRESENT on read-back.
+ * Exit codes: 0 deleted (and captured in the requested set) / dry-run, 1 bad args, missing
+ * record or unknown/closed update set, 2 the record is STILL PRESENT on read-back (including a
+ * delete the server refused with an error), its state is unknown, the update-set pin did not
+ * take (nothing deleted), or it was deleted but the DELETE capture landed in a different set or
+ * could not be read back. A table with no update-set capture at all exits 0 with a note.
  */
 async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
   var table = flags.table;
@@ -2296,7 +2307,15 @@ async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
         result.sysId +
         " → update set " +
         result.updateSetSysId +
+        (result.updateSetName ? " (" + result.updateSetName + ")" : "") +
         (result.verified ? " — verified gone" : "") +
+        (result.status === "deleted"
+          ? (result.captureState === "in-set"
+            ? ", capture verified"
+            : result.captureState === "none"
+              ? ", no update-set capture (table not recorded?)"
+              : ", NOT captured in that set")
+          : "") +
         "\n" +
         result.note +
         "\n",
@@ -2306,6 +2325,11 @@ async function runDeleteRecord(flags: Record<string, string>): Promise<number> {
     }
   }
   if (result.status === "failed") return 2;
+  // Gone but the DELETE landed in ANOTHER set (the requested set would promote without it),
+  // or the capture could not be read back: neither may read as success to a script. A table
+  // that is not recorded in update sets at all ("none") is a plain data delete — exit 0, and
+  // the note says the delete will not travel.
+  if (result.status === "deleted" && (result.captureState === "other-set" || result.captureState === "unverified")) return 2;
   return 0;
 }
 

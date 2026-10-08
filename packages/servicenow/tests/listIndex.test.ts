@@ -230,3 +230,112 @@ describe("listIndexes — what it refuses to claim", function () {
     expect(result.indexes[0].type).toBe("btree");
   });
 });
+
+describe("listIndexes — table-per-hierarchy children (indexes live on the storage root)", function () {
+  var CHILD = "x_cadso_work_campaign";
+  var MIDDLE = "x_cadso_work_item";
+  var ROOT = "task";
+  var CHILD_ID = "11111111111111111111111111111111";
+  var MIDDLE_ID = "22222222222222222222222222222222";
+  var ROOT_ID = "33333333333333333333333333333333";
+
+  /** sys_db_object + v_db_index served per query, as the instance would. */
+  function hierarchyClient(opts: {
+    objects: Array<{ sys_id: string; name: string; super_class: string }>;
+    indexesByTable: Record<string, Array<Record<string, string>>>;
+  }) {
+    return makeMockClient({
+      query: async function (table: string, query?: string) {
+        var q = String(query || "");
+        if (table === "v_db_index") {
+          var name = q.replace(/^table_name=/, "");
+          return opts.indexesByTable[name] || [];
+        }
+        if (table === "sys_db_object") {
+          return opts.objects
+            .filter(function (o) {
+              return q === "name=" + o.name || q === "sys_id=" + o.sys_id;
+            })
+            .map(function (o) {
+              return {
+                sys_id: o.sys_id,
+                name: o.name,
+                super_class: o.super_class ? { value: o.super_class } : "",
+              };
+            });
+        }
+        throw new Error("unexpected table " + table);
+      },
+    });
+  }
+
+  var OBJECTS = [
+    { sys_id: CHILD_ID, name: CHILD, super_class: MIDDLE_ID },
+    { sys_id: MIDDLE_ID, name: MIDDLE, super_class: ROOT_ID },
+    { sys_id: ROOT_ID, name: ROOT, super_class: "" },
+  ];
+  var ROOT_INDEXES: Record<string, Array<Record<string, string>>> = {};
+  ROOT_INDEXES[ROOT] = [
+    row("PRIMARY", "[sys_id]", ROOT),
+    row("task_number", "[number]", ROOT),
+  ];
+
+  it("lists the storage root's indexes and names the root", async function () {
+    var ctx = hierarchyClient({ objects: OBJECTS, indexesByTable: ROOT_INDEXES });
+    var result = await listIndexes({ client: ctx.client, table: CHILD });
+    expect(result.table).toBe(CHILD);
+    expect(result.storageTable).toBe(ROOT);
+    expect(
+      result.indexes.map(function (i) {
+        return i.name;
+      }),
+    ).toEqual(["PRIMARY", "task_number"]);
+    expect(result.note).toMatch(/stored in 'task''s physical table/);
+    expect(result.note).toMatch(/table-per-hierarchy/);
+    expect(result.note).toMatch(/x_cadso_work_campaign -> x_cadso_work_item -> task/);
+    // The old "the table name is wrong" guess must NOT be made for a table that exists.
+    expect(result.note).not.toMatch(/name is wrong/);
+    expect(result.unverified).toContain("uniqueness-enforced");
+  });
+
+  it("a table with its own rows is its own storage table and walks nothing", async function () {
+    var byTable: Record<string, Array<Record<string, string>>> = {};
+    byTable[CHILD] = [row("PRIMARY", "[sys_id]", CHILD)];
+    var ctx = hierarchyClient({ objects: OBJECTS, indexesByTable: byTable });
+    var result = await listIndexes({ client: ctx.client, table: CHILD });
+    expect(result.storageTable).toBe(CHILD);
+    expect(result.indexes).toHaveLength(1);
+    expect(
+      ctx.calls.tableQuery.some(function (c) {
+        return c.table === "sys_db_object";
+      }),
+    ).toBe(false);
+  });
+
+  it("a table that does not exist says the name is wrong", async function () {
+    var ctx = hierarchyClient({ objects: OBJECTS, indexesByTable: ROOT_INDEXES });
+    var result = await listIndexes({ client: ctx.client, table: "x_cadso_nope" });
+    expect(result.storageTable).toBe("x_cadso_nope");
+    expect(result.indexes).toEqual([]);
+    expect(result.note).toMatch(/not found in sys_db_object/);
+  });
+
+  it("an existing table with no indexed ancestor is reported as unreadable, not unindexed", async function () {
+    var ctx = hierarchyClient({ objects: OBJECTS, indexesByTable: {} });
+    var result = await listIndexes({ client: ctx.client, table: CHILD });
+    expect(result.indexes).toEqual([]);
+    expect(result.storageTable).toBe(CHILD);
+    expect(result.note).toMatch(/NOT evidence the table is unindexed/);
+  });
+
+  it("a cyclic super_class chain terminates", async function () {
+    var cyclic = [
+      { sys_id: CHILD_ID, name: CHILD, super_class: MIDDLE_ID },
+      { sys_id: MIDDLE_ID, name: MIDDLE, super_class: CHILD_ID },
+    ];
+    var ctx = hierarchyClient({ objects: cyclic, indexesByTable: {} });
+    var result = await listIndexes({ client: ctx.client, table: CHILD });
+    expect(result.indexes).toEqual([]);
+    expect(ctx.calls.tableQuery.length).toBeLessThan(10);
+  });
+});

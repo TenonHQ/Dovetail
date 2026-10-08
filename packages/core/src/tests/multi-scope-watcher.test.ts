@@ -87,6 +87,12 @@ jest.mock("../recentEdits", () => ({
   writeRecentEdit: jest.fn(),
 }));
 
+// Branch-switch guard: default to "not a git work tree" (guard off) so the
+// existing tests keep today's behaviour; the guard block overrides it.
+jest.mock("../gitHead", () => ({
+  readGitHead: jest.fn().mockResolvedValue(null),
+}));
+
 jest.mock("../Logger", () => ({
   logger: {
     info: jest.fn(),
@@ -141,6 +147,7 @@ import { getFileContextFromPath, getFileContextWithSkipReason } from "../FileUti
 import { groupAppFiles, pushFiles } from "../appUtils";
 import { logFilePush } from "../logMessages";
 import { logger } from "../Logger";
+import { readGitHead } from "../gitHead";
 import { multiScopeWatcher, startMultiScopeWatching, stopMultiScopeWatching } from "../MultiScopeWatcher";
 
 // Helper to flush microtask queue (for async code in setInterval callbacks)
@@ -476,6 +483,99 @@ describe("MultiScopeWatcherManager", () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining("Watcher error: FS error"),
       );
+    });
+  });
+
+  describe("branch-switch guard (git HEAD)", () => {
+    var HEAD_A = "a".repeat(40);
+    var HEAD_B = "b".repeat(40);
+
+    beforeEach(async () => {
+      (ConfigManager.getConfig as jest.Mock).mockReturnValue({
+        ...MOCK_CONFIG_TWO_SCOPES,
+        scopes: { x_test_core: { sourceDirectory: "src/x_test_core" } },
+      });
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      (getFileContextWithSkipReason as jest.Mock).mockReturnValue({ context: makeFileContext() });
+      (groupAppFiles as jest.Mock).mockReturnValue([{ table: "sys_script_include", sysId: "abc123", fields: {} }]);
+      (pushFiles as jest.Mock).mockResolvedValue([{ success: true, message: "ok" }]);
+    });
+
+    afterEach(() => {
+      (readGitHead as jest.Mock).mockReset();
+      (readGitHead as jest.Mock).mockResolvedValue(null);
+    });
+
+    it("reads HEAD in the project root at start", async () => {
+      (readGitHead as jest.Mock).mockResolvedValue(HEAD_A);
+
+      await startMultiScopeWatching();
+
+      expect(readGitHead).toHaveBeenCalledWith("/project");
+    });
+
+    it("pushes when HEAD is unchanged at flush time", async () => {
+      (readGitHead as jest.Mock).mockResolvedValue(HEAD_A);
+      await startMultiScopeWatching();
+
+      mockWatchers[0]._emit("change", makeFileContext().filePath);
+      await capturedDebounceFns[0]();
+
+      expect(readGitHead).toHaveBeenCalledTimes(2);
+      expect(pushFiles).toHaveBeenCalledTimes(1);
+      expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining("Git HEAD changed"));
+    });
+
+    it("drops the queue, pushes nothing, logs an error and pauses when HEAD moves between enqueue and flush", async () => {
+      (readGitHead as jest.Mock).mockResolvedValue(HEAD_A);
+      await startMultiScopeWatching();
+
+      mockWatchers[0]._emit("change", makeFileContext().filePath);
+      // A `git checkout` lands before the debounce fires.
+      (readGitHead as jest.Mock).mockResolvedValue(HEAD_B);
+      await capturedDebounceFns[0]();
+
+      expect(pushFiles).not.toHaveBeenCalled();
+      expect(mockSNClient.changeScope).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("Git HEAD changed"));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("restart"));
+      var internals = multiScopeWatcher as unknown as {
+        pendingScopes: Map<string, number>;
+        scopeWatchers: Map<string, { pushQueue: string[] }>;
+      };
+      expect(internals.pendingScopes.size).toBe(0);
+      internals.scopeWatchers.forEach(function (w) {
+        expect(w.pushQueue).toEqual([]);
+      });
+
+      // Paused: even if HEAD goes back, later changes are not pushed until restart.
+      (readGitHead as jest.Mock).mockResolvedValue(HEAD_A);
+      mockWatchers[0]._emit("change", makeFileContext().filePath);
+      await capturedDebounceFns[0]();
+      expect(pushFiles).not.toHaveBeenCalled();
+    });
+
+    it("treats an unreadable HEAD after start as a change (fail safe)", async () => {
+      (readGitHead as jest.Mock).mockResolvedValue(HEAD_A);
+      await startMultiScopeWatching();
+
+      mockWatchers[0]._emit("change", makeFileContext().filePath);
+      (readGitHead as jest.Mock).mockResolvedValue(null);
+      await capturedDebounceFns[0]();
+
+      expect(pushFiles).not.toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining("unreadable"));
+    });
+
+    it("behaves as before outside a git work tree (no HEAD at start)", async () => {
+      (readGitHead as jest.Mock).mockResolvedValue(null);
+      await startMultiScopeWatching();
+
+      mockWatchers[0]._emit("change", makeFileContext().filePath);
+      await capturedDebounceFns[0]();
+
+      expect(readGitHead).toHaveBeenCalledTimes(1);
+      expect(pushFiles).toHaveBeenCalledTimes(1);
     });
   });
 

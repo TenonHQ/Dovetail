@@ -33,6 +33,7 @@ interface FakeRow {
 interface Captured {
   encodedQueries: string[];
   fieldQueries: Array<{ field: string; value: string }>;
+  queryCalls: number;
 }
 
 /**
@@ -71,6 +72,7 @@ function makeGlideRecord(
       return validFields === null ? true : validFields.indexOf(field) !== -1;
     };
     this.query = function () {
+      captured.queryCalls += 1;
       i = -1;
     };
     this.next = function () {
@@ -107,7 +109,11 @@ interface LoadOptions {
 function loadUtils(opts: LoadOptions) {
   const rows = opts.rows || [];
   const warnings: string[] = [];
-  const captured: Captured = { encodedQueries: [], fieldQueries: [] };
+  const captured: Captured = {
+    encodedQueries: [],
+    fieldQueries: [],
+    queryCalls: 0,
+  };
   const metadataClasses = opts.metadataClasses || [];
 
   const sandbox: any = {
@@ -225,7 +231,13 @@ describe("DovetailUtilsMS.buildTableMap — scopeQuery", () => {
   });
 
   it("renders {scopeId} as the scope sys_id", () => {
-    const out = buildChoices({ scopeQuery: "sys_package={scopeId}" });
+    const out = buildChoices({ scopeQuery: "sys_package={scopeId}" }, [
+      "name",
+      "element",
+      "value",
+      "label",
+      "sys_package",
+    ]);
     expect(out.captured.encodedQueries).toContain(
       "sys_package=5e9f5f8b87420250369f33373cbb3559",
     );
@@ -282,6 +294,116 @@ describe("DovetailUtilsMS.buildTableMap — scopeQuery", () => {
     );
     expect(scopeFilters).toHaveLength(1);
     expect(out.captured.encodedQueries).toHaveLength(0);
+  });
+});
+
+describe("DovetailUtilsMS.buildTableMap — scopeQuery fails closed", () => {
+  // ServiceNow drops an encoded-query term on an unknown column, so an unchecked
+  // scopeQuery typo would return the WHOLE table (sys_choice: >200k rows) for every
+  // scope. buildTableMap must refuse such a query and never call query().
+  function expectRefused(out: ReturnType<typeof buildChoices>, reason: RegExp) {
+    expect(out.captured.queryCalls).toBe(0);
+    expect(out.captured.encodedQueries).toHaveLength(0);
+    expect(Object.keys(out.records)).toHaveLength(0);
+    expect(out.warnings).toHaveLength(1);
+    expect(out.warnings[0]).toContain("sys_choice");
+    expect(out.warnings[0]).toContain("scopeQuery");
+    expect(out.warnings[0]).toMatch(reason);
+  }
+
+  // The fixture's three "Failed" labels also raise duplicate-name warnings; only
+  // scopeQuery refusals matter to the accept-path assertions.
+  function scopeQueryWarnings(warnings: string[]) {
+    return warnings.filter(function (w) {
+      return w.indexOf("scopeQuery") !== -1;
+    });
+  }
+
+  it("refuses a scopeQuery whose field does not exist on the table (typo)", () => {
+    const out = buildChoices({ scopeQuery: "nmeSTARTSWITH{scope}_" });
+    expectRefused(out, /nme/);
+  });
+
+  it("refuses a scopeQuery with no {scope}/{scopeId} token", () => {
+    const out = buildChoices({ scopeQuery: "active=true" }, null);
+    expectRefused(out, /\{scope\}/);
+  });
+
+  it("refuses a scopeQuery containing ^NQ", () => {
+    const out = buildChoices({
+      scopeQuery: "nameSTARTSWITH{scope}_^NQelement=state",
+    });
+    expectRefused(out, /\^NQ/);
+  });
+
+  it("verifies every ^OR term, not just the first", () => {
+    const out = buildChoices({
+      scopeQuery: "nameSTARTSWITH{scope}_^ORelmentSTARTSWITH{scope}_",
+    });
+    expectRefused(out, /elment/);
+  });
+
+  it("refuses a dot-walked field it cannot verify", () => {
+    const out = buildChoices({ scopeQuery: "name.sys_scope={scopeId}" }, null);
+    expectRefused(out, /name\.sys_scope/);
+  });
+
+  it("refuses a term with no operator", () => {
+    const out = buildChoices({ scopeQuery: "nameSTARTSWITH{scope}_^element" });
+    expectRefused(out, /element/);
+  });
+
+  it("refuses an empty term (^^)", () => {
+    const out = buildChoices({
+      scopeQuery: "nameSTARTSWITH{scope}_^^element=x",
+    });
+    expectRefused(out, /empty/);
+  });
+
+  it("refuses when the scope token would render empty", () => {
+    const loaded = loadUtils({
+      rows: CHOICE_ROWS,
+      validFields: ["name", "element", "value", "label"],
+    });
+    const result = loaded.utils.buildTableMap({
+      tableName: "sys_choice",
+      scopeId: null,
+      scopeName: "",
+      getContents: false,
+      includes: { sys_choice: { label: { type: "txt" } } },
+      excludes: {},
+      tableOptions: { scopeQuery: "nameSTARTSWITH{scope}_" },
+    });
+    expect(loaded.captured.queryCalls).toBe(0);
+    expect(Object.keys(result.records)).toHaveLength(0);
+    expect(loaded.warnings[0]).toMatch(/empty/);
+  });
+
+  it("accepts a valid ^OR template unchanged and runs the query", () => {
+    const out = buildChoices({
+      scopeQuery: "nameSTARTSWITH{scope}_^ORelementSTARTSWITH{scope}_",
+    });
+    expect(out.captured.queryCalls).toBe(1);
+    expect(out.captured.encodedQueries).toEqual([
+      "nameSTARTSWITHx_cadso_automate_^ORelementSTARTSWITHx_cadso_automate_",
+    ]);
+    expect(scopeQueryWarnings(out.warnings)).toHaveLength(0);
+    expect(Object.keys(out.records).length).toBeGreaterThan(0);
+  });
+
+  it("accepts symbol and word operators (!=, ISNOTEMPTY, IN, ORDERBY)", () => {
+    const out = buildChoices({
+      scopeQuery:
+        "nameSTARTSWITH{scope}_^element!=x^valueISNOTEMPTY^labelINa,b^ORDERBYname",
+    });
+    expect(out.captured.queryCalls).toBe(1);
+    expect(scopeQueryWarnings(out.warnings)).toHaveLength(0);
+  });
+
+  it("leaves tables without a scopeQuery on the sys_scope path (no validation)", () => {
+    const out = buildChoices({}, []);
+    expect(out.captured.queryCalls).toBe(1);
+    expect(scopeQueryWarnings(out.warnings)).toHaveLength(0);
   });
 });
 

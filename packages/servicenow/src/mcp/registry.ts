@@ -542,7 +542,7 @@ export function buildDescriptors(
         "by scope on another app's table (the platform's cross-scope field: element becomes " +
         "<scope>_<name>, the dictionary row and its update-set capture land in scope); the table " +
         "must allow new fields from other scopes (sys_db_object.alter_access) and updateSetSysId " +
-        "must belong to scope — both checked on dryRun too, and the stored element + sys_scope are " +
+        "must belong to scope and be in progress — all checked on dryRun too, and the stored element + sys_scope are " +
         "read back. A cross-scope result carries designAccess { present, sysId, created }: the " +
         "platform UI refuses cross-scope authoring without a sys_scope_design_access record " +
         "(scope -> the table's scope), so a missing one is FLAGGED (not blocking — the headless " +
@@ -589,8 +589,8 @@ export function buildDescriptors(
         "table's own access flags are NOT the gate. Scopes are names or sys_scope sys_ids. " +
         "Idempotent: an existing record returns status 'exists' and nothing is written. Live " +
         "creates it via the scope-aware createRecord op switched to sourceScope, captured in " +
-        "updateSetSysId (must belong to sourceScope), then reads it back and asserts " +
-        "source/target. updateSetSysId is required on the live path; dryRun:true only reports " +
+        "updateSetSysId (must belong to sourceScope and be in progress), then reads it back and asserts " +
+        "source/target and that it is owned by sourceScope. updateSetSysId is required on the live path; dryRun:true only reports " +
         "exists / missing.",
       shape: designAccessSchema.shape,
       handler: async function (args: unknown) {
@@ -694,8 +694,11 @@ export function buildDescriptors(
         "READABLE: v_db_index carries no uniqueness field, so a unique index and an ordinary " +
         "one are indistinguishable in it — `unique` is therefore left ABSENT rather than " +
         "guessed, and 'uniqueness-enforced' is always reported in unverified. Only a " +
-        "duplicate-insert test proves enforcement. An empty result more likely means the table " +
-        "name is wrong than that the table is unindexed (every physical table has a PRIMARY).",
+        "duplicate-insert test proves enforcement. A table stored in an ancestor's physical " +
+        "table (table-per-hierarchy, e.g. anything extending task) has no rows of its own: its " +
+        "super_class chain is walked and the storage root's indexes are listed, with " +
+        "`storageTable` and the note naming the root. An empty result for a table that does " +
+        "not exist says the name is wrong (every physical table has a PRIMARY).",
       shape: listIndexesSchema.shape,
       handler: async function (args: unknown) {
         var p = listIndexesSchema.parse(args);
@@ -735,7 +738,10 @@ export function buildDescriptors(
         "duplicate values, EMPTY included. verified:true means a matching row was READ BACK; " +
         "captured:true means the sys_update_xml row was READ BACK from the pinned set (an " +
         "index that exists but was not captured is created:true, captured:false with " +
-        "'update-set-capture' in unverified). 'uniqueness-enforced' is ALWAYS in " +
+        "'update-set-capture' in unverified, and captureFoundIn names the set(s) the row " +
+        "actually landed in). When the REST identity is not the form-login user the run " +
+        "still proceeds and the note carries an IDENTITY WARNING, because the build " +
+        "captures into the form user's current set. 'uniqueness-enforced' is ALWAYS in " +
         "unverified: v_db_index has no uniqueness field. Requires a username+password identity " +
         "that can form-log-in; xmlhttp.do ignores Basic auth and API keys, so an API-key-only " +
         "or SSO/MFA identity fails at the session with a diagnosis (TenonHQ/Dovetail#292).",
@@ -764,8 +770,9 @@ export function buildDescriptors(
       description:
         "Update the SCHEMA of an EXISTING column on an EXISTING ServiceNow table — its label, " +
         "mandatory, default, readOnly, maxLength, or dependentOnField (the sibling column a " +
-        "document_id resolves against; must exist on the table; \"\" clears it; not overridable " +
-        "per-child) — captured into a named update set, then READ " +
+        "document_id resolves against; must exist on the table; \"\" clears it) — on an INHERITED " +
+        "column, overridden for that table alone via sys_dictionary_override — captured into a " +
+        "named update set, then READ " +
         "BACK from the instance to verify. This is the schema counterpart to set_field: set_field " +
         "changes a RECORD's value, set_column changes the COLUMN's definition (sys_dictionary). Use " +
         "add_column to CREATE a column. maxLength is PHYSICAL — changing it fires a real ALTER on the " +
@@ -888,7 +895,8 @@ export function buildDescriptors(
         "specified update set, then READ BACK to verify. Wraps the scope- and update-set-aware " +
         "createRecord core op (switches app scope + update set server-side, inserts, restores both — " +
         "so the record lands in the right scope without sys_user_preference mutation). REFUSES schema " +
-        "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those. fields is a " +
+        "tables (sys_db_object / sys_dictionary) — use create_table / add_column for those — and " +
+        "sys_update_set (the op cannot set its application; use `dove createUpdateSet`). fields is a " +
         "flat name->string map; scope and updateSetSysId are required; ifAbsentQuery makes re-runs " +
         "idempotent (skips the insert when it already matches a row); dryRun:true returns the plan " +
         "without writing. To UPDATE an existing record use set_field.",
@@ -915,10 +923,13 @@ export function buildDescriptors(
         "error — never a 'successful' delete of nothing) and READ BACK AFTER (success is only " +
         "reported once the record is confirmed gone). DRY-RUN BY DEFAULT — without confirm:true " +
         "nothing is deleted and the before-snapshot is returned; dryRun:true forces a dry-run even " +
-        "with confirm. updateSetSysId is REQUIRED and sent, but the capture is NOT pinned yet: until " +
-        "TenonHQ/Dovetail#297 ships, the server-side op ignores it and captures the delete into the " +
-        "session's CURRENT update set — make that the set you want before confirming (every result " +
-        "note repeats this). sysId must be a 32-char lowercase hex id; table a plain " +
+        "with confirm. updateSetSysId is REQUIRED and must be an existing in-progress update set " +
+        "(checked on the dry-run too). Until TenonHQ/Dovetail#297 ships the server-side op ignores it " +
+        "and captures into the session's CURRENT update set, so the tool pins the set as current " +
+        "first (refusing to delete if the pin does not read back) and afterwards reads the DELETE " +
+        "row back from sys_update_xml: captured:true only when it is in the requested set, " +
+        "capturedInto names the set it actually landed in. A deleted record with captured:false " +
+        "will NOT travel with that set. sysId must be a 32-char lowercase hex id; table a plain " +
         "table name. REFUSES schema tables (sys_db_object / sys_dictionary) — dropping a table or " +
         "column is a lifecycle op, not a record delete. Destructive and irreversible on apply: query " +
         "first and dry-run before confirming. To change a record use set_field; to add one use " +

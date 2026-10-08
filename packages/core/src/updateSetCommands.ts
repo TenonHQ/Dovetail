@@ -308,7 +308,7 @@ export async function switchUpdateSetCommand(args: any): Promise<void> {
     const client = defaultClient();
     
     // Get update set to switch to
-    const targetUpdateSet = await selectUpdateSet(args.name, args.scope);
+    const targetUpdateSet = await selectUpdateSet(args.name, args.scope, args.sysId);
     
     if (!targetUpdateSet) {
       throw new Error("No update set selected");
@@ -710,9 +710,19 @@ async function getCurrentUpdateSetDetails(scope?: string): Promise<{ sysId: stri
  */
 async function selectUpdateSet(
   nameFilter?: string,
-  scopeFilter?: string
+  scopeFilter?: string,
+  sysIdFilter?: string
 ): Promise<UpdateSetListResponse | null> {
   let query = "state=in progress";
+
+  // An exact sys_id is unambiguous where a name may not be (two in-progress
+  // sets can share a name). Validate it before it reaches the encoded query.
+  if (sysIdFilter !== undefined) {
+    if (typeof sysIdFilter !== "string" || !/^[0-9a-f]{32}$/i.test(sysIdFilter)) {
+      logger.error(`Invalid --sysId "${String(sysIdFilter)}": expected a 32-character sys_id`);
+      return null;
+    }
+  }
   
   if (scopeFilter) {
     const client = defaultClient();
@@ -722,6 +732,18 @@ async function selectUpdateSet(
       return null;
     }
     query += `^application=${scopeResult[0].sys_id}`;
+  }
+
+  if (sysIdFilter !== undefined) {
+    const byId = await getUpdateSets(`${query}^sys_id=${sysIdFilter}`);
+    if (byId.length === 0) {
+      logger.error(
+        `No in-progress update set with sys_id ${sysIdFilter}` +
+          (scopeFilter ? ` in scope "${scopeFilter}"` : "")
+      );
+      return null;
+    }
+    return byId[0];
   }
   
   const updateSets = await getUpdateSets(query);

@@ -379,7 +379,8 @@ async function buildCreateFields(
   return fields;
 }
 
-async function applyCreates(
+// Exported for tests.
+export async function applyCreates(
   scope: string,
   creates: RecordChange[],
   updateSetSysId: string | undefined,

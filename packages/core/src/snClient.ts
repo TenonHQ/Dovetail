@@ -418,15 +418,35 @@ export const snClient = (
     return client.patch(endpoint, fields);
   };
 
-  const getScopeId = (scopeName: string) => {
+  // Resolve a scope name to its sys_scope sys_id. `scope=<name>` is not unique
+  // on every instance: `scope=global` also matches sys_app rows (their scope
+  // column is "global"), so the real Global scope is addressed by its fixed
+  // sys_id, and any other ambiguous name is refused rather than guessed.
+  const getScopeId = async (
+    scopeName: string,
+  ): Promise<AxiosResponse<Sinc.SNAPIResponse<SN.ScopeRecord[]>>> => {
     const endpoint = "api/now/table/sys_scope";
     type ScopeResponse = Sinc.SNAPIResponse<SN.ScopeRecord[]>;
-    return client.get<ScopeResponse>(endpoint, {
+    const query =
+      scopeName === "global" ? "sys_id=global" : `scope=${scopeName}`;
+    const resp = await client.get<ScopeResponse>(endpoint, {
       params: {
-        sysparm_query: `scope=${scopeName}`,
+        sysparm_query: query,
         sysparm_fields: "sys_id",
       },
     });
+    const rows =
+      resp && resp.data && Array.isArray(resp.data.result)
+        ? resp.data.result
+        : [];
+    if (rows.length > 1) {
+      const ids = rows.map((row) => (row && row.sys_id) || "?").join(", ");
+      throw new Error(
+        `Scope "${scopeName}" is ambiguous: ${rows.length} sys_scope rows match ` +
+          `(${ids}). Refusing to guess which one owns the change.`,
+      );
+    }
+    return resp;
   };
 
   const getScopeById = (scopeSysId: string) => {
@@ -451,6 +471,29 @@ export const snClient = (
     return client.get<UpdateSetReadResponse>(endpoint, {
       params: {
         sysparm_query: `sys_id=${updateSetSysId}`,
+        sysparm_fields: "sys_id,name,application",
+      },
+    });
+  };
+
+  /**
+   * In-progress update sets with exactly this name in one application, so a
+   * create can refuse a duplicate (a retry after a timeout would otherwise
+   * leave two same-named sets, and activate-by-name picks either). A `^` in
+   * the name is escaped as `^^` so it cannot split the encoded query.
+   */
+  const getInProgressUpdateSetsByName = (
+    updateSetName: string,
+    applicationSysId: string,
+  ) => {
+    const endpoint = "api/now/table/sys_update_set";
+    type UpdateSetReadResponse = Sinc.SNAPIResponse<UpdateSetReadRecord[]>;
+    const safeName = String(updateSetName).replace(/\^/g, "^^");
+    return client.get<UpdateSetReadResponse>(endpoint, {
+      params: {
+        sysparm_query:
+          `name=${safeName}^application=${applicationSysId}` +
+          "^state=in progress",
         sysparm_fields: "sys_id,name,application",
       },
     });
@@ -755,6 +798,20 @@ export const snClient = (
         ),
       );
     }
+    // Guard: the generic createRecord op never sets `application`, so an
+    // update set inserted through it lands in the session app (and a
+    // name-only read-back still passes). Update sets must go through the
+    // scope-correct createUpdateSet op.
+    if (params && params.table === "sys_update_set") {
+      return Promise.reject(
+        new Error(
+          "Refusing to insert sys_update_set via createRecord: the generic " +
+            "createRecord op does not set the update set's application, so it " +
+            "would land in the session app. Use `dove createUpdateSet --name " +
+            "<name> --scope <scope>` instead.",
+        ),
+      );
+    }
     return _callDovetailApi<CreateRecordResponse>("createRecord", (endpoint) =>
       client.post<CreateRecordResponse>(endpoint, params),
     );
@@ -785,6 +842,7 @@ export const snClient = (
     getScopeId,
     getScopeById,
     getUpdateSetById,
+    getInProgressUpdateSetsByName,
     getRecordScope,
     getUpdateSetMembers,
     getUserSysId,

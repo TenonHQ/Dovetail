@@ -37,6 +37,7 @@ import {
   UpdateXmlReadRecord,
 } from "./snClient";
 import {
+  duplicateFolderName,
   emptyMetadataFile,
   normalizeManifestKeys,
   stampMetadataContent,
@@ -241,6 +242,15 @@ export function spliceManifestRecord(
     for (const key of Object.keys(existing)) {
       if (previousKey !== undefined && key === previousKey && key !== entry.name) continue;
       if (key === entry.name) {
+        const held = existing[key];
+        if (held && held.sys_id && held.sys_id !== entry.sys_id) {
+          // Never replace another record's entry: its folder would be overwritten
+          // and its sys_id dropped from the manifest.
+          throw new Error(
+            table + ": manifest key '" + key + "' already belongs to sys_id " + held.sys_id +
+            ", not " + entry.sys_id + ". Refusing to overwrite it.",
+          );
+        }
         records[key] = entryShape(entry);
         placed = true;
         continue;
@@ -460,6 +470,16 @@ function tableIsWhitelisted(scope: string, table: string): boolean {
   }
 }
 
+/** sys_id holding `key` in `table` of a manifest, or undefined when the key is free. */
+function sysIdAtKey(manifest: SN.AppManifest | undefined, table: string, key: string): string | undefined {
+  if (!manifest || !manifest.tables) return undefined;
+  const tableEntry = manifest.tables[table];
+  if (!tableEntry || !tableEntry.records) return undefined;
+  if (!Object.prototype.hasOwnProperty.call(tableEntry.records, key)) return undefined;
+  const rec = tableEntry.records[key];
+  return rec && rec.sys_id ? rec.sys_id : undefined;
+}
+
 async function readIfExists(p: string): Promise<string | undefined> {
   try {
     return await fsp.readFile(p, "utf8");
@@ -552,6 +572,45 @@ export async function planPull(
     return Object.assign({}, r, { serverKey: hit ? hit.key : undefined, requestFiles });
   });
 
+  // Local manifests, read once per scope (the diff below and the key-collision
+  // checks both need them).
+  const manifestTexts: Record<string, ManifestText> = {};
+  const manifestsByScope: Record<string, PlannedManifest> = {};
+  for (const scope of scopes) {
+    const manifestPath = ConfigManager.getScopeManifestPath(scope);
+    manifestTexts[scope] = parseManifestText(await readIfExists(manifestPath));
+    manifestsByScope[scope] = {
+      scope,
+      manifestPath,
+      formatPreserved: manifestTexts[scope].formatPreserved,
+      existed: manifestTexts[scope].existed,
+      records: [],
+    };
+  }
+
+  // A server-provided key the local manifest gives to a DIFFERENT record means the
+  // server's duplicate-suffix order moved since the last refresh. Splicing it in
+  // would overwrite that record's entry and folder, so refuse before any content
+  // is fetched; only a table refresh can re-key both consistently.
+  const keyConflicts: string[] = [];
+  for (const p of pending) {
+    if (p.serverKey === undefined) continue;
+    const holder = sysIdAtKey(manifestTexts[p.scope].manifest, p.table, p.serverKey);
+    if (holder !== undefined && holder !== p.sysId) {
+      keyConflicts.push(
+        p.table + " " + p.sysId + ": manifest key '" + p.serverKey + "' already belongs to sys_id " +
+        holder + " in the local manifest for scope '" + p.scope + "'. Run 'dove refresh -t " + p.table +
+        "' to re-key the table. Nothing was written.",
+      );
+    }
+  }
+  if (keyConflicts.length > 0) {
+    throw new Error(
+      (keyConflicts.length === 1 ? "Refusing to pull:\n  " : "Refusing to pull (" + keyConflicts.length + " problems):\n  ") +
+      keyConflicts.join("\n  "),
+    );
+  }
+
   const missing: SN.MissingFileTableMap = {};
   for (const p of pending) {
     if (!missing[p.table]) missing[p.table] = {};
@@ -560,9 +619,9 @@ export async function planPull(
   const downloaded = await unwrapSNResponse(client.getMissingFiles(missing, config.tableOptions || {}));
 
   // 4. Diff against disk + local manifests.
-  const manifestTexts: Record<string, ManifestText> = {};
-  const manifestsByScope: Record<string, PlannedManifest> = {};
   const records: PlannedRecord[] = [];
+  // Fallback keys claimed earlier in THIS batch: scope -> table -> key -> sys_id.
+  const claimed: Record<string, Record<string, Record<string, string>>> = {};
   const forceWrite = !!options.force;
 
   for (const p of pending) {
@@ -572,22 +631,41 @@ export async function planPull(
       throw new Error(label + ": the instance returned no content for this record (bulkDownload).");
     }
     const recWarnings: string[] = [];
-    const key = p.serverKey !== undefined
-      ? p.serverKey
-      : toSafeFolderName({ name: dl.record.name, sys_id: p.sysId, files: [] });
-
-    if (!manifestTexts[p.scope]) {
-      const manifestPath = ConfigManager.getScopeManifestPath(p.scope);
-      manifestTexts[p.scope] = parseManifestText(await readIfExists(manifestPath));
-      manifestsByScope[p.scope] = {
-        scope: p.scope,
-        manifestPath,
-        formatPreserved: manifestTexts[p.scope].formatPreserved,
-        existed: manifestTexts[p.scope].existed,
-        records: [],
-      };
-    }
     const local = manifestTexts[p.scope].manifest;
+    let key: string;
+    if (p.serverKey !== undefined) {
+      key = p.serverKey;
+    } else {
+      // Not in the server manifest: the key is the bare display name, which may
+      // already belong to another record (locally, on the server, or earlier in
+      // this batch). Disambiguate the way normalizeManifestKeys does.
+      if (!claimed[p.scope]) claimed[p.scope] = {};
+      if (!claimed[p.scope][p.table]) claimed[p.scope][p.table] = {};
+      const batchClaims = claimed[p.scope][p.table];
+      const takenByOther = (k: string): string | undefined => {
+        const holders = [
+          sysIdAtKey(local, p.table, k),
+          sysIdAtKey(serverManifests[p.scope], p.table, k),
+          Object.prototype.hasOwnProperty.call(batchClaims, k) ? batchClaims[k] : undefined,
+        ];
+        for (const h of holders) if (h !== undefined && h !== p.sysId) return h;
+        return undefined;
+      };
+      key = toSafeFolderName({ name: dl.record.name, sys_id: p.sysId, files: [] });
+      if (takenByOther(key) !== undefined) {
+        const suffixed = duplicateFolderName(key, p.sysId);
+        const holder = takenByOther(suffixed);
+        if (holder !== undefined) {
+          throw new Error(
+            "Refusing to pull:\n  " + label + ": manifest keys '" + key + "' and '" + suffixed +
+            "' both belong to other records (sys_id " + holder + "). Run 'dove refresh -t " + p.table +
+            "' to re-key the table. Nothing was written.",
+          );
+        }
+        key = suffixed;
+      }
+      batchClaims[key] = p.sysId;
+    }
     const existing = findRecordBySysId(local ? local.tables : undefined, p.table, p.sysId);
     const manifestEntry: SN.MetaRecord = { files: p.requestFiles.map((f) => ({ name: f.name, type: f.type })), name: key, sys_id: p.sysId };
     let manifestAction: ManifestAction = "add";

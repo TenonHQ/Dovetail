@@ -51,8 +51,9 @@
  * reported as applied on the strength of a status code.
  *
  * INHERITED COLUMNS. On an extended table the column is defined on an ancestor, not here.
- * That is not an error and not a dead end: mandatory / default / read_only are narrowed
- * for THIS table alone via sys_dictionary_override, and label via sys_documentation,
+ * That is not an error and not a dead end: mandatory / default / read_only /
+ * dependent_on_field are narrowed for THIS table alone via sys_dictionary_override, and
+ * label via sys_documentation,
  * leaving the ancestor and every sibling untouched. See overrideColumn.ts, which carries
  * the live-verified detail. max_length is the one real exception — it is the ancestor's
  * physical column and has no per-child override, so it is refused with the reason.
@@ -81,7 +82,6 @@ import { encodeQueryValue } from "../choices";
 import {
   OVERRIDABLE,
   explainMaxLengthNotOverridable,
-  explainDependentOnFieldNotOverridable,
   findOverrideRow,
   findLabelRow,
   diffInherited,
@@ -150,7 +150,8 @@ export interface ColumnAttributes {
   /**
    * The sibling column this one resolves against (sys_dictionary.dependent_on_field —
    * a document_id's table_name column). "" clears it. The named column must exist on
-   * the table. Not overridable per-child: sys_dictionary_override has no such field.
+   * the table. On an INHERITED column it is overridden for this table alone via
+   * sys_dictionary_override.dependent / dependent_override.
    */
   dependentOnField?: string;
 
@@ -625,8 +626,8 @@ export async function setColumn(
   // The dependency target must exist on the table. ServiceNow stores any string here
   // unchecked, so a typo would land as a column that resolves against nothing. Only the
   // table's own rows are searched (an inherited column was routed to the override path
-  // above and refused there). Runs on the dry-run too, so a plan never promises a write
-  // the live path would refuse.
+  // above, which runs its own check). Runs on the dry-run too, so a plan never promises
+  // a write the live path would refuse.
   if (writes.dependent_on_field !== undefined && writes.dependent_on_field !== "") {
     var dependencyRows = await params.client.table.query<Record<string, unknown>>(
       "sys_dictionary",
@@ -965,8 +966,8 @@ interface InheritedContext {
  *
  * The caller asked to change a column on a child table. ServiceNow's answer to that is an
  * override on the child — not an edit to the ancestor, which would silently change the
- * column for every other table extending it. Four of the five attributes set-column
- * supports can be narrowed this way; max_length cannot, because it is the ancestor's
+ * column for every other table extending it. Every attribute set-column supports can be
+ * narrowed this way except max_length, which cannot, because it is the ancestor's
  * physical column, and that is the one case where "change it at the source" is the honest
  * answer (given with its blast radius spelled out, rather than as a casual suggestion).
  */
@@ -982,10 +983,41 @@ async function setInheritedColumn(
       explainMaxLengthNotOverridable(ctx.table, ctx.column, ctx.definedOn),
     );
   }
-  if (ctx.writes.dependent_on_field !== undefined) {
-    throw new Error(
-      explainDependentOnFieldNotOverridable(ctx.table, ctx.column, ctx.definedOn),
+  // The dependency target must be a column this table actually has — its own or one it
+  // inherits (a sibling defined on an ancestor is the usual case). ServiceNow stores any
+  // string unchecked, so a typo would land as an override that resolves against nothing.
+  if (
+    ctx.writes.dependent_on_field !== undefined &&
+    ctx.writes.dependent_on_field !== ""
+  ) {
+    var ownDependencyRows = await params.client.table.query<
+      Record<string, unknown>
+    >(
+      "sys_dictionary",
+      "name=" +
+        encodeQueryValue(ctx.table) +
+        "^element=" +
+        encodeQueryValue(ctx.writes.dependent_on_field),
+      { limit: 1, fields: ["sys_id"] },
     );
+    var dependencyOwner =
+      ownDependencyRows.length > 0
+        ? ctx.table
+        : await findDefiningTable(
+            params.client,
+            ctx.table,
+            ctx.writes.dependent_on_field,
+          );
+    if (!dependencyOwner) {
+      throw new Error(
+        "set-column: dependent_on_field '" +
+          ctx.writes.dependent_on_field +
+          "' is not a column on '" +
+          ctx.table +
+          "' (its own and inherited sys_dictionary rows were searched). Add that " +
+          "column first, then re-run. Nothing was written.",
+      );
+    }
   }
 
   var overrideRow = await findOverrideRow(params.client, ctx.table, ctx.column);

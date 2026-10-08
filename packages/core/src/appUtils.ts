@@ -333,6 +333,16 @@ export const toSafeFolderName = (record: SN.MetaRecord): string => {
 };
 
 /**
+ * The key a record gets when its folder name is already taken by a different
+ * record in the same table: the display key plus the first 8 hex chars of its
+ * sys_id. Shared by every writer that resolves key collisions so a record keeps
+ * the same folder whichever path mirrored it.
+ */
+export const duplicateFolderName = (key: string, sysId: string): string => {
+  return key + " (" + String(sysId || "").substring(0, 8) + ")";
+};
+
+/**
  * Re-keys manifest records from sys_id to a filesystem-safe folder name.
  * Some ServiceNow tables return records keyed by sys_id instead of display name.
  * This ensures consistent naming for directories and manifest lookups, and keeps
@@ -354,7 +364,7 @@ export const normalizeManifestKeys = (manifest: SN.AppManifest): SN.AppManifest 
       var displayKey = toSafeFolderName(record);
       // Handle duplicate folder names by appending sys_id suffix
       if (normalized[displayKey]) {
-        displayKey = displayKey + " (" + record.sys_id.substring(0, 8) + ")";
+        displayKey = duplicateFolderName(displayKey, record.sys_id);
       }
       // Keep record.name === manifest key so all writers (which build the folder
       // path from record.name) and push (which looks up by folder name) agree.

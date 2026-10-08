@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Release commits are rebuilt on the latest `main` tip again (#288 re-landed), and the publisher now refuses to push a release commit that touches anything beyond the lockfile, package `version` / `@tenonhq/*` ranges and release metadata. A stale-checkout release commit had silently reverted #287, #288, #290 and #311.
+- `@modelcontextprotocol/sdk` is back on `^1.32.1` in every MCP package (#311 re-landed; it had been reverted), and `@hono/node-server` resolves past the 1.19.15 advisory.
+- `dove pull` never overwrites another record's manifest key: a same-named record gets the `name (sys_id prefix)` suffix a refresh would give it, and a collision on a server-provided key is refused. `dove pull --dry-run` / `--sys-ids` without a table now error instead of running a full refresh.
+- `dove-sn create-record`, MCP `create_record` and `snClient.createRecord` refuse `sys_update_set` (the generic insert lands it in the session's app); use `dove createUpdateSet` / `dove create sys_update_set`.
+- `getScopeId("global")` resolves `sys_id=global` (several `sys_scope` rows carry `scope=global`), and any other ambiguous scope name throws. `dove create sys_update_set` refuses a duplicate in-progress name in the scope and its hint activates the new set by `--sysId`.
+- `design-access` and `add-column --cross-scope` refuse an update set that is not in progress; the Design Access record is created only after every refusing check (dependency included, also on scoped dry-runs), and its read-back asserts the owning `sys_scope`. `--dependent-on-field` is validated before it reaches a query.
+- `set-column --dependent-on-field` on an inherited column writes a child-only `sys_dictionary_override` (`dependent` + `dependent_override`) instead of refusing.
+- `index-create` warns (`IDENTITY WARNING` in the note) when the REST identity differs from the form-login user, since the capture can land in that user's set, and names the set a missing capture actually landed in. `index-list` / `index-create` / `add-index` resolve table-per-hierarchy children to their storage-root table instead of reporting no indexes.
+- `delete-record` / `delete_record` checks the update set is in progress, pins it as current before deleting, reads the DELETE capture back (`captured`, `capturedInto`, `captureState`), and always runs the read-back even when the delete call throws.
+- `DovetailUtilsMS` (server, deploy separately) fails closed on a `scopeQuery` without a `{scope}`/`{scopeId}` token, with `^NQ`, a dot-walk, or a field `isValidField()` rejects — instead of letting ServiceNow drop the term and return the whole table.
 - `add-column --dry-run` / `add_column { dryRun: true }` now runs the same scope guards as the live path whenever a `scope` is named, so a mismatched or cross-scope request fails the dry-run the way it fails live instead of planning clean and failing on the write. A dry-run with no scope named stays network-free. (#316)
 - `dove create sys_update_set --scope <x>` now routes through the scope-correct `createUpdateSet` server op instead of the generic record insert (which let ServiceNow default `application` to the session's current app), reads the set back, and exits non-zero naming requested vs. actual scope if it is mis-scoped. `--scope` is required for `sys_update_set` in `--ci` mode. (#231)
 
@@ -24,6 +34,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - `dove watch` (`w` / `watchAllScopes`) is hidden from `dove --help` and scrubbed from Claude-facing docs and skills; still fully wired for humans. It now prints a human-only warning when it detects a Claude Code session (`CLAUDECODE` / `CLAUDE_CODE_*`), because a branch switch mid-watch overwrites instance records. Human-facing docs keep it, labelled with the caveat. (#155)
+- The watcher now refuses to start in a Claude Code tool shell (`CLAUDECODE` set; override `DOVE_ALLOW_WATCH_IN_CLAUDE=1`) and pauses — dropping queued changes, pushing nothing — when git `HEAD` moves while it runs, so a branch switch can no longer mass-push the working tree.
 
 ## [0.0.83] - 2026-04-17
 

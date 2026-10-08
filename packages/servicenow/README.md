@@ -742,8 +742,16 @@ substring-matched, because `"[owner_id]"` contains `"owner"`. `type` is `access_
 **Uniqueness is not readable.** `v_db_index` has no uniqueness field, so a unique index
 and an ordinary one are indistinguishable in it: `unique` is left **absent** rather than
 guessed, and `uniqueness-enforced` is reported in `unverified` on every result. Only a
-duplicate-insert test proves enforcement. An empty result more likely means the table name
-is wrong than that the table is unindexed - every physical table has a `PRIMARY`.
+duplicate-insert test proves enforcement. An empty result for a table that does not exist
+means the table name is wrong - every physical table has a `PRIMARY`.
+
+**Table-per-hierarchy children list their storage root's indexes.** `v_db_index` lists
+indexes by *physical* table, and a table stored in an ancestor's physical table (anything
+extending `task`, for example) has no rows under its own name. When the table exists but
+has no rows, its `super_class` chain is walked to the first ancestor that has them, and
+that root's indexes are listed - with `storageTable` and the note naming the root.
+`index-create` and `add-index` **refuse** such a child on the live path, naming the root,
+rather than build on it or report a false "NOT created".
 
 ### Create an index (composite and non-unique included)
 
@@ -792,6 +800,15 @@ was a silent no-op for that reason.)
 - **Idempotent.** On the live path `v_db_index` is read first, and an index over *exactly*
   these columns short-circuits to `already-exists` with no pin, no form session and no
   write. Column **order** is part of an index's identity - `[a;b]` is not `[b;a]`.
+- **Table-per-hierarchy children are refused.** A table with no `v_db_index` rows of its
+  own whose ancestor has them is stored in that ancestor's physical table; the run stops
+  before any write and names the root (run against the root if that is what you want).
+- **Identity check (warns, never refuses).** The pin runs through the REST client (an API
+  key when one is configured) but the build is scheduled by the form session (always
+  `SN_USER`), and the build captures into the *form* user's current set. The REST caller's
+  own `sys_user` row is read first; when it is not the form-login user (or cannot be read)
+  the run still goes ahead and every result note carries an `IDENTITY WARNING`. The capture
+  read-back then reports where the row actually landed (`captured` / `captureFoundIn`).
 - **The pin is read back.** The set is pinned with Dovetail's own `changeUpdateSet` and
   `currentUpdateSet` is read; a pin that did not take stops the run before the session
   opens.
@@ -804,7 +821,8 @@ was a silent no-op for that reason.)
   values (EMPTY counts). Then the capture row is looked for in the pinned set:
   `captured:true` only when it was read back; an index that exists but was not captured
   is `created:true, captured:false` with `update-set-capture` in `unverified` - and
-  exit code 2, because it will not travel.
+  exit code 2, because it will not travel. In that case the capture name is searched
+  across every set and the set(s) it actually landed in come back in `captureFoundIn`.
 - **Uniqueness is still never claimed.** `uniqueness-enforced` stays in `unverified` on
   every status.
 
@@ -859,7 +877,8 @@ npx dove-sn create-record \
 switches the executing user's app scope + update set server-side, inserts, and
 restores both — so the record is owned by the right app and the insert is captured
 in the right update set. Like `set-field` it **refuses** schema tables and verifies
-via read-back. `--scope` and `--update-set` are required; `--if-absent
+via read-back. It also **refuses** `sys_update_set` — the op cannot set an update
+set's application, so create sets with `dove createUpdateSet` instead. `--scope` and `--update-set` are required; `--if-absent
 "<encoded-query>"` makes re-runs idempotent (the insert is skipped when the query
 already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1` bad
 args, `2` write landed unverified (or skipped with drift). To **update** an existing
@@ -916,14 +935,19 @@ npx dove-sn delete-record \
 `delete-record` wraps the core `deleteRecord` op. It is **dry-run by default** —
 nothing is deleted without `--apply` (`--dry-run` wins if both are given). `--sys-id`
 must be a 32-character lowercase hex id and `--table` a plain table name; both are
-validated before any network call. `--update-set` is **required** and sent with the
-delete, but **the capture is not pinned yet**: until
-[#297](https://github.com/TenonHQ/Dovetail/issues/297) ships server-side, the op ignores
-`update_set_sys_id` and captures the delete into the session's **current** update set —
-make that the set you want before `--apply`. Every result note repeats this caveat; the
-client keeps sending the field so it takes effect the moment the server honours it. Like its siblings it **refuses** schema tables (`sys_db_object` /
-`sys_dictionary`). Exit codes: `0` deleted / dry-run, `1` bad args or no such record,
-`2` the delete returned but the record is **still present** on read-back.
+validated before any network call. `--update-set` is **required**, must exist and be
+**in progress** (checked on the dry-run too). Until
+[#297](https://github.com/TenonHQ/Dovetail/issues/297) ships server-side the op ignores
+`update_set_sys_id` and captures the delete into the session's **current** update set, so
+the verb pins `--update-set` as current first (refusing, nothing deleted, if the pin does
+not read back) and then reads the DELETE row back from `sys_update_xml`. The result carries
+`captured`, `capturedInto` and `captureState` (`in-set` / `other-set` / `none` /
+`unverified`). Like its siblings it **refuses** schema tables (`sys_db_object` /
+`sys_dictionary`). A failed delete call never skips the read-back. Exit codes: `0` deleted
+and captured in the set, a table that writes no capture at all (`none`, with a note), or a
+dry-run; `1` bad args, no such record, or an unknown/closed update set; `2` the record is
+**still present** on read-back (including a server-refused delete), its state is unknown,
+the pin did not take, or the DELETE landed in a different set / could not be read back.
 
 All three verbs are exported for programmatic use:
 
@@ -1198,8 +1222,8 @@ existing record), `create_record` (insert one record) and `delete_record` (delet
 record — dry-run by default, `confirm:true` to apply, `updateSetSysId` required, the
 record read back before AND after so success is only reported once it is confirmed
 gone) — all read-back-verified; `set_field` / `create_record` are captured in the
-update set you pass, while `delete_record` captures into the session's current set
-until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `host_assets` (deploy a built
+update set you pass, while `delete_record` pins the set as current and reads the DELETE
+capture back (`captureState`) until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `host_assets` (deploy a built
 dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step

@@ -3,9 +3,11 @@ import type { ServiceNowClient } from "../src/client";
 
 /**
  * Stub instance: scopes x_cadso_journey (JOURNEYSYS) and x_cadso_automate (AUTOSYS);
- * update set "usj" in Journey, "usa" in Automate. Design Access JOURNEY -> AUTOMATE is
+ * update set "usj" in Journey, "usa" in Automate (both in progress), "usc" a COMPLETE
+ * set in Journey. Design Access JOURNEY -> AUTOMATE is
  * present or missing per opts; a created record reads back with the fields it was
- * inserted with unless `readBackSource` pins a different source_scope.
+ * inserted with (owned by the source scope) unless `readBackSource` / `readBackScope` pin
+ * a different source_scope / sys_scope.
  */
 type Calls = {
   creates: Array<{
@@ -21,6 +23,8 @@ function stub(opts: {
   insertThrows?: boolean;
   noSysId?: boolean;
   readBackSource?: string;
+  /** Pin the read-back sys_scope (default: the inserted source_scope). */
+  readBackScope?: string;
 }): { client: ServiceNowClient; calls: Calls } {
   var calls: Calls = { creates: [], queries: [] };
   var client = {
@@ -41,6 +45,16 @@ function stub(opts: {
                 sys_id: "usj",
                 name: "Journey set",
                 application: { value: "JOURNEYSYS" },
+                state: "in progress",
+              },
+            ];
+          if (query === "sys_id=usc")
+            return [
+              {
+                sys_id: "usc",
+                name: "Closed Journey set",
+                application: { value: "JOURNEYSYS" },
+                state: "complete",
               },
             ];
           if (query === "sys_id=usa")
@@ -49,6 +63,7 @@ function stub(opts: {
                 sys_id: "usa",
                 name: "Automate set",
                 application: { value: "AUTOSYS" },
+                state: "in progress",
               },
             ];
           return [];
@@ -66,6 +81,12 @@ function stub(opts: {
                       : made.fields.source_scope,
                 },
                 target_package: { value: made.fields.target_package },
+                sys_scope: {
+                  value:
+                    opts.readBackScope !== undefined
+                      ? opts.readBackScope
+                      : made.fields.source_scope,
+                },
               },
             ];
           }
@@ -150,6 +171,27 @@ describe("ensureDesignAccess", function () {
     ).rejects.toThrow(/does not belong to the source scope 'x_cadso_journey'/);
     expect(s.calls.creates).toHaveLength(0);
   });
+  it("refuses a closed update set on the live path and writes nothing", async function () {
+    var s = stub({});
+    await expect(
+      ensureDesignAccess(
+        Object.assign({ client: s.client, updateSetSysId: "usc" }, PAIR),
+      ),
+    ).rejects.toThrow(/'Closed Journey set' is 'complete', not 'in progress'/);
+    expect(s.calls.creates).toHaveLength(0);
+  });
+  it("refuses a closed update set on dry-run too", async function () {
+    var s = stub({});
+    await expect(
+      ensureDesignAccess(
+        Object.assign(
+          { client: s.client, updateSetSysId: "usc", dryRun: true },
+          PAIR,
+        ),
+      ),
+    ).rejects.toThrow(/not 'in progress'/);
+    expect(s.calls.creates).toHaveLength(0);
+  });
   it("requires an update set on the live path", async function () {
     var s = stub({});
     await expect(
@@ -211,6 +253,16 @@ describe("ensureDesignAccess", function () {
     expect(r.status).toBe("failed");
     expect(r.sysId).toBe("DASYS");
     expect(r.note).toMatch(/read back as source_scope 'AUTOSYS'/);
+  });
+  it("returns failed (with the sys_id) when the record is owned by the wrong scope", async function () {
+    var s = stub({ readBackScope: "AUTOSYS" });
+    var r = await ensureDesignAccess(
+      Object.assign({ client: s.client, updateSetSysId: "usj" }, PAIR),
+    );
+    expect(r.status).toBe("failed");
+    expect(r.present).toBe(false);
+    expect(r.sysId).toBe("DASYS");
+    expect(r.note).toMatch(/owned by sys_scope 'AUTOSYS'/);
   });
 });
 

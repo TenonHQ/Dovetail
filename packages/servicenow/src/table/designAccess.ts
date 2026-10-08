@@ -18,12 +18,17 @@
  * a missing record and can create it; this module is that check + create.
  *
  * Read-back discipline matches add-column: a created record is read back by the returned
- * sys_id and its source/target asserted before it is called verified. ES6 only, no
+ * sys_id and its source/target and owning sys_scope asserted before it is called verified. ES6 only, no
  * optional chaining, no `any`.
  */
 
 import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
+import {
+  closedUpdateSetMessage,
+  isUpdateSetOpen,
+  readUpdateSet,
+} from "./updateSetGuard";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
 var SCOPE_NAME = /^[a-z0-9_]+$/i;
@@ -161,7 +166,7 @@ async function resolvePair(
  * existing record is reported ("exists") and nothing is written. Dry-run reports whether
  * it exists or would be created. Live creates it through the scope-aware createRecord op
  * switched to the SOURCE scope, captured in `updateSetSysId` (which must belong to the
- * source scope), then reads it back.
+ * source scope and be in progress — checked on dry-run too), then reads it back.
  */
 export async function ensureDesignAccess(
   params: EnsureDesignAccessParams,
@@ -203,21 +208,17 @@ export async function ensureDesignAccess(
       throw new Error(
         "design-access: update set '" + us + "' is not a sys_id.",
       );
-    var usRows = await client.table.query<Record<string, unknown>>(
-      "sys_update_set",
-      "sys_id=" + us,
-      { limit: 1, fields: ["sys_id", "name", "application"] },
-    );
-    if (usRows.length === 0)
+    var usInfo = await readUpdateSet(client, us);
+    if (!usInfo.found)
       throw new Error(
         "design-access: update set '" +
           us +
           "' was not found in sys_update_set.",
       );
-    if (fieldToString(usRows[0].application) !== pair.source.sysId) {
+    if (usInfo.applicationSysId !== pair.source.sysId) {
       throw new Error(
         "design-access: update set '" +
-          (fieldToString(usRows[0].name) || us) +
+          (usInfo.name || us) +
           "' does not belong to the source scope '" +
           pair.source.name +
           "' — the Design Access record is owned by the AUTHORING app and ships in its " +
@@ -225,6 +226,10 @@ export async function ensureDesignAccess(
           pair.source.name +
           "'.",
       );
+    }
+    // Refused on dry-run too: a closed set would accept the record and capture nothing.
+    if (!isUpdateSetOpen(usInfo.state)) {
+      throw new Error(closedUpdateSetMessage("design-access", usInfo));
     }
   }
 
@@ -282,7 +287,10 @@ export async function ensureDesignAccess(
     rows = await client.table.query<Record<string, unknown>>(
       DESIGN_ACCESS_TABLE,
       "sys_id=" + newSysId,
-      { limit: 1, fields: ["sys_id", "source_scope", "target_package"] },
+      {
+        limit: 1,
+        fields: ["sys_id", "source_scope", "target_package", "sys_scope"],
+      },
     );
   } catch (e) {
     return failed(
@@ -320,6 +328,26 @@ export async function ensureDesignAccess(
         "' / '" +
         pair.target.sysId +
         "'. Fix or delete it on the instance.",
+    );
+  }
+  // The record must be OWNED by the source app (the scope switch took), or it is captured
+  // in — and ships with — the wrong app even though source/target look right.
+  var gotScope = fieldToString(rows[0].sys_scope);
+  if (gotScope !== pair.source.sysId) {
+    return failed(
+      base,
+      us,
+      newSysId,
+      "record " +
+        newSysId +
+        " is owned by sys_scope '" +
+        (gotScope || "(empty)") +
+        "', not the source scope '" +
+        pair.source.name +
+        "' (" +
+        pair.source.sysId +
+        ") — the scope switch did not take, so it is captured in the wrong app. Fix or " +
+        "delete it on the instance.",
     );
   }
   return {

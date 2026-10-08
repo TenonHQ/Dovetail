@@ -29,7 +29,8 @@
  * to the COLUMN's scope, so the dictionary row and its update-set capture both land
  * in the column's scope. Guards, run on dry-run and live alike: the override scope
  * must exist; the table must allow new fields from other scopes
- * (`sys_db_object.alter_access`); the update set must belong to the column's scope.
+ * (`sys_db_object.alter_access`); the update set must belong to the column's scope and
+ * be in progress.
  * The element is sent already prefixed (`<scope>_<name>`; an already-prefixed name
  * is accepted as-is) and the element ServiceNow actually stored is read back and
  * reported, together with a `sys_scope` assertion on the read-back row.
@@ -65,8 +66,15 @@ import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
 import { ColumnSpec, normalizeColumns } from "./buildTableSave";
 import { ensureDesignAccess, findDesignAccess } from "./designAccess";
+import {
+  closedUpdateSetMessage,
+  isUpdateSetOpen,
+  readUpdateSet,
+} from "./updateSetGuard";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
+/** A dictionary element name — spliced into an encoded query, so nothing else is allowed. */
+var ELEMENT_NAME = /^[a-z0-9_]+$/;
 
 /** Patch dependent_on_field on a sys_dictionary row, captured in the given update set. */
 async function setDependentOnField(
@@ -125,7 +133,7 @@ export interface AddColumnParams {
    * Explicit opt-in to a column owned by a different scope than its table. Requires
    * `scope`. The element is prefixed with the owning scope (`x_cadso_journey_<name>`),
    * the table must allow new fields from other scopes (sys_db_object.alter_access),
-   * and the update set must belong to the column's scope.
+   * and the update set must belong to the column's scope and be in progress.
    */
   crossScope?: boolean;
   /**
@@ -287,25 +295,6 @@ async function resolveScope(
   };
 }
 
-/** Resolve an update set's owning application (sys_scope sys_id); "" when not found. */
-async function resolveUpdateSetScope(
-  client: ServiceNowClient,
-  updateSetSysId: string,
-): Promise<{ found: boolean; applicationSysId: string; name: string }> {
-  var rows = await client.table.query<Record<string, unknown>>(
-    "sys_update_set",
-    "sys_id=" + updateSetSysId,
-    { limit: 1, fields: ["sys_id", "name", "application"] },
-  );
-  if (rows.length === 0)
-    return { found: false, applicationSysId: "", name: "" };
-  return {
-    found: true,
-    applicationSysId: fieldToString(rows[0].application),
-    name: fieldToString(rows[0].name),
-  };
-}
-
 /** Where the column will live: its owning scope, and the element it will be stored under. */
 interface ColumnPlan {
   resolved: ResolvedTable;
@@ -403,7 +392,7 @@ async function planColumnScope(
     );
   }
   if (params.updateSetSysId && params.updateSetSysId.trim()) {
-    var us = await resolveUpdateSetScope(client, params.updateSetSysId.trim());
+    var us = await readUpdateSet(client, params.updateSetSysId.trim());
     if (!us.found) {
       throw new Error(
         "add-column: update set '" +
@@ -422,6 +411,11 @@ async function planColumnScope(
           owner.name +
           "'.",
       );
+    }
+    // A closed set would accept the column (and any Design Access record) and capture
+    // neither — refuse it here, on dry-run and live alike, before anything is written.
+    if (!isUpdateSetOpen(us.state)) {
+      throw new Error(closedUpdateSetMessage("add-column", us));
     }
   }
   // ServiceNow stores a cross-scope element as <owner>_<name>. Send it already
@@ -527,6 +521,49 @@ export function designAccessNote(
   );
 }
 
+/**
+ * Refuse a dependent_on_field that names the column being added (as it will be STORED —
+ * scope-prefixed on a cross-scope column) or that is not a column on the table. ServiceNow
+ * accepts any string in dependent_on_field without checking it, so a typo would land
+ * silently and every document_id on the table would resolve against nothing. Only the
+ * table's OWN dictionary rows are searched — a dependency on an inherited column is not
+ * supported here; add it on the defining table instead. `wantDependent` has already been
+ * validated as a plain element name. Shared by the scoped dry-run and the live path.
+ */
+async function assertDependencyExists(
+  client: ServiceNowClient,
+  tableName: string,
+  plannedElement: string,
+  wantDependent: string,
+): Promise<void> {
+  if (wantDependent === plannedElement) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' names the column being added — a column cannot depend on itself.",
+    );
+  }
+  var dependencyRows = await client.table.query<Record<string, unknown>>(
+    "sys_dictionary",
+    "name=" + tableName + "^element=" + wantDependent,
+    { limit: 1, fields: ["sys_id", "element"] },
+  );
+  // The row found must BE the requested element, not merely some row the query matched.
+  if (
+    dependencyRows.length === 0 ||
+    fieldToString(dependencyRows[0].element) !== wantDependent
+  ) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' is not a column on '" +
+        tableName +
+        "' (its own sys_dictionary rows were searched; inherited columns are not " +
+        "considered). Add that column first, then re-run. Nothing was written.",
+    );
+  }
+}
+
 export async function addColumn(
   params: AddColumnParams,
 ): Promise<AddColumnResult> {
@@ -572,6 +609,15 @@ async function addColumnInner(
     typeof params.column.dependent_on_field === "string"
       ? params.column.dependent_on_field.trim()
       : "";
+  // It is spliced into the existence-check query, so an operator (^OR, =) would turn the
+  // check into "does ANY matching row exist" — refuse anything but a plain element name.
+  if (wantDependent && !ELEMENT_NAME.test(wantDependent)) {
+    throw new Error(
+      "add-column: dependent_on_field '" +
+        wantDependent +
+        "' is not a valid column name (lowercase letters, digits and underscores only).",
+    );
+  }
   if (wantDependent === element) {
     throw new Error(
       "add-column: dependent_on_field '" +
@@ -591,6 +637,17 @@ async function addColumnInner(
       params.crossScope === true;
     var planned: ColumnPlan | undefined;
     if (hasScopeAsk) planned = await planColumnScope(client, params, element);
+    // Once the dry-run is talking to the instance, check the dependency too — otherwise a
+    // missing (or, cross-scope, self-referencing prefixed) dependency dry-runs clean and
+    // only fails live.
+    if (planned && wantDependent) {
+      await assertDependencyExists(
+        client,
+        planned.resolved.name,
+        planned.element,
+        wantDependent,
+      );
+    }
     var planElement = planned ? planned.element : element;
     var planTable = planned ? planned.resolved.name : params.table;
     var planTableSysId = planned
@@ -655,9 +712,20 @@ async function addColumnInner(
   var scopeName = plan.scopeName;
   element = plan.element;
 
-  // Create the missing Design Access record FIRST when asked — nothing about the column
-  // has been written yet, so a failure here stops cleanly with the instance untouched
-  // (or, if the record landed but did not verify, says exactly that).
+  // max_length is deliberately NOT sent on the insert — see the sizing step below.
+  // Reference (and date) columns carry no max_length at all.
+  var wantLength = col.type === "reference" ? "" : col.maxLength;
+
+  // The dependency target must EXIST on this table before anything is written — the
+  // same check the scoped dry-run ran, against the element the plan will store.
+  if (wantDependent) {
+    await assertDependencyExists(client, resolved.name, element, wantDependent);
+  }
+
+  // Create the missing Design Access record when asked — AFTER every check that can still
+  // refuse the request (scope, update set, dependency), so a refusal never leaves a record
+  // behind, and BEFORE the column, so nothing about the column has been written yet: a
+  // failure here stops cleanly (or, if the record landed but did not verify, says so).
   var da = plan.designAccess;
   if (da && da.present !== true && params.ensureDesignAccess === true) {
     var ensured = await ensureDesignAccess({
@@ -690,33 +758,6 @@ async function addColumnInner(
     }
   }
   if (da) daOut.value = da;
-
-  // max_length is deliberately NOT sent on the insert — see the sizing step below.
-  // Reference (and date) columns carry no max_length at all.
-  var wantLength = col.type === "reference" ? "" : col.maxLength;
-
-  // The dependency target must EXIST on this table before the insert. ServiceNow
-  // accepts any string in dependent_on_field without checking it, so a typo would
-  // land silently and every document_id on the table would resolve against nothing.
-  // Only the table's OWN dictionary rows are searched — a dependency on an inherited
-  // column is not supported here; add it on the defining table instead.
-  if (wantDependent) {
-    var dependencyRows = await client.table.query<Record<string, unknown>>(
-      "sys_dictionary",
-      "name=" + resolved.name + "^element=" + wantDependent,
-      { limit: 1, fields: ["sys_id", "element"] },
-    );
-    if (dependencyRows.length === 0) {
-      throw new Error(
-        "add-column: dependent_on_field '" +
-          wantDependent +
-          "' is not a column on '" +
-          resolved.name +
-          "' (its own sys_dictionary rows were searched; inherited columns are not " +
-          "considered). Add that column first, then re-run. Nothing was written.",
-      );
-    }
-  }
 
   // Idempotency: if the column already exists, skip the insert (never duplicate a
   // dictionary row on a re-run). Matched by name+element — the element IS the column's

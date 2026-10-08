@@ -42,7 +42,9 @@ and un-promotable. This directory is the source of truth going forward.
   platform-config tables whose rows carry **no `sys_scope`** (`sys_choice`) —
   `scopeQuery` (an encoded query with `{scope}`/`{scopeId}` tokens that replaces the
   `sys_scope` filter; such a table is also added to the scope's table list, since
-  `getTableNames` only sees `sys_metadata` children) and `nameTemplate`
+  `getTableNames` only sees `sys_metadata` children — the query fails closed: no
+  `{scope}`/`{scopeId}` token, an `^NQ`, a dot-walk or any field `isValidField` rejects
+  returns no records plus a `gs.warn`, never the unfiltered table) and `nameTemplate`
   (`"{name}.{element}.{value}"` folder names from raw fields; empty tokens dropped).
   Covered by `packages/core/src/tests/dovetailUtilsMSTableOptions.test.ts`.
 
