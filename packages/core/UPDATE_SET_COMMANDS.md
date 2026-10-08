@@ -68,6 +68,7 @@ npx dove switchUpdateSet
 #### Options:
 - `-n, --name <name>` - Name or partial name of the update set to switch to
 - `-s, --scope <scope>` - Filter update sets by scope
+- `--sysId <sys_id>` - Switch to the in-progress update set with exactly this sys_id (unambiguous when two sets share a name)
 - `--logLevel <level>` - Set log level (default: info)
 
 #### Examples:
@@ -75,6 +76,11 @@ npx dove switchUpdateSet
 Interactive mode (shows list to select from):
 ```bash
 npx dove switchUpdateSet
+```
+
+Switch by exact sys_id (what `dove create sys_update_set` prints):
+```bash
+npx dove switchUpdateSet --sysId 0123456789abcdef0123456789abcdef -s x_company_app
 ```
 
 Switch by partial name match:

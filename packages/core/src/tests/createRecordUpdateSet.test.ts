@@ -73,6 +73,7 @@ interface MockClient {
   getScopeId: jest.Mock;
   getScopeById: jest.Mock;
   getUpdateSetById: jest.Mock;
+  getInProgressUpdateSetsByName: jest.Mock;
   createUpdateSet: jest.Mock;
   createRecord: jest.Mock;
 }
@@ -81,6 +82,7 @@ var mockClient: MockClient = {
   getScopeId: jest.fn(),
   getScopeById: jest.fn(),
   getUpdateSetById: jest.fn(),
+  getInProgressUpdateSetsByName: jest.fn(),
   createUpdateSet: jest.fn(),
   createRecord: jest.fn(),
 };
@@ -143,6 +145,9 @@ describe("dove create sys_update_set (#231)", function () {
       }
       return axiosResult([]);
     });
+    mockClient.getInProgressUpdateSetsByName.mockImplementation(function () {
+      return axiosResult([]);
+    });
     mockClient.createUpdateSet.mockImplementation(function (name: string, scopeSysId: string) {
       return axiosResult({ sys_id: SET_SYS_ID, name: name, application: scopeSysId });
     });
@@ -193,6 +198,55 @@ describe("dove create sys_update_set (#231)", function () {
     expect(success.length).toBe(1);
     expect(success[0].msg).toContain(SET_SYS_ID);
     expect(success[0].msg).toContain(REQUESTED_SCOPE);
+  });
+
+  it("prints an activation hint keyed on the new set's sys_id, not its name", async function () {
+    mockClient.getUpdateSetById.mockReturnValue(
+      axiosResult([{ sys_id: SET_SYS_ID, application: { value: REQUESTED_SCOPE_SYS_ID } }]),
+    );
+
+    await createRecordCommand({
+      table: "sys_update_set",
+      name: "Journey - Fix 231",
+      scope: REQUESTED_SCOPE,
+      ci: true,
+      logLevel: "info",
+    });
+
+    expect(mockClient.getInProgressUpdateSetsByName).toHaveBeenCalledWith(
+      "Journey - Fix 231",
+      REQUESTED_SCOPE_SYS_ID,
+    );
+    var hint = logMessages.filter(function (m) {
+      return m.level === "info" && m.msg.indexOf("switchUpdateSet") !== -1;
+    });
+    expect(hint).toHaveLength(1);
+    expect(hint[0].msg).toContain("--sysId " + SET_SYS_ID);
+    expect(hint[0].msg).toContain("-s " + REQUESTED_SCOPE);
+    expect(hint[0].msg).not.toContain("--name");
+  });
+
+  it("refuses (exit 1, no op call) when an in-progress set with the same name already exists in the scope", async function () {
+    mockClient.getInProgressUpdateSetsByName.mockImplementation(function () {
+      return axiosResult([{ sys_id: "existingSetSysId000000000000000cd", name: "Journey - Fix 231" }]);
+    });
+
+    await expect(
+      createRecordCommand({
+        table: "sys_update_set",
+        name: "Journey - Fix 231",
+        scope: REQUESTED_SCOPE,
+        ci: true,
+        logLevel: "info",
+      }),
+    ).rejects.toBeInstanceOf(ExitSignal);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(mockClient.createUpdateSet).not.toHaveBeenCalled();
+    expect(mockClient.createRecord).not.toHaveBeenCalled();
+    expect(logMessages.filter(function (m) { return m.level === "success"; })).toHaveLength(0);
+    expect(errorText()).toContain("already exists");
+    expect(errorText()).toContain("existingSetSysId000000000000000cd");
   });
 
   it("fails loudly (exit 1, no success) when the created set's application is not the requested scope", async function () {

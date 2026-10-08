@@ -558,6 +558,11 @@ export function configureCli(cli: Argv): Argv {
             type: "string",
             describe: "Name or partial name of the update set to switch to",
           },
+          sysId: {
+            type: "string",
+            describe:
+              "Exact sys_id of the update set to switch to (unambiguous when names repeat)",
+          },
           scope: {
             alias: "s",
             type: "string",

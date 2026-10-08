@@ -42,7 +42,8 @@ See [`UPDATE_SET_COMMANDS.md`](UPDATE_SET_COMMANDS.md) for the full update-set C
 
 - `--scope` decides the application. It is **required** with `--ci`; interactively it is confirmed in the summary.
 - Only `name` and `description` map onto the op; other `--field` values are ignored with a warning.
-- The set is created, not activated — use `npx dove switchUpdateSet --name "<name>" -s <scope>` (or `npx dove createUpdateSet`, which creates and activates in one step).
+- An in-progress set with the same name already in that scope is refused (exit 1) rather than duplicated.
+- The set is created, not activated — the success line prints its sys_id; use `npx dove switchUpdateSet --sysId <sys_id> -s <scope>` (or `npx dove createUpdateSet`, which creates and activates in one step).
 
 ## Plugins
 

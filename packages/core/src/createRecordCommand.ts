@@ -340,6 +340,32 @@ export async function createUpdateSetRecord(
     throw new Error('Scope "' + scope + '" resolved without a sys_id.');
   }
 
+  // Refuse a duplicate: a second in-progress set with the same name in the
+  // same scope (e.g. a retry after a timeout that had already succeeded) makes
+  // every later activate-by-name ambiguous.
+  var existingSets = await unwrapSNResponse(
+    client.getInProgressUpdateSetsByName(name, scopeSysId),
+  );
+  if (Array.isArray(existingSets) && existingSets.length > 0) {
+    var existingIds = existingSets
+      .map(function (row) {
+        return row && typeof row.sys_id === "string" ? row.sys_id : "?";
+      })
+      .join(", ");
+    throw new Error(
+      'An in-progress update set named "' +
+        name +
+        '" already exists in scope ' +
+        scope +
+        " (" +
+        existingIds +
+        "). Refusing to create a duplicate — reuse it with " +
+        "npx dove switchUpdateSet --sysId <sys_id> -s " +
+        scope +
+        ", or pick a different name.",
+    );
+  }
+
   fileLogger.debug(
     "createUpdateSet op:",
     JSON.stringify({ name: name, scope: scope, application: scopeSysId }),
@@ -551,8 +577,8 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
           ").",
       );
       logger.info(
-        "Not activated. To route pushes to it: npx dove switchUpdateSet --name " +
-          JSON.stringify(createdSet.name) +
+        "Not activated. To route pushes to it: npx dove switchUpdateSet --sysId " +
+          createdSet.sysId +
           " -s " +
           createdSet.scope,
       );

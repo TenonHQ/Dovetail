@@ -1234,7 +1234,7 @@ All commands are registered via yargs in `packages/core/src/commander.ts`. The b
 | Command | Description | Key Flags |
 |---|---|---|
 | `createUpdateSet` | Create new update set and switch to it | `--name`, `--description`, `--scope`, `--clickup <id>`, `--skipDescription`, `--skipScope` |
-| `switchUpdateSet` | Switch to existing update set | `--name`, `--scope` |
+| `switchUpdateSet` | Switch to existing update set | `--name`, `--scope`, `--sysId` |
 | `listUpdateSets` | List in-progress update sets | `--scope` |
 | `currentUpdateSet` | Show current active update set | `--scope` |
 

@@ -477,6 +477,29 @@ export const snClient = (
   };
 
   /**
+   * In-progress update sets with exactly this name in one application, so a
+   * create can refuse a duplicate (a retry after a timeout would otherwise
+   * leave two same-named sets, and activate-by-name picks either). A `^` in
+   * the name is escaped as `^^` so it cannot split the encoded query.
+   */
+  const getInProgressUpdateSetsByName = (
+    updateSetName: string,
+    applicationSysId: string,
+  ) => {
+    const endpoint = "api/now/table/sys_update_set";
+    type UpdateSetReadResponse = Sinc.SNAPIResponse<UpdateSetReadRecord[]>;
+    const safeName = String(updateSetName).replace(/\^/g, "^^");
+    return client.get<UpdateSetReadResponse>(endpoint, {
+      params: {
+        sysparm_query:
+          `name=${safeName}^application=${applicationSysId}` +
+          "^state=in progress",
+        sysparm_fields: "sys_id,name,application",
+      },
+    });
+  };
+
+  /**
    * Reads ONE record by sys_id, selecting only its class and owning scope, so a
    * per-record pull can resolve (and refuse) the target scope before it fetches
    * any content. Plain Table API read — no Dovetail server op involved.
@@ -819,6 +842,7 @@ export const snClient = (
     getScopeId,
     getScopeById,
     getUpdateSetById,
+    getInProgressUpdateSetsByName,
     getRecordScope,
     getUpdateSetMembers,
     getUserSysId,
