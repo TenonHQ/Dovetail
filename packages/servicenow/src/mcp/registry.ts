@@ -51,6 +51,9 @@ import {
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
 import { createRecord } from "../createRecord";
+import { syncUxEvents } from "../uxEvents";
+import * as fs from "fs";
+import * as path from "path";
 import { deleteRecord } from "../deleteRecord";
 import { invokeRest } from "../invokeRest";
 import type { InvokeRestParams } from "../invokeRest";
@@ -87,6 +90,7 @@ import {
   setTableSchema,
   setFieldSchema,
   createRecordSchema,
+  syncUxEventsSchema,
   deleteRecordSchema,
   hostAssetsSchema,
   invokeRestSchema,
@@ -123,6 +127,7 @@ export var TOOL_NAMES = [
   "set_field",
   "create_record",
   "delete_record",
+  "sync_ux_events",
   "host_assets",
   "invoke_rest",
   "app_publish",
@@ -911,6 +916,34 @@ export function buildDescriptors(
           updateSetSysId: p.updateSetSysId,
           ifAbsentQuery: p.ifAbsentQuery,
           dryRun: p.dryRun,
+        });
+      },
+    },
+    {
+      name: "sync_ux_events",
+      annotations: WRITE_ADDITIVE_IDEMPOTENT,
+      description:
+        "Register a UI component's dispatched events: read a local now-ui.json, and for each component " +
+        "with actions resolve its macroponent (sys_ux_macroponent whose root_component is the " +
+        "sys_ux_lib_component with that tag), then diff every action against sys_ux_event and the " +
+        "macroponent's dispatched_events. Each action is ok / create (no event record) / link (record " +
+        "exists but is not listed) / drift (label or description differs — report only) / ambiguous " +
+        "(several records — never written); linked-but-undeclared events are reported as orphans. " +
+        "DRY-RUN BY DEFAULT — with confirm:true it creates the missing events in the macroponent's scope " +
+        "via the scope-aware createRecord op and APPENDS their sys_ids to dispatched_events via " +
+        "pushWithUpdateSet (never drops or reorders an entry), both captured into updateSetSysId " +
+        "(required to confirm), then re-reads the macroponent to verify. Idempotent: a re-run is a no-op. " +
+        "ok:false means an unresolved/ambiguous component or event, or an unverified write.",
+      shape: syncUxEventsSchema.shape,
+      handler: async function (args: unknown) {
+        var p = syncUxEventsSchema.parse(args);
+        var nowUi: unknown = JSON.parse(fs.readFileSync(path.resolve(p.file), "utf8"));
+        return syncUxEvents({
+          client: client(),
+          nowUi: nowUi,
+          component: p.component,
+          updateSetSysId: p.updateSetSysId,
+          apply: p.confirm === true && p.dryRun !== true,
         });
       },
     },

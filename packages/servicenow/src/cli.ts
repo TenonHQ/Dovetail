@@ -89,6 +89,7 @@ import type {
   PublishTarget,
 } from "./publishApp";
 import { hostAssets, formatHostAssetsResult } from "./hostAssets";
+import { syncUxEvents, formatUxEventSync } from "./uxEvents";
 import {
   formatReadFlowResult,
   formatReadActionTypeResult,
@@ -2245,6 +2246,62 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
 }
 
 /**
+ * dove-sn sync-ux-events:
+ *   --file <path/to/now-ui.json>
+ *   [--component <tag>]
+ *   [--update-set <sys_id>]                      (required with --apply)
+ *   [--apply] [--dry-run] [--json]
+ * DRY-RUN BY DEFAULT. Exit codes: 0 in sync / dry-run / applied+verified, 1 bad args or
+ * unreadable file, 2 unresolved/ambiguous component or event, or an unverified write.
+ */
+async function runSyncUxEvents(
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): Promise<number> {
+  var bareErr = bareStringFlagError("sync-ux-events", bare);
+  if (bareErr) {
+    process.stderr.write(bareErr);
+    return 1;
+  }
+  var file = flags.file;
+  if (!file) {
+    process.stderr.write("sync-ux-events: --file <now-ui.json> is required\n");
+    return 1;
+  }
+  var apply = flags.apply === "true" && flags["dry-run"] !== "true";
+  var nowUi: unknown;
+  try {
+    nowUi = JSON.parse(fs.readFileSync(path.resolve(file), "utf8"));
+  } catch (err) {
+    process.stderr.write(
+      "sync-ux-events: cannot read " + file + ": " + (err instanceof Error ? err.message : String(err)) + "\n",
+    );
+    return 1;
+  }
+  var result: Awaited<ReturnType<typeof syncUxEvents>>;
+  try {
+    result = await syncUxEvents({
+      client: createClient({}),
+      nowUi: nowUi,
+      component: flags.component,
+      updateSetSysId: flags["update-set"],
+      apply: apply,
+    });
+  } catch (err) {
+    var message = err instanceof Error ? err.message : String(err);
+    if (message.indexOf("ux-events: ") === 0) message = message.slice("ux-events: ".length);
+    process.stderr.write("sync-ux-events: " + message + "\n");
+    return 1;
+  }
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else {
+    process.stdout.write(formatUxEventSync(result) + "\n");
+  }
+  return result.ok ? 0 : 2;
+}
+
+/**
  * dove-sn delete-record:
  *   --table x_cadso_core_metric_point_type
  *   --sys-id <32-hex sys_id>                     (the record to delete)
@@ -3023,6 +3080,9 @@ async function dispatch(parsed: ParsedArgs): Promise<number> {
   }
   if (parsed.command === "create-record") {
     return await runCreateRecord(parsed.flags);
+  }
+  if (parsed.command === "sync-ux-events") {
+    return await runSyncUxEvents(parsed.flags, parsed.bare);
   }
   if (parsed.command === "delete-record") {
     return await runDeleteRecord(parsed.flags);

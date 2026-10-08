@@ -965,6 +965,36 @@ var r = await setField({
 console.log(r.status, r.verified); // "applied" true
 ```
 
+### Register UI component events (sync-ux-events)
+
+UI Builder can only map an event a component dispatches when it exists as a
+`sys_ux_event` record **and** is listed in the component macroponent's
+`dispatched_events`. A component deploy does not reliably create either, so
+`sync-ux-events` reads the component's `now-ui.json` and reconciles every
+`components.<tag>.actions[]` entry against the instance.
+
+```bash
+# Dry-run (the default) — per action: ok / create / link / drift / ambiguous, plus orphans
+npx dove-sn sync-ux-events --file path/to/now-ui.json
+
+# Apply — creates the missing events and appends them to dispatched_events
+npx dove-sn sync-ux-events --file path/to/now-ui.json \
+  --component cadso-journey-builder --update-set <sys_id> --apply
+```
+
+The macroponent is the `sys_ux_macroponent` (category `component`) whose
+`root_component` is the `sys_ux_lib_component` with that tag; events are created in
+the macroponent's scope via the scope-aware `createRecord` op and the list edit goes
+through `pushWithUpdateSet`, both captured into `--update-set`. The write is
+**append-only** — existing `dispatched_events` entries are never dropped or reordered —
+and is re-read to verify. Label/description **drift** and **orphans** (linked but no
+longer declared) are reported, never changed; an event name carried by several records
+is **ambiguous** and never written. Event names and tags are charset-validated before
+they reach a query. Re-runs are no-ops. Exit codes: `0` in sync / dry-run / applied and
+verified; `1` bad args or unreadable file; `2` an unresolved or ambiguous
+component/event, or a write that did not verify. MCP: `sync_ux_events` (dry-run unless
+`confirm:true`).
+
 ### Invoke an arbitrary REST operation
 
 Invoke any authenticated ServiceNow REST operation — an application's own

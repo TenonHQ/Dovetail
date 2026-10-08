@@ -6,7 +6,7 @@ import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 32 expected tools", function () {
+  it("registers exactly the 33 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -42,9 +42,10 @@ describe("MCP registry", function () {
       "set_list_layout",
       "set_related_lists",
       "set_table",
+      "sync_ux_events",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(32);
+    expect(TOOL_NAMES).toHaveLength(33);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -535,7 +536,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (32)");
+    expect(out).toContain("Registered tools (33)");
     expect(out).toContain("action_define");
     expect(out).toContain("action_clone");
     expect(out).toContain("add_index");
@@ -581,7 +582,7 @@ describe("MCP registry — annotations", function () {
     var map = byName();
 
     // additive, idempotent upserts/creates
-    ["create_view", "add_choices_to_field", "index_create"].forEach(function (name) {
+    ["create_view", "add_choices_to_field", "index_create", "sync_ux_events"].forEach(function (name) {
       expect(map[name].annotations.readOnlyHint).toBe(false);
       expect(map[name].annotations.destructiveHint).toBe(false);
       expect(map[name].annotations.idempotentHint).toBe(true);

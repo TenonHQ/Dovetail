@@ -568,6 +568,24 @@ export var deleteRecordSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+// sync_ux_events: DRY-RUN BY DEFAULT — writes only with confirm:true (dryRun:true
+// forces a dry-run even then). file is a local now-ui.json path read by the server
+// process; the component tag and update-set id are shape-checked here AND in
+// syncUxEvents so a malformed value never reaches an encoded query.
+export var syncUxEventsSchema = z.object({
+  file: z.string().min(1),
+  component: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{0,99}$/, "component must be a custom-element tag, e.g. cadso-journey-builder")
+    .optional(),
+  updateSetSysId: z
+    .string()
+    .regex(/^[0-9a-f]{32}$/, "updateSetSysId must be a 32-character lowercase hex sys_id")
+    .optional(),
+  confirm: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
 // app_publish: publish a scoped app to the ServiceNow Store or the company
 // application repository. Deliberately NO credential fields — the Store
 // account resolves from SN_STORE_USERNAME/SN_STORE_PASSWORD inside the verb,
