@@ -14,7 +14,7 @@ Dovetail is the action layer that lets a Claude session **read and write Service
 |---|---|---|---|---|
 | **dovetail-mcp** | `@tenonhq/dovetail-mcp` | 16 | Read-mostly; 4 ClickUp writes behind an env gate | Look up ClickUp tasks, unread/starred mail, today's calendar, or query any SN table read-only |
 | **dovetail-claude-plans** | `@tenonhq/dovetail-claude-plans` | 25 | Read + write (no gate) | Push a plan/diagram/artifact to the dashboard, park Q&A, drive pipeline stages, record lint events, browse plan versions, manage prompt drafts, build a session handoff |
-| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 31 | Writes, update-set-captured (`delete_record` pending #297); **most** preview before writing (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
+| **dovetail-servicenow** | `@tenonhq/dovetail-servicenow` (`dove-sn mcp`) | 31 | Writes, update-set-captured (`delete_record` pinned client-side until #297); **most** preview before writing (not all — see §4) | Declaratively author SN views, list/form layouts, related lists, field choices, tables/columns, records, and flows |
 
 MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude-plans__push_plan`), where `<server-key>` is whatever the session's MCP config names the server. The **tool names below are the names registered in code** — verified against each package's `registry.ts`.
 
@@ -106,8 +106,8 @@ Source: `packages/claude-plans/src/registry.ts`. No env gate. Dashboard renders 
 Source: `packages/servicenow/src/mcp/registry.ts` — the registry is the source of
 truth, and `tests/mcp.test.ts` pins the count, so a drifted number here is a bug.
 
-Writes are **captured in the update set you pass** (exception: `delete_record`, until
-#297 ships — see its row) and are **idempotent** (re-running reports every record
+Writes are **captured in the update set you pass** (`delete_record` pins the set and
+verifies the capture client-side until #297 ships — see its row) and are **idempotent** (re-running reports every record
 unchanged).
 
 > **Previewing is NOT universal.** Of the 31 tools, 23 accept `dryRun`; 3 more preview
@@ -147,7 +147,7 @@ unchanged).
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
 | `create_record` | Create a record in a given scope + update set | yes |
-| `delete_record` | Delete ONE record by table + 32-hex sys_id. `updateSetSysId` is **required** and sent, but **not yet honoured**: until #297 ships the delete is captured into the session's **current** update set (every result note says so). Reads the record BEFORE (a missing record is an error, not a no-op) and AFTER (success only once it is confirmed gone). Refuses schema tables. Not on `dovetail-mcp` — writes live here | dry-run **by default**; `confirm:true` deletes |
+| `delete_record` | Delete ONE record by table + 32-hex sys_id. `updateSetSysId` is **required** and must be in progress. The server op ignores it until #297 ships, so the tool pins it as the session's current set first (refusing if the pin does not read back) and reads the DELETE capture back from `sys_update_xml` (`captured` / `capturedInto` / `captureState`). Reads the record BEFORE (a missing record is an error, not a no-op) and AFTER (success only once it is confirmed gone). Refuses schema tables. Not on `dovetail-mcp` — writes live here | dry-run **by default**; `confirm:true` deletes |
 
 ### Flows & actions
 

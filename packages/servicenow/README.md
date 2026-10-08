@@ -935,14 +935,19 @@ npx dove-sn delete-record \
 `delete-record` wraps the core `deleteRecord` op. It is **dry-run by default** —
 nothing is deleted without `--apply` (`--dry-run` wins if both are given). `--sys-id`
 must be a 32-character lowercase hex id and `--table` a plain table name; both are
-validated before any network call. `--update-set` is **required** and sent with the
-delete, but **the capture is not pinned yet**: until
-[#297](https://github.com/TenonHQ/Dovetail/issues/297) ships server-side, the op ignores
-`update_set_sys_id` and captures the delete into the session's **current** update set —
-make that the set you want before `--apply`. Every result note repeats this caveat; the
-client keeps sending the field so it takes effect the moment the server honours it. Like its siblings it **refuses** schema tables (`sys_db_object` /
-`sys_dictionary`). Exit codes: `0` deleted / dry-run, `1` bad args or no such record,
-`2` the delete returned but the record is **still present** on read-back.
+validated before any network call. `--update-set` is **required**, must exist and be
+**in progress** (checked on the dry-run too). Until
+[#297](https://github.com/TenonHQ/Dovetail/issues/297) ships server-side the op ignores
+`update_set_sys_id` and captures the delete into the session's **current** update set, so
+the verb pins `--update-set` as current first (refusing, nothing deleted, if the pin does
+not read back) and then reads the DELETE row back from `sys_update_xml`. The result carries
+`captured`, `capturedInto` and `captureState` (`in-set` / `other-set` / `none` /
+`unverified`). Like its siblings it **refuses** schema tables (`sys_db_object` /
+`sys_dictionary`). A failed delete call never skips the read-back. Exit codes: `0` deleted
+and captured in the set, a table that writes no capture at all (`none`, with a note), or a
+dry-run; `1` bad args, no such record, or an unknown/closed update set; `2` the record is
+**still present** on read-back (including a server-refused delete), its state is unknown,
+the pin did not take, or the DELETE landed in a different set / could not be read back.
 
 All three verbs are exported for programmatic use:
 
@@ -1217,8 +1222,8 @@ existing record), `create_record` (insert one record) and `delete_record` (delet
 record — dry-run by default, `confirm:true` to apply, `updateSetSysId` required, the
 record read back before AND after so success is only reported once it is confirmed
 gone) — all read-back-verified; `set_field` / `create_record` are captured in the
-update set you pass, while `delete_record` captures into the session's current set
-until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `host_assets` (deploy a built
+update set you pass, while `delete_record` pins the set as current and reads the DELETE
+capture back (`captureState`) until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `host_assets` (deploy a built
 dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step
