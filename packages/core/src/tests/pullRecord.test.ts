@@ -572,6 +572,100 @@ describe("planPull — renamed record", function () {
   });
 });
 
+describe("planPull — manifest key collisions (never overwrite another sys_id)", function () {
+  const TABLE = "sys_one_extend_capability";
+  const ID_DUP = "ddddddddddddddddddddddddddddddd4";
+  const NAME = "Skill Capability";
+
+  function metaFolder(key: string): string {
+    return path.join(tmpRoot, "src", SCOPE, TABLE, key, "metaData.json");
+  }
+
+  test("two same-named metaData-only records pulled one after the other → both entries + both folders survive", async function () {
+    mockClient.getMissingFiles.mockResolvedValue(bulkDownload(TABLE, ID_META_ONLY, NAME, []));
+    await applyPull(await planPull([{ table: TABLE, sysId: ID_META_ONLY }]));
+
+    mockClient.getMissingFiles.mockResolvedValue(bulkDownload(TABLE, ID_DUP, NAME, []));
+    const plan = await planPull([{ table: TABLE, sysId: ID_DUP }]);
+    const dupKey = NAME + " (" + ID_DUP.substring(0, 8) + ")";
+    expect(plan.records[0].key).toBe(dupKey);
+    expect(plan.records[0].manifestAction).toBe("add");
+    await applyPull(plan);
+
+    const records = JSON.parse(readLocalManifest()).tables[TABLE].records;
+    expect(Object.keys(records)).toEqual([NAME, dupKey]);
+    expect(records[NAME].sys_id).toBe(ID_META_ONLY);
+    expect(records[dupKey]).toEqual({ files: [], name: dupKey, sys_id: ID_DUP });
+    expect(JSON.parse(fs.readFileSync(metaFolder(NAME), "utf8"))._sys_id).toBe(ID_META_ONLY);
+    expect(JSON.parse(fs.readFileSync(metaFolder(dupKey), "utf8"))._sys_id).toBe(ID_DUP);
+
+    // re-pulling either record is a no-op: the suffixed key is stable
+    const again = await planPull([{ table: TABLE, sysId: ID_DUP }]);
+    expect(again.records[0].key).toBe(dupKey);
+    expect(again.records[0].manifestAction).toBe("unchanged");
+    mockClient.getMissingFiles.mockResolvedValue(bulkDownload(TABLE, ID_META_ONLY, NAME, []));
+    const first = await planPull([{ table: TABLE, sysId: ID_META_ONLY }]);
+    expect(first.records[0].key).toBe(NAME);
+    expect(first.records[0].manifestAction).toBe("unchanged");
+  });
+
+  test("two same-named metaData-only records in ONE batch → both entries + both folders survive", async function () {
+    const a = bulkDownload(TABLE, ID_META_ONLY, NAME, [])[TABLE].records[NAME];
+    const b = bulkDownload(TABLE, ID_DUP, NAME, [])[TABLE].records[NAME];
+    mockClient.getMissingFiles.mockResolvedValue({ [TABLE]: { records: { [ID_META_ONLY]: a, [ID_DUP]: b } } });
+
+    const plan = await planPull([{ table: TABLE, sysId: ID_META_ONLY }, { table: TABLE, sysId: ID_DUP }]);
+    const dupKey = NAME + " (" + ID_DUP.substring(0, 8) + ")";
+    expect(plan.records.map(function (r) { return r.key + ":" + r.manifestAction; }))
+      .toEqual([NAME + ":add", dupKey + ":add"]);
+    await applyPull(plan);
+
+    const records = JSON.parse(readLocalManifest()).tables[TABLE].records;
+    expect(Object.keys(records)).toEqual([NAME, dupKey]);
+    expect(records[NAME].sys_id).toBe(ID_META_ONLY);
+    expect(records[dupKey].sys_id).toBe(ID_DUP);
+    expect(JSON.parse(fs.readFileSync(metaFolder(NAME), "utf8"))._sys_id).toBe(ID_META_ONLY);
+    expect(JSON.parse(fs.readFileSync(metaFolder(dupKey), "utf8"))._sys_id).toBe(ID_DUP);
+  });
+
+  test("a fallback key never takes a key the server manifest gives another record", async function () {
+    mockClient.getManifest.mockResolvedValue({
+      scope: SCOPE,
+      tables: { [TABLE]: { records: { [NAME]: { name: NAME, sys_id: ID_META_ONLY, files: [{ name: "script", type: "js" }] } } } },
+    });
+    mockClient.getMissingFiles.mockResolvedValue(bulkDownload(TABLE, ID_DUP, NAME, []));
+    const plan = await planPull([{ table: TABLE, sysId: ID_DUP }]);
+    expect(plan.records[0].key).toBe(NAME + " (" + ID_DUP.substring(0, 8) + ")");
+  });
+
+  test("a server-provided key held locally by a DIFFERENT sys_id → refused, points at dove refresh -t, writes nothing", async function () {
+    // Local manifest says "Sibling" is ID_SIB; the server now hands "Sibling" to
+    // another record (its duplicate-suffix order moved since the last refresh).
+    seedSibling();
+    writeLocalManifest(localManifestWithSibling(), true);
+    const before = snapshot(tmpRoot);
+    mockClient.getManifest.mockResolvedValue({
+      scope: SCOPE,
+      tables: { sys_script_include: { records: {
+        Sibling: { name: "Sibling", sys_id: ID_NEW, files: [{ name: "script", type: "js" }] },
+      } } },
+    });
+
+    await expect(planPull([{ table: "sys_script_include", sysId: ID_NEW }]))
+      .rejects.toThrow(/manifest key 'Sibling' already belongs to sys_id aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1[\s\S]*dove refresh -t sys_script_include/);
+    expect(mockClient.getMissingFiles).not.toHaveBeenCalled();
+    expect(snapshot(tmpRoot)).toEqual(before);
+  });
+
+  test("spliceManifestRecord refuses to overwrite a key held by a different sys_id", function () {
+    expect(function () {
+      spliceManifestRecord(localManifestWithSibling(), SCOPE, "sys_script_include", {
+        files: [], name: "Sibling", sys_id: ID_NEW,
+      });
+    }).toThrow(/already belongs to sys_id/);
+  });
+});
+
 // ---------- --from-update-set ----------
 
 describe("targetsFromUpdateSet", function () {
