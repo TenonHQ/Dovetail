@@ -29,7 +29,8 @@
  * to the COLUMN's scope, so the dictionary row and its update-set capture both land
  * in the column's scope. Guards, run on dry-run and live alike: the override scope
  * must exist; the table must allow new fields from other scopes
- * (`sys_db_object.alter_access`); the update set must belong to the column's scope.
+ * (`sys_db_object.alter_access`); the update set must belong to the column's scope and
+ * be in progress.
  * The element is sent already prefixed (`<scope>_<name>`; an already-prefixed name
  * is accepted as-is) and the element ServiceNow actually stored is read back and
  * reported, together with a `sys_scope` assertion on the read-back row.
@@ -65,6 +66,11 @@ import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
 import { ColumnSpec, normalizeColumns } from "./buildTableSave";
 import { ensureDesignAccess, findDesignAccess } from "./designAccess";
+import {
+  closedUpdateSetMessage,
+  isUpdateSetOpen,
+  readUpdateSet,
+} from "./updateSetGuard";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
 
@@ -125,7 +131,7 @@ export interface AddColumnParams {
    * Explicit opt-in to a column owned by a different scope than its table. Requires
    * `scope`. The element is prefixed with the owning scope (`x_cadso_journey_<name>`),
    * the table must allow new fields from other scopes (sys_db_object.alter_access),
-   * and the update set must belong to the column's scope.
+   * and the update set must belong to the column's scope and be in progress.
    */
   crossScope?: boolean;
   /**
@@ -287,25 +293,6 @@ async function resolveScope(
   };
 }
 
-/** Resolve an update set's owning application (sys_scope sys_id); "" when not found. */
-async function resolveUpdateSetScope(
-  client: ServiceNowClient,
-  updateSetSysId: string,
-): Promise<{ found: boolean; applicationSysId: string; name: string }> {
-  var rows = await client.table.query<Record<string, unknown>>(
-    "sys_update_set",
-    "sys_id=" + updateSetSysId,
-    { limit: 1, fields: ["sys_id", "name", "application"] },
-  );
-  if (rows.length === 0)
-    return { found: false, applicationSysId: "", name: "" };
-  return {
-    found: true,
-    applicationSysId: fieldToString(rows[0].application),
-    name: fieldToString(rows[0].name),
-  };
-}
-
 /** Where the column will live: its owning scope, and the element it will be stored under. */
 interface ColumnPlan {
   resolved: ResolvedTable;
@@ -403,7 +390,7 @@ async function planColumnScope(
     );
   }
   if (params.updateSetSysId && params.updateSetSysId.trim()) {
-    var us = await resolveUpdateSetScope(client, params.updateSetSysId.trim());
+    var us = await readUpdateSet(client, params.updateSetSysId.trim());
     if (!us.found) {
       throw new Error(
         "add-column: update set '" +
@@ -422,6 +409,11 @@ async function planColumnScope(
           owner.name +
           "'.",
       );
+    }
+    // A closed set would accept the column (and any Design Access record) and capture
+    // neither — refuse it here, on dry-run and live alike, before anything is written.
+    if (!isUpdateSetOpen(us.state)) {
+      throw new Error(closedUpdateSetMessage("add-column", us));
     }
   }
   // ServiceNow stores a cross-scope element as <owner>_<name>. Send it already

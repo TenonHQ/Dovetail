@@ -3,7 +3,8 @@ import type { ServiceNowClient } from "../src/client";
 
 /**
  * Stub instance: scopes x_cadso_journey (JOURNEYSYS) and x_cadso_automate (AUTOSYS);
- * update set "usj" in Journey, "usa" in Automate. Design Access JOURNEY -> AUTOMATE is
+ * update set "usj" in Journey, "usa" in Automate (both in progress), "usc" a COMPLETE
+ * set in Journey. Design Access JOURNEY -> AUTOMATE is
  * present or missing per opts; a created record reads back with the fields it was
  * inserted with unless `readBackSource` pins a different source_scope.
  */
@@ -41,6 +42,16 @@ function stub(opts: {
                 sys_id: "usj",
                 name: "Journey set",
                 application: { value: "JOURNEYSYS" },
+                state: "in progress",
+              },
+            ];
+          if (query === "sys_id=usc")
+            return [
+              {
+                sys_id: "usc",
+                name: "Closed Journey set",
+                application: { value: "JOURNEYSYS" },
+                state: "complete",
               },
             ];
           if (query === "sys_id=usa")
@@ -49,6 +60,7 @@ function stub(opts: {
                 sys_id: "usa",
                 name: "Automate set",
                 application: { value: "AUTOSYS" },
+                state: "in progress",
               },
             ];
           return [];
@@ -148,6 +160,27 @@ describe("ensureDesignAccess", function () {
         Object.assign({ client: s.client, updateSetSysId: "usa" }, PAIR),
       ),
     ).rejects.toThrow(/does not belong to the source scope 'x_cadso_journey'/);
+    expect(s.calls.creates).toHaveLength(0);
+  });
+  it("refuses a closed update set on the live path and writes nothing", async function () {
+    var s = stub({});
+    await expect(
+      ensureDesignAccess(
+        Object.assign({ client: s.client, updateSetSysId: "usc" }, PAIR),
+      ),
+    ).rejects.toThrow(/'Closed Journey set' is 'complete', not 'in progress'/);
+    expect(s.calls.creates).toHaveLength(0);
+  });
+  it("refuses a closed update set on dry-run too", async function () {
+    var s = stub({});
+    await expect(
+      ensureDesignAccess(
+        Object.assign(
+          { client: s.client, updateSetSysId: "usc", dryRun: true },
+          PAIR,
+        ),
+      ),
+    ).rejects.toThrow(/not 'in progress'/);
     expect(s.calls.creates).toHaveLength(0);
   });
   it("requires an update set on the live path", async function () {

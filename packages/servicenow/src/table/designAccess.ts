@@ -24,6 +24,11 @@
 
 import type { ServiceNowClient } from "../client";
 import { fieldToString } from "../setField";
+import {
+  closedUpdateSetMessage,
+  isUpdateSetOpen,
+  readUpdateSet,
+} from "./updateSetGuard";
 
 var SYS_ID = /^[0-9a-f]{32}$/i;
 var SCOPE_NAME = /^[a-z0-9_]+$/i;
@@ -161,7 +166,7 @@ async function resolvePair(
  * existing record is reported ("exists") and nothing is written. Dry-run reports whether
  * it exists or would be created. Live creates it through the scope-aware createRecord op
  * switched to the SOURCE scope, captured in `updateSetSysId` (which must belong to the
- * source scope), then reads it back.
+ * source scope and be in progress — checked on dry-run too), then reads it back.
  */
 export async function ensureDesignAccess(
   params: EnsureDesignAccessParams,
@@ -203,21 +208,17 @@ export async function ensureDesignAccess(
       throw new Error(
         "design-access: update set '" + us + "' is not a sys_id.",
       );
-    var usRows = await client.table.query<Record<string, unknown>>(
-      "sys_update_set",
-      "sys_id=" + us,
-      { limit: 1, fields: ["sys_id", "name", "application"] },
-    );
-    if (usRows.length === 0)
+    var usInfo = await readUpdateSet(client, us);
+    if (!usInfo.found)
       throw new Error(
         "design-access: update set '" +
           us +
           "' was not found in sys_update_set.",
       );
-    if (fieldToString(usRows[0].application) !== pair.source.sysId) {
+    if (usInfo.applicationSysId !== pair.source.sysId) {
       throw new Error(
         "design-access: update set '" +
-          (fieldToString(usRows[0].name) || us) +
+          (usInfo.name || us) +
           "' does not belong to the source scope '" +
           pair.source.name +
           "' — the Design Access record is owned by the AUTHORING app and ships in its " +
@@ -225,6 +226,10 @@ export async function ensureDesignAccess(
           pair.source.name +
           "'.",
       );
+    }
+    // Refused on dry-run too: a closed set would accept the record and capture nothing.
+    if (!isUpdateSetOpen(usInfo.state)) {
+      throw new Error(closedUpdateSetMessage("design-access", usInfo));
     }
   }
 

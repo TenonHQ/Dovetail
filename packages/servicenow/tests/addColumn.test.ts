@@ -771,7 +771,7 @@ function crossCallsOf(client: ServiceNowClient): CrossCalls {
 /**
  * Stub instance: table x_cadso_automate_email_batch (scope AUTOSYS / x_cadso_automate,
  * alter_access per opts), scope x_cadso_journey (JOURNEYSYS), update set "usj" in
- * Journey and "usa" in Automate. The read-back echoes the inserted element + sys_scope
+ * Journey and "usa" in Automate (both in progress), "usc" a COMPLETE set in Journey. The read-back echoes the inserted element + sys_scope
  * unless pinned by opts.
  */
 function crossScopeClient(opts: {
@@ -838,8 +838,9 @@ function crossScopeClient(opts: {
           return [];
         }
         if (table === "sys_update_set") {
-          if (query === "sys_id=usj") return [{ sys_id: "usj", name: "Journey set", application: { value: "JOURNEYSYS" } }];
-          if (query === "sys_id=usa") return [{ sys_id: "usa", name: "Automate set", application: { value: "AUTOSYS" } }];
+          if (query === "sys_id=usj") return [{ sys_id: "usj", name: "Journey set", application: { value: "JOURNEYSYS" }, state: "in progress" }];
+          if (query === "sys_id=usa") return [{ sys_id: "usa", name: "Automate set", application: { value: "AUTOSYS" }, state: "in progress" }];
+          if (query === "sys_id=usc") return [{ sys_id: "usc", name: "Closed Journey set", application: { value: "JOURNEYSYS" }, state: "complete" }];
           return [];
         }
         if (table === "sys_dictionary") {
@@ -1090,6 +1091,38 @@ describe("addColumn cross-scope", function () {
         updateSetSysId: "usa",
       }),
     ).rejects.toThrow(/does not belong to the column's scope 'x_cadso_journey'/);
+  });
+  it("refuses a closed update set in the column's scope and writes nothing", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        ensureDesignAccess: true,
+        updateSetSysId: "usc",
+      }),
+    ).rejects.toThrow(/'Closed Journey set' is 'complete', not 'in progress'/);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
+  });
+  it("a cross-scope dry-run with a closed update set is refused too", async function () {
+    var client = crossScopeClient({});
+    await expect(
+      addColumn({
+        client: client,
+        table: "x_cadso_automate_email_batch",
+        column: CROSS_COLUMN,
+        scope: "x_cadso_journey",
+        crossScope: true,
+        updateSetSysId: "usc",
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/not 'in progress'/);
+    expect(crossCallsOf(client).createRecordCount).toBe(0);
+    expect(crossCallsOf(client).designAccessCreates).toHaveLength(0);
   });
   it("treats crossScope + the table's OWN scope as a plain same-scope add", async function () {
     var client = crossScopeClient({});

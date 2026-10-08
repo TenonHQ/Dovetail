@@ -542,7 +542,7 @@ export function buildDescriptors(
         "by scope on another app's table (the platform's cross-scope field: element becomes " +
         "<scope>_<name>, the dictionary row and its update-set capture land in scope); the table " +
         "must allow new fields from other scopes (sys_db_object.alter_access) and updateSetSysId " +
-        "must belong to scope — both checked on dryRun too, and the stored element + sys_scope are " +
+        "must belong to scope and be in progress — all checked on dryRun too, and the stored element + sys_scope are " +
         "read back. A cross-scope result carries designAccess { present, sysId, created }: the " +
         "platform UI refuses cross-scope authoring without a sys_scope_design_access record " +
         "(scope -> the table's scope), so a missing one is FLAGGED (not blocking — the headless " +
@@ -589,7 +589,7 @@ export function buildDescriptors(
         "table's own access flags are NOT the gate. Scopes are names or sys_scope sys_ids. " +
         "Idempotent: an existing record returns status 'exists' and nothing is written. Live " +
         "creates it via the scope-aware createRecord op switched to sourceScope, captured in " +
-        "updateSetSysId (must belong to sourceScope), then reads it back and asserts " +
+        "updateSetSysId (must belong to sourceScope and be in progress), then reads it back and asserts " +
         "source/target. updateSetSysId is required on the live path; dryRun:true only reports " +
         "exists / missing.",
       shape: designAccessSchema.shape,
