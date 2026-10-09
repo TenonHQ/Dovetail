@@ -48,6 +48,10 @@ function makeGlideRecord(
 ) {
   return function GlideRecordStub(this: any, _table: string) {
     var i = -1;
+    // Honours only an exact addQuery("scope", value) — enough for getScopeId's lookup.
+    // Every other filter is recorded but ignored, so queries iterate every fixture row.
+    var scopeFilter: string | null = null;
+    var view: FakeRow[] = rows;
     this.get = function (sysIdOrField: string, value?: string) {
       if (value !== undefined) {
         // sys_app lookup by scope name → one row with a sys_id
@@ -63,6 +67,9 @@ function makeGlideRecord(
     };
     this.addQuery = function (field: string, value: string) {
       captured.fieldQueries.push({ field: field, value: value });
+      if (field === "scope" && arguments.length === 2) {
+        scopeFilter = value;
+      }
       return { addOrCondition: function () {} };
     };
     this.addEncodedQuery = function (q: string) {
@@ -74,20 +81,26 @@ function makeGlideRecord(
     this.query = function () {
       captured.queryCalls += 1;
       i = -1;
+      view =
+        scopeFilter === null
+          ? rows
+          : rows.filter(function (r) {
+              return r.scope === scopeFilter;
+            });
     };
     this.next = function () {
       i += 1;
-      return i < rows.length;
+      return i < view.length;
     };
     this.getValue = function (field: string) {
-      var v = rows[i][field];
+      var v = view[i][field];
       return v === undefined ? null : v;
     };
     this.getDisplayValue = function (field?: string) {
-      return field ? rows[i][field] : rows[i].label || rows[i].name;
+      return field ? view[i][field] : view[i].label || view[i].name;
     };
     this.getElement = function (field: string) {
-      var v = rows[i][field];
+      var v = view[i][field];
       return {
         getDisplayValue: function () {
           return v === undefined ? "" : v;
@@ -623,7 +636,7 @@ describe("DovetailUtilsMS.getTableNames — scopeQuery tables are listed explici
 describe("DovetailUtilsMS.getManifest — wiring", () => {
   it("passes scopeName into buildTableMap so scopeQuery renders, and lists the scope-less table", () => {
     const loaded = loadUtils({
-      // sys_app lookup row (getScopeId does appGR.get("scope", name)) + the choice rows
+      // app lookup row (getScopeId queries sys_scope by scope name) + the choice rows
       rows: (
         [
           {
@@ -660,5 +673,39 @@ describe("DovetailUtilsMS.getManifest — wiring", () => {
       "x_cadso_automate_message_batch_recipient.last_status.delivered",
     );
     expect(keys).toContain("x_cadso_automate_message_batch.state.Failed");
+  });
+});
+
+describe("DovetailUtilsMS.getScopeId — store-app installs", () => {
+  // App-repo / Store installs (every customer and demo instance) are sys_store_app
+  // records, not sys_app, so the lookup goes through sys_scope filtered to both classes.
+  it("queries sys_scope filtered to sys_app + sys_store_app and returns the one match", () => {
+    const loaded = loadUtils({
+      rows: [
+        { sys_id: "11111111111111111111111111111111", scope: "x_cadso_journey", sys_class_name: "sys_store_app" },
+        { sys_id: "22222222222222222222222222222222", scope: "x_cadso_core", sys_class_name: "sys_store_app" },
+      ],
+    });
+    expect(loaded.utils.getScopeId("x_cadso_journey")).toBe("11111111111111111111111111111111");
+    expect(loaded.captured.fieldQueries).toContainEqual({ field: "scope", value: "x_cadso_journey" });
+    expect(loaded.captured.fieldQueries).toContainEqual({ field: "sys_class_name", value: "IN" });
+  });
+
+  it("returns empty for an unknown scope and for a blank name", () => {
+    const loaded = loadUtils({
+      rows: [{ sys_id: "11111111111111111111111111111111", scope: "x_cadso_journey" }],
+    });
+    expect(loaded.utils.getScopeId("x_cadso_nope")).toBe("");
+    expect(loaded.utils.getScopeId("")).toBe("");
+  });
+
+  it("returns empty when the name is shared by several apps (e.g. global)", () => {
+    const loaded = loadUtils({
+      rows: [
+        { sys_id: "5f33b5d433d90b147b18bc534d5c7bf6", scope: "global" },
+        { sys_id: "489827984f396200993533718110c733", scope: "global" },
+      ],
+    });
+    expect(loaded.utils.getScopeId("global")).toBe("");
   });
 });
