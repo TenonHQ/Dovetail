@@ -43,10 +43,15 @@ DovetailUtilsMS.prototype = {
     scopeGR.addQuery("scope", scopeName);
     scopeGR.addQuery("sys_class_name", "IN", this.APP_CLASSES);
     scopeGR.query();
-    if (scopeGR.getRowCount() !== 1 || !scopeGR.next()) {
-      return "";
+    // Count by iterating (not getRowCount) so a second match means "ambiguous".
+    var scopeId = "";
+    while (scopeGR.next()) {
+      if (scopeId) {
+        return "";
+      }
+      scopeId = scopeGR.getValue("sys_id") || "";
     }
-    return scopeGR.getUniqueValue();
+    return scopeId;
   },
 
   getTableNames: function (config) {
