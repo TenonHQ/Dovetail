@@ -49,7 +49,7 @@ Ask the user which symptom they are experiencing (if not already clear):
    - Instance should NOT have `https://` prefix or trailing slash
    - Credentials must have admin or developer role
 
-2. **Test connection:** `npx dove status` (add `--env <path>` to test a specific credential file, e.g. `npx dove status --env .env.prod`)
+2. **Test connection:** `npx dove status` (add `--env <name|path>` to test a specific credential file, e.g. `npx dove status --env prod` for `.env.prod` in the cwd)
 
 3. **Check the Dovetail server scoped app** is installed on the instance. Without it, API endpoints will 404.
 
