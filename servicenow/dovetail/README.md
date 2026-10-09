@@ -79,6 +79,13 @@ and un-promotable. This directory is the source of truth going forward.
 - `sys_script_include/DovetailUtils.js` — entry-point class the `Dovetail Sync` ops
   instantiate (`new DovetailUtils()`); extends `DovetailUtilsMS`.
 
+- `DovetailUtilsMS` resolves app scopes through `sys_scope` filtered to `sys_app` +
+  `sys_store_app`. Apps installed from the app repo or the Store are `sys_store_app` records,
+  so the old `sys_app`-only lookup came back empty on every customer/demo instance.
+  `getManifest` then returned only scope-name-filtered tables (`sys_dictionary`,
+  `sys_choice`) and a refresh wrote a bogus partial mirror. `getManifest` now returns 404
+  for a scope that doesn't resolve uniquely (fixed 2026-10-08 after a demo8 refresh).
+
 - `sys_script_include/DovetailPromote.js` — the engine behind `promote.js`:
   retrieve → preview → (optionally) commit a named update set from a registered
   update-set source. The commit path replicates the platform's
