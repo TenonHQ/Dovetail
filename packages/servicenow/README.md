@@ -879,7 +879,12 @@ switches the executing user's app scope + update set server-side, inserts, and
 restores both — so the record is owned by the right app and the insert is captured
 in the right update set. Like `set-field` it **refuses** schema tables and verifies
 via read-back. It also **refuses** `sys_update_set` — the op cannot set an update
-set's application, so create sets with `dove createUpdateSet` instead. `--scope` and `--update-set` are required; `--if-absent
+set's application, so create sets with `dove createUpdateSet` instead. `--scope` and `--update-set` are required. `--scope` takes a scope name or a
+`sys_scope` sys_id. Every global-scope app (e.g. the Dovetail app) has the scope name
+`global`, which always means the Global scope itself, so reach a specific global app by its
+sys_id. The server answers an unknown scope with 404, and a name shared by several apps with
+409, instead of falling back to your session scope; the record gets both `sys_scope` and
+`sys_package`. `--if-absent
 "<encoded-query>"` makes re-runs idempotent (the insert is skipped when the query
 already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1` bad
 args, `2` write landed unverified (or skipped with drift). To **update** an existing

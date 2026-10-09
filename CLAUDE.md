@@ -108,7 +108,7 @@ Dovetail's server operations live in a **global-scoped Scripted REST API** named
 | GET    | `/currentUpdateSet`  | Read current update set. Optional `?scope=...`                                                                                                       |
 | GET    | `/changeUpdateSet`   | Switch active update set. `?sysId=...` or `?name=...&scope=...`                                                                                      |
 | POST   | `/pushWithUpdateSet` | Update a record within a specified update set. Body: `{ update_set_sys_id, table, record_sys_id, fields }`                                           |
-| POST   | `/createRecord`      | Create a record. Body: `{ table, fields }` (+ optional `sys_id`, `scope`, `update_set_sys_id`). Supports cross-instance moves via explicit `sys_id`. |
+| POST   | `/createRecord`      | Create a record. Body: `{ table, fields }` (+ optional `sys_id`, `scope` — name or sys_scope sys_id, `update_set_sys_id`). Supports cross-instance moves via explicit `sys_id`. |
 | POST   | `/deleteRecord`      | Delete a record. Body: `{ table, sys_id }`                                                                                                           |
 
 All POSTs are `application/json`. Update-set ops save/restore the previous update set. Source XML lives under `Downloads/sys_ws_operation (web_service_definition=<Dovetail def sys_id>)*.xml`.

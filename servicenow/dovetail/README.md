@@ -63,6 +63,15 @@ and un-promotable. This directory is the source of truth going forward.
     while the legacy `Dovetail` def still runs the older ES6 variant (2025-08-10). Since
     `Dovetail Core` is the client's primary target, **the Core version is captured here**
     as canonical. (Reconciling the legacy def to match is a separate cleanup.)
+    `createRecord.js` and `createUpdateSet.js` share a `resolveScopeId` helper (keep the two
+    copies in sync). `scope` may be a scope name or a `sys_scope` sys_id. `"global"` always
+    means the Global scope, so a specific global-scope app is reached only by sys_id. An
+    unknown scope is a 404 and an ambiguous name a 409; neither falls back to the session
+    scope. Deployed to the `Dovetail Core` def on tenonworkstudio 2026-10-08; the legacy
+    `Dovetail` def still runs the old name-only lookup.
+  - **Dovetail Core** `runFlow.js` — POST `/runFlow`: runs a flow, subflow, or action via
+    `sn_fd.FlowAPI` for `testFlow({ mode: "execute" })`. Contract:
+    [`../../packages/servicenow/resources/runFlow.md`](../../packages/servicenow/resources/runFlow.md).
   - **Dovetail Sync** thin wrappers into `DovetailUtils`: `getAppList.js`,
     `getManifest.js`, `bulkDownload.js`, `getCurrentScope.js`, `pushATFfile.js`.
   - **Dovetail Promote**: `promote.js`.

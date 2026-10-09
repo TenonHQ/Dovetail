@@ -3,7 +3,10 @@
     // (also mirrored on the /api/cadso/dovetail definition)
     // Body: { name, scope?, application?, description?, state? }
     //   name        (required) update set name
-    //   scope       scope identifier, e.g. "x_cadso_core" (preferred — instance-stable)
+    //   scope       scope name (e.g. "x_cadso_core") or sys_scope sys_id. Every global-scope
+    //               app's name is "global", so "global" means the Global scope itself; reach
+    //               a specific global app (e.g. the Dovetail app) by its sys_id. A name that
+    //               matches several apps is a 409, never a guess.
     //   application  optional explicit sys_scope sys_id (used if scope is omitted)
     //   description  optional update set description
     //   state        optional, defaults to "in progress"
@@ -28,23 +31,51 @@
         return response;
     }
 
+    // Keep in sync with resolveScopeId in createRecord.js.
+    function resolveScopeId(identifier) {
+        var value = String(identifier || "");
+        if (!value) {
+            return { sysId: "" };
+        }
+        if (value === "global") {
+            return { sysId: "global" };
+        }
+        var scopeGr = new GlideRecord("sys_scope");
+        if (/^[0-9a-f]{32}$/.test(value)) {
+            if (scopeGr.get(value)) {
+                return { sysId: scopeGr.getUniqueValue() };
+            }
+            return { status: 404, error: "Scope not found: " + value };
+        }
+        scopeGr.addQuery("scope", value);
+        scopeGr.query();
+        var matches = [];
+        while (scopeGr.next()) {
+            matches.push(scopeGr.getUniqueValue() + " (" + scopeGr.getValue("name") + ")");
+        }
+        if (matches.length === 1) {
+            return { sysId: matches[0].substring(0, 32) };
+        }
+        if (matches.length === 0) {
+            return { status: 404, error: "Scope not found: " + value };
+        }
+        return {
+            status: 409,
+            error: "Scope name '" + value + "' matches " + matches.length +
+                " apps; pass the sys_scope sys_id instead: " + matches.join(", "),
+        };
+    }
+
     var previousAppId = gs.getCurrentApplicationId();
     var switched = false;
     try {
-        var appSysId = applicationSysId;
-        if (!appSysId && scope) {
-            var scopeGr = new GlideRecord("sys_scope");
-            scopeGr.addQuery("scope", scope);
-            scopeGr.query();
-            if (scopeGr.next()) {
-                appSysId = scopeGr.getUniqueValue();
-            }
-        }
-        if ((scope || applicationSysId) && !appSysId) {
-            response.setStatus(404);
-            response.setBody({ error: "Scope not found: " + (scope || applicationSysId) });
+        var resolved = resolveScopeId(scope || applicationSysId);
+        if (resolved.error) {
+            response.setStatus(resolved.status);
+            response.setBody({ error: resolved.error });
             return response;
         }
+        var appSysId = resolved.sysId;
 
         // Be in the target scope at insert time so the application default resolves
         // correctly even if a platform rule were to ignore the explicit setValue.

@@ -11,6 +11,7 @@ import {
 } from "@tenonhq/dovetail-clickup";
 import { refineUpdateSetName } from "./clickupCommands";
 import { writeUpdateSetRouting } from "./updateSetConfig";
+import { isScopeSysId } from "./scopeId";
 
 interface UpdateSetDetails {
   sys_id: string;
@@ -203,13 +204,18 @@ export async function createUpdateSetCommand(args: any): Promise<void> {
     let scopeSysId: string | undefined;
     
     if (scope) {
-      // Get scope sys_id if scope name provided
-      const scopeResult = await unwrapSNResponse(client.getScopeId(scope));
-      if (scopeResult.length === 0) {
-        throw new Error(`Scope "${scope}" not found`);
+      if (isScopeSysId(scope)) {
+        // A sys_scope sys_id: the only way to target a specific global-scope app,
+        // since every global app's scope name is "global".
+        scopeSysId = scope;
+      } else {
+        const scopeResult = await unwrapSNResponse(client.getScopeId(scope));
+        if (scopeResult.length === 0) {
+          throw new Error(`Scope "${scope}" not found`);
+        }
+        scopeSysId = scopeResult[0].sys_id;
       }
-      scopeSysId = scopeResult[0].sys_id;
-      
+
       // Switch to the target scope first
       logger.info(`Switching to scope: ${scope}`);
       await switchToScope(scopeSysId, scope);
