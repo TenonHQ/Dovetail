@@ -1,0 +1,16 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-mcp@0.0.52",
+  "package": "@tenonhq/dovetail-mcp",
+  "version": "0.0.52",
+  "prev_version": "0.0.51",
+  "published_at": "2026-10-09T04:47:51.248Z",
+  "git": {
+    "sha": "59e58fca0912edf7566742e96de42d09240cea73",
+    "tag": "dovetail-mcp@0.0.52"
+  },
+  "semver_bump": "patch",
+  "commits": [],
+  "exports_delta": null,
+  "narrative": null
+}

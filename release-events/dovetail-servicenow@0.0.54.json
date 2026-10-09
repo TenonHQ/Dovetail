@@ -1,0 +1,22 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.54",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.54",
+  "prev_version": "0.0.53",
+  "published_at": "2026-10-09T04:47:51.248Z",
+  "git": {
+    "sha": "59e58fca0912edf7566742e96de42d09240cea73",
+    "tag": "dovetail-servicenow@0.0.54"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "59e58fca0",
+      "subject": "feat(servicenow): sys_dictionary attributes + readonly_clickthrough default on reference columns (#326) (#327)",
+      "pr": 326
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
