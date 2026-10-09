@@ -217,6 +217,10 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       { flag: "user-role", value: "<role>", note: "Role that may read the table." },
       { flag: "no-acls", note: "Skip the default access controls." },
       { flag: "no-menu", note: "Skip the application-menu module." },
+      {
+        flag: "no-readonly-clickthrough",
+        note: "Opt every reference column out of the readonly_clickthrough=true default (per column: readonly_clickthrough:false / attributes in --from-json).",
+      },
       UPDATE_SET_FLAG,
       { flag: "save-action", value: "<sys_id>", note: "Advanced: override the Studio save UI action." },
       { flag: "columns-rel-id", value: "<sys_id>", note: "Advanced: override the Studio columns relationship id." },
@@ -227,7 +231,10 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     gate: "dry-run-flag",
     example:
       'dove-sn create-table --name x_cadso_core_error --label Error --scope x_cadso_core --columns "Key:string:255, Severity:choice:50" --update-set <sys_id> --dry-run',
-    notes: ["Exit 2 when the platform reports the save failed."],
+    notes: [
+      "Reference columns get sys_dictionary.attributes readonly_clickthrough=true by default; every column with attributes is read back after the save and merge-patched once into --update-set if they did not land.",
+      "Exit 2 when the platform reports the save failed, or a column's attributes could not be verified.",
+    ],
   },
   "add-column": {
     summary: "Add ONE column to an EXISTING table via a scope-aware sys_dictionary insert, then verify",
@@ -252,6 +259,15 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         note: "Sibling column a document_id resolves against (its table_name column); must already exist.",
       },
       {
+        flag: "attributes",
+        value: '"k=v,k2=v2"',
+        note: "sys_dictionary.attributes to set; verified on read-back. Reference columns also get readonly_clickthrough=true unless you set it yourself.",
+      },
+      {
+        flag: "no-readonly-clickthrough",
+        note: "Opt a reference column out of the readonly_clickthrough=true default.",
+      },
+      {
         flag: "scope",
         value: "<x_scope>",
         note: "Owning app scope. Must match the table's scope unless --cross-scope is passed.",
@@ -274,7 +290,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     example:
       "dove-sn add-column --table x_cadso_journey --label URL --type url --max-length 1024 --update-set <sys_id>",
     notes: [
-      "Exit 2 when the write landed but the read-back does not show the column.",
+      "Exit 2 when the write landed but the read-back does not show the column (or its requested attributes).",
       "Cross-scope: dove-sn add-column --table x_cadso_automate_email_batch --label 'Instance Step' --name instance_step --type reference --reference x_cadso_journey_instance_step --scope x_cadso_journey --cross-scope --update-set <journey set>",
     ],
   },
@@ -300,7 +316,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     ],
   },
   "set-column": {
-    summary: "Update an EXISTING column's schema (label/mandatory/default/read-only/max-length/dependent-on-field), then verify",
+    summary: "Update an EXISTING column's schema (label/mandatory/default/read-only/max-length/dependent-on-field/attributes), then verify",
     required: [
       { flag: "table", value: "<name>" },
       { flag: "column", value: "<element>" },
@@ -313,6 +329,11 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       { flag: "read-only", value: "<true|false>" },
       { flag: "max-length", value: "<n>", note: "Positive integer. A SHRINK is refused while rows hold longer values." },
       { flag: "dependent-on-field", value: "<element>", note: "Empty string clears the dependency." },
+      {
+        flag: "attributes",
+        value: '"k=v,k2=v2"',
+        note: "MERGED into the column's existing sys_dictionary.attributes — keys you don't name are kept. Refused on an inherited column.",
+      },
       DRY_RUN_FLAG,
       JSON_FLAG,
     ],
@@ -332,6 +353,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       "update-set",
       "updateSetSysId",
       "dependent-on-field",
+      "attributes",
     ],
   },
   "set-table": {
@@ -376,6 +398,17 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       "Success is read back from v_db_index, which has no uniqueness field, so ENFORCEMENT is always reported unverified.",
       "Exit 2 when the dictionary flag is set but no index was read back.",
     ],
+  },
+  "reference-attr-audit": {
+    summary: "List reference columns whose sys_dictionary.attributes lack readonly_clickthrough=true (or --attribute)",
+    required: [{ flag: "scope-prefix", value: "<prefix>", note: "Table-name prefix, e.g. x_cadso_." }],
+    optional: [
+      { flag: "attribute", value: '"k=v"', note: "Attribute(s) to require. Default readonly_clickthrough=true." },
+      JSON_FLAG,
+    ],
+    gate: "read-only",
+    example: "dove-sn reference-attr-audit --scope-prefix x_cadso_ --json",
+    notes: ["Report only — backfill with set-column --attributes per column, into an update set."],
   },
   "index-list": {
     summary: "List a table's DATABASE indexes from the v_db_index view",

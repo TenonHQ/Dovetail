@@ -6,7 +6,7 @@ import { makeClient as makeCloneClient, SRC as CLONE_SRC, TARGET_SCOPE_NAME, US 
 var US = { sys_id: "us1", name: "Work", state: "in progress" };
 
 describe("MCP registry", function () {
-  it("registers exactly the 33 expected tools", function () {
+  it("registers exactly the 34 expected tools", function () {
     var names = buildDescriptors().map(function (d) {
       return d.name;
     });
@@ -35,6 +35,7 @@ describe("MCP registry", function () {
       "index_create",
       "index_list",
       "invoke_rest",
+      "reference_attr_audit",
       "remove_choices_from_field",
       "set_column",
       "set_field",
@@ -45,7 +46,7 @@ describe("MCP registry", function () {
       "sync_ux_events",
       "update_set_export",
     ]);
-    expect(TOOL_NAMES).toHaveLength(33);
+    expect(TOOL_NAMES).toHaveLength(34);
   });
 
   it("every descriptor has a non-trivial description and an input shape", function () {
@@ -536,7 +537,7 @@ describe("MCP registry", function () {
     } as any);
     await runSmoke();
     spy.mockRestore();
-    expect(out).toContain("Registered tools (33)");
+    expect(out).toContain("Registered tools (34)");
     expect(out).toContain("action_define");
     expect(out).toContain("action_clone");
     expect(out).toContain("add_index");

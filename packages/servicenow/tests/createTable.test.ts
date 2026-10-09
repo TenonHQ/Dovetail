@@ -10,6 +10,7 @@ import {
   showInMenuKey,
   parseFormInputs,
   parseSysIdFromLocation,
+  verifyColumnAttributes,
   type OverlaySpec,
   type NormalizedColumn
 } from "../src/table";
@@ -226,5 +227,121 @@ describe("createTable dryRun", function () {
       client: fakeClient(), name: "Bad Name", label: "X", scope: "x_cadso_core",
       columns: [{ label: "A", type: "string" }], dryRun: true
     })).rejects.toThrow(/valid table identifier/);
+  });
+});
+
+describe("create-table dictionary attributes (readonly_clickthrough default)", function () {
+  it("DEFAULT: a reference column normalizes with readonly_clickthrough=true; other types get none", function () {
+    var cols = normalizeColumns([
+      { label: "Owner", type: "reference", reference: "sys_user" },
+      { label: "Key", type: "string", max_length: 40 }
+    ]);
+    expect(cols[0].attributes).toBe("readonly_clickthrough=true");
+    expect(cols[1].attributes).toBeUndefined();
+  });
+  it("OPT-OUT and MERGE per column", function () {
+    var cols = normalizeColumns([
+      { label: "A", type: "reference", reference: "sys_user", readonly_clickthrough: false },
+      { label: "B", type: "reference", reference: "sys_user", attributes: "ref_auto_completer=X" },
+      { label: "C", type: "string", attributes: { no_sort: true } }
+    ]);
+    expect(cols[0].attributes).toBeUndefined();
+    expect(cols[1].attributes).toBe("ref_auto_completer=X,readonly_clickthrough=true");
+    expect(cols[2].attributes).toBe("no_sort=true");
+  });
+  it("rejects a malformed attribute, naming the column", function () {
+    expect(function () {
+      normalizeColumns([{ label: "Owner", type: "reference", reference: "sys_user", attributes: "a=1,2" }]);
+    }).toThrow(/createTable: column 'Owner' attributes: '2' is not a valid attribute name/);
+  });
+  it("renders the attribute into the Studio column XML as a modified field", function () {
+    var xml = buildColumnXml(
+      [{ label: "Owner", type: "reference", maxLength: "", reference: "sys_user", attributes: "readonly_clickthrough=true" }],
+      ["z"]
+    );
+    expect(xml).toContain(
+      '<field name="attributes" modified="true" value_set="true" dsp_set="false"><value>readonly_clickthrough=true</value></field>'
+    );
+  });
+  it("leaves a column with no attributes byte-identical to Studio's payload", function () {
+    var xml = buildColumnXml([{ label: "Key", type: "string_full_utf8", maxLength: "40", reference: "" }], ["z"]);
+    expect(xml).toContain('<field name="attributes" modified="false" value_set="false" dsp_set="false"><value></value></field>');
+  });
+  it("dry-run reports each column's planned attributes", async function () {
+    var result = await createTable({
+      client: fakeClient(),
+      name: "x_cadso_core_thing", label: "Thing", scope: "x_cadso_core",
+      columns: [{ label: "Owner", type: "reference", reference: "sys_user" }],
+      dryRun: true
+    });
+    expect(result.resolvedColumns[0].attributes).toBe("readonly_clickthrough=true");
+    expect(result.columnXml).toContain("<value>readonly_clickthrough=true</value>");
+  });
+});
+
+describe("verifyColumnAttributes (post-save read-back)", function () {
+  function readBackClient(stored: Record<string, string>, opts?: { ignoreWrites?: boolean }) {
+    var pushes: Array<Record<string, unknown>> = [];
+    var c = fakeClient() as unknown as {
+      table: { query: (t: string, q: string) => Promise<Array<Record<string, string>>> };
+      claude: { pushWithUpdateSet: (p: Record<string, unknown>) => Promise<{ sys_id: string }> };
+    };
+    c.table.query = async function (table: string, query: string) {
+      if (table !== "sys_dictionary") return [];
+      if (query.indexOf("sys_id=") === 0) {
+        return [{ sys_id: "OWNSYS", attributes: stored.Owner || "" }];
+      }
+      return Object.keys(stored).map(function (label) {
+        return { sys_id: label.toUpperCase() + "SYS", element: label.toLowerCase(), column_label: label, attributes: stored[label] };
+      });
+    };
+    c.claude.pushWithUpdateSet = async function (p: Record<string, unknown>) {
+      pushes.push(p);
+      var fields = p.fields as Record<string, string>;
+      if (!(opts && opts.ignoreWrites)) stored.Owner = fields.attributes;
+      return { sys_id: "OWNSYS" };
+    };
+    return { client: c as unknown as ServiceNowClient, pushes: pushes };
+  }
+  var cols: Array<NormalizedColumn> = [
+    { label: "Owner", type: "reference", maxLength: "", reference: "sys_user", attributes: "readonly_clickthrough=true" },
+    { label: "Key", type: "string_full_utf8", maxLength: "40", reference: "" }
+  ];
+
+  it("verifies without writing when the form save carried the attribute", async function () {
+    var t = readBackClient({ Owner: "readonly_clickthrough=true", Key: "" });
+    var checks = await verifyColumnAttributes(t.client, "x_t", cols, "us1");
+    expect(checks).toHaveLength(1);
+    expect(checks[0].verified).toBe(true);
+    expect(checks[0].patched).toBe(false);
+    expect(t.pushes).toHaveLength(0);
+  });
+  it("merge-patches ONCE into the update set when the form save dropped it", async function () {
+    var t = readBackClient({ Owner: "ref_contributions=x", Key: "" });
+    var checks = await verifyColumnAttributes(t.client, "x_t", cols, "us1");
+    expect(checks[0].verified).toBe(true);
+    expect(checks[0].patched).toBe(true);
+    expect(t.pushes).toEqual([
+      { update_set_sys_id: "us1", table: "sys_dictionary", record_sys_id: "OWNERSYS", fields: { attributes: "ref_contributions=x,readonly_clickthrough=true" } }
+    ]);
+  });
+  it("fails the column when the patch does not stick", async function () {
+    var t = readBackClient({ Owner: "", Key: "" }, { ignoreWrites: true });
+    var checks = await verifyColumnAttributes(t.client, "x_t", cols, "us1");
+    expect(checks[0].verified).toBe(false);
+    expect(checks[0].note).toMatch(/still missing readonly_clickthrough=true/);
+  });
+  it("refuses to write an uncaptured patch when no update set was given", async function () {
+    var t = readBackClient({ Owner: "", Key: "" });
+    var checks = await verifyColumnAttributes(t.client, "x_t", cols, "");
+    expect(checks[0].verified).toBe(false);
+    expect(t.pushes).toHaveLength(0);
+    expect(checks[0].note).toMatch(/no update set was given/);
+  });
+  it("reports a column it cannot find by label instead of throwing", async function () {
+    var t = readBackClient({ Key: "" });
+    var checks = await verifyColumnAttributes(t.client, "x_t", cols, "us1");
+    expect(checks[0].verified).toBe(false);
+    expect(checks[0].note).toMatch(/no sys_dictionary row labelled 'Owner'/);
   });
 });

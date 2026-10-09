@@ -76,6 +76,17 @@ import { fieldToString } from "../setField";
 // through this first. A stray "^" or "=" does not error — it silently changes what the
 // query MEANS, which is the worst kind of bug to ship into a schema tool.
 import { encodeQueryValue } from "../choices";
+// sys_dictionary.attributes is a comma-separated k=v string: requested keys are MERGED
+// into what the column already carries, never written over it.
+import {
+  AttributeInput,
+  DictionaryAttribute,
+  mergeAttributes,
+  missingAttributes,
+  normalizeAttributeInput,
+  parseAttributes,
+  serializeAttributes,
+} from "./dictionaryAttributes";
 // The inherited-column path. An extended table's columns live on an ancestor's
 // dictionary rows, and ServiceNow's answer for narrowing one per-child is
 // sys_dictionary_override / sys_documentation — not editing the ancestor.
@@ -119,6 +130,7 @@ var WRITABLE: Record<string, string> = {
   readOnly: "read_only",
   maxLength: "max_length",
   dependentOnField: "dependent_on_field",
+  attributes: "attributes",
 };
 
 /** Attributes ServiceNow will not honour on an existing column, and the reason. Each
@@ -154,6 +166,12 @@ export interface ColumnAttributes {
    * sys_dictionary_override.dependent / dependent_override.
    */
   dependentOnField?: string;
+  /**
+   * sys_dictionary.attributes to ADD or change — "k=v,k2=v2" or a key -> value map.
+   * MERGED into the column's existing attributes: keys not named here are kept, never
+   * dropped. Refused on an inherited column (override semantics not yet verified).
+   */
+  attributes?: AttributeInput;
 
   // The two below are declared ONLY so a caller can express them and be told why they
   // cannot be done. Silently dropping them would leave someone who asked to rename a
@@ -254,6 +272,20 @@ export function resolveAttributes(
           Object.keys(WRITABLE).join(", ") +
           ".",
       );
+    }
+    if (target === "attributes") {
+      // Validated + normalized here (so a malformed request fails on the dry-run too);
+      // setColumn turns it into the MERGED string once it has read the column.
+      try {
+        out[target] = serializeAttributes(
+          normalizeAttributeInput(value as AttributeInput),
+        );
+      } catch (e) {
+        throw new Error(
+          "set-column: " + (e instanceof Error ? e.message : String(e)),
+        );
+      }
+      continue;
     }
     out[target] = toStoredValue(value as string | number | boolean);
   }
@@ -588,6 +620,33 @@ export async function setColumn(
   var resolved = await resolveColumn(params.client, table, column, readFields);
   var row = resolved.row;
 
+  // attributes is a MERGE: the target value is the column's current string with the
+  // requested keys set, so every attribute it already carries survives. The diff below
+  // then compares like with like, and the read-back checks just the requested keys.
+  var requestedAttrs: Array<DictionaryAttribute> = [];
+  if (writes.attributes !== undefined) {
+    if (resolved.definedOn) {
+      throw new Error(
+        "set-column: attributes on an INHERITED column are not supported yet — '" +
+          column +
+          "' is defined on '" +
+          resolved.definedOn +
+          "', and narrowing attributes for '" +
+          table +
+          "' alone means a sys_dictionary_override whose merge semantics have not been " +
+          "verified live. Nothing was written.",
+      );
+    }
+    requestedAttrs = parseAttributes(writes.attributes);
+    var currentAttributes = fieldToString(row.attributes);
+    // Already carried: keep the stored string verbatim so a re-serialization (spacing,
+    // a duplicate key) never reads as a change and triggers a pointless write.
+    writes.attributes =
+      missingAttributes(currentAttributes, requestedAttrs).length === 0
+        ? currentAttributes
+        : mergeAttributes(currentAttributes, requestedAttrs);
+  }
+
   // max_length is meaningless on a type that has no length. ServiceNow would take the
   // write and ignore it (a fourth silent no-op), so refuse it here where we can say why.
   //
@@ -878,6 +937,16 @@ export async function setColumn(
   for (var j = 0; j < targets.length; j += 1) {
     var name = targets[j];
     var got = fieldToString(after[name]);
+    if (name === "attributes") {
+      // Order-insensitive: the column must carry every REQUESTED key with its value.
+      var lacking = missingAttributes(got, requestedAttrs);
+      if (lacking.length > 0) {
+        mismatched.push(
+          "attributes read back as '" + got + "', missing " + lacking.join(", "),
+        );
+      }
+      continue;
+    }
     if (got !== writes[name]) {
       mismatched.push(
         name + " reads back as '" + got + "', not '" + writes[name] + "'",

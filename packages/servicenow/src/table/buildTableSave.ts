@@ -8,6 +8,11 @@
  */
 
 import { NormalizedColumn } from "./buildColumnXml";
+import {
+  AttributeInput,
+  resolveColumnAttributes,
+  serializeAttributes,
+} from "./dictionaryAttributes";
 
 /** Friendly input column (what a caller / MCP tool passes). */
 export interface ColumnSpec {
@@ -27,6 +32,16 @@ export interface ColumnSpec {
    * the table — add it first.
    */
   dependent_on_field?: string;
+  /**
+   * sys_dictionary.attributes to set — "k=v,k2=v2" or a key -> value map. Merged with the
+   * reference default below; never written wholesale over an existing column.
+   */
+  attributes?: AttributeInput;
+  /**
+   * Reference columns carry readonly_clickthrough=true by default (team rule
+   * 2026-10-08). false opts this column out. Ignored for non-reference types.
+   */
+  readonly_clickthrough?: boolean;
 }
 
 /**
@@ -94,7 +109,17 @@ export function normalizeColumns(cols: Array<ColumnSpec>): Array<NormalizedColum
     var maxLength = c.max_length === undefined || c.max_length === null ? "" : String(c.max_length).trim();
     // date/time types carry no max_length in Studio's payload.
     if (internal === "glide_date_time" || internal === "glide_date") maxLength = "";
-    out.push({ label: label, type: internal, maxLength: maxLength, reference: reference });
+    var attributes: string;
+    try {
+      attributes = serializeAttributes(
+        resolveColumnAttributes(internal, c.attributes, c.readonly_clickthrough === false),
+      );
+    } catch (e) {
+      throw new Error("createTable: column '" + label + "' " + (e instanceof Error ? e.message : String(e)));
+    }
+    var normalized: NormalizedColumn = { label: label, type: internal, maxLength: maxLength, reference: reference };
+    if (attributes) normalized.attributes = attributes;
+    out.push(normalized);
   }
   return out;
 }

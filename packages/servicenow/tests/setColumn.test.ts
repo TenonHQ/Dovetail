@@ -910,3 +910,128 @@ describe("setColumn hostile inputs and awkward states", function () {
     expect(result.columnSysId).toBe("COL1");
   });
 });
+
+describe("setColumn — attributes (sys_dictionary.attributes, merged)", function () {
+  function refDict(attributes: string): Record<string, string> {
+    return {
+      sys_id: "COL1",
+      element: "owner",
+      internal_type: "reference",
+      column_label: "Owner",
+      attributes: attributes,
+    };
+  }
+
+  it("resolveAttributes normalizes the request (string or map) onto sys_dictionary.attributes", function () {
+    expect(resolveAttributes({ attributes: "readonly_clickthrough=true" })).toEqual({
+      attributes: "readonly_clickthrough=true",
+    });
+    expect(resolveAttributes({ attributes: { readonly_clickthrough: true, no_sort: "x" } })).toEqual({
+      attributes: "readonly_clickthrough=true,no_sort=x",
+    });
+  });
+
+  it("refuses a malformed attribute string before touching the instance", function () {
+    expect(function () {
+      resolveAttributes({ attributes: "a=1,,b=2" });
+    }).toThrow(/^set-column: attributes: .*stray comma/);
+    expect(function () {
+      resolveAttributes({ attributes: "" });
+    }).toThrow(/set-column: attributes: an empty attribute string/);
+  });
+
+  it("MERGES into existing attributes — never clobbers them — and captures it in the update set", async function () {
+    var client = liveClient({ dict: refDict("ref_auto_completer=AJAXTableCompleter,ref_ac_columns=name;email") });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "owner",
+      attributes: { attributes: "readonly_clickthrough=true" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("applied");
+    expect(result.verified).toBe(true);
+    expect(result.capturedInUpdateSet).toBe(true);
+    var pushes = pushesOf(client);
+    expect(pushes).toHaveLength(1);
+    expect(pushes[0].update_set_sys_id).toBe("us1");
+    expect(pushes[0].fields).toEqual({
+      attributes:
+        "ref_auto_completer=AJAXTableCompleter,ref_ac_columns=name;email,readonly_clickthrough=true",
+    });
+  });
+
+  it("overwrites a requested key IN PLACE, keeping the others", async function () {
+    var client = liveClient({ dict: refDict("readonly_clickthrough=false,no_sort=true") });
+    await setColumn({
+      client: client,
+      table: "x_t",
+      column: "owner",
+      attributes: { attributes: "readonly_clickthrough=true" },
+      updateSetSysId: "us1",
+    });
+    expect(pushesOf(client)[0].fields).toEqual({
+      attributes: "readonly_clickthrough=true,no_sort=true",
+    });
+  });
+
+  it("reports 'unchanged' and writes nothing when the column already carries it (any order)", async function () {
+    var client = liveClient({ dict: refDict("no_sort=true, readonly_clickthrough=true") });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "owner",
+      attributes: { attributes: "readonly_clickthrough=true" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("unchanged");
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("dry-run shows the merged string and writes nothing", async function () {
+    var client = liveClient({ dict: refDict("ref_auto_completer=X") });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "owner",
+      attributes: { attributes: "readonly_clickthrough=true" },
+      dryRun: true,
+    });
+    expect(result.status).toBe("dry-run");
+    expect(result.changes).toEqual([
+      { attribute: "attributes", from: "ref_auto_completer=X", to: "ref_auto_completer=X,readonly_clickthrough=true" },
+    ]);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+
+  it("FAILS when ServiceNow accepts the write but the attribute does not stick", async function () {
+    var client = liveClient({ dict: refDict(""), ignoreWrites: true });
+    var result = await setColumn({
+      client: client,
+      table: "x_t",
+      column: "owner",
+      attributes: { attributes: "readonly_clickthrough=true" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.note).toMatch(/missing readonly_clickthrough=true/);
+  });
+
+  it("REFUSES attributes on an INHERITED column, even on a dry-run, writing nothing", async function () {
+    var client = liveClient({
+      dict: null,
+      parentTable: "x_parent",
+      parentDict: { sys_id: "PCOL", element: "owner", internal_type: "reference", attributes: "" },
+    });
+    await expect(
+      setColumn({
+        client: client,
+        table: "x_t",
+        column: "owner",
+        attributes: { attributes: "readonly_clickthrough=true" },
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/attributes on an INHERITED column are not supported yet — 'owner' is defined on 'x_parent'/);
+    expect(pushesOf(client)).toHaveLength(0);
+  });
+});

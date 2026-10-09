@@ -67,6 +67,11 @@ import { fieldToString } from "../setField";
 import { ColumnSpec, normalizeColumns } from "./buildTableSave";
 import { ensureDesignAccess, findDesignAccess } from "./designAccess";
 import {
+  mergeAttributes,
+  missingAttributes,
+  parseAttributes,
+} from "./dictionaryAttributes";
+import {
   closedUpdateSetMessage,
   isUpdateSetOpen,
   readUpdateSet,
@@ -91,6 +96,21 @@ async function setDependentOnField(
   });
 }
 
+/** Merge-patch sys_dictionary.attributes on a row, captured in the given update set. */
+async function setAttributes(
+  client: ServiceNowClient,
+  columnSysId: string,
+  updateSetSysId: string,
+  attributes: string,
+): Promise<void> {
+  await client.claude.pushWithUpdateSet({
+    update_set_sys_id: updateSetSysId,
+    table: "sys_dictionary",
+    record_sys_id: columnSysId,
+    fields: { attributes: attributes },
+  });
+}
+
 /** The sys_dictionary columns every read-back asks for. */
 var READ_BACK_FIELDS = [
   "sys_id",
@@ -98,6 +118,7 @@ var READ_BACK_FIELDS = [
   "internal_type",
   "max_length",
   "dependent_on_field",
+  "attributes",
   "sys_scope",
 ];
 
@@ -189,6 +210,11 @@ export interface AddColumnResult {
   updateSetSysId: string;
   /** True only when the column was READ BACK from sys_dictionary (created), or already present (skipped). */
   verified: boolean;
+  /**
+   * sys_dictionary.attributes — as READ BACK on created/skipped, as planned on dry-run.
+   * A reference column carries readonly_clickthrough=true unless opted out.
+   */
+  attributes?: string;
   /** Human-readable note (success summary, the read-back result, or the failure body). */
   note: string;
   /** Cross-scope only: whether the Design Access record the platform UI requires exists. */
@@ -603,6 +629,10 @@ async function addColumnInner(
   }
   var col = normalized[0];
   var element = deriveElement(col.label, params.column.name);
+  // The attributes the column must carry (caller's + the reference default). Already
+  // validated by normalizeColumns; parsed back so the read-back can check each key.
+  var wantAttributes = col.attributes ? col.attributes : "";
+  var wantAttrList = parseAttributes(wantAttributes);
   // The sibling column this one resolves against (document_id -> its table_name
   // column). Read straight off the raw spec like mandatory/default; "" means none.
   var wantDependent =
@@ -667,6 +697,7 @@ async function addColumnInner(
       columnSysId: "",
       updateSetSysId: params.updateSetSysId ? params.updateSetSysId : "",
       verified: false,
+      attributes: wantAttributes,
       note:
         "dry-run: no write. Would add column '" +
         planElement +
@@ -687,6 +718,7 @@ async function addColumnInner(
             wantDependent +
             "' (which must already exist on the table)"
           : "") +
+        (wantAttributes ? ", with attributes '" + wantAttributes + "'" : "") +
         ", then read it back." +
         designAccessNote(dryDa, params.ensureDesignAccess === true, true),
     };
@@ -774,6 +806,7 @@ async function addColumnInner(
     var existingType = fieldToString(existing[0].internal_type);
     var existingLength = fieldToString(existing[0].max_length);
     var existingDependent = fieldToString(existing[0].dependent_on_field);
+    var existingAttributes = fieldToString(existing[0].attributes);
     // "Already there" is not the same as "already what you asked for". Report the column
     // that EXISTS, not the one that was requested, and refuse to call a mismatched column
     // verified — silently green-lighting a column of the wrong type or size is the same
@@ -804,6 +837,16 @@ async function addColumnInner(
           "'",
       );
     }
+    var existingMissing = missingAttributes(existingAttributes, wantAttrList);
+    if (existingMissing.length > 0) {
+      drift.push(
+        "attributes '" +
+          existingAttributes +
+          "' lack " +
+          existingMissing.join(", ") +
+          " (add them with set-column --attributes)",
+      );
+    }
     return {
       status: "skipped",
       table: resolved.name,
@@ -815,6 +858,7 @@ async function addColumnInner(
       columnSysId: existingSysId,
       updateSetSysId: params.updateSetSysId,
       verified: drift.length === 0,
+      attributes: existingAttributes,
       note:
         drift.length === 0
           ? "Column '" +
@@ -857,6 +901,9 @@ async function addColumnInner(
   // rides on the insert; the read-back below still proves it stuck, and patches it
   // once if the insert dropped it.
   if (wantDependent) fields.dependent_on_field = wantDependent;
+  // Plain dictionary-row field too; rides on the insert, and the read-back below proves
+  // every requested key stuck (patching once with a MERGE if the insert dropped any).
+  if (wantAttributes) fields.attributes = wantAttributes;
 
   var created: { sys_id: string; [k: string]: unknown } | undefined;
   try {
@@ -948,6 +995,24 @@ async function addColumnInner(
         );
       }
     }
+    // Same rule for attributes: a missing key is patched ONCE, as a merge over whatever
+    // the row carries (never a wholesale overwrite), and the final read-back decides.
+    if (rows.length > 0 && wantAttrList.length > 0) {
+      var landedAttributes = fieldToString(rows[0].attributes);
+      if (missingAttributes(landedAttributes, wantAttrList).length > 0) {
+        await setAttributes(
+          client,
+          columnSysId,
+          params.updateSetSysId,
+          mergeAttributes(landedAttributes, wantAttrList),
+        );
+        rows = await client.table.query<Record<string, unknown>>(
+          "sys_dictionary",
+          "sys_id=" + columnSysId,
+          { limit: 1, fields: READ_BACK_FIELDS },
+        );
+      }
+    }
   } catch (e) {
     return failure(
       resolved,
@@ -977,6 +1042,7 @@ async function addColumnInner(
     ? fieldToString(rows[0].dependent_on_field)
     : "";
   var readBackScope = verified ? fieldToString(rows[0].sys_scope) : "";
+  var readBackAttributes = verified ? fieldToString(rows[0].attributes) : "";
 
   // Ownership is part of the column's identity: a cross-scope row that reads back in
   // the TABLE's scope was prefixed for nothing and will ship in the wrong update set.
@@ -1042,6 +1108,30 @@ async function addColumnInner(
     );
   }
 
+  var attrsMissing = verified
+    ? missingAttributes(readBackAttributes, wantAttrList)
+    : [];
+  if (verified && attrsMissing.length > 0) {
+    return failure(
+      resolved,
+      col,
+      element,
+      params.updateSetSysId,
+      "column '" +
+        actualElement +
+        "' materialised but attributes read back as " +
+        (readBackAttributes ? "'" + readBackAttributes + "'" : "(empty)") +
+        ", missing " +
+        attrsMissing.join(", ") +
+        " — ServiceNow dropped them even after a patch. Set them on the instance " +
+        "(set-column --attributes " +
+        attrsMissing.join(",") +
+        ") before relying on the column.",
+      columnSysId,
+      scopeName,
+    );
+  }
+
   if (!verified) {
     return failure(
       resolved,
@@ -1088,6 +1178,7 @@ async function addColumnInner(
     ") to " +
     resolved.name +
     (wantDependent ? ", dependent on '" + wantDependent + "'" : "") +
+    (readBackAttributes ? ", attributes '" + readBackAttributes + "'" : "") +
     (plan.crossScope
       ? " owned by scope '" + scopeName + "' (cross-scope field)"
       : "") +
@@ -1129,6 +1220,7 @@ async function addColumnInner(
     columnSysId: columnSysId,
     updateSetSysId: params.updateSetSysId,
     verified: true,
+    attributes: readBackAttributes,
     note: note,
   };
 }

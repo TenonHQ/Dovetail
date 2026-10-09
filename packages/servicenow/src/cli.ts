@@ -62,6 +62,7 @@ import {
   createIndex,
   setColumn,
   setTable,
+  referenceAttrAudit,
 } from "./table";
 import type {
   ColumnSpec,
@@ -1456,7 +1457,9 @@ function parseColumnsInline(input: string): Array<ColumnSpec> {
  *   --columns "Key:string:255, Severity:choice:50, Occurence Count:integer:5"
  *   [--extends sys_metadata] [--number-prefix ERR] [--user-role x_cadso_core.user]
  *   [--no-acls] [--no-menu] [--update-set <sys_id>] [--save-action <sys_id>]
- *   [--from-json <spec.json>] [--dry-run] [--json]
+ *   [--no-readonly-clickthrough] [--from-json <spec.json>] [--dry-run] [--json]
+ * Reference columns carry readonly_clickthrough=true by default; per-column
+ * `attributes` / `readonly_clickthrough` ride on the --from-json column specs.
  */
 async function runCreateTable(flags: Record<string, string>): Promise<number> {
   var spec: Partial<CreateTableParams> = {};
@@ -1476,6 +1479,15 @@ async function runCreateTable(flags: Record<string, string>): Promise<number> {
       "create-table: --name, --label, --scope and --columns (or --from-json) are required\n",
     );
     return 1;
+  }
+  // Table-wide opt-out of the reference default; a column that says otherwise wins.
+  if (flags["no-readonly-clickthrough"] === "true") {
+    columns = columns.map(function (c) {
+      if (c.readonly_clickthrough !== undefined) return c;
+      var copy: ColumnSpec = Object.assign({}, c);
+      copy.readonly_clickthrough = false;
+      return copy;
+    });
   }
   var params: CreateTableParams = {
     client: createClient({}),
@@ -1585,6 +1597,7 @@ async function runDesignAccess(flags: Record<string, string>): Promise<number> {
  *   --table x_cadso_journey --label URL --type url
  *   [--name url] [--max-length 1024] [--reference <table>]
  *   [--mandatory] [--default <value>] [--dependent-on-field <element>]
+ *   [--attributes "k=v,k2=v2"] [--no-readonly-clickthrough]
  *   [--scope x_cadso_journey] [--cross-scope] [--ensure-design-access]
  *   [--update-set <sys_id>] [--from-json <spec.json>] [--dry-run] [--debug] [--json]
  * --update-set is required unless --dry-run. --cross-scope opts in to a column
@@ -1610,6 +1623,17 @@ async function runAddColumn(flags: Record<string, string>): Promise<number> {
     if (flags["dependent-on-field"] !== undefined) {
       column.dependent_on_field = flags["dependent-on-field"];
     }
+  }
+  // Apply to a --from-json column too, so the flags never silently do nothing.
+  if (column && flags.attributes !== undefined) {
+    if (flags.attributes === "true" || !flags.attributes.trim()) {
+      process.stderr.write('add-column: --attributes needs a value, e.g. --attributes "readonly_clickthrough=true"\n');
+      return 1;
+    }
+    column.attributes = flags.attributes;
+  }
+  if (column && flags["no-readonly-clickthrough"] === "true") {
+    column.readonly_clickthrough = false;
   }
   if (!table || !column || !column.label) {
     process.stderr.write(
@@ -1750,6 +1774,60 @@ async function runAddIndex(flags: Record<string, string>): Promise<number> {
     );
   }
   if (result.status === "failed") return 2;
+  return 0;
+}
+
+/**
+ * dove-sn reference-attr-audit:
+ *   --scope-prefix x_cadso_ [--attribute "readonly_clickthrough=true"] [--json]
+ *
+ * Read-only. Lists active reference columns under the prefix whose
+ * sys_dictionary.attributes lack the attribute (team rule: readonly_clickthrough=true).
+ * Backfilling is a separate decision — set-column --attributes per column.
+ *
+ * Exit codes: 0 read (findings are a report, not a failure), 1 bad args.
+ */
+async function runReferenceAttrAudit(flags: Record<string, string>): Promise<number> {
+  var prefix = flags["scope-prefix"];
+  if (!prefix || prefix === "true") {
+    process.stderr.write("reference-attr-audit: --scope-prefix <prefix> is required (e.g. x_cadso_)\n");
+    return 1;
+  }
+  if (flags.attribute === "true") {
+    process.stderr.write('reference-attr-audit: --attribute needs a value, e.g. "readonly_clickthrough=true"\n');
+    return 1;
+  }
+  var result;
+  try {
+    result = await referenceAttrAudit({
+      client: createClient({}),
+      scopePrefix: prefix,
+      attribute: flags.attribute,
+    });
+  } catch (e) {
+    var msg = e instanceof Error ? e.message : String(e);
+    if (/^reference-attr-audit:/.test(msg)) {
+      process.stderr.write(msg + "\n");
+      return 1;
+    }
+    throw e;
+  }
+  if (flags.json === "true") {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(
+    result.scopePrefix + "* — " + result.total + " reference column(s), " +
+      result.missing.length + " missing '" + result.attribute + "'" +
+      (result.truncated ? " (SCAN TRUNCATED — results incomplete)" : "") + "\n",
+  );
+  for (var i = 0; i < result.missing.length; i += 1) {
+    var m = result.missing[i];
+    process.stdout.write(
+      "  " + m.table + "." + m.element + "  -> " + (m.reference || "(no target)") +
+        "  [" + (m.attributes || "no attributes") + "]\n",
+    );
+  }
   return 0;
 }
 
@@ -1927,6 +2005,7 @@ function parseBoolFlag(
  *   --table x_cadso_journey --column description --update-set <sys_id>
  *   [--label "Description"] [--mandatory true|false] [--default <v>]
  *   [--read-only true|false] [--max-length 4000] [--dependent-on-field <element>]
+ *   [--attributes "k=v,k2=v2"]  (MERGED into the column's existing attributes)
  *   [--dry-run] [--json]
  *
  * Updates an EXISTING column's schema. `internal_type` and a rename are refused —
@@ -1970,6 +2049,8 @@ async function runSetColumn(
   if (flags["dependent-on-field"] !== undefined) {
     attributes.dependentOnField = flags["dependent-on-field"].trim();
   }
+  // A bare --attributes is refused above (stringFlags); the value is validated in setColumn.
+  if (flags.attributes !== undefined) attributes.attributes = flags.attributes;
   if (flags["max-length"] !== undefined) {
     var len = Number(flags["max-length"]);
     // sys_dictionary.max_length is an integer; the MCP schema enforces int() too.
@@ -3066,6 +3147,9 @@ async function dispatch(parsed: ParsedArgs): Promise<number> {
   }
   if (parsed.command === "add-index") {
     return await runAddIndex(parsed.flags);
+  }
+  if (parsed.command === "reference-attr-audit") {
+    return await runReferenceAttrAudit(parsed.flags);
   }
   if (parsed.command === "index-list") {
     return await runIndexList(parsed.flags);
