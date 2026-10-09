@@ -162,7 +162,7 @@ unchanged).
 | `flow_publish` | Publish a flow | no |
 | `flow_copy` | Copy a flow | no |
 | `flow_create` | Author a new flow | yes |
-| `flow_test` | Validate / execute a flow | validate-only **by default**; `confirm:true` executes |
+| `flow_test` | Validate / execute a flow, subflow, or action (`target:"action"`). Execute POSTs `/api/cadso/dovetail_core/runFlow` (ships with the Dovetail app; one legacy fallback to `/api/cadso/dovetail/runFlow` on a 404; an explicit `runnerPath` never falls back) | validate-only **by default**; `confirm:true` executes |
 | `flow_edit` | Patch + republish a flow step | dry-run **by default**; `apply:true` writes |
 
 ### Platform
@@ -188,7 +188,7 @@ Sync from Claude is headless and explicit — `push` / `refresh` / `status`, one
 
 | Command | Notable flags | Purpose |
 |---|---|---|
-| `refresh` (`r`) | `--force`, `--scope`, **`--benchmark`** | Pull latest manifest + files. `--benchmark` logs per-scope/aggregate HTTP latency, bytes, file counts |
+| `refresh` (`r`) | `--force`, `--scope`, **`--benchmark`** | Pull latest manifest + files. `--benchmark` logs per-scope/aggregate HTTP latency, bytes, file counts. If any scope fails, the rest still refresh, then it prints the failed scopes and **exits 1** (no "Refresh complete!") |
 | `pull <table> <sys_id...>` | `--sys-ids a,b`, `--from-update-set <sys_id>`, `--scope`, **`--dry-run`**, `--force` | Per-record mirror: writes only that record's folder + its manifest key, every other entry byte-identical. Refuses a record outside `--scope` and writes nothing. Bare `pull` = `refresh` (#319) |
 | `push` | **`--diff <branch>`**, **`--clickup <id\|url>`**, `--updateSet <name>`, `--ci` | Push local → SN. `--diff` filters to files changed vs a git branch; `--clickup` creates an update set from a ClickUp task |
 | `build` | `--diff <branch>` | Build app files locally; `--diff` scopes to a branch diff |

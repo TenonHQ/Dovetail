@@ -86,6 +86,7 @@ export {
   editFlow,
   testFlow,
   DEFAULT_RUN_FLOW_PATH,
+  LEGACY_RUN_FLOW_PATH,
   generateSysId,
   topoSort,
   executeWritePlan,
@@ -157,6 +158,7 @@ export type {
   StepInputPatch,
   TestFlowParams,
   TestFlowResult,
+  TestFlowTarget,
   WriteOp,
   WriteOpResult,
 } from "./flowDesigner";

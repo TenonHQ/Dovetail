@@ -771,15 +771,18 @@ async function runCreateFlow(flags: Record<string, string>): Promise<number> {
 
 /**
  * dove-sn test-flow:
- *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow).
+ *   --sys-id <sys_id>   Required. sys_hub_flow sys_id (flow or subflow), or a
+ *                       sys_hub_action_type_definition sys_id with --action.
+ *   --action            Optional. --sys-id is an action (sent as actionSysId).
  *   --execute           Optional. Actually run it (default is validate-only).
  *   --confirm           Required with --execute. A deliberate run-for-real gate.
  *   --inputs <json>     Optional. JSON object of inputs (or --inputs-json <path>).
  *   --json              Optional. Emit the structured TestFlowResult.
  *
  * Default (no --execute) is a safe pre-flight: published? readable? inputs match
- * declared variables? --execute POSTs the FlowAPI runner endpoint (see
- * resources/runFlow.md). Executing a flow can cause real side effects.
+ * declared variables? --execute POSTs the Dovetail Core runFlow op
+ * (/api/cadso/dovetail_core/runFlow, legacy fallback on 404; --runner overrides
+ * with no fallback — see resources/runFlow.md). Executing can cause real side effects.
  */
 async function runTestFlow(flags: Record<string, string>): Promise<number> {
   var sysId = flags["sys-id"] || flags.sysId;
@@ -796,6 +799,7 @@ async function runTestFlow(flags: Record<string, string>): Promise<number> {
   var params: any = {
     client: createClient({}),
     sysId: sysId,
+    target: flags.action === "true" ? "action" : "flow",
     mode: flags.execute === "true" ? "execute" : "validate",
     inputs: inputs,
     confirm: flags.confirm === "true",

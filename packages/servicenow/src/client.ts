@@ -315,6 +315,19 @@ export interface ServiceNowClient {
 }
 
 /**
+ * Dovetail core Scripted REST API base (ships in the Dovetail app). Every
+ * Dovetail server op is tried here first.
+ */
+export var DOVETAIL_CORE_API_BASE = "/api/cadso/dovetail_core/";
+
+/**
+ * Legacy global-scope Dovetail Scripted REST API base. Clients fall back to it
+ * once, on a 404 from DOVETAIL_CORE_API_BASE, for instances that predate the
+ * Dovetail app.
+ */
+export var DOVETAIL_LEGACY_API_BASE = "/api/cadso/dovetail/";
+
+/**
  * Match a thrown error message against the 403/404 patterns produced by request().
  * buildAgent.* uses this to decide when to fall back to the plain Table API.
  */
@@ -502,8 +515,8 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     ctx: string,
   ): Promise<T> {
     var url = useDovetailLegacyPath
-      ? "/api/cadso/dovetail/" + op
-      : "/api/cadso/dovetail_core/" + op;
+      ? DOVETAIL_LEGACY_API_BASE + op
+      : DOVETAIL_CORE_API_BASE + op;
     try {
       return await request<T>({ method: method, url: url, data: body, params: params }, ctx);
     } catch (e: any) {
@@ -511,12 +524,12 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
       if (!useDovetailLegacyPath && msg.indexOf("SN 404 on") === 0) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[deprecation] /api/cadso/dovetail_core/" + op +
-            " returned 404. Falling back to legacy /api/cadso/dovetail/" + op +
+          "[deprecation] " + DOVETAIL_CORE_API_BASE + op +
+            " returned 404. Falling back to legacy " + DOVETAIL_LEGACY_API_BASE + op +
             ". Install the Dovetail application's Scripted REST APIs to silence this warning.",
         );
         useDovetailLegacyPath = true;
-        var legacyUrl = "/api/cadso/dovetail/" + op;
+        var legacyUrl = DOVETAIL_LEGACY_API_BASE + op;
         return await request<T>({ method: method, url: legacyUrl, data: body, params: params }, ctx);
       }
       throw e;

@@ -433,6 +433,23 @@ export interface SyncManifestOptions {
   _benchmarkCollector?: import("./benchmark").BenchmarkCollector;
 }
 
+/** One scope that failed during a refresh, with the reason it failed. */
+export interface SyncManifestFailure {
+  scope: string;
+  error: string;
+}
+
+/**
+ * Outcome of syncManifest. syncManifest never throws for a per-scope failure —
+ * an all-scopes refresh keeps going past a broken scope — so this is how a
+ * caller learns that something failed. Empty `failedScopes` means every scope
+ * that was attempted refreshed cleanly (skipped undeclared scopes are not
+ * failures).
+ */
+export interface SyncManifestResult {
+  failedScopes: Array<SyncManifestFailure>;
+}
+
 /**
  * Narrow a manifest's table map to `tables`, for the FILE refresh only.
  *
@@ -507,7 +524,8 @@ export const narrowManifestToRecord = (
 export const syncManifest = async (
   scope?: string,
   options: SyncManifestOptions = {},
-) => {
+): Promise<SyncManifestResult> => {
+  var failedScopes: Array<SyncManifestFailure> = [];
   // Top-level entry owns the collector lifecycle. Recursive calls (all-scopes
   // → per-scope) inherit the collector via options._benchmarkCollector.
   var isBenchmarkOwner = false;
@@ -536,7 +554,7 @@ export const syncManifest = async (
           "Add it to config.scopes to sync, or remove its manifest file."
         );
         fileLogger.debug("syncManifest: skipped undeclared scope '" + scope + "'");
-        return;
+        return { failedScopes: failedScopes };
       }
 
       logger.info("Refreshing scope: " + scope + "...");
@@ -662,31 +680,38 @@ export const syncManifest = async (
         tables: options.tables,
         _benchmarkCollector: collector,
       };
+      // Each child call catches its own failure and reports it in its result,
+      // so one broken scope never stops the rest — collect, then report.
+      var childScopes: Array<string> = [];
       if (declaredScopes.length > 0) {
-        for (var d = 0; d < declaredScopes.length; d++) {
-          await syncManifest(declaredScopes[d], childOptions);
-        }
+        childScopes = declaredScopes;
       } else if (ConfigManager.isMultiScopeManifest(curManifest)) {
         // No declared scopes — fall back to the persisted manifest's scopes.
-        for (const scopeName of Object.keys(curManifest)) {
-          await syncManifest(scopeName, childOptions);
-        }
+        childScopes = Object.keys(curManifest);
       } else if (curManifest.scope) {
         // Single scope manifest
-        await syncManifest(curManifest.scope, childOptions);
+        childScopes = [curManifest.scope];
+      }
+      for (var d = 0; d < childScopes.length; d++) {
+        var childResult = await syncManifest(childScopes[d], childOptions);
+        if (childResult && Array.isArray(childResult.failedScopes)) {
+          failedScopes = failedScopes.concat(childResult.failedScopes);
+        }
       }
     }
   } catch (e) {
     let message;
     if (e instanceof Error) message = e.message;
     else message = String(e);
-    logger.error("Refresh failed: " + message);
+    logger.error("Refresh failed" + (scope ? " for " + scope : "") + ": " + message);
+    failedScopes.push({ scope: scope || "(all scopes)", error: message });
   } finally {
     if (isBenchmarkOwner && collector) {
       setBenchmarkSink(null);
       logger.info(collector.formatSummary());
     }
   }
+  return { failedScopes: failedScopes };
 };
 
 const markFileMissing =

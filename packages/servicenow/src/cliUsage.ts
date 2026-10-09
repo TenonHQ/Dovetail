@@ -659,14 +659,15 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
     notes: ["Exit 2 when the flow was created but the snapshot did not compile (not published)."],
   },
   "test-flow": {
-    summary: "Validate (default) or run a flow/subflow",
-    required: [{ flag: "sys-id", value: "<sys_id>", note: "sys_hub_flow sys_id (flow or subflow)." }],
+    summary: "Validate (default) or run a flow/subflow/action",
+    required: [{ flag: "sys-id", value: "<sys_id>", note: "sys_hub_flow sys_id (flow or subflow), or an action's with --action." }],
     optional: [
+      { flag: "action", note: "--sys-id is a sys_hub_action_type_definition (sent as actionSysId)." },
       { flag: "execute", note: "Actually run it (default is validate-only)." },
       { flag: "confirm", note: "Required with --execute — the deliberate run-for-real gate." },
       { flag: "inputs", value: "'<json>'", note: "JSON object of flow inputs." },
       { flag: "inputs-json", value: "<path>", note: "Same, from a file." },
-      { flag: "runner", value: "<path>", note: "Override the FlowAPI runner endpoint path." },
+      { flag: "runner", value: "<path>", note: "Override the runner path (default /api/cadso/dovetail_core/runFlow; no legacy fallback when set)." },
       JSON_FLAG,
     ],
     gate: "execute-confirm",
