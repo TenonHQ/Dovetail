@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-core@0.0.127",
+  "package": "@tenonhq/dovetail-core",
+  "version": "0.0.127",
+  "prev_version": "0.0.126",
+  "published_at": "2026-10-09T04:42:22.954Z",
+  "git": {
+    "sha": "df50311d3f68ef07ea1b91013c3a9e7f438d1f73",
+    "tag": "dovetail-core@0.0.127"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "df50311d3",
+      "subject": "fix: runFlow defaults to dovetail_core and dove refresh fails loudly (#329)",
+      "pr": 329
+    },
+    {
+      "sha": "6c27f3e76",
+      "subject": "chore(release): @tenonhq/dovetail-core@0.0.126 [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
