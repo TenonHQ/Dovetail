@@ -1,22 +1,38 @@
 import { editFlow } from "../src/flowDesigner/editFlow";
-import { testFlow } from "../src/flowDesigner/testFlow";
+import { testFlow, DEFAULT_RUN_FLOW_PATH, LEGACY_RUN_FLOW_PATH } from "../src/flowDesigner/testFlow";
 import type { ServiceNowClient } from "../src/client";
 
 interface Cap {
   gets: Array<string>;
   posts: Array<{ path: string; body: any }>;
+  invokes: Array<{ method: string; path: string; body: any }>;
+  queries: Array<{ table: string; query: string }>;
 }
 
-function mockClient(opts: { getResponse?: any; getResponses?: Array<any>; postResponse?: any; postThrows?: Error }): {
+function mockClient(opts: {
+  getResponse?: any;
+  getResponses?: Array<any>;
+  postResponse?: any;
+  postThrows?: Error;
+  // Consumed sequentially by now.invoke; the last entry repeats.
+  invokeResponses?: Array<{ status: number; body: unknown }>;
+  queryRows?: Array<Record<string, unknown>>;
+}): {
   client: ServiceNowClient;
   cap: Cap;
 } {
-  var cap: Cap = { gets: [], posts: [] };
+  var cap: Cap = { gets: [], posts: [], invokes: [], queries: [] };
+  var invokeIdx = 0;
   // getResponses (if provided) is consumed sequentially — index 0 is the initial
   // model read, index 1 the post-publish verify read. Falls back to getResponse.
   var getIdx = 0;
   var client = {
-    table: { query: async function () { return []; } },
+    table: {
+      query: async function (table: string, query: string) {
+        cap.queries.push({ table: table, query: query });
+        return (opts.queryRows || []) as any;
+      },
+    },
     buildAgent: {
       runQuery: async function () { return []; },
       getTableSchema: async function () { return { fields: [], primary_key: "sys_id" }; },
@@ -36,7 +52,13 @@ function mockClient(opts: { getResponse?: any; getResponses?: Array<any>; postRe
     now: {
       put: async function () { return {} as any; },
       delete: async function () { return {} as any; },
-      invoke: async function () { return { status: 200, body: {} }; },
+      invoke: async function (p: { method: string; path: string; body?: unknown }) {
+        cap.invokes.push({ method: p.method, path: p.path, body: p.body });
+        var list = opts.invokeResponses || [{ status: 200, body: {} }];
+        var r = list[invokeIdx] !== undefined ? list[invokeIdx] : list[list.length - 1];
+        invokeIdx += 1;
+        return r;
+      },
       get: async function <T>(path: string): Promise<T> {
         cap.gets.push(path);
         if (opts.getResponses) {
@@ -246,8 +268,13 @@ describe("testFlow", function () {
     expect(ctx.cap.posts).toHaveLength(0);
   });
 
-  it("execute with confirm POSTs the runner endpoint and returns the context id", async function () {
-    var ctx = mockClient({ postResponse: { result: { contextId: "ctx-123", outputs: { ok: true } } } });
+  it("execute with confirm POSTs the Dovetail Core runFlow op and returns the context id", async function () {
+    var ctx = mockClient({
+      invokeResponses: [{
+        status: 200,
+        body: { result: { ok: true, name: "x_cadso_core.send_sms", contextId: "ctx-123", outputs: { ok: true } } },
+      }],
+    });
     var r = await testFlow({
       client: ctx.client,
       sysId: FLOW,
@@ -258,14 +285,121 @@ describe("testFlow", function () {
     expect(r.mode).toBe("execute");
     expect(r.ok).toBe(true);
     expect(r.contextSysId).toBe("ctx-123");
-    expect(ctx.cap.posts[0].path).toBe("/api/cadso/dovetail/runFlow");
-    expect(ctx.cap.posts[0].body.flowSysId).toBe(FLOW);
+    expect(r.httpStatus).toBe(200);
+    expect(r.runnerPath).toBe("/api/cadso/dovetail_core/runFlow");
+    expect(DEFAULT_RUN_FLOW_PATH).toBe("/api/cadso/dovetail_core/runFlow");
+    expect(ctx.cap.invokes).toHaveLength(1);
+    expect(ctx.cap.invokes[0].method).toBe("POST");
+    expect(ctx.cap.invokes[0].path).toBe("/api/cadso/dovetail_core/runFlow");
+    expect(ctx.cap.invokes[0].body).toEqual({ flowSysId: FLOW, inputs: { phone: "x" } });
+    expect(r.notes.join(" ")).toContain("x_cadso_core.send_sms");
   });
 
-  it("execute surfaces a clear error when the runner endpoint is not deployed (404)", async function () {
-    var ctx = mockClient({ postThrows: new Error("SN 404 not found") });
+  it("execute with target='action' sends actionSysId, not flowSysId", async function () {
+    var ctx = mockClient({ invokeResponses: [{ status: 200, body: { result: { ok: true, contextId: "c", outputs: {} } } }] });
+    await testFlow({ client: ctx.client, sysId: FLOW, target: "action", mode: "execute", confirm: true });
+    expect(ctx.cap.invokes[0].body).toEqual({ actionSysId: FLOW, inputs: {} });
+  });
+
+  it("execute falls back to the legacy path once when the core route 404s", async function () {
+    var warn = jest.spyOn(console, "warn").mockImplementation(function () { return undefined; });
+    var ctx = mockClient({
+      invokeResponses: [
+        { status: 404, body: { error: { message: "Requested URI does not represent any resource" }, status: "failure" } },
+        { status: 200, body: { result: { ok: true, contextId: "ctx-legacy", outputs: {} } } },
+      ],
+    });
+    var r = await testFlow({ client: ctx.client, sysId: FLOW, mode: "execute", confirm: true });
+    expect(ctx.cap.invokes.map(function (c) { return c.path; })).toEqual([
+      "/api/cadso/dovetail_core/runFlow",
+      LEGACY_RUN_FLOW_PATH,
+    ]);
+    expect(LEGACY_RUN_FLOW_PATH).toBe("/api/cadso/dovetail/runFlow");
+    expect(r.ok).toBe(true);
+    expect(r.contextSysId).toBe("ctx-legacy");
+    expect(r.runnerPath).toBe("/api/cadso/dovetail/runFlow");
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("execute does NOT fall back when the op itself answers 404 (unknown sys_id)", async function () {
+    var ctx = mockClient({
+      invokeResponses: [{ status: 404, body: { result: { ok: false, error: "sys_hub_flow not found: " + FLOW } } }],
+    });
+    var r = await testFlow({ client: ctx.client, sysId: FLOW, mode: "execute", confirm: true });
+    expect(ctx.cap.invokes).toHaveLength(1);
+    expect(r.ok).toBe(false);
+    expect(r.httpStatus).toBe(404);
+    expect(r.notes.join(" ")).toContain("sys_hub_flow not found");
+  });
+
+  it("execute surfaces the op's role guard (403) as a rejected run", async function () {
+    var ctx = mockClient({
+      invokeResponses: [{ status: 403, body: { result: { ok: false, error: "runFlow requires the admin or dovetail_user role" } } }],
+    });
+    var r = await testFlow({ client: ctx.client, sysId: FLOW, mode: "execute", confirm: true });
+    expect(ctx.cap.invokes).toHaveLength(1);
+    expect(r.ok).toBe(false);
+    expect(r.httpStatus).toBe(403);
+    expect(r.notes.join(" ")).toContain("dovetail_user");
+  });
+
+  it("an explicit runnerPath wins and never falls back", async function () {
+    var ctx = mockClient({ invokeResponses: [{ status: 404, body: { error: { message: "no route" } } }] });
+    await expect(testFlow({
+      client: ctx.client,
+      sysId: FLOW,
+      mode: "execute",
+      confirm: true,
+      runnerPath: "/api/custom/runner",
+    })).rejects.toThrow(/no runFlow endpoint found \(tried \/api\/custom\/runner\)/);
+    expect(ctx.cap.invokes).toHaveLength(1);
+    expect(ctx.cap.invokes[0].path).toBe("/api/custom/runner");
+  });
+
+  it("execute surfaces a clear error when neither runner route exists (404 on both)", async function () {
+    var warn = jest.spyOn(console, "warn").mockImplementation(function () { return undefined; });
+    var ctx = mockClient({ invokeResponses: [{ status: 404, body: { error: { message: "no route" } } }] });
     await expect(testFlow({ client: ctx.client, sysId: FLOW, mode: "execute", confirm: true }))
-      .rejects.toThrow(/runner endpoint .* is not deployed/);
+      .rejects.toThrow(/ships with the Dovetail app/);
+    expect(ctx.cap.invokes).toHaveLength(2);
+    warn.mockRestore();
+  });
+
+  it("execute throws on a non-contract auth failure instead of reporting a run", async function () {
+    var ctx = mockClient({ invokeResponses: [{ status: 401, body: { error: { message: "User Not Authenticated" } } }] });
+    await expect(testFlow({ client: ctx.client, sysId: FLOW, mode: "execute", confirm: true }))
+      .rejects.toThrow(/HTTP 401/);
+  });
+
+  it("rejects a malformed sysId before any request", async function () {
+    var ctx = mockClient({});
+    await expect(testFlow({ client: ctx.client, sysId: "not-a-sys-id", mode: "execute", confirm: true }))
+      .rejects.toThrow(/32-character hex/);
+    expect(ctx.cap.invokes).toHaveLength(0);
+  });
+
+  it("validate with target='action' checks the record and its declared inputs", async function () {
+    var ctx = mockClient({
+      queryRows: [{ sys_id: FLOW, name: "Send SMS", internal_name: "send_sms", sys_scope: SCOPE }],
+      getResponse: { result: { displayName: "Send SMS", inputs: [{ name: "phone", label: "Phone", type: "string" }], outputs: [] } },
+    });
+    var r = await testFlow({ client: ctx.client, sysId: FLOW, target: "action", inputs: { phone: "1", bogus: 2 } });
+    expect(r.mode).toBe("validate");
+    expect(r.ok).toBe(true);
+    expect(ctx.cap.queries[0].table).toBe("sys_hub_action_type_definition");
+    expect(r.notes.join(" ")).toContain("'bogus' does not match any declared action input");
+    expect(ctx.cap.invokes).toHaveLength(0);
+  });
+
+  it("validate with target='action' fails when the action has no internal_name", async function () {
+    var ctx = mockClient({
+      queryRows: [{ sys_id: FLOW, name: "Broken", internal_name: "", sys_scope: SCOPE }],
+      getResponse: { result: { inputs: [], outputs: [] } },
+    });
+    var r = await testFlow({ client: ctx.client, sysId: FLOW, target: "action" });
+    expect(r.ok).toBe(false);
+    expect(r.notes.join(" ")).toContain("NO internal_name");
   });
 
   it("requires sysId", async function () {

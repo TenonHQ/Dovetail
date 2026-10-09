@@ -71,8 +71,8 @@ export type { CreateFlowParams, CreateFlowResult } from "./createFlow";
 export { editFlow } from "./editFlow";
 export type { EditFlowParams, EditFlowResult, EditFlowOps, StepInputPatch } from "./editFlow";
 
-export { testFlow, DEFAULT_RUN_FLOW_PATH } from "./testFlow";
-export type { TestFlowParams, TestFlowResult } from "./testFlow";
+export { testFlow, DEFAULT_RUN_FLOW_PATH, LEGACY_RUN_FLOW_PATH } from "./testFlow";
+export type { TestFlowParams, TestFlowResult, TestFlowTarget } from "./testFlow";
 
 export {
   generateSysId,

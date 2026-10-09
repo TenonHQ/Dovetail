@@ -115,6 +115,7 @@ export var createFlowSchema = z.object({
 
 export var testFlowSchema = z.object({
   sysId: z.string().min(1),
+  target: z.union([z.literal("flow"), z.literal("action")]).optional(),
   mode: z.union([z.literal("validate"), z.literal("execute")]).optional(),
   inputs: z.record(z.any()).optional(),
   confirm: z.boolean().optional(),

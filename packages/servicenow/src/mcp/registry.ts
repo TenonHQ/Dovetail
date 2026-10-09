@@ -458,13 +458,17 @@ export function buildDescriptors(
         "pre-flight — checks the flow is published and that supplied inputs match its declared " +
         "variables; it never runs the flow. mode='execute' actually runs it via the server-side " +
         "FlowAPI runner and REQUIRES confirm=true (running a flow can cause real side effects, " +
-        "e.g. sending an SMS). sysId is the sys_hub_flow sys_id.",
+        "e.g. sending an SMS). sysId is the sys_hub_flow sys_id, or a sys_hub_action_type_definition " +
+        "sys_id with target='action'. Execute POSTs /api/cadso/dovetail_core/runFlow (ships with the " +
+        "Dovetail app; falls back once to the legacy /api/cadso/dovetail/runFlow on a 404); an " +
+        "explicit runnerPath is used as-is.",
       shape: testFlowSchema.shape,
       handler: async function (args: any) {
         var p = testFlowSchema.parse(args);
         return testFlow({
           client: client(),
           sysId: p.sysId,
+          target: p.target,
           mode: p.mode,
           inputs: p.inputs,
           confirm: p.confirm,

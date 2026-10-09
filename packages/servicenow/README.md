@@ -349,6 +349,7 @@ npx dove-sn publish-flow --sys-id <sys_id>             # scope defaults to the f
 # Test a flow: validate (default, read-only) or actually run it
 npx dove-sn test-flow --sys-id <sys_id> --inputs '{"phone":"+1555..."}'
 npx dove-sn test-flow --sys-id <sys_id> --execute --confirm --inputs '{...}'  # runs it
+npx dove-sn test-flow --sys-id <action_sys_id> --action --execute --confirm      # runs an action
 
 # Edit a flow in place (rename / description / step inputs)
 echo '{"rename":{"name":"New Name"},"patchStepInputs":[{"step":"Calculate SMS Send At","input":"send_rate","value":"5"}]}' > ops.json
@@ -1160,7 +1161,14 @@ failed/timeout. Programmatic: `exportUpdateSet({ updateSet, mode })`,
 
 `test-flow` defaults to **validate** — a safe pre-flight (published? inputs match
 declared variables?) that never runs the flow; `--execute --confirm` runs it via
-the server-side FlowAPI runner (deploy `resources/runFlow.md` first).
+the Dovetail Core `runFlow` op (`POST /api/cadso/dovetail_core/runFlow`), which
+ships with the Dovetail app — nothing to deploy. On a route-level 404 it falls
+back once to the legacy `/api/cadso/dovetail/runFlow`; `--runner <path>` is used
+as-is with no fallback. Add `--action` when `--sys-id` is a
+`sys_hub_action_type_definition` (sent as `actionSysId`). The caller needs the
+`admin` or `dovetail_user` role; a rejected run (400/403/404/422/500 with the
+op's `{ ok: false, error }`) reports `ok=false` and exits 2. Contract and source:
+[`resources/runFlow.md`](resources/runFlow.md).
 
 `edit-flow` defaults to a **dry-run** diff. With `--apply`: rename/description are
 written to `sys_hub_flow` through the update-set-aware API (so `--update-set` is
