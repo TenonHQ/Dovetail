@@ -210,7 +210,7 @@ Sync from Claude is headless and explicit — `push` / `refresh` / `status`, one
 
 > **There is no `dove diff` command.** `--diff` is a flag on `push` and `build`. (Older docs listed `dove diff` — that was never a real command.)
 
-> **Global `--env <path>` (alias `-e`, `--env-file`).** Every command loads credentials from this file instead of the project-root `.env`, so one checkout can target multiple instances (`npx dove push --env .env.prod`). `login --env <path>` writes there too. Already-set environment variables are never overridden.
+> **Global `--env <name|path>` (alias `-e`, `--env-file`).** Every command loads credentials from this file instead of the project-root `.env`, so one checkout can target multiple instances. A bare instance name resolves like `dove-sn`'s: `npx dove push --env prod` → `.env.prod` in the cwd; a path, an existing file in the cwd, or a dotted filename (`npx dove push --env .env.prod`) is used as-is. `login --env <name|path>` writes there too. Already-set environment variables are never overridden, and a missing file loads nothing (no error).
 
 ### `dove-sn` (package `servicenow`) — SN authoring CLI
 Source: `packages/servicenow/src/cli.ts`. Every write lands in `--update-set`; most support `--dry-run` and `--json`.

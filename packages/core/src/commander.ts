@@ -93,7 +93,7 @@ export function configureCli(cli: Argv): Argv {
       alias: ["e", "env-file", "envFile"],
       type: "string",
       describe:
-        "Path to a .env file to load for this command (default: .env in the project root). Lets one checkout target multiple instances.",
+        "Instance name or path of a .env file to load for this command (default: .env in the project root). A bare name like 'prod' loads .env.prod from the current directory. Lets one checkout target multiple instances.",
     })
     .global("env")
     .option("debug", {
