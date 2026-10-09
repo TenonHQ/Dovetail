@@ -109,13 +109,28 @@ export async function refreshCommand(
       ", benchmark=" + !!args.benchmark +
       ", tables=" + (tables.length > 0 ? tables.join(",") : "all") + ")",
     );
-    await AppUtils.syncManifest(args.scope, {
+    const result = await AppUtils.syncManifest(args.scope, {
       force: !!args.force,
       metadataOnly: !!args.metadataOnly,
       benchmark: !!args.benchmark,
       tables: tables.length > 0 ? tables : undefined,
     });
-    logger.success("Refresh complete!");
+    const failed = (result && Array.isArray(result.failedScopes)) ? result.failedScopes : [];
+    if (failed.length > 0) {
+      // Every remaining scope was still attempted (syncManifest keeps going
+      // past a broken scope); now say so loudly and exit non-zero so scripts
+      // and CI can't mistake a partial refresh for a clean one.
+      logger.error(
+        "Refresh finished with " + failed.length + " failed scope" +
+        (failed.length === 1 ? "" : "s") + ":",
+      );
+      for (const f of failed) {
+        logger.error("  - " + f.scope + ": " + f.error);
+      }
+      process.exitCode = 1;
+    } else {
+      logger.success("Refresh complete!");
+    }
     setLogLevel(args);
   } catch (e) {
     throw e;

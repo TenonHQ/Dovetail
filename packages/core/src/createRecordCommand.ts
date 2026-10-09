@@ -640,9 +640,15 @@ export async function createRecordCommand(args: TSFIXME): Promise<void> {
       fileLogger.debug("Starting single-record sync for scope:", scope);
 
       try {
-        await AppUtils.syncManifest(scope, {
+        var syncResult = await AppUtils.syncManifest(scope, {
           record: { table: table, sysId: newSysId },
         });
+        // syncManifest reports a failed scope in its result instead of
+        // throwing; route it to the catch below so we never claim the local
+        // files were created when the refresh failed.
+        if (syncResult && syncResult.failedScopes && syncResult.failedScopes.length > 0) {
+          throw new Error(syncResult.failedScopes[0].error);
+        }
         // Resolve the scope's own source directory — syncManifest writes into
         // getSourcePathForScope(scope), which a scope config can override. Using
         // the top-level getSourcePath() here would print a wrong path in
