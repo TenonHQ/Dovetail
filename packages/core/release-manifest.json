@@ -1,7 +1,42 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-08T18:59:46.354Z",
+  "generated_at": "2026-10-09T03:55:11.874Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.126",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.126",
+      "prev_version": "0.0.125",
+      "published_at": "2026-10-09T03:55:11.868Z",
+      "git": {
+        "sha": "ca4fdead0bbd5c4f7ed3dd544ac3ae19a4037e42",
+        "tag": "dovetail-core@0.0.126"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "ca4fdead0",
+          "subject": "fix(core): dove --env accepts a bare instance name like dove-sn (#325)",
+          "pr": 325
+        },
+        {
+          "sha": "435341abf",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "301dfbb75",
+          "subject": "fix: review fixes for the Oct 1-8 merges, re-land reverted #288 and #311 (#322)",
+          "pr": 322
+        },
+        {
+          "sha": "16fd9248d",
+          "subject": "chore(release): @tenonhq/dovetail-core@0.0.125 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.52",
@@ -1307,32 +1342,6 @@
       "commits": [
         {
           "sha": "4f8b2c234",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.38",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.38",
-      "prev_version": "0.0.37",
-      "published_at": "2026-09-15T23:33:16.570Z",
-      "git": {
-        "sha": "925c0ca40cc6407fa78f28b25b82f8dc0fbd460f",
-        "tag": "dovetail-servicenow@0.0.38"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "925c0ca40",
-          "subject": "feat(servicenow): headless update-set / app export with mandatory secret stripping (#276)",
-          "pr": 276
-        },
-        {
-          "sha": "83df94645",
           "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
