@@ -6,6 +6,7 @@
 
 export {
   createTable,
+  verifyColumnAttributes,
   projectTableGraph,
   parseSysIdFromLocation,
   DEFAULT_SUPER_CLASS,
@@ -53,6 +54,24 @@ export type {
   PostResult,
 } from "./formSession";
 
+export {
+  parseAttributes,
+  serializeAttributes,
+  normalizeAttributeInput,
+  mergeAttributes,
+  missingAttributes,
+  resolveColumnAttributes,
+  REFERENCE_DEFAULT_ATTRIBUTES,
+  READONLY_CLICKTHROUGH,
+} from "./dictionaryAttributes";
+export type { DictionaryAttribute, AttributeInput } from "./dictionaryAttributes";
+export { referenceAttrAudit } from "./referenceAttrAudit";
+export type {
+  ReferenceAttrAuditParams,
+  ReferenceAttrAuditResult,
+  ReferenceAttrAuditRow,
+} from "./referenceAttrAudit";
+export type { ColumnAttributeCheck } from "./createTable";
 export { addColumn, deriveElement } from "./addColumn";
 export type { AddColumnParams, AddColumnResult, DesignAccessFlag } from "./addColumn";
 export {

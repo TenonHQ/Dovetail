@@ -110,10 +110,10 @@ Writes are **captured in the update set you pass** (`delete_record` pins the set
 verifies the capture client-side until #297 ships — see its row) and are **idempotent** (re-running reports every record
 unchanged).
 
-> **Previewing is NOT universal.** Of the 31 tools, 23 accept `dryRun`; 3 more preview
+> **Previewing is NOT universal.** Of the 32 tools, 23 accept `dryRun`; 3 more preview
 > by default and need an explicit flag to write (`action_edit` / `flow_edit` →
-> `apply:true`, `flow_test` → `confirm:true`); 3 are read-only (`flow_view`,
-> `action_view`, `index_list`); and **2 write immediately with no preview**
+> `apply:true`, `flow_test` → `confirm:true`); 4 are read-only (`flow_view`,
+> `action_view`, `index_list`, `reference_attr_audit`); and **2 write immediately with no preview**
 > (`flow_publish`, `flow_copy`). Check the tool's own schema before assuming you can plan
 > a write. (Both choice verbs accept `dryRun` as of the #296 fix — reads happen, nothing
 > is written, rows report `would-create` / `would-update` / `would-deactivate`.)
@@ -138,12 +138,13 @@ unchanged).
 
 | Tool | What it does | `dryRun` |
 |---|---|---|
-| `create_table` | Create a scoped table | yes |
-| `add_column` | Add a column to a table | yes |
+| `create_table` | Create a scoped table. Reference columns get `readonly_clickthrough=true` by default; per-column `attributes` / `readonly_clickthrough:false`; attributes read back after the save and merge-patched once if dropped | yes |
+| `add_column` | Add a column to a table. Reference columns get `sys_dictionary.attributes` `readonly_clickthrough=true` by default (`readonly_clickthrough:false` opts out); `attributes` adds more; verified on read-back | yes |
 | `add_index` | Create a **single-column UNIQUE** index via `sys_dictionary.unique` (the only headless lever — `sys_index` is ACL-403), read back from the `v_db_index` view. Composite and non-unique are refused, not narrowed; duplicate values — or a duplicate scan that hits its row cap — abort before any write; a table-per-hierarchy child (stored in an ancestor's physical table) is refused, naming the root; uniqueness *enforcement* is always reported unverified | yes |
 | `index_list` | **Read-only.** List a table's database indexes from the `v_db_index` view — the only index read surface (`sys_index` is API-level-ACL 403, `sys_index_column` does not exist). `column_names` is parsed out of its bracketed, semicolon-separated form; `unique` is left absent because the view has no uniqueness field. A table-per-hierarchy child (no rows of its own) lists its storage root's indexes, with `storageTable` naming the root | n/a (read-only) |
 | `index_create` | Create an index — **composite and non-unique included** — by replaying the Database Indexes dialog's two `xmlhttp.do` processor calls (`IndexCreatorErrorChecker.canCreate` pre-flight, then `ScheduleCreator.createSchedule`), then polling `v_db_index` until it appears. **An index IS captured in an update set** (a `sys_update_xml` row of type `Indexes` in the user's current set), so `updateSetSysId` is **required** on the live path: pinned via `changeUpdateSet` and read back, refused outside the table's scope, and the capture row is read back afterwards (`captured:true`). Idempotent (`already-exists`); a table-per-hierarchy child is refused, naming its storage root; `name` is refused (the dialog has no name input — the platform names after the leading column). Needs a form-loginable username+password identity (`xmlhttp.do` ignores API keys), and warns (never refuses) when the REST identity is not that same user (the build captures into the form user's current set); on `captured:false`, `captureFoundIn` names the set the row actually landed in | dry-run **by default**; `confirm:true` writes |
-| `set_column` | Update a column's dictionary definition | yes |
+| `set_column` | Update a column's dictionary definition. `attributes` is **merged** into the column's existing `sys_dictionary.attributes` (never clobbered); refused on an inherited column | yes |
+| `reference_attr_audit` | **Read-only.** List reference columns under a table-name prefix whose `sys_dictionary.attributes` lack `readonly_clickthrough=true` (or a given attribute); paged past 1000 rows | n/a (read-only) |
 | `set_table` | Update a table's definition | yes |
 | `set_field` | Update a field value on a record | yes |
 | `create_record` | Create a record in a given scope + update set | yes |

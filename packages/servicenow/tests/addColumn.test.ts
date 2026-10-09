@@ -97,6 +97,14 @@ function liveClient(opts: {
   readBackDependent?: string;
   /** dependent_on_field of the ALREADY-EXISTING column, for drift tests. */
   existingDependent?: string;
+  /** Simulate an insert that drops attributes: the read-back reports what was there
+   *  (insertAttributesAs, default "") until a pushWithUpdateSet write carries them. */
+  insertDropsAttributes?: boolean;
+  insertAttributesAs?: string;
+  /** Pin what the read-back reports for attributes no matter what is written. */
+  readBackAttributes?: string;
+  /** attributes of the ALREADY-EXISTING column, for drift tests. */
+  existingAttributes?: string;
 }): ServiceNowClient {
   // Deliberately NOT the table name — the scope assertion below must fail if
   // addColumn ever passes the table name where the resolved scope name belongs.
@@ -109,11 +117,13 @@ function liveClient(opts: {
     createRecordFields: Record<string, unknown>;
     maxLengthWrites: Array<string>;
     dependentWrites: Array<string>;
+    attributeWrites: Array<string>;
   } = {
     createRecordScope: "",
     createRecordFields: {},
     maxLengthWrites: [],
     dependentWrites: [],
+    attributeWrites: [],
   };
   var c = {
     _calls: calls,
@@ -164,6 +174,16 @@ function liveClient(opts: {
               opts.readBackDependent === undefined
                 ? writtenDependent
                 : opts.readBackDependent;
+            var insertedAttributes = opts.insertDropsAttributes
+              ? opts.insertAttributesAs === undefined
+                ? ""
+                : opts.insertAttributesAs
+              : typeof calls.createRecordFields.attributes === "string"
+              ? String(calls.createRecordFields.attributes)
+              : "";
+            var writtenAttributes = calls.attributeWrites.length
+              ? calls.attributeWrites[calls.attributeWrites.length - 1]
+              : insertedAttributes;
             return [
               {
                 sys_id: "NEWSYS",
@@ -171,6 +191,10 @@ function liveClient(opts: {
                 internal_type: reportedType,
                 max_length: reported,
                 dependent_on_field: reportedDependent,
+                attributes:
+                  opts.readBackAttributes === undefined
+                    ? writtenAttributes
+                    : opts.readBackAttributes,
               },
             ];
           }
@@ -196,6 +220,10 @@ function liveClient(opts: {
                     opts.existingDependent === undefined
                       ? ""
                       : opts.existingDependent,
+                  attributes:
+                    opts.existingAttributes === undefined
+                      ? ""
+                      : opts.existingAttributes,
                 },
               ]
             : [];
@@ -228,6 +256,9 @@ function liveClient(opts: {
         }
         if (p && p.fields && p.fields.dependent_on_field !== undefined) {
           calls.dependentWrites.push(String(p.fields.dependent_on_field));
+        }
+        if (p && p.fields && p.fields.attributes !== undefined) {
+          calls.attributeWrites.push(String(p.fields.attributes));
         }
         return { sys_id: "" };
       },
@@ -729,6 +760,170 @@ describe("addColumn dependent_on_field", function () {
   });
 });
 
+describe("addColumn dictionary attributes (readonly_clickthrough default)", function () {
+  function attrCalls(client: ServiceNowClient) {
+    return (
+      client as unknown as {
+        _calls: {
+          createRecordFields: Record<string, unknown>;
+          attributeWrites: Array<string>;
+        };
+      }
+    )._calls;
+  }
+  var refColumn = {
+    label: "Owner",
+    type: "reference",
+    reference: "sys_user",
+    name: "url", // the stub's read-back element
+  };
+
+  it("DEFAULT: a reference column is inserted with readonly_clickthrough=true and verified", async function () {
+    var client = liveClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: refColumn,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(result.verified).toBe(true);
+    expect(attrCalls(client).createRecordFields.attributes).toBe("readonly_clickthrough=true");
+    expect(result.attributes).toBe("readonly_clickthrough=true");
+    expect(attrCalls(client).attributeWrites).toEqual([]);
+  });
+
+  it("OPT-OUT: readonly_clickthrough:false writes no attributes", async function () {
+    var client = liveClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: Object.assign({}, refColumn, { readonly_clickthrough: false }),
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(attrCalls(client).createRecordFields.attributes).toBeUndefined();
+  });
+
+  it("a caller-set readonly_clickthrough wins over the default", async function () {
+    var client = liveClient({});
+    await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: Object.assign({}, refColumn, { attributes: "readonly_clickthrough=false" }),
+      updateSetSysId: "us1",
+    });
+    expect(attrCalls(client).createRecordFields.attributes).toBe("readonly_clickthrough=false");
+  });
+
+  it("MERGE: caller attributes ride alongside the reference default", async function () {
+    var client = liveClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: Object.assign({}, refColumn, {
+        attributes: { ref_auto_completer: "AJAXTableCompleter", no_sort: true },
+      }),
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(attrCalls(client).createRecordFields.attributes).toBe(
+      "ref_auto_completer=AJAXTableCompleter,no_sort=true,readonly_clickthrough=true",
+    );
+  });
+
+  it("NON-REFERENCE: a string column gets no default", async function () {
+    var client = liveClient({});
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: { label: "URL", type: "url" },
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(attrCalls(client).createRecordFields.attributes).toBeUndefined();
+  });
+
+  it("dry-run plans the attributes with no network", async function () {
+    var result = await addColumn({
+      client: noNetworkClient(),
+      table: "x_cadso_journey",
+      column: refColumn,
+      dryRun: true,
+    });
+    expect(result.attributes).toBe("readonly_clickthrough=true");
+    expect(result.note).toMatch(/with attributes 'readonly_clickthrough=true'/);
+  });
+
+  it("patches ONCE as a MERGE when the insert dropped the attribute, keeping what landed", async function () {
+    var client = liveClient({ insertDropsAttributes: true, insertAttributesAs: "ref_contributions=x" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: refColumn,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("created");
+    expect(result.verified).toBe(true);
+    expect(attrCalls(client).attributeWrites).toEqual(["ref_contributions=x,readonly_clickthrough=true"]);
+  });
+
+  it("fails loudly when the attribute never takes (silent drop)", async function () {
+    var client = liveClient({ readBackAttributes: "" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: refColumn,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.verified).toBe(false);
+    expect(result.columnSysId).toBe("NEWSYS");
+    expect(result.note).toMatch(/missing readonly_clickthrough=true/);
+  });
+
+  it("refuses to verify a skip when the existing reference column lacks the attribute", async function () {
+    var client = liveClient({ existing: true, existingType: "reference", existingAttributes: "ref_auto_completer=X" });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: refColumn,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(false);
+    expect(result.note).toMatch(/set-column --attributes/);
+    expect(attrCalls(client).attributeWrites).toEqual([]);
+  });
+
+  it("verifies a skip when the existing column already carries it (any order)", async function () {
+    var client = liveClient({
+      existing: true,
+      existingType: "reference",
+      existingAttributes: "readonly_clickthrough=true,ref_auto_completer=X",
+    });
+    var result = await addColumn({
+      client: client,
+      table: "x_cadso_journey",
+      column: refColumn,
+      updateSetSysId: "us1",
+    });
+    expect(result.status).toBe("skipped");
+    expect(result.verified).toBe(true);
+  });
+
+  it("rejects a malformed attribute string before any network call", async function () {
+    await expect(
+      addColumn({
+        client: noNetworkClient(),
+        table: "x_cadso_journey",
+        column: Object.assign({}, refColumn, { attributes: "1bad=x" }),
+        dryRun: true,
+      }),
+    ).rejects.toThrow(/^add-column: column 'Owner' attributes: '1bad' is not a valid attribute name/);
+  });
+});
+
 describe("addColumn error prefixes", function () {
   it("re-prefixes a shared-helper error as add-column, not createTable", async function () {
     await expect(
@@ -894,6 +1089,12 @@ function crossScopeClient(opts: {
                     : "",
                 internal_type: calls.createRecordFields.internal_type,
                 max_length: "",
+                // The insert's attributes land as sent (a reference column carries the
+                // readonly_clickthrough default).
+                attributes:
+                  typeof calls.createRecordFields.attributes === "string"
+                    ? calls.createRecordFields.attributes
+                    : "",
                 sys_scope: {
                   value:
                     opts.readBackScope !== undefined
@@ -913,6 +1114,7 @@ function crossScopeClient(opts: {
                 element: "x_cadso_journey_instance_step",
                 internal_type: "reference",
                 max_length: "",
+                attributes: "readonly_clickthrough=true",
               },
             ];
           }

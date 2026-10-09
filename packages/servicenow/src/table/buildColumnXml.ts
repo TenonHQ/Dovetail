@@ -20,6 +20,12 @@ export interface NormalizedColumn {
   maxLength: string;
   /** Reference target table for type "reference"; "" otherwise (rendered as NULL). */
   reference: string;
+  /**
+   * Serialized sys_dictionary.attributes ("readonly_clickthrough=true,..."); "" or
+   * absent when none. A reference column carries readonly_clickthrough=true by default
+   * (see dictionaryAttributes.ts).
+   */
+  attributes?: string;
 }
 
 /**
@@ -46,7 +52,13 @@ function renderRecord(col: NormalizedColumn, sysId: string): string {
   parts.push(field("display", { value: "false" }));
   parts.push(field("sys_updated_on", { value: "" }));
   parts.push(field("sys_updated_by", { value: "" }));
-  parts.push(field("attributes", { value: "" }));
+  // Untouched (value "") when there are none, so a column without attributes renders
+  // byte-for-byte as Studio's own payload does.
+  if (col.attributes) {
+    parts.push(field("attributes", { modified: true, value_set: true, value: col.attributes }));
+  } else {
+    parts.push(field("attributes", { value: "" }));
+  }
   parts.push(field("read_only", { value: "false" }));
   parts.push(field("sys_created_on", { value: "" }));
   parts.push(field("sys_created_by", { value: "" }));

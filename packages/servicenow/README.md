@@ -674,6 +674,40 @@ adds diagnostics (app-switch status, resolved column key, assigned sys_id) to th
 result note. Ground truth (the HAR dissection) lives in the CTO repo's create-table
 docs.
 
+### Dictionary attributes (`sys_dictionary.attributes`) and the reference-column rule
+
+**Team rule (2026-10-08): every reference column carries `readonly_clickthrough=true`.**
+`add-column` and `create-table` apply it by default to every `reference` column; any
+other attributes you need ride alongside it.
+
+```bash
+# default — the column is created with readonly_clickthrough=true, verified on read-back
+npx dove-sn add-column --table x_cadso_journey --label Owner --type reference --reference sys_user --update-set <sys_id>
+# more attributes (merged with the default) / opt out of the default
+npx dove-sn add-column ... --attributes "ref_auto_completer=AJAXTableCompleter,ref_ac_columns=name;email"
+npx dove-sn add-column ... --no-readonly-clickthrough
+# fix an EXISTING column — MERGED into its current attributes, never overwriting them
+npx dove-sn set-column --table x_cadso_automate_email_batch --column x_cadso_journey_instance_step \
+  --attributes readonly_clickthrough=true --update-set <sys_id>
+# read-only audit: which reference columns lack it
+npx dove-sn reference-attr-audit --scope-prefix x_cadso_ --json
+```
+
+- **Format.** `--attributes` (MCP `attributes`) is `"k=v,k2=v2"` or, in JSON/MCP, a
+  `{ key: value }` map. Keys are identifiers; a value may not contain `,` (the separator).
+- **Merge, never clobber.** `set-column` sets the named keys and keeps every other
+  attribute the column carries. A column that already has them reports `unchanged`.
+- **Verified.** add-column reads `attributes` back; if the insert dropped a key it patches
+  once (as a merge) and re-reads — still missing is `failed` (exit 2). create-table reads
+  every column with attributes back after the form save (`columnAttributes` on the
+  result) and merge-patches into `--update-set` the same way. set-column verifies each
+  requested key order-insensitively.
+- **Opt-out / override.** `--no-readonly-clickthrough` (create-table: table-wide;
+  per column `readonly_clickthrough: false` in `--from-json`), or set
+  `readonly_clickthrough=false` in `attributes` — the caller's value wins.
+- **Inherited columns** are refused by `set-column --attributes` for now (a per-child
+  `sys_dictionary_override` for attributes has not been verified live).
+
 ### Add a unique index
 
 Create a **single-column UNIQUE index** on an existing table, then read it back.
@@ -1253,7 +1287,9 @@ record — dry-run by default, `confirm:true` to apply, `updateSetSysId` require
 record read back before AND after so success is only reported once it is confirmed
 gone) — all read-back-verified; `set_field` / `create_record` are captured in the
 update set you pass, while `delete_record` pins the set as current and reads the DELETE
-capture back (`captureState`) until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `host_assets` (deploy a built
+capture back (`captureState`) until [#297](https://github.com/TenonHQ/Dovetail/issues/297) ships — `reference_attr_audit` (read-only: reference columns under a table-name prefix
+missing `readonly_clickthrough=true`; `add_column` / `create_table` columns and
+`set_column` also take `attributes` — see "Dictionary attributes"), `host_assets` (deploy a built
 dist/), plus the Flow Designer
 tools `flow_view` (read a flow/subflow's step graph), `action_view` (read an action
 type's model), `action_edit` (structurally edit a published action type — per-step

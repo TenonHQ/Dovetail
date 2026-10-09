@@ -36,6 +36,9 @@ import {
   OverlaySpec,
   listEditKey
 } from "./buildTableSave";
+import { fieldToString } from "../setField";
+import { encodeQueryValue } from "../choices";
+import { mergeAttributes, missingAttributes, parseAttributes } from "./dictionaryAttributes";
 import { resolveFormAuth, openFormSession, setCurrentApplication, getNewRecordForm, postForm } from "./formSession";
 
 /** Default parent for a custom scoped table — what Studio picks for "extends nothing". */
@@ -117,8 +120,15 @@ export interface CreateTableResult {
   label: string;
   scopeSysId: string;
   columns: number;
-  /** Resolved internal types (friendly -> internal). */
-  resolvedColumns: Array<{ label: string; type: string; maxLength: string }>;
+  /** Resolved internal types (friendly -> internal), with the attributes each must carry. */
+  resolvedColumns: Array<{ label: string; type: string; maxLength: string; attributes: string }>;
+  /**
+   * Live path only: the read-back of every column that must carry attributes (a
+   * reference column carries readonly_clickthrough=true by default). A column whose
+   * attributes did not land is merge-patched once into the update set, then re-read;
+   * any still missing fails the create.
+   */
+  columnAttributes?: Array<ColumnAttributeCheck>;
   graph: TableGraph;
   httpStatus: number;
   /** 302 Location on success. */
@@ -127,6 +137,106 @@ export interface CreateTableResult {
   columnXml: string;
   /** Human-readable note (e.g. the live-validation caveat). */
   note: string;
+}
+
+/** One column's attribute read-back after a live create. */
+export interface ColumnAttributeCheck {
+  label: string;
+  /** "" when the column could not be found by label on read-back. */
+  element: string;
+  columnSysId: string;
+  /** What the column must carry. */
+  wanted: string;
+  /** sys_dictionary.attributes as finally read back. */
+  attributes: string;
+  /** True when it was patched after the form save dropped it. */
+  patched: boolean;
+  verified: boolean;
+  note: string;
+}
+
+/**
+ * After the form save: read every column that must carry attributes back from
+ * sys_dictionary (matched by column_label — unique per normalizeColumns), and merge-patch
+ * any that did not land through Studio's list-edit XML. Never throws — the table already
+ * exists, so every outcome is reported per column.
+ */
+export async function verifyColumnAttributes(
+  client: ServiceNowClient,
+  tableName: string,
+  columns: Array<NormalizedColumn>,
+  updateSetSysId: string,
+): Promise<Array<ColumnAttributeCheck>> {
+  var out: Array<ColumnAttributeCheck> = [];
+  var wanted = columns.filter(function (c) { return Boolean(c.attributes); });
+  if (wanted.length === 0) return out;
+  var rows: Array<Record<string, unknown>> = [];
+  var readError = "";
+  try {
+    rows = await client.table.query<Record<string, unknown>>(
+      "sys_dictionary",
+      "name=" + encodeQueryValue(tableName) + "^internal_type!=collection",
+      { limit: 1000, fields: ["sys_id", "element", "column_label", "attributes"] },
+    );
+  } catch (e) {
+    readError = e instanceof Error ? e.message : String(e);
+  }
+  for (var i = 0; i < wanted.length; i += 1) {
+    var col = wanted[i];
+    var want = parseAttributes(String(col.attributes));
+    var check: ColumnAttributeCheck = {
+      label: col.label, element: "", columnSysId: "", wanted: String(col.attributes),
+      attributes: "", patched: false, verified: false, note: "",
+    };
+    out.push(check);
+    if (readError) {
+      check.note = "could not read sys_dictionary back: " + readError;
+      continue;
+    }
+    var row: Record<string, unknown> | undefined;
+    for (var r = 0; r < rows.length; r += 1) {
+      if (fieldToString(rows[r].column_label) === col.label) { row = rows[r]; break; }
+    }
+    if (!row) {
+      check.note = "no sys_dictionary row labelled '" + col.label + "' on " + tableName + " — the column may not have been created.";
+      continue;
+    }
+    check.element = fieldToString(row.element);
+    check.columnSysId = fieldToString(row.sys_id);
+    check.attributes = fieldToString(row.attributes);
+    if (missingAttributes(check.attributes, want).length === 0) {
+      check.verified = true;
+      continue;
+    }
+    if (!updateSetSysId) {
+      check.note = "attributes did not land via the form save, and no update set was given to capture a patch into — set them with set-column --attributes.";
+      continue;
+    }
+    try {
+      await client.claude.pushWithUpdateSet({
+        update_set_sys_id: updateSetSysId,
+        table: "sys_dictionary",
+        record_sys_id: check.columnSysId,
+        fields: { attributes: mergeAttributes(check.attributes, want) },
+      });
+      check.patched = true;
+      var after = await client.table.query<Record<string, unknown>>(
+        "sys_dictionary",
+        "sys_id=" + encodeQueryValue(check.columnSysId),
+        { limit: 1, fields: ["sys_id", "attributes"] },
+      );
+      check.attributes = after.length > 0 ? fieldToString(after[0].attributes) : "";
+    } catch (e) {
+      check.note = "patching attributes failed: " + (e instanceof Error ? e.message : String(e));
+      continue;
+    }
+    var still = missingAttributes(check.attributes, want);
+    check.verified = still.length === 0;
+    if (!check.verified) {
+      check.note = "attributes still missing " + still.join(", ") + " after a patch — set them on the instance.";
+    }
+  }
+  return out;
 }
 
 /** The well-known global "Save" UI action (sys_ui_action). Override per-instance if needed. */
@@ -201,7 +311,7 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   var hasRole = !!(params.userRole && params.userRole.trim());
   var graph = projectTableGraph(columns.length, createAcls, hasRole);
   var resolvedColumns = columns.map(function (c) {
-    return { label: c.label, type: c.type, maxLength: c.maxLength };
+    return { label: c.label, type: c.type, maxLength: c.maxLength, attributes: c.attributes ? c.attributes : "" };
   });
 
   // The column XML is pure — build it now (used by dry-run AND the live POST).
@@ -304,12 +414,32 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   var assignedSysId = parseSysIdFromLocation(resp.location);
   var finalSysId = ok ? (assignedSysId || tableSysId) : "";
 
+  // The form's list-edit XML carries the attributes, but whether Studio honours them
+  // there is not trusted on a 302 alone — read every such column back, patch once.
+  var attrChecks: Array<ColumnAttributeCheck> = [];
+  if (ok) {
+    attrChecks = await verifyColumnAttributes(
+      client,
+      params.name,
+      columns,
+      params.updateSetSysId ? params.updateSetSysId : "",
+    );
+  }
+  var attrFailures = attrChecks.filter(function (c) { return !c.verified; });
+
   var note: string;
   if (ok) {
     note = "Created via form save. Verify the " + graph.total
       + " records landed in scope " + scopeRef.sysId + " and the pinned update set.";
   } else {
     note = "save POST returned " + resp.status + " (expected 302). " + resp.body.slice(0, 200);
+  }
+  if (attrChecks.length > 0) {
+    note += attrFailures.length === 0
+      ? " Column attributes verified on " + attrChecks.length + " column(s)."
+      : " COLUMN ATTRIBUTES NOT VERIFIED: " + attrFailures.map(function (c) {
+          return "'" + c.label + "' — " + c.note;
+        }).join("; ");
   }
   if (params.debug) {
     note += " [debug: appSwitch=" + appSwitch.status + (appSwitch.ok ? "/ok" : "/FAIL:" + appSwitch.body)
@@ -323,7 +453,7 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
   }
 
   return {
-    status: ok ? "created" : "failed",
+    status: ok && attrFailures.length === 0 ? "created" : "failed",
     tableSysId: finalSysId,
     name: params.name,
     label: params.label,
@@ -334,6 +464,7 @@ export async function createTable(params: CreateTableParams): Promise<CreateTabl
     httpStatus: resp.status,
     location: resp.location,
     columnXml: columnXml,
+    columnAttributes: attrChecks,
     note: note
   };
 }

@@ -47,6 +47,7 @@ import {
   createIndex,
   setColumn,
   setTable,
+  referenceAttrAudit,
 } from "../table";
 import { hostAssets } from "../hostAssets";
 import { setField } from "../setField";
@@ -85,6 +86,7 @@ import {
   designAccessSchema,
   addIndexSchema,
   listIndexesSchema,
+  referenceAttrAuditSchema,
   createIndexSchema,
   setColumnSchema,
   setTableSchema,
@@ -121,6 +123,7 @@ export var TOOL_NAMES = [
   "design_access",
   "add_index",
   "index_list",
+  "reference_attr_audit",
   "index_create",
   "set_column",
   "set_table",
@@ -504,7 +507,12 @@ export function buildDescriptors(
         "(POST /sys_db_object.do) so the real 36-record graph + the physical table + seeded ACLs " +
         "are created. name (x_scope_*), label, scope, and columns[] are required; extendsTable " +
         "defaults to sys_metadata; friendly column types are mapped to internal types " +
-        "(string -> string_full_utf8). dryRun:true returns the plan + the column XML + the projected " +
+        "(string -> string_full_utf8). A reference column gets sys_dictionary.attributes " +
+        "readonly_clickthrough=true by default (team rule; column.readonly_clickthrough:false opts " +
+        "out); column.attributes ('k=v,k2=v2' or a map) adds more. After a live save every column " +
+        "with attributes is READ BACK and merge-patched once into updateSetSysId if they did not land " +
+        "— still missing fails the create (see columnAttributes). " +
+        "dryRun:true returns the plan + the column XML + the projected " +
         "graph with no session and no writes. NOTE: the live write path is pending a validated-live " +
         "spike — prefer dryRun until confirmed, and always verify the sys_update_xml landed in the " +
         "intended update set.",
@@ -538,11 +546,16 @@ export function buildDescriptors(
         "inserts, restores) so the column lands in the right scope and update set, then READS THE COLUMN " +
         "BACK from sys_dictionary to prove it materialised (a returned sys_id with no column is reported " +
         "failed, not created). table is the table name or its sys_db_object sys_id; column is " +
-        "{ label, type, name?, max_length?, reference?, mandatory?, default?, dependent_on_field? } with " +
+        "{ label, type, name?, max_length?, reference?, mandatory?, default?, dependent_on_field?, " +
+        "attributes?, readonly_clickthrough? } with " +
         "friendly types mapped to internal types (string -> string_full_utf8) and reference = the target " +
         "table NAME; element is derived from label unless column.name is given. dependent_on_field names " +
         "the sibling column a document_id column resolves against (its table_name column) — it must " +
         "already exist on the table, is verified on the read-back, and is refused when absent. " +
+        "A REFERENCE column gets sys_dictionary.attributes readonly_clickthrough=true by default " +
+        "(team rule; readonly_clickthrough:false opts out, or set it yourself in attributes); " +
+        "column.attributes ('k=v,k2=v2' or a map) adds more. Every requested attribute is verified " +
+        "on the read-back (patched once as a merge if the insert dropped it; still missing = failed). " +
         "scope must match the table's scope unless crossScope:true, which opts in to a column OWNED " +
         "by scope on another app's table (the platform's cross-scope field: element becomes " +
         "<scope>_<name>, the dictionary row and its update-set capture land in scope); the table " +
@@ -711,6 +724,27 @@ export function buildDescriptors(
       },
     },
     {
+      name: "reference_attr_audit",
+      annotations: READ_ONLY,
+      description:
+        "List the REFERENCE columns under a table-name prefix (e.g. x_cadso_) whose " +
+        "sys_dictionary.attributes lack a required attribute — by default " +
+        "readonly_clickthrough=true, the team rule for every reference column. Read-only: pages " +
+        "sys_dictionary (internal_type=reference, active) 1000 rows at a time and returns " +
+        "{ total, compliant, missing: [{ table, element, columnSysId, scope, reference, attributes }], " +
+        "truncated }. It never writes — backfill a column with set_column attributes into an " +
+        "update set as a separate, deliberate step.",
+      shape: referenceAttrAuditSchema.shape,
+      handler: async function (args: unknown) {
+        var p = referenceAttrAuditSchema.parse(args);
+        return referenceAttrAudit({
+          client: client(),
+          scopePrefix: p.scopePrefix,
+          attribute: p.attribute,
+        });
+      },
+    },
+    {
       name: "index_create",
       annotations: WRITE_ADDITIVE_IDEMPOTENT,
       description:
@@ -774,8 +808,11 @@ export function buildDescriptors(
       annotations: WRITE_OVERWRITE,
       description:
         "Update the SCHEMA of an EXISTING column on an EXISTING ServiceNow table — its label, " +
-        "mandatory, default, readOnly, maxLength, or dependentOnField (the sibling column a " +
-        "document_id resolves against; must exist on the table; \"\" clears it) — on an INHERITED " +
+        "mandatory, default, readOnly, maxLength, dependentOnField (the sibling column a " +
+        "document_id resolves against; must exist on the table; \"\" clears it), or attributes " +
+        "(sys_dictionary.attributes, 'k=v,k2=v2' or a map — MERGED into the column's existing " +
+        "attributes, never overwriting keys you did not name; verified order-insensitively; refused " +
+        "on an inherited column) — on an INHERITED " +
         "column, overridden for that table alone via sys_dictionary_override — captured into a " +
         "named update set, then READ " +
         "BACK from the instance to verify. This is the schema counterpart to set_field: set_field " +

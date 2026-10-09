@@ -369,6 +369,13 @@ export var hostAssetsSchema = z.object({
   dryRun: z.boolean().optional(),
 });
 
+// sys_dictionary.attributes input: the raw "k=v,k2=v2" string or a key -> value map.
+// Validated (key shape, no ',' in values) by normalizeAttributeInput at the tool boundary.
+export var dictionaryAttributesInputSchema = z.union([
+  z.string().min(1),
+  z.record(z.string(), z.union([z.string(), z.boolean()])),
+]);
+
 export var columnSpecSchema = z.object({
   label: z.string().min(1),
   type: z.string().min(1),
@@ -380,6 +387,10 @@ export var columnSpecSchema = z.object({
   // add_column only — the sibling column a document_id resolves against. Must already
   // exist on the table. Ignored by create_table's form path.
   dependent_on_field: z.string().optional(),
+  // sys_dictionary.attributes to set on the new column (verified on read-back).
+  attributes: dictionaryAttributesInputSchema.optional(),
+  // Reference columns carry readonly_clickthrough=true by default; false opts out.
+  readonly_clickthrough: z.boolean().optional(),
 });
 
 export var createTableSchema = z.object({
@@ -488,10 +499,20 @@ export var columnAttributesSchema = z.object({
   maxLength: z.number().int().positive().optional(),
   // sys_dictionary.dependent_on_field; "" clears it. Must name a column on the table.
   dependentOnField: z.string().optional(),
+  // sys_dictionary.attributes — MERGED into the column's existing attributes (keys not
+  // named are kept). Refused on an inherited column.
+  attributes: dictionaryAttributesInputSchema.optional(),
   // Present so a caller can express them and be told WHY they are impossible, rather
   // than having them silently dropped. setColumn refuses both.
   internalType: z.string().optional(),
   element: z.string().optional(),
+});
+
+// reference_attr_audit: read-only. Reference columns under a table-name prefix that lack
+// the attribute (default readonly_clickthrough=true).
+export var referenceAttrAuditSchema = z.object({
+  scopePrefix: z.string().min(1),
+  attribute: dictionaryAttributesInputSchema.optional(),
 });
 
 export var setColumnSchema = z.object({
