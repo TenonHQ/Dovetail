@@ -28,10 +28,25 @@ DovetailUtilsMS.prototype = {
     };
   },
 
+  // App records live in sys_scope's child tables: sys_app for an app built on the
+  // instance, sys_store_app for one installed from the app repo or the Store (every
+  // x_cadso app on a customer or demo instance). Query the parent so both resolve.
+  APP_CLASSES: "sys_app,sys_store_app",
+
+  // Returns the app's sys_id, or "" when no app (or more than one) carries the name.
+  // Every global-scope app shares the name "global", so it never resolves here.
   getScopeId: function (scopeName) {
-    var appGR = new GlideRecord("sys_app");
-    appGR.get("scope", scopeName);
-    return appGR.getValue("sys_id");
+    if (!scopeName) {
+      return "";
+    }
+    var scopeGR = new GlideRecord("sys_scope");
+    scopeGR.addQuery("scope", scopeName);
+    scopeGR.addQuery("sys_class_name", "IN", this.APP_CLASSES);
+    scopeGR.query();
+    if (scopeGR.getRowCount() !== 1 || !scopeGR.next()) {
+      return "";
+    }
+    return scopeGR.getUniqueValue();
   },
 
   getTableNames: function (config) {
@@ -709,7 +724,7 @@ DovetailUtilsMS.prototype = {
   getCurrentScope: function () {
     var scopeID = gs.getCurrentApplicationId();
     if (scopeID) {
-      var appGR = new GlideRecord("sys_app");
+      var appGR = new GlideRecord("sys_scope");
       if (appGR.get(scopeID)) {
         return {
           scope: appGR.getValue("scope") || "Global",
@@ -725,7 +740,8 @@ DovetailUtilsMS.prototype = {
 
   getAppList: function () {
     var results = [];
-    var appGR = new GlideRecord("sys_app");
+    var appGR = new GlideRecord("sys_scope");
+    appGR.addQuery("sys_class_name", "IN", this.APP_CLASSES);
     appGR.query();
 
     while (appGR.next()) {

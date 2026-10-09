@@ -16,6 +16,17 @@
   var getContents = data.getContents || data.withFiles || false;
   var scopeName = request.pathParams.scope;
 
+  // An unresolved scope must fail loudly. Before, it produced a partial manifest (only
+  // tables filtered by scope name, e.g. sys_dictionary and sys_choice) that a refresh
+  // would happily write to disk.
+  if (!utils.getScopeId(scopeName)) {
+    response.setStatus(404);
+    response.setBody({
+      error: "Scope not found or not unique among sys_app / sys_store_app: " + scopeName
+    });
+    return;
+  }
+
   var result = utils.getManifest({
     scopeName: scopeName,
     includes: includes,

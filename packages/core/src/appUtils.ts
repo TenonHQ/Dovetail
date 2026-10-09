@@ -27,6 +27,7 @@ import {
 import { BenchmarkCollector } from "./benchmark";
 import { logger } from "./Logger";
 import { aggregateErrorMessages, allSettled, processBatched, allSettledBatched } from "./genericUtils";
+import { isScopeSysId } from "./scopeId";
 
 interface UpdateSetSelection {
   sys_id: string;
@@ -1530,13 +1531,17 @@ const swapServerScope = async (scopeId: string): Promise<void> => {
 /**
  * Creates a new update set and assigns it to the current user.
  * @param updateSetName - does not create update set if value is blank
- * @param scope - optional scope name (e.g. x_cadso_work) to create the update set in
+ * @param scope - optional scope name (e.g. x_cadso_work) or sys_scope sys_id to create
+ *   the update set in. A sys_id is the only way to target a specific global-scope app,
+ *   because every global app's scope name is "global".
  */
 export const createAndAssignUpdateSet = async (updateSetName = "", scope?: string) => {
   logger.info(`Update Set Name: ${updateSetName}` + (scope ? ` (scope: ${scope})` : ""));
   const client = defaultClient();
   var scopeSysId: string | undefined;
-  if (scope) {
+  if (scope && isScopeSysId(scope)) {
+    scopeSysId = scope;
+  } else if (scope) {
     var scopeResult = await unwrapSNResponse(client.getScopeId(scope));
     if (scopeResult.length > 0) {
       scopeSysId = scopeResult[0].sys_id;
