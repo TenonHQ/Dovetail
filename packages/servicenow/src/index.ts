@@ -279,6 +279,8 @@ export type {
   SetFieldResult,
 } from "./setField";
 export type { CreateRecordParams, CreateRecordResult } from "./createRecord";
+export { DEFAULT_WRITE_DOMAIN, normalizeDomain, findOverrides } from "./domain";
+export type { DomainCheck, MultiRowDomainCheck, OverrideRow, ServerDomainEcho } from "./domain";
 export { deleteRecord } from "./deleteRecord";
 export type { DeleteRecordParams, DeleteRecordResult } from "./deleteRecord";
 export { syncUxEvents, parseNowUiActions, formatUxEventSync } from "./uxEvents";

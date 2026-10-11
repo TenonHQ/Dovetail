@@ -1,3 +1,5 @@
+import type { MultiRowDomainCheck } from "./domain";
+
 /**
  * @tenonhq/dovetail-servicenow — type definitions
  */
@@ -60,6 +62,12 @@ export interface AddChoicesParams {
   updateSetSysId: string;
   /** sys_dictionary.choice setting. Defaults to 3 (dropdown). Pass null to leave dictionary alone. */
   choiceType?: ChoiceType | null;
+  /**
+   * Session domain every sys_choice write runs in: "global" (the default) or a domain
+   * sys_id. On a domain-separated instance an insert is stamped with the session domain
+   * and an update from a session below the row's domain creates a domain override.
+   */
+  domain?: string;
   /**
    * Plan only. Every read still happens (the field, the update set and the existing rows
    * are all verified), but NO write is sent — each row reports the action that WOULD be
@@ -151,6 +159,13 @@ export interface AddChoicesResult {
   /** True when every write was planned and none performed. */
   dryRun: boolean;
   choices: Array<ChoiceActionResult>;
+  /**
+   * Session domain the writes ran in + the read-back domain verification (created rows
+   * in the requested domain, no override rows created). OPTIONAL in the type only for
+   * backwards compatibility with consumers that construct this shape; the runtime always
+   * populates it. A non-empty `problems` means the write landed in the wrong domain.
+   */
+  domain?: MultiRowDomainCheck;
 }
 
 export interface RemoveChoicesParams {
@@ -164,6 +179,12 @@ export interface RemoveChoicesParams {
   language?: string;
   /** Update set sys_id that will capture every write. Required — no default. */
   updateSetSysId: string;
+  /**
+   * Session domain every sys_choice write runs in: "global" (the default) or a domain
+   * sys_id. On a domain-separated instance an insert is stamped with the session domain
+   * and an update from a session below the row's domain creates a domain override.
+   */
+  domain?: string;
   /**
    * Plan only. Every read still happens, but NO write is sent — each live row reports
    * "would-deactivate" and the envelope carries `dryRun: true`.
@@ -218,6 +239,13 @@ export interface RemoveChoicesResult {
   /** True when every write was planned and none performed. */
   dryRun: boolean;
   choices: Array<ChoiceRemovalResult>;
+  /**
+   * Session domain the writes ran in + the read-back domain verification (created rows
+   * in the requested domain, no override rows created). OPTIONAL in the type only for
+   * backwards compatibility with consumers that construct this shape; the runtime always
+   * populates it. A non-empty `problems` means the write landed in the wrong domain.
+   */
+  domain?: MultiRowDomainCheck;
 }
 
 /* ─── Form / list / view layout tooling ─────────────────────────────────── */

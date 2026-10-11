@@ -13,6 +13,18 @@
 
 import { createClient } from "./client";
 import type { ServiceNowClient } from "./client";
+import {
+  DOMAIN_READ_FIELDS,
+  describeOverrides,
+  domainProblemNote,
+  domainSnapshot,
+  domainValue,
+  findOverrides,
+  newOverrides,
+  normalizeDomain,
+  readServerDomainEcho
+} from "./domain";
+import type { DomainCheck, OverrideRow } from "./domain";
 
 export interface SetFieldParams {
   client?: ServiceNowClient;
@@ -24,6 +36,12 @@ export interface SetFieldParams {
   fields: Record<string, string>;
   /** Update set to capture the change into. Required for a tracked write. */
   updateSetSysId?: string;
+  /**
+   * Session domain to run the write in: "global" (the default) or a domain sys_id.
+   * On a domain-separated instance an update from a session BELOW the record's domain
+   * creates a domain override instead of editing the record — see domain.ts.
+   */
+  domain?: string;
   dryRun?: boolean;
 }
 
@@ -42,6 +60,8 @@ export interface RecordWriteResult {
   after: Record<string, string>;
   verified: boolean;
   note: string;
+  /** Session domain requested + the read-back domain verification. */
+  domain: DomainCheck;
 }
 
 export interface SetFieldResult extends RecordWriteResult {
@@ -196,6 +216,12 @@ export async function setField(params: SetFieldParams): Promise<SetFieldResult> 
   if (!params.updateSetSysId) {
     throw new Error("set-field: --update-set <sys_id> is required so the change is captured.");
   }
+  var domain: string;
+  try {
+    domain = normalizeDomain(params.domain);
+  } catch (e) {
+    throw new Error("set-field: --" + (e instanceof Error ? e.message : String(e)));
+  }
 
   // Resolve the target sys_id (explicit, or a single-match query).
   var sysId = params.sysId;
@@ -213,13 +239,34 @@ export async function setField(params: SetFieldParams): Promise<SetFieldResult> 
     sysId = fieldToString(matches[0].sys_id);
   }
 
-  // Read current values (also confirms the record exists).
-  var readFields = ["sys_id"].concat(fieldNames);
-  var beforeRows = await client.table.query(table, "sys_id=" + sysId, { limit: 1, fields: readFields });
+  // Read current values (also confirms the record exists). noDomain: a record in
+  // another domain — or one already hidden behind an override — must still be found.
+  var readFields = uniqueFields(["sys_id"].concat(fieldNames, DOMAIN_READ_FIELDS));
+  var beforeRows = await client.table.query(table, "sys_id=" + sysId, {
+    limit: 1,
+    fields: readFields,
+    noDomain: true
+  });
   if (beforeRows.length === 0) {
     throw new Error("set-field: no record " + sysId + " found on " + table + ".");
   }
   var before = pickFields(beforeRows[0], fieldNames);
+  var beforeDomain = domainSnapshot(beforeRows[0]);
+  // The record keeps its own domain unless the caller sets sys_domain explicitly.
+  var expectedDomain = beforeDomain.domainAware
+    ? (Object.prototype.hasOwnProperty.call(params.fields, "sys_domain")
+      ? domainValue(params.fields.sys_domain)
+      : beforeDomain.domain)
+    : "";
+  var domainCheck: DomainCheck = {
+    requested: domain,
+    domainAware: beforeDomain.domainAware,
+    expected: expectedDomain,
+    actual: beforeDomain.domain,
+    overridesCreated: [],
+    serverAcknowledged: false,
+    problems: []
+  };
 
   if (params.dryRun) {
     return {
@@ -231,24 +278,73 @@ export async function setField(params: SetFieldParams): Promise<SetFieldResult> 
       before: before,
       after: before,
       verified: false,
+      domain: domainCheck,
       note: "dry-run: no write. Would set " + JSON.stringify(params.fields)
-        + " on " + table + "/" + sysId + " into update set " + params.updateSetSysId + "."
+        + " on " + table + "/" + sysId + " into update set " + params.updateSetSysId
+        + " in session domain " + domain + "."
     };
   }
 
-  // Write via the update-set-aware core REST op.
-  await client.claude.pushWithUpdateSet({
+  var overridesBefore: Array<OverrideRow> = beforeDomain.overridesSupported
+    ? await findOverrides(client, table, [sysId])
+    : [];
+
+  // Write via the update-set-aware core REST op, in the requested session domain.
+  var response = await client.claude.pushWithUpdateSet({
     update_set_sys_id: params.updateSetSysId,
     table: table,
     record_sys_id: sysId,
-    fields: params.fields
+    fields: params.fields,
+    domain: domain
   });
+  domainCheck.serverAcknowledged = readServerDomainEcho(response) !== null;
 
-  // Read back and verify each field equals what we set.
-  var afterRows = await client.table.query(table, "sys_id=" + sysId, { limit: 1, fields: readFields });
+  // Read back and verify each field equals what we set, then the domain outcome.
+  var afterRows = await client.table.query(table, "sys_id=" + sysId, {
+    limit: 1,
+    fields: readFields,
+    noDomain: true
+  });
   var after = pickFields(afterRows[0] || {}, fieldNames);
   var check = verifyReadBack(params.fields, after);
-  var verified = check.verified;
+
+  if (beforeDomain.overridesSupported) {
+    var overridesAfter = await findOverrides(client, table, [sysId]);
+    domainCheck.overridesCreated = newOverrides(overridesBefore, overridesAfter);
+  }
+  if (beforeDomain.domainAware) {
+    domainCheck.actual = domainSnapshot(afterRows[0]).domain;
+    if (afterRows.length === 0) {
+      domainCheck.problems.push("The record no longer reads back across domains.");
+    } else if (domainCheck.actual !== expectedDomain) {
+      domainCheck.problems.push(
+        "sys_domain is " + (domainCheck.actual || "(empty)") + ", expected " + expectedDomain + "."
+      );
+    }
+  }
+  if (domainCheck.overridesCreated.length > 0) {
+    domainCheck.problems.push(
+      "The platform created domain override row(s) " + describeOverrides(domainCheck.overridesCreated)
+        + " instead of updating " + table + "/" + sysId + " in place — the write ran in a session "
+        + "domain below the record's (" + (beforeDomain.domain || "?") + "). The override is captured "
+        + "in the update set; delete it and its capture, then re-run with --domain "
+        + (beforeDomain.domain || "global") + "."
+    );
+  }
+  var verified = check.verified && domainCheck.problems.length === 0;
+
+  var note: string;
+  if (verified) {
+    note = "Set " + fieldNames.join(", ") + " on " + table + "/" + sysId + " and verified via read-back"
+      + (beforeDomain.domainAware ? " (sys_domain " + domainCheck.actual + ", no override created)" : "")
+      + "." + readBackNote(check);
+  } else if (domainCheck.problems.length > 0) {
+    note = domainProblemNote(domainCheck, "pushWithUpdateSet")
+      + (check.verified ? "" : " Field read-back also differs (" + check.mismatched.join(", ") + ").");
+  } else {
+    note = "Write landed but read-back does not match the requested values ("
+      + check.mismatched.join(", ") + ") — check field types / ACLs.";
+  }
 
   return {
     status: verified ? "applied" : "failed",
@@ -259,10 +355,19 @@ export async function setField(params: SetFieldParams): Promise<SetFieldResult> 
     before: before,
     after: after,
     verified: verified,
-    note: verified
-      ? "Set " + fieldNames.join(", ") + " on " + table + "/" + sysId + " and verified via read-back."
-        + readBackNote(check)
-      : "Write landed but read-back does not match the requested values ("
-        + check.mismatched.join(", ") + ") — check field types / ACLs."
+    domain: domainCheck,
+    note: note
   };
+}
+
+/** De-duplicate a field list, keeping first-seen order. */
+export function uniqueFields(names: Array<string>): Array<string> {
+  var seen: Record<string, boolean> = {};
+  var out: Array<string> = [];
+  for (var i = 0; i < names.length; i += 1) {
+    if (seen[names[i]]) continue;
+    seen[names[i]] = true;
+    out.push(names[i]);
+  }
+  return out;
 }

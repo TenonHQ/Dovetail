@@ -220,8 +220,11 @@ export function buildDescriptors(
         "sys_dictionary.choice so the field renders as a dropdown. Idempotent. Writes are " +
         "captured in the supplied update set. dryRun:true verifies the field + update set " +
         "and reports each row as would-create / would-update / unchanged with NO write sent " +
-        "(result.dryRun is true). Result envelope: field {table, column, language, scope, " +
-        "dictionarySysId}, dictionary {choiceWas, choiceNow}, updateSet, dryRun, choices[].",
+        "(result.dryRun is true). domain (default \"global\", or a domain sys_id) is the session " +
+        "domain every write runs in; result.domain.problems is non-empty when a created row landed " +
+        "in another domain or an update was diverted into a domain override row. Result envelope: " +
+        "field {table, column, language, scope, dictionarySysId}, dictionary {choiceWas, choiceNow}, " +
+        "updateSet, dryRun, choices[], domain {requested, serverAcknowledged, overridesCreated, problems}.",
       shape: addChoicesToFieldSchema.shape,
       handler: async function (args: any) {
         return addChoicesToField(client(), addChoicesToFieldSchema.parse(args));
@@ -244,9 +247,10 @@ export function buildDescriptors(
         "values are); a 'missing' row whose value exists on the field in a different case " +
         "carries nearMatches with the stored spelling(s). dryRun:true verifies the field + " +
         "update set and reports each live row as would-deactivate with NO write sent " +
-        "(result.dryRun is true). Writes are captured in the supplied update set. Result " +
-        "envelope: field {table, column, language, scope, dictionarySysId}, updateSet, dryRun, " +
-        "choices[].",
+        "(result.dryRun is true). Writes are captured in the supplied update set, in session " +
+        "domain 'domain' (default \"global\"). Result envelope: field {table, column, language, " +
+        "scope, dictionarySysId}, updateSet, dryRun, choices[], domain {requested, " +
+        "serverAcknowledged, overridesCreated, problems}.",
       shape: removeChoicesFromFieldSchema.shape,
       handler: async function (args: any) {
         return removeChoicesFromField(
@@ -917,7 +921,11 @@ export function buildDescriptors(
         "by a query that resolves to EXACTLY one row. REFUSES schema tables (sys_db_object / " +
         "sys_dictionary) — use add_column / create_table for those. fields is a flat name->string map " +
         "(sent as strings; ServiceNow coerces); updateSetSysId is required so the change is tracked; " +
-        "dryRun:true reads the current values and returns the plan without writing. To INSERT a new " +
+        "dryRun:true reads the current values and returns the plan without writing. domain (default " +
+        "\"global\", or a domain sys_id) is the session domain the update runs in: on a " +
+        "domain-separated instance an update from a session below the record's domain makes the " +
+        "platform create a domain OVERRIDE row instead of editing the record — the read-back " +
+        "(across domains) then reports status failed with result.domain.problems. To INSERT a new " +
         "record use create_record.",
       shape: setFieldSchema.shape,
       handler: async function (args: any) {
@@ -929,6 +937,7 @@ export function buildDescriptors(
           query: p.query,
           fields: p.fields,
           updateSetSysId: p.updateSetSysId,
+          domain: p.domain,
           dryRun: p.dryRun,
         });
       },
@@ -945,7 +954,10 @@ export function buildDescriptors(
         "sys_update_set (the op cannot set its application; use `dove createUpdateSet`). fields is a " +
         "flat name->string map; scope and updateSetSysId are required; ifAbsentQuery makes re-runs " +
         "idempotent (skips the insert when it already matches a row); dryRun:true returns the plan " +
-        "without writing. To UPDATE an existing record use set_field.",
+        "without writing. domain (default \"global\" — or the payload's sys_domain when it carries " +
+        "one — or a domain sys_id) is the session domain the insert runs in; the platform stamps " +
+        "it on the new row, so a sys_domain in fields alone is not enough. The read-back verifies " +
+        "sys_domain. To UPDATE an existing record use set_field.",
       shape: createRecordSchema.shape,
       handler: async function (args: any) {
         var p = createRecordSchema.parse(args);
@@ -956,6 +968,7 @@ export function buildDescriptors(
           scope: p.scope,
           updateSetSysId: p.updateSetSysId,
           ifAbsentQuery: p.ifAbsentQuery,
+          domain: p.domain,
           dryRun: p.dryRun,
         });
       },

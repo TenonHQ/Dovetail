@@ -924,6 +924,32 @@ already matches a row). Exit codes: `0` created / skipped-in-sync / dry-run, `1`
 args, `2` write landed unverified (or skipped with drift). To **update** an existing
 record instead, use `set-field`.
 
+#### Session domain (`--domain`, domain-separated instances)
+
+`set-field`, `create-record`, `add-choices` and `remove-choices` (and their MCP tools
+`set_field`, `create_record`, `add_choices_to_field`, `remove_choices_from_field`, as
+`domain`) take `--domain <global|domain sys_id>`, **default `global`**. It is the session
+domain the server op runs the write in. On a domain-separated instance the API user's
+session starts in its own domain (`sys_user.sys_domain`), and that domain decides two
+things the HTTP response never mentions:
+
+- **Insert** — the new row is stamped with the session domain. A `sys_domain` in the
+  payload does not override it. (`create-record` without `--domain` uses the payload's
+  `sys_domain` as the session domain; both given and different is refused.)
+- **Update of a process record** (`sys_script`, `sys_choice`, ...) that lives in a domain
+  *above* the session's — the platform does **not** edit it. It creates a domain
+  **override**: a new row in the session domain whose `sys_overrides` points at the
+  original, which stays unchanged.
+
+The server op switches the session domain before the write and restores it afterwards,
+and echoes `domain: { requested, applied, previous }`. It fails closed (nothing written)
+if the switch does not take. Every verb then reads back **across domains**
+(`sysparm_query_no_domain=true`) and reports `failed` / exits `2` with
+`DOMAIN CHECK FAILED` when the record's `sys_domain` is not the expected one or a new
+override row appeared. If the instance's op predates domain selection (no echo), the
+message says so — deploy `servicenow/dovetail/sys_ws_operation/{pushWithUpdateSet,createRecord}.js`
+to the Dovetail Core definition. Tables without `sys_domain` skip every domain check.
+
 #### Field sources (`--fields`, `--from-json`, `--from-stdin`)
 
 Both verbs take their field map from any combination of three sources; on a shared

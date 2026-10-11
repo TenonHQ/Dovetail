@@ -110,6 +110,11 @@ var UPDATE_SET_FLAG: FlagDoc = {
   value: "<sys_id>",
   note: "Update set that captures every write (alias: --updateSetSysId).",
 };
+var DOMAIN_FLAG: FlagDoc = {
+  flag: "domain",
+  value: "<global|domain sys_id>",
+  note: "Session domain the write runs in (default global). On a domain-separated instance the read-back also verifies sys_domain and that no domain override row was created.",
+};
 var DEBUG_FLAG: FlagDoc = {
   flag: "debug",
   note: "Verbose request/response tracing on stderr.",
@@ -143,6 +148,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         value: "<path>",
         note: 'Replaces the flags above. JSON { "table", "column", "updateSetSysId", "choiceType"?, "choices": [{ "value", "label" }] }.',
       },
+      DOMAIN_FLAG,
       {
         flag: "dry-run",
         note: "Verify the field + update set and print [would create] / [would update] rows; nothing is written.",
@@ -161,6 +167,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       "choices",
       "from-json",
       "choice-type",
+      "domain",
     ],
   },
   "remove-choices": {
@@ -178,6 +185,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         value: "<path>",
         note: 'Replaces the flags above. JSON { "table", "column", "updateSetSysId", "values": [...], "language"? } — validated against the MCP schema.',
       },
+      DOMAIN_FLAG,
       {
         flag: "dry-run",
         note: "Verify the field + update set and print [would deactivate] rows; nothing is written.",
@@ -196,6 +204,7 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       "values",
       "language",
       "from-json",
+      "domain",
     ],
   },
 
@@ -464,11 +473,13 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
         note: "At least one. --from-json / --from-stdin (alias --from-json -) take a JSON { field: value } object, win on a shared key, and are the only forms for large or multiline values. stdin is read ONLY with --from-stdin.",
       },
     ],
-    optional: [DRY_RUN_FLAG, JSON_FLAG],
+    optional: [DOMAIN_FLAG, DRY_RUN_FLAG, JSON_FLAG],
     gate: "dry-run-flag",
     example:
       'dove-sn set-field --table x_cadso_core_metric_point_type --query "name=send_size" --fields "order=20" --update-set <sys_id>',
-    notes: ["Exit 2 when the write landed but the read-back is unverified."],
+    notes: [
+      "Exit 2 when the write landed but the read-back is unverified — including a sys_domain change, or a domain OVERRIDE row the platform created instead of updating the record in place (the write ran in a session domain below the record's).",
+    ],
   },
   "create-record": {
     summary: "Create ONE NEW record in a data table, into an update set, then verify",
@@ -483,14 +494,18 @@ export var VERB_USAGE: Record<string, VerbUsage> = {
       },
     ],
     optional: [
-      { flag: "if-absent", value: "<encoded-query>", note: "Skip the insert when this query already matches a row." },
+      { flag: "if-absent", value: "<encoded-query>", note: "Skip the insert when this query already matches a row (in any domain)." },
+      DOMAIN_FLAG,
       DRY_RUN_FLAG,
       JSON_FLAG,
     ],
     gate: "dry-run-flag",
     example:
       'dove-sn create-record --table x_cadso_core_metric_point_type --scope x_cadso_core --fields "name=avg_parts,label=Avg Parts,order=35" --if-absent "name=avg_parts" --update-set <sys_id>',
-    notes: ["Exit 2 when the write landed but the read-back is unverified (or --if-absent skipped with drift)."],
+    notes: [
+      "Exit 2 when the write landed but the read-back is unverified (or --if-absent skipped with drift, including a row in the wrong domain).",
+      "A sys_domain in the fields payload is not enough on its own — the platform stamps the session domain on insert. Without --domain the payload's sys_domain is used as the session domain; both given and different is refused.",
+    ],
   },
   "delete-record": {
     summary: "Delete ONE EXISTING data record, then read it back to verify it is GONE",
