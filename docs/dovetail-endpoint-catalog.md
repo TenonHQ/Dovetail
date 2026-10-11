@@ -71,7 +71,7 @@ Switch the active update set.
 
 Update a record's fields inside a specified update set.
 
-- **Body:** `{ update_set_sys_id, table, record_sys_id, fields }`
+- **Body:** `{ update_set_sys_id, table, record_sys_id, fields }` + optional `domain` (`"global"` or a domain sys_id): the session domain the update runs in, switched before `gr.update()` and restored after, echoed as `domain: { requested, applied, previous }` + `record_domain`. Absent `domain` = legacy (no switch). Fails closed (500, nothing written) when the switch does not take.
 - **Client:** `packages/core/src/snClient.ts:615-629`
 - **Server:** `servicenow/dovetail/sys_ws_operation/pushWithUpdateSet.js` -- **hardened**: switches the request's application scope to the target update set's scope _before_ calling `gr.update()`. Before this fix, a scoped record's change landed in the caller's session/default update set instead of the requested one -- routed pushes reported success while silently capturing nothing into the intended set.
 - **Example:** `POST /api/cadso/dovetail_core/pushWithUpdateSet` with body `{"update_set_sys_id": "...", "table": "sys_script_include", "record_sys_id": "...", "fields": {"script": "..."}}`
@@ -80,7 +80,7 @@ Update a record's fields inside a specified update set.
 
 Create a record.
 
-- **Body:** `{ table, fields }` + optional `sys_id`, `scope`, `update_set_sys_id`. Supports cross-instance moves via an explicit `sys_id`.
+- **Body:** `{ table, fields }` + optional `sys_id`, `scope`, `update_set_sys_id`, `domain`. Supports cross-instance moves via an explicit `sys_id`. `domain` (`"global"` or a domain sys_id) is the session domain the insert runs in (also stamped on `sys_domain` when the payload carries none); same echo / fail-closed contract as `pushWithUpdateSet`.
 - **Client:** `packages/core/src/snClient.ts:631-664`
 - **Client-side guard (real pain point, now fixed):** a bare `createRecord` call against `table: "sys_db_object"` is **refused client-side** with an explicit error (`packages/core/src/snClient.ts:646-660`) -- a raw insert there only creates an orphaned metadata row with no physical table and no ACLs. The error message redirects to the `dove-sn create-table` capability instead. This guard exists _because_ someone hit this exact footgun before it was added.
 - **Scope note:** the `dove push`/reconcile path never includes `sys_scope` in the body -- Dovetail's own field-building logic there (`packages/core/src/reconcileCommand.ts:295-315`, `buildCreateFields()`) explicitly strips it before constructing the create payload, with the comment "sys_scope comes from `scope`" -- i.e. scope is conveyed via the separate `scope` parameter, never the body, on that path. That's not a blanket guarantee for every caller, though: the CLI's direct `createRecordCommand.ts` path builds `fields` straight from user-supplied JSON (`--from`) or `--field` flags with no such filtering, so a caller CAN send `sys_scope` in the body through that path. Whether the server would ignore an explicitly-sent `sys_scope` field either way is not verifiable from this repo (no server script checked in for this op) -- documented as unverified rather than asserted.

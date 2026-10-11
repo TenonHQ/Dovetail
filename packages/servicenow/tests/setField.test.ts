@@ -66,7 +66,8 @@ describe("setField", function () {
       update_set_sys_id: US,
       table: "x_t",
       record_sys_id: "row1",
-      fields: { order: "20" }
+      fields: { order: "20" },
+      domain: "global"
     });
   });
 

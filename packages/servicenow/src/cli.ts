@@ -78,6 +78,8 @@ import type {
 import { setField } from "./setField";
 import type { SetFieldParams } from "./setField";
 import { createRecord } from "./createRecord";
+import { normalizeDomain, multiRowDomainNote } from "./domain";
+import type { MultiRowDomainCheck } from "./domain";
 import type { CreateRecordParams } from "./createRecord";
 import { deleteRecord } from "./deleteRecord";
 import type { DeleteRecordParams } from "./deleteRecord";
@@ -219,6 +221,37 @@ function bareStringFlagError(
   return null;
 }
 
+/**
+ * --domain for the record-write verbs (set-field, create-record, add-choices,
+ * remove-choices): the session domain the write runs in. Absent → undefined, and the
+ * verb defaults to "global". A bare flag or a value that is neither "global" nor a
+ * 32-hex sys_id is refused — a typo must never silently fall back to the default.
+ */
+export function domainFlag(
+  verb: string,
+  flags: Record<string, string>,
+  bare: Record<string, boolean>,
+): { domain?: string; error?: string } {
+  if (bare && bare.domain) {
+    return { error: verb + ": --domain needs a value (\"global\" or a domain sys_id).\n" };
+  }
+  if (!flags || flags.domain === undefined) {
+    return {};
+  }
+  try {
+    return { domain: normalizeDomain(flags.domain) };
+  } catch (e) {
+    return { error: verb + ": --" + (e instanceof Error ? e.message : String(e)) + "\n" };
+  }
+}
+
+/** Print a choices verb's domain failure (if any) and return the exit code it implies. */
+function choicesDomainExit(check: MultiRowDomainCheck | undefined): number {
+  if (!check || check.problems.length === 0) return 0;
+  process.stderr.write(multiRowDomainNote(check, "pushWithUpdateSet / createRecord") + "\n");
+  return 2;
+}
+
 async function runAddChoices(
   flags: Record<string, string>,
   bare: Record<string, boolean>,
@@ -230,11 +263,20 @@ async function runAddChoices(
     process.stderr.write(bareErr);
     return 1;
   }
+  var addDomain = domainFlag("add-choices", flags, bare);
+  if (addDomain.error) {
+    process.stderr.write(addDomain.error);
+    return 1;
+  }
   var params = paramsFromFlags(flags);
   // The flag is parsed for every verb; this verb used to drop it on the floor and WRITE
   // (#296). Threading it here is what makes --dry-run a real plan, not a label.
   if (flags["dry-run"] === "true") {
     params.dryRun = true;
+  }
+  // The flag wins over a --from-json spec's own "domain".
+  if (addDomain.domain !== undefined) {
+    params.domain = addDomain.domain;
   }
   var client = createClient({});
   var result = await addChoicesToField(client, params);
@@ -242,12 +284,12 @@ async function runAddChoices(
     process.stdout.write(
       JSON.stringify({ params: params, result: result }, null, 2) + "\n",
     );
-    return 0;
+    return choicesDomainExit(result.domain);
   }
   process.stdout.write(
     formatAddChoicesResult(params.table, params.column, result) + "\n",
   );
-  return 0;
+  return choicesDomainExit(result.domain);
 }
 
 function removeParamsFromFlags(
@@ -302,9 +344,17 @@ async function runRemoveChoices(
     process.stderr.write(bareErr);
     return 1;
   }
+  var removeDomain = domainFlag("remove-choices", flags, bare);
+  if (removeDomain.error) {
+    process.stderr.write(removeDomain.error);
+    return 1;
+  }
   var params = removeParamsFromFlags(flags);
   if (flags["dry-run"] === "true") {
     params.dryRun = true;
+  }
+  if (removeDomain.domain !== undefined) {
+    params.domain = removeDomain.domain;
   }
   var client = createClient({});
   var result = await removeChoicesFromField(client, params);
@@ -312,12 +362,12 @@ async function runRemoveChoices(
     process.stdout.write(
       JSON.stringify({ params: params, result: result }, null, 2) + "\n",
     );
-    return 0;
+    return choicesDomainExit(result.domain);
   }
   process.stdout.write(
     formatRemoveChoicesResult(params.table, params.column, result) + "\n",
   );
-  return 0;
+  return choicesDomainExit(result.domain);
 }
 
 /**
@@ -2197,10 +2247,20 @@ function getProcessStdin(): NodeJS.ReadStream {
  *                                                 way stdin is ever read; never implicit)
  *                                                — at least one field source is required
  *   --update-set <sys_id>                        (required — the change is captured here)
+ *   [--domain global|<domain sys_id>]            (session domain for the write; default global)
  *   [--dry-run] [--json]
- * Exit codes: 0 applied/dry-run, 1 bad args, 2 write landed but read-back unverified.
+ * Exit codes: 0 applied/dry-run, 1 bad args, 2 write landed but read-back unverified
+ * (including a sys_domain change or a domain OVERRIDE row created instead of an in-place update).
  */
-async function runSetField(flags: Record<string, string>): Promise<number> {
+async function runSetField(
+  flags: Record<string, string>,
+  bare?: Record<string, boolean>,
+): Promise<number> {
+  var setDomain = domainFlag("set-field", flags, bare || {});
+  if (setDomain.error) {
+    process.stderr.write(setDomain.error);
+    return 1;
+  }
   var table = flags.table;
   var fields: Record<string, string>;
   try {
@@ -2232,6 +2292,7 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
   if (flags["sys-id"]) params.sysId = flags["sys-id"];
   if (flags.query) params.query = flags.query;
   if (flags["dry-run"] === "true") params.dryRun = true;
+  if (setDomain.domain !== undefined) params.domain = setDomain.domain;
 
   var result = await setField(params);
   if (flags.json === "true") {
@@ -2268,11 +2329,21 @@ async function runSetField(flags: Record<string, string>): Promise<number> {
  *   --scope x_cadso_core                         (the app that owns the new record)
  *   --update-set <sys_id>                        (required — the insert is captured here)
  *   [--if-absent "name=avg_message_parts"]       (skip the insert when this query already matches)
+ *   [--domain global|<domain sys_id>]            (session domain for the insert; default global,
+ *                                                 or the payload's sys_domain when it carries one)
  *   [--dry-run] [--json]
  * Exit codes: 0 created/skipped-in-sync/dry-run, 1 bad args, 2 write landed but read-back unverified
  * (or skipped with drift).
  */
-async function runCreateRecord(flags: Record<string, string>): Promise<number> {
+async function runCreateRecord(
+  flags: Record<string, string>,
+  bare?: Record<string, boolean>,
+): Promise<number> {
+  var createDomain = domainFlag("create-record", flags, bare || {});
+  if (createDomain.error) {
+    process.stderr.write(createDomain.error);
+    return 1;
+  }
   var table = flags.table;
   var fields: Record<string, string>;
   try {
@@ -2305,6 +2376,7 @@ async function runCreateRecord(flags: Record<string, string>): Promise<number> {
   };
   if (flags["if-absent"]) params.ifAbsentQuery = flags["if-absent"];
   if (flags["dry-run"] === "true") params.dryRun = true;
+  if (createDomain.domain !== undefined) params.domain = createDomain.domain;
 
   var result = await createRecord(params);
   if (flags.json === "true") {
@@ -3164,10 +3236,10 @@ async function dispatch(parsed: ParsedArgs): Promise<number> {
     return await runSetTable(parsed.flags, parsed.bare);
   }
   if (parsed.command === "set-field") {
-    return await runSetField(parsed.flags);
+    return await runSetField(parsed.flags, parsed.bare);
   }
   if (parsed.command === "create-record") {
-    return await runCreateRecord(parsed.flags);
+    return await runCreateRecord(parsed.flags, parsed.bare);
   }
   if (parsed.command === "sync-ux-events") {
     return await runSyncUxEvents(parsed.flags, parsed.bare);

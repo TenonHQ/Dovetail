@@ -130,7 +130,24 @@ export function formatAddChoicesResult(
           unchanged +
           " unchanged.",
   );
+  appendDomainLines(lines, result.domain);
   return lines.join("\n");
+}
+
+/**
+ * Domain footer shared by both choices summaries: the session domain the writes ran in,
+ * and every domain problem (row created in the wrong domain, override created). Silent
+ * when the result carries no domain block (an older build produced it).
+ */
+function appendDomainLines(
+  lines: Array<string>,
+  domain: AddChoicesResult["domain"],
+): void {
+  if (!domain) return;
+  lines.push("Session domain: " + domain.requested);
+  domain.problems.forEach(function (problem) {
+    lines.push("  [DOMAIN PROBLEM] " + problem);
+  });
 }
 
 /**
@@ -219,5 +236,6 @@ export function formatRemoveChoicesResult(
           missing +
           " missing.",
   );
+  appendDomainLines(lines, result.domain);
   return lines.join("\n");
 }

@@ -69,6 +69,15 @@ and un-promotable. This directory is the source of truth going forward.
     unknown scope is a 404 and an ambiguous name a 409; neither falls back to the session
     scope. Deployed to the `Dovetail Core` def on tenonworkstudio 2026-10-08; the legacy
     `Dovetail` def still runs the old name-only lookup.
+  - **Session domain** (`pushWithUpdateSet.js`, `createRecord.js`): an optional body key
+    `domain` (`"global"` or a domain sys_id) runs the write in that session domain via
+    `gs.getUser().setDomainID()` and restores the previous one in `finally`; the response
+    echoes `domain: { requested, applied, previous }` and `record_domain`. Without it the
+    write runs in the API user's own domain — on a domain-separated instance that stamps a
+    child domain on inserts and turns an update of a global process record into a domain
+    override. Absent `domain` keeps the legacy behaviour. Both ops carry a copy of the
+    helper (keep the two in sync). **Not yet deployed to any instance** — the change ships
+    in this repo first; deploy it to the `Dovetail Core` def by hand and verify.
   - **Dovetail Core** `runFlow.js` — POST `/runFlow`: runs a flow, subflow, or action via
     `sn_fd.FlowAPI` for `testFlow({ mode: "execute" })`. Contract:
     [`../../packages/servicenow/resources/runFlow.md`](../../packages/servicenow/resources/runFlow.md).

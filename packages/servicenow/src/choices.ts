@@ -21,6 +21,14 @@ import type {
   RemoveChoicesResult,
   UpdateSetRecord,
 } from "./types";
+import {
+  auditWrittenRows,
+  findOverrides,
+  normalizeDomain,
+  readServerDomainEcho,
+  rowSupportsOverrides,
+} from "./domain";
+import type { MultiRowDomainCheck, OverrideRow } from "./domain";
 
 /**
  * Thrown when a choices write fails partway through the value loop.
@@ -364,6 +372,42 @@ function buildChoiceFields(
   return fields;
 }
 
+/** Normalise params.domain, naming the verb in the error. */
+function resolveVerbDomain(verb: string, domain: unknown): string {
+  try {
+    return normalizeDomain(domain);
+  } catch (e) {
+    throw new Error(verb + ": " + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+/** Snapshot of the overrides that already point at the rows a run will update. */
+async function overrideBaseline(
+  client: ServiceNowClient,
+  existing: Array<ExistingChoice>,
+  toUpdate: Array<string>,
+): Promise<{ supported: boolean; before: Array<OverrideRow> }> {
+  var supported =
+    existing.length > 0 &&
+    rowSupportsOverrides(existing[0] as unknown as Record<string, unknown>);
+  if (!supported || toUpdate.length === 0) {
+    return { supported: supported, before: [] };
+  }
+  return {
+    supported: true,
+    before: await findOverrides(client, "sys_choice", toUpdate),
+  };
+}
+
+function noWriteDomainCheck(domain: string): MultiRowDomainCheck {
+  return {
+    requested: domain,
+    serverAcknowledged: true,
+    overridesCreated: [],
+    problems: [],
+  };
+}
+
 function isUnchanged(existing: ExistingChoice, choice: ChoiceValue): boolean {
   var sameLabel = existing.label === choice.label;
   var sameLang = (existing.language || "en") === (choice.language || "en");
@@ -399,6 +443,10 @@ export async function addChoicesToField(
   // Strict equality on purpose: a truthy-but-not-true value (the string "false" from a
   // mis-parsed flag, say) must not silently turn a planned run into a live write.
   var dryRun = params.dryRun === true;
+  var domain = resolveVerbDomain("add-choices", params.domain);
+  var acknowledged = true;
+  var createdIds: Array<string> = [];
+  var updatedIds: Array<string> = [];
 
   var dict = await fetchDictionary(client, params.table, params.column);
   var updateSet = await fetchUpdateSet(client, params.updateSetSysId);
@@ -414,12 +462,14 @@ export async function addChoicesToField(
   var choiceNow = choiceWas;
   if (params.choiceType !== null && Number(dict.choice) !== targetChoiceType) {
     if (!dryRun) {
-      await client.claude.pushWithUpdateSet({
+      var dictResp = await client.claude.pushWithUpdateSet({
         update_set_sys_id: params.updateSetSysId,
         table: "sys_dictionary",
         record_sys_id: dict.sys_id,
         fields: { choice: String(targetChoiceType) },
+        domain: domain,
       });
+      acknowledged = acknowledged && readServerDomainEcho(dictResp) !== null;
     }
     choiceNow = targetChoiceType;
   }
@@ -442,6 +492,16 @@ export async function addChoicesToField(
     ),
   );
   var existingByValue = groupExistingByKey(existing);
+
+  // Pre-write override baseline for every row this run will UPDATE, so an update the
+  // platform diverts into a domain override is caught on read-back.
+  var addBaseline = dryRun
+    ? { supported: false, before: [] as Array<OverrideRow> }
+    : await overrideBaseline(
+        client,
+        existing,
+        staleRowIds(choices, existingByValue),
+      );
 
   var results: Array<ChoiceActionResult> = [];
   for (var i = 0; i < choices.length; i += 1) {
@@ -487,12 +547,15 @@ export async function addChoicesToField(
       }
       try {
         for (var s = 0; s < stale.length; s += 1) {
-          await client.claude.pushWithUpdateSet({
+          var updResp = await client.claude.pushWithUpdateSet({
             update_set_sys_id: params.updateSetSysId,
             table: "sys_choice",
             record_sys_id: stale[s].sys_id,
             fields: updFields,
+            domain: domain,
           });
+          acknowledged = acknowledged && readServerDomainEcho(updResp) !== null;
+          updatedIds.push(stale[s].sys_id);
         }
       } catch (e) {
         throw new ChoiceWriteError("add-choices", choice.value, results, e);
@@ -530,9 +593,14 @@ export async function addChoicesToField(
         ),
         scope: scopeName,
         update_set_sys_id: params.updateSetSysId,
+        domain: domain,
       });
     } catch (e) {
       throw new ChoiceWriteError("add-choices", choice.value, results, e);
+    }
+    acknowledged = acknowledged && readServerDomainEcho(created) !== null;
+    if (created && created.sys_id) {
+      createdIds.push(String(created.sys_id));
     }
     results.push({
       value: choice.value,
@@ -558,7 +626,34 @@ export async function addChoicesToField(
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
     dryRun: dryRun,
     choices: results,
+    domain: dryRun
+      ? noWriteDomainCheck(domain)
+      : await auditWrittenRows({
+          client: client,
+          table: "sys_choice",
+          domain: domain,
+          createdIds: createdIds,
+          updatedIds: updatedIds,
+          overridesSupported: addBaseline.supported,
+          overridesBefore: addBaseline.before,
+          serverAcknowledged: acknowledged,
+        }),
   };
+}
+
+/** sys_ids of every existing row the add pass will rewrite (mirrors the loop's stale filter). */
+function staleRowIds(
+  choices: Array<ChoiceValue>,
+  existingByValue: Record<string, Array<ExistingChoice>>,
+): Array<string> {
+  var ids: Array<string> = [];
+  choices.forEach(function (choice) {
+    var key = (choice.language || "en") + "::" + choice.value;
+    (existingByValue[key] || []).forEach(function (row) {
+      if (!isUnchanged(row, choice)) ids.push(row.sys_id);
+    });
+  });
+  return ids;
 }
 
 /**
@@ -611,6 +706,9 @@ export async function removeChoicesFromField(
   var language = params.language || "en";
   // Strict equality on purpose — see addChoicesToField.
   var dryRun = params.dryRun === true;
+  var domain = resolveVerbDomain("remove-choices", params.domain);
+  var removeAcknowledged = true;
+  var deactivatedIds: Array<string> = [];
 
   // fetchDictionary throws a clear error when the field does not exist; fetchUpdateSet
   // throws unless the set is in progress. Both mirror the add path's guards.
@@ -630,6 +728,16 @@ export async function removeChoicesFromField(
     values,
   );
   var existingByValue = groupExistingByKey(existing);
+
+  var toDeactivate: Array<string> = [];
+  values.forEach(function (v) {
+    (existingByValue[language + "::" + v] || []).forEach(function (row) {
+      if (row.inactive !== "true") toDeactivate.push(row.sys_id);
+    });
+  });
+  var removeBaseline = dryRun
+    ? { supported: false, before: [] as Array<OverrideRow> }
+    : await overrideBaseline(client, existing, toDeactivate);
 
   var results: Array<ChoiceRemovalResult> = [];
   for (var i = 0; i < values.length; i += 1) {
@@ -679,12 +787,16 @@ export async function removeChoicesFromField(
     }
     try {
       for (var a = 0; a < active.length; a += 1) {
-        await client.claude.pushWithUpdateSet({
+        var deactResp = await client.claude.pushWithUpdateSet({
           update_set_sys_id: params.updateSetSysId,
           table: "sys_choice",
           record_sys_id: active[a].sys_id,
           fields: { inactive: "true" },
+          domain: domain,
         });
+        removeAcknowledged =
+          removeAcknowledged && readServerDomainEcho(deactResp) !== null;
+        deactivatedIds.push(active[a].sys_id);
       }
     } catch (e) {
       throw new ChoiceWriteError("remove-choices", value, results, e);
@@ -708,5 +820,17 @@ export async function removeChoicesFromField(
     updateSet: { sysId: updateSet.sys_id, name: updateSet.name },
     dryRun: dryRun,
     choices: results,
+    domain: dryRun
+      ? noWriteDomainCheck(domain)
+      : await auditWrittenRows({
+          client: client,
+          table: "sys_choice",
+          domain: domain,
+          createdIds: [],
+          updatedIds: deactivatedIds,
+          overridesSupported: removeBaseline.supported,
+          overridesBefore: removeBaseline.before,
+          serverAcknowledged: removeAcknowledged,
+        }),
   };
 }

@@ -164,6 +164,14 @@ export interface TableQueryOptions {
    * non-negative integer; omitted → not sent (ServiceNow default 0).
    */
   offset?: number;
+  /**
+   * Read across every domain (sysparm_query_no_domain=true). On a domain-separated
+   * instance a session in a child domain does not see rows in sibling domains, and a
+   * process record that has a domain override is HIDDEN behind the override — so a
+   * by-sys_id read-back after a write can come back empty or show the wrong row.
+   * Ignored by instances without domain separation.
+   */
+  noDomain?: boolean;
 }
 
 export interface TableSchemaField {
@@ -236,6 +244,12 @@ export interface ServiceNowClient {
       scope?: string;
       update_set_sys_id?: string;
       sys_id?: string;
+      /**
+       * Session domain to run the insert in: "global" or a domain sys_id. The op
+       * switches the session domain around the insert and restores it; an op that
+       * predates domain selection ignores the key (see domain.ts).
+       */
+      domain?: string;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
     /** POST /api/cadso/dovetail_core/pushWithUpdateSet (legacy: /api/cadso/dovetail/pushWithUpdateSet). */
     pushWithUpdateSet: (params: {
@@ -243,6 +257,12 @@ export interface ServiceNowClient {
       table: string;
       record_sys_id: string;
       fields: Record<string, unknown>;
+      /**
+       * Session domain to run the update in: "global" or a domain sys_id. An update of
+       * a process record from a session BELOW the record's domain creates a domain
+       * override instead of editing the record — see domain.ts.
+       */
+      domain?: string;
     }) => Promise<{ sys_id: string; [k: string]: any }>;
     /** GET /api/cadso/dovetail_core/currentUpdateSet?scope=... (legacy: /api/cadso/dovetail/currentUpdateSet). */
     currentUpdateSet: (scope?: string) => Promise<{ sys_id: string; name: string }>;
@@ -544,6 +564,7 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     var limit: number = 100;
     var fields: string[] | undefined;
     var offset: number | undefined;
+    var noDomain = false;
     if (typeof limitOrOptions === "number") {
       limit = limitOrOptions;
     } else if (limitOrOptions && typeof limitOrOptions === "object") {
@@ -560,6 +581,7 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
         }
         offset = rawOffset;
       }
+      noDomain = limitOrOptions.noDomain === true;
     }
     var params: Record<string, any> = {
       sysparm_query: query,
@@ -571,6 +593,9 @@ export function createClient(config: ServiceNowClientConfig = {}): ServiceNowCli
     }
     if (offset !== undefined) {
       params.sysparm_offset = offset;
+    }
+    if (noDomain) {
+      params.sysparm_query_no_domain = true;
     }
     var data = await request<{ result: Array<T> }>(
       {

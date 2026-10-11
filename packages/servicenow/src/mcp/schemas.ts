@@ -5,6 +5,19 @@
 
 import { z } from "zod";
 
+/**
+ * Session domain for a record write: "global" (the default when omitted) or a 32-hex
+ * domain sys_id. On a domain-separated instance the platform stamps the session domain
+ * on an insert and turns an update from a lower domain into a domain OVERRIDE row.
+ */
+export var domainSchema = z
+  .string()
+  .regex(
+    /^(global|[0-9a-fA-F]{32})$/i,
+    'domain must be "global" or a 32-character domain sys_id',
+  )
+  .optional();
+
 export var createViewSchema = z.object({
   name: z.string().min(1),
   title: z.string().optional(),
@@ -65,6 +78,8 @@ export var addChoicesToFieldSchema = z.object({
     .union([z.literal(0), z.literal(1), z.literal(3)])
     .nullable()
     .optional(),
+  /** Session domain for every sys_choice write (default global). */
+  domain: domainSchema,
   /** Plan only: reads happen, no sys_choice / sys_dictionary write is sent. */
   dryRun: z.boolean().optional(),
 });
@@ -75,6 +90,8 @@ export var removeChoicesFromFieldSchema = z.object({
   values: z.array(z.string().min(1)).min(1),
   language: z.string().min(1).optional(),
   updateSetSysId: z.string().min(1),
+  /** Session domain for every deactivation (default global). */
+  domain: domainSchema,
   /** Plan only: reads happen, no inactive=true write is sent. */
   dryRun: z.boolean().optional(),
 });
@@ -561,6 +578,7 @@ export var setFieldSchema = z.object({
   query: z.string().optional(),
   fields: z.record(z.string()),
   updateSetSysId: z.string().min(1),
+  domain: domainSchema,
   dryRun: z.boolean().optional(),
 });
 
@@ -570,6 +588,7 @@ export var createRecordSchema = z.object({
   scope: z.string().min(1),
   updateSetSysId: z.string().min(1),
   ifAbsentQuery: z.string().optional(),
+  domain: domainSchema,
   dryRun: z.boolean().optional(),
 });
 

@@ -8,6 +8,11 @@
  * Web Service Definition: "Dovetail" (global scope). The op sys_id differs per
  * instance — look it up by name, never hardcode.
  *
+ * Optional body key `domain` ("global" or a domain sys_id): the session domain
+ * the update runs in — switched before the write, restored in finally, echoed
+ * back as `domain: { requested, applied, previous }`. Fails closed (no write)
+ * when the switch does not take. See resolveDomainTarget below.
+ *
  * Hardening: switch to the TARGET update set's application scope
  * (gs.setCurrentApplicationId) BEFORE gr.update(), restoring it in finally.
  * Without the scope switch, a scoped record's customer update issued from this
@@ -22,6 +27,7 @@
 	var table = body.table;
 	var recordSysId = body.record_sys_id;
 	var fields = body.fields;
+	var requestedDomain = body.domain;
 
 	if (!updateSetSysId || !table || !recordSysId || !fields) {
 		response.setStatus(400);
@@ -31,10 +37,67 @@
 		return response;
 	}
 
+	// ── Session domain (domain separation) ────────────────────────────────────
+	// Keep in sync with the copy in createRecord.js.
+	//
+	// The session domain decides where a write lands: an INSERT is stamped with it,
+	// and an UPDATE of a process record (sys_script, sys_choice, ...) that lives in a
+	// domain ABOVE the session's is diverted into a new domain OVERRIDE row instead of
+	// editing the record. The session is established in the API user's own domain
+	// (sys_user.sys_domain), so a caller names the domain the write must run in.
+	//
+	// gs.getUser().setDomainID() is the global-scope session-domain setter (the
+	// domain-picker path; ServiceNow KB0822648) and getDomainID() the getter
+	// (GlideUser API). An absent `domain` keeps the legacy behaviour: no switch.
+	function sessionDomainId() {
+		var id = gs.getUser().getDomainID();
+		return id ? String(id) : "global";
+	}
+
+	// { skip, reason } | { id } | { status, error }
+	function resolveDomainTarget(tableName, requested) {
+		var value = String(requested || "");
+		if (!value) {
+			return { skip: true, reason: "no domain requested" };
+		}
+		var probe = new GlideRecord(tableName);
+		if (!probe.isValidField("sys_domain")) {
+			return { skip: true, reason: "table has no sys_domain" };
+		}
+		if (value === "global") {
+			return { id: "global" };
+		}
+		if (!/^[0-9a-f]{32}$/.test(value)) {
+			return {
+				status: 400,
+				error: "domain must be 'global' or a 32-character domain sys_id: " + value,
+			};
+		}
+		var refTable = probe.getElement("sys_domain").getReferenceTable();
+		var domainGr = new GlideRecord(refTable || "domain");
+		if (!domainGr.get(value)) {
+			return {
+				status: 404,
+				error: "Domain not found: " + value + " (in " + (refTable || "domain") + ")",
+			};
+		}
+		return { id: value };
+	}
+
+	var domainTarget = resolveDomainTarget(table, requestedDomain);
+	if (domainTarget.error) {
+		response.setStatus(domainTarget.status);
+		response.setBody({ error: domainTarget.error });
+		return response;
+	}
+
 	var previousAppId = gs.getCurrentApplicationId();
 	var switched = false;
 	var us = new GlideUpdateSet();
 	var previousUpdateSet = us.get();
+	var previousDomain = null;
+	var domainSwitched = false;
+	var domainEcho = null;
 
 	try {
 		// Switch to the target update set's application scope BEFORE the write, so a
@@ -54,6 +117,27 @@
 		}
 		us.set(updateSetSysId);
 
+		if (domainTarget.id) {
+			previousDomain = sessionDomainId();
+			if (previousDomain !== domainTarget.id) {
+				gs.getUser().setDomainID(domainTarget.id);
+				domainSwitched = true;
+			}
+			var appliedDomain = sessionDomainId();
+			if (appliedDomain !== domainTarget.id) {
+				// Fail closed: writing in the wrong domain is the bug this guards.
+				response.setStatus(500);
+				response.setBody({
+					error: "Could not switch the session domain to " + domainTarget.id +
+						" (session is in " + appliedDomain + "); nothing was written.",
+				});
+				return response;
+			}
+			domainEcho = { requested: domainTarget.id, applied: appliedDomain, previous: previousDomain };
+		} else if (requestedDomain) {
+			domainEcho = { requested: String(requestedDomain), applied: null, previous: null, skipped: domainTarget.reason };
+		}
+
 		var gr = new GlideRecord(table);
 		if (gr.get(recordSysId)) {
 			for (var field in fields) {
@@ -63,14 +147,21 @@
 			}
 			gr.update();
 
-			response.setStatus(200);
-			response.setBody({
+			var updatedBody = {
 				success: true,
 				message: "Record updated in update set",
 				table: table,
 				sys_id: recordSysId,
 				update_set: updateSetSysId,
-			});
+			};
+			if (domainEcho) {
+				updatedBody.domain = domainEcho;
+				if (gr.isValidField("sys_domain")) {
+					updatedBody.record_domain = gr.getValue("sys_domain");
+				}
+			}
+			response.setStatus(200);
+			response.setBody(updatedBody);
 		} else {
 			response.setStatus(404);
 			response.setBody({
@@ -81,6 +172,11 @@
 		response.setStatus(500);
 		response.setBody({ error: "Server error: " + e.message });
 	} finally {
+		if (domainSwitched && previousDomain) {
+			try {
+				gs.getUser().setDomainID(previousDomain);
+			} catch (ignoreDomain) {}
+		}
 		us.set(previousUpdateSet);
 		if (switched && previousAppId) {
 			try {

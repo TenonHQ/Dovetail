@@ -12,8 +12,15 @@ export type QueryFn = (table: string, query?: string, limit?: number) => Promise
 
 export type AttachmentsFn = (params: { table: string; sysId: string }) => Promise<Array<any>>;
 
+/**
+ * Optional hook for the core write ops: return the op's response body (e.g. one carrying
+ * the server's `domain` acknowledgement). Returning undefined keeps the default body.
+ * Runs AFTER the call is recorded, so it can mutate the fixture the next read sees.
+ */
+export type WriteFn = (op: "createRecord" | "pushWithUpdateSet", params: any, index: number) => any;
+
 export interface MockCalls {
-  tableQuery: Array<{ table: string; query: string }>;
+  tableQuery: Array<{ table: string; query: string; options?: any }>;
   createRecord: Array<any>;
   pushWithUpdateSet: Array<any>;
   deleteRecord: Array<any>;
@@ -29,7 +36,9 @@ export interface MockClientCtx {
   calls: MockCalls;
 }
 
-export function makeMockClient(overrides: { query?: QueryFn; attachments?: AttachmentsFn } = {}): MockClientCtx {
+export function makeMockClient(
+  overrides: { query?: QueryFn; attachments?: AttachmentsFn; write?: WriteFn } = {}
+): MockClientCtx {
   var calls: MockCalls = {
     tableQuery: [],
     createRecord: [],
@@ -50,7 +59,14 @@ export function makeMockClient(overrides: { query?: QueryFn; attachments?: Attac
     query: string,
     limitOrOptions?: number | { limit?: number; fields?: string[] }
   ): Promise<Array<T>> {
-    calls.tableQuery.push({ table: table, query: query });
+    var entry: { table: string; query: string; options?: any } = { table: table, query: query };
+    // Non-enumerable: readable as entry.options, but invisible to toEqual, so existing
+    // exact-shape asserts on { table, query } keep passing.
+    Object.defineProperty(entry, "options", {
+      value: typeof limitOrOptions === "object" ? limitOrOptions : undefined,
+      enumerable: false
+    });
+    calls.tableQuery.push(entry);
     var limit = typeof limitOrOptions === "number"
       ? limitOrOptions
       : (limitOrOptions && limitOrOptions.limit);
@@ -67,10 +83,19 @@ export function makeMockClient(overrides: { query?: QueryFn; attachments?: Attac
     claude: {
       createRecord: async function (params) {
         calls.createRecord.push(params);
-        return { sys_id: "new_" + calls.createRecord.length };
+        var def = { sys_id: "new_" + calls.createRecord.length };
+        if (overrides.write) {
+          var custom = overrides.write("createRecord", params, calls.createRecord.length);
+          if (custom !== undefined) return custom;
+        }
+        return def;
       },
       pushWithUpdateSet: async function (params) {
         calls.pushWithUpdateSet.push(params);
+        if (overrides.write) {
+          var customPush = overrides.write("pushWithUpdateSet", params, calls.pushWithUpdateSet.length);
+          if (customPush !== undefined) return customPush;
+        }
         return { sys_id: params.record_sys_id };
       },
       currentUpdateSet: async function () {

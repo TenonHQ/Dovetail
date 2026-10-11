@@ -69,7 +69,8 @@ describe("createRecord", function () {
       table: "x_t",
       fields: { name: "a", order: "35" },
       scope: "x_s",
-      update_set_sys_id: US
+      update_set_sys_id: US,
+      domain: "global"
     });
   });
 
