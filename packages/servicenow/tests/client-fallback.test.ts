@@ -120,3 +120,50 @@ describe("servicenow client dovetail->claude 404 fallback", function () {
     expect(lastCall.url).toBe("/api/cadso/dovetail_core/currentUpdateSet");
   });
 });
+
+// The core ops refuse a domain with 409 (switch did not take / update set drifted) or
+// 422 (unknown domain) — never 404 (which would re-send the write to the legacy op,
+// which ignores `domain`) and never 5xx (retried, then the body is dropped).
+describe("servicenow client — domain refusals from the core ops", function () {
+  var warnSpy: jest.SpyInstance;
+
+  beforeEach(function () {
+    jest.clearAllMocks();
+    process.env.SN_INSTANCE = "test.service-now.com";
+    process.env.SN_USER = "u";
+    process.env.SN_PASSWORD = "p";
+    process.env.SN_REQUEST_INTERVAL_MS = "0";
+    warnSpy = jest.spyOn(console, "warn").mockImplementation(function () { /* swallow */ });
+  });
+
+  afterEach(function () {
+    warnSpy.mockRestore();
+  });
+
+  it("409 fail-closed: one request, no legacy fallback, the op's message reaches the caller", async function () {
+    mockHttp.request.mockResolvedValueOnce({
+      status: 409,
+      data: { error: "Could not switch the session domain to global (session is in x); nothing was written." },
+    });
+    var client = createClient();
+    await expect(
+      client.claude.pushWithUpdateSet({
+        update_set_sys_id: "us", table: "sys_script", record_sys_id: "r", fields: { a: "b" }, domain: "global",
+      })
+    ).rejects.toThrow(/SN 409 .*Could not switch the session domain/);
+    expect(mockHttp.request).toHaveBeenCalledTimes(1);
+    expect(mockHttp.request.mock.calls[0][0].url).toBe("/api/cadso/dovetail_core/pushWithUpdateSet");
+    expect(mockHttp.request.mock.calls[0][0].data.domain).toBe("global");
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("422 unknown domain: one request, no legacy fallback", async function () {
+    mockHttp.request.mockResolvedValueOnce({ status: 422, data: { error: "Domain not found: abc (in domain)" } });
+    var client = createClient();
+    await expect(
+      client.claude.createRecord({ table: "sys_script", fields: { name: "x" }, domain: "abc" })
+    ).rejects.toThrow(/SN 422 .*Domain not found/);
+    expect(mockHttp.request).toHaveBeenCalledTimes(1);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});

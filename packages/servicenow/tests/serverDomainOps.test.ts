@@ -33,6 +33,13 @@ interface World {
   knownDomains: Array<string>;
   writeThrows: boolean;
   recordExists: boolean;
+  /** GlideUpdateSet.set() is ignored (the current set does not move). */
+  setIgnored: boolean;
+  /** setDomainID throws when restoring (any call after the first). */
+  restoreThrows: boolean;
+  /** Ordered trace of domain / update-set switches. */
+  trace: Array<string>;
+  warnings: Array<string>;
 }
 
 function newWorld(over: Partial<World> = {}): World {
@@ -47,6 +54,10 @@ function newWorld(over: Partial<World> = {}): World {
       knownDomains: [CHILD, OTHER],
       writeThrows: false,
       recordExists: true,
+      setIgnored: false,
+      restoreThrows: false,
+      trace: [],
+      warnings: [],
     },
     over,
   );
@@ -100,7 +111,9 @@ function sandboxFor(world: World, body: Record<string, unknown>) {
   var user = {
     getDomainID: function () { return world.sessionDomain; },
     setDomainID: function (id: string) {
+      if (world.restoreThrows && world.setDomainCalls.length > 0) throw new Error("restore failed");
       world.setDomainCalls.push(id);
+      world.trace.push("domain:" + id);
       if (!world.switchIgnored) world.sessionDomain = id;
     },
   };
@@ -114,11 +127,16 @@ function sandboxFor(world: World, body: Record<string, unknown>) {
       getUser: function () { return user; },
       getCurrentApplicationId: function () { return "global"; },
       setCurrentApplicationId: function () {},
+      warn: function (msg: string) { world.warnings.push(msg); },
     },
     GlideRecord: GlideRecord,
     GlideUpdateSet: function (this: any) {
-      this.get = function () { return "prev_set"; };
-      this.set = function () {};
+      var current = "prev_set";
+      this.get = function () { return current; };
+      this.set = function (id: string) {
+        world.trace.push("set:" + id);
+        if (!world.setIgnored) current = id;
+      };
     },
   };
   return { sandbox: sandbox, res: res };
@@ -163,10 +181,10 @@ describe("pushWithUpdateSet.js — session domain", function () {
     expect(r.body.domain).toEqual({ requested: "global", applied: "global", previous: "global" });
   });
 
-  it("fails closed when the switch does not take — nothing is written", function () {
+  it("fails closed when the switch does not take — 409 (never retried), nothing is written", function () {
     var w = newWorld({ switchIgnored: true });
     var r = runOp("pushWithUpdateSet", w, Object.assign({ domain: "global" }, PUSH_BODY));
-    expect(r.status).toBe(500);
+    expect(r.status).toBe(409);
     expect(r.body.error).toMatch(/Could not switch the session domain to global/);
     expect(w.writeDomains).toEqual([]);
   });
@@ -193,6 +211,33 @@ describe("pushWithUpdateSet.js — session domain", function () {
     expect(r.body.domain).toEqual({ requested: "global", applied: null, previous: null, skipped: "table has no sys_domain" });
   });
 
+  it("switches the domain BEFORE selecting the update set", function () {
+    var w = newWorld();
+    runOp("pushWithUpdateSet", w, Object.assign({ domain: "global" }, PUSH_BODY));
+    expect(w.trace.indexOf("domain:global")).toBeLessThan(w.trace.indexOf("set:" + US));
+  });
+
+  it("fails closed (409) when the target update set is not current before the write", function () {
+    var w = newWorld({ setIgnored: true });
+    var r = runOp("pushWithUpdateSet", w, Object.assign({ domain: "global" }, PUSH_BODY));
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/is not current after the domain switch/);
+    expect(w.writeDomains).toEqual([]);
+    expect(w.sessionDomain).toBe(CHILD);
+  });
+
+  it("legacy path does not assert the update set (behaviour unchanged without domain)", function () {
+    var w = newWorld({ setIgnored: true });
+    expect(runOp("pushWithUpdateSet", w, PUSH_BODY).status).toBe(200);
+  });
+
+  it("a failed restore is traced with gs.warn, not swallowed", function () {
+    var w = newWorld({ restoreThrows: true });
+    var r = runOp("pushWithUpdateSet", w, Object.assign({ domain: "global" }, PUSH_BODY));
+    expect(r.status).toBe(200);
+    expect(w.warnings[0]).toMatch(/could not restore session domain/);
+  });
+
   it("switches to a named domain sys_id", function () {
     var w = newWorld();
     var r = runOp("pushWithUpdateSet", w, Object.assign({ domain: OTHER }, PUSH_BODY));
@@ -201,12 +246,12 @@ describe("pushWithUpdateSet.js — session domain", function () {
     expect(w.sessionDomain).toBe(CHILD);
   });
 
-  it("refuses a malformed domain (400) and an unknown one (404) before writing", function () {
+  it("refuses a malformed domain (400) and an unknown one (422 — a 404 would send the client to the legacy op) before writing", function () {
     var w1 = newWorld();
     expect(runOp("pushWithUpdateSet", w1, Object.assign({ domain: "Default" }, PUSH_BODY)).status).toBe(400);
     var w2 = newWorld();
     var r2 = runOp("pushWithUpdateSet", w2, Object.assign({ domain: "22222222222222222222222222222222" }, PUSH_BODY));
-    expect(r2.status).toBe(404);
+    expect(r2.status).toBe(422);
     expect(r2.body.error).toMatch(/Domain not found/);
     expect(w1.writeDomains.concat(w2.writeDomains)).toEqual([]);
   });
@@ -239,10 +284,10 @@ describe("createRecord.js — session domain", function () {
     expect(w.written.sys_domain).toBe(OTHER);
   });
 
-  it("fails closed when the switch does not take — nothing is inserted", function () {
+  it("fails closed when the switch does not take — 409, nothing is inserted", function () {
     var w = newWorld({ switchIgnored: true });
     var r = runOp("createRecord", w, Object.assign({ domain: "global" }, CREATE_BODY));
-    expect(r.status).toBe(500);
+    expect(r.status).toBe(409);
     expect(r.body.error).toMatch(/nothing was inserted/);
     expect(w.writeDomains).toEqual([]);
   });
@@ -252,6 +297,23 @@ describe("createRecord.js — session domain", function () {
     var r = runOp("createRecord", w, Object.assign({ domain: "global" }, CREATE_BODY));
     expect(r.status).toBe(500);
     expect(w.sessionDomain).toBe(CHILD);
+  });
+
+  it("switches the domain BEFORE selecting the update set, and fails closed (409) when the set drifts", function () {
+    var w = newWorld();
+    runOp("createRecord", w, Object.assign({ domain: "global" }, CREATE_BODY));
+    expect(w.trace.indexOf("domain:global")).toBeLessThan(w.trace.indexOf("set:" + US));
+    var drift = newWorld({ setIgnored: true });
+    var r = runOp("createRecord", drift, Object.assign({ domain: "global" }, CREATE_BODY));
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/current: prev_set/);
+    expect(drift.writeDomains).toEqual([]);
+    expect(drift.sessionDomain).toBe(CHILD);
+  });
+
+  it("refuses an unknown domain with 422, never 404", function () {
+    var w = newWorld();
+    expect(runOp("createRecord", w, Object.assign({ domain: "22222222222222222222222222222222" }, CREATE_BODY)).status).toBe(422);
   });
 
   it("refuses a malformed domain with 400", function () {

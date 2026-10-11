@@ -76,8 +76,11 @@
 		var refTable = probe.getElement("sys_domain").getReferenceTable();
 		var domainGr = new GlideRecord(refTable || "domain");
 		if (!domainGr.get(value)) {
+			// 422, never 404: the client treats any 404 from a Dovetail Core op as "op not
+			// installed" and re-sends the write to the legacy op, which ignores `domain` —
+			// that would turn a refused domain into a write in the caller's own domain.
 			return {
-				status: 404,
+				status: 422,
 				error: "Domain not found: " + value + " (in " + (refTable || "domain") + ")",
 			};
 		}
@@ -110,13 +113,9 @@
 			response.setBody({ error: "Update set not found: " + updateSetSysId });
 			return response;
 		}
-		var appId = usGr.getValue("application");
-		if (appId) {
-			gs.setCurrentApplicationId(appId);
-			switched = true;
-		}
-		us.set(updateSetSysId);
-
+		// Session domain FIRST: switching domain (like switching app scope) may
+		// re-select the session's current update set, so it must happen before
+		// us.set() — and the set is asserted again just before the write.
 		if (domainTarget.id) {
 			previousDomain = sessionDomainId();
 			if (previousDomain !== domainTarget.id) {
@@ -125,8 +124,9 @@
 			}
 			var appliedDomain = sessionDomainId();
 			if (appliedDomain !== domainTarget.id) {
-				// Fail closed: writing in the wrong domain is the bug this guards.
-				response.setStatus(500);
+				// Fail closed: writing in the wrong domain is the bug this guards. 409,
+				// not 5xx: the client retries a 5xx and then drops this body.
+				response.setStatus(409);
 				response.setBody({
 					error: "Could not switch the session domain to " + domainTarget.id +
 						" (session is in " + appliedDomain + "); nothing was written.",
@@ -136,6 +136,22 @@
 			domainEcho = { requested: domainTarget.id, applied: appliedDomain, previous: previousDomain };
 		} else if (requestedDomain) {
 			domainEcho = { requested: String(requestedDomain), applied: null, previous: null, skipped: domainTarget.reason };
+		}
+
+		var appId = usGr.getValue("application");
+		if (appId) {
+			gs.setCurrentApplicationId(appId);
+			switched = true;
+		}
+		us.set(updateSetSysId);
+
+		if (domainTarget.id && String(us.get()) !== String(updateSetSysId)) {
+			response.setStatus(409);
+			response.setBody({
+				error: "Update set " + updateSetSysId + " is not current after the domain switch (current: " +
+					us.get() + "); nothing was written.",
+			});
+			return response;
 		}
 
 		var gr = new GlideRecord(table);
@@ -175,7 +191,9 @@
 		if (domainSwitched && previousDomain) {
 			try {
 				gs.getUser().setDomainID(previousDomain);
-			} catch (ignoreDomain) {}
+			} catch (restoreErr) {
+				gs.warn("Dovetail: could not restore session domain " + previousDomain + ": " + restoreErr);
+			}
 		}
 		us.set(previousUpdateSet);
 		if (switched && previousAppId) {
