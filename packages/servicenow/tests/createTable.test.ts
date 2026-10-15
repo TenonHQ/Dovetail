@@ -55,6 +55,11 @@ describe("resolveType", function () {
     expect(resolveType("glide_date_time")).toBe("glide_date_time");
     expect(resolveType("choice")).toBe("choice");
   });
+  it("passes condition and domain-separation types through unchanged", function () {
+    expect(resolveType("conditions")).toBe("conditions");
+    expect(resolveType("domain_id")).toBe("domain_id");
+    expect(resolveType("domain_path")).toBe("domain_path");
+  });
   it("throws on an unknown type", function () {
     expect(function () { resolveType("frobnicate"); }).toThrow(/unknown column type/);
   });
