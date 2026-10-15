@@ -1,0 +1,26 @@
+{
+  "$schema": "dovetail-release-event/v1",
+  "event_id": "dovetail-servicenow@0.0.56",
+  "package": "@tenonhq/dovetail-servicenow",
+  "version": "0.0.56",
+  "prev_version": "0.0.55",
+  "published_at": "2026-10-15T22:33:13.670Z",
+  "git": {
+    "sha": "01c04e34711ddd97ee37a470b6449b36b9862af0",
+    "tag": "dovetail-servicenow@0.0.56"
+  },
+  "semver_bump": "patch",
+  "commits": [
+    {
+      "sha": "01c04e347",
+      "subject": "feat(servicenow): accept conditions, domain_id and domain_path column types (#333)",
+      "pr": 333
+    },
+    {
+      "sha": "a32a76e4c",
+      "subject": "chore(release): publish 2 packages [skip ci]"
+    }
+  ],
+  "exports_delta": null,
+  "narrative": null
+}
