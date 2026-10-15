@@ -75,7 +75,11 @@ var KNOWN_INTERNAL: Record<string, boolean> = {
   reference: true, choice: true, translated_text: true, html: true, url: true,
   email: true, journal: true, journal_input: true, currency: true, price: true,
   percent_complete: true, sys_class_name: true, document_id: true, field_name: true,
-  table_name: true, json: true, script: true
+  table_name: true, json: true, script: true,
+  // A condition-builder column (pair it with dependent_on_field = its table_name column),
+  // and the two domain-separation columns a domain-aware table carries (sys_domain /
+  // sys_domain_path).
+  conditions: true, domain_id: true, domain_path: true
 };
 
 /** Resolve a friendly-or-internal type string to the internal_type to write. */
