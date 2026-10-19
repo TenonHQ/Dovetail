@@ -73,6 +73,23 @@ describe("getGoals", function () {
     });
   });
 
+  it("includes goals that live in Goal folders, without duplicates", async function () {
+    var inFolder = { id: "g-2", name: "TTV", folder_id: "f-1" };
+    mockAxiosInstance.get.mockResolvedValue({
+      data: {
+        goals: [GOAL],
+        folders: [
+          { id: "f-1", goals: [inFolder, { id: "g-1", name: "dup" }] },
+          { id: "f-2" },
+        ],
+      },
+    });
+
+    var result = await getGoals({ client: client, teamId: "9017" });
+
+    expect(result).toEqual([GOAL, inFolder]);
+  });
+
   it("throws when the envelope is missing", async function () {
     mockAxiosInstance.get.mockResolvedValue({ data: {} });
 

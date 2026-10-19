@@ -172,6 +172,8 @@ export interface ClickUpGoal {
   date_created: string;
   percent_completed: number | null;
   owners: ClickUpUser[];
+  // Set when the goal lives in a Goal folder; null otherwise.
+  folder_id?: string | null;
   // Present on getGoal; absent on the getGoals list.
   key_results?: ClickUpKeyResult[];
   [key: string]: unknown;

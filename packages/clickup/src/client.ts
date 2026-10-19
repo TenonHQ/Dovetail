@@ -494,7 +494,7 @@ function unwrap<T>(data: unknown, key: string, context: string): T {
 }
 
 /**
- * @description Lists the Goals in a workspace (team). Key results are not included — use getGoal.
+ * @description Lists the Goals in a workspace (team), including goals inside Goal folders. Key results are not included — use getGoal.
  * @param params - Object with client, teamId, and optional includeCompleted.
  * @returns Array of goals.
  */
@@ -509,10 +509,35 @@ export async function getGoals(params: {
       "/api/v2/team/" + encodeURIComponent(params.teamId) + "/goal",
       { params: params.includeCompleted ? { include_completed: true } : {} }
     );
-    return unwrap<ClickUpGoal[]>(response.data, "goals", context);
+    var goals = unwrap<ClickUpGoal[]>(response.data, "goals", context);
+    return goals.concat(folderGoals(response.data, goals));
   } catch (error) {
     return handleApiError(error, context);
   }
+}
+
+// Goals that live in a Goal folder come back under folders[].goals, not the
+// top-level goals array. Collect them, skipping any id already listed.
+function folderGoals(data: unknown, topLevel: ClickUpGoal[]): ClickUpGoal[] {
+  var folders = data && typeof data === "object" ? (data as Record<string, unknown>).folders : undefined;
+  if (!Array.isArray(folders)) return [];
+  var seen: Record<string, boolean> = {};
+  topLevel.forEach(function (goal) {
+    seen[goal.id] = true;
+  });
+  var result: ClickUpGoal[] = [];
+  folders.forEach(function (folder: unknown) {
+    var nested = folder && typeof folder === "object" ? (folder as Record<string, unknown>).goals : undefined;
+    if (!Array.isArray(nested)) return;
+    nested.forEach(function (item: unknown) {
+      if (!item || typeof item !== "object") return;
+      var goal = item as ClickUpGoal;
+      if (typeof goal.id !== "string" || seen[goal.id]) return;
+      seen[goal.id] = true;
+      result.push(goal);
+    });
+  });
+  return result;
 }
 
 /**
