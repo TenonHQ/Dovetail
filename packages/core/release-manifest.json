@@ -1,7 +1,88 @@
 {
   "$schema": "dovetail-manifest/v1",
-  "generated_at": "2026-10-15T22:33:13.682Z",
+  "generated_at": "2026-10-19T20:13:35.615Z",
   "events": [
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-clickup@0.0.15",
+      "package": "@tenonhq/dovetail-clickup",
+      "version": "0.0.15",
+      "prev_version": "0.0.14",
+      "published_at": "2026-10-19T20:13:35.597Z",
+      "git": {
+        "sha": "27e794da15a284012f747cd45bfed9e9c0c742ad",
+        "tag": "dovetail-clickup@0.0.15"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "27e794da1",
+          "subject": "feat(clickup,mcp): ClickUp Goals + Key Results (#335)",
+          "pr": 335
+        },
+        {
+          "sha": "b46e30a86",
+          "subject": "chore(release): publish 7 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-core@0.0.129",
+      "package": "@tenonhq/dovetail-core",
+      "version": "0.0.129",
+      "prev_version": "0.0.128",
+      "published_at": "2026-10-19T20:13:35.597Z",
+      "git": {
+        "sha": "27e794da15a284012f747cd45bfed9e9c0c742ad",
+        "tag": "dovetail-core@0.0.129"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "58bb537f2",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "a32a76e4c",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        },
+        {
+          "sha": "7020c0e49",
+          "subject": "chore(release): @tenonhq/dovetail-core@0.0.128 [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
+    {
+      "$schema": "dovetail-release-event/v1",
+      "event_id": "dovetail-mcp@0.0.55",
+      "package": "@tenonhq/dovetail-mcp",
+      "version": "0.0.55",
+      "prev_version": "0.0.54",
+      "published_at": "2026-10-19T20:13:35.597Z",
+      "git": {
+        "sha": "27e794da15a284012f747cd45bfed9e9c0c742ad",
+        "tag": "dovetail-mcp@0.0.55"
+      },
+      "semver_bump": "patch",
+      "commits": [
+        {
+          "sha": "27e794da1",
+          "subject": "feat(clickup,mcp): ClickUp Goals + Key Results (#335)",
+          "pr": 335
+        },
+        {
+          "sha": "58bb537f2",
+          "subject": "chore(release): publish 2 packages [skip ci]"
+        }
+      ],
+      "exports_delta": null,
+      "narrative": null
+    },
     {
       "$schema": "dovetail-release-event/v1",
       "event_id": "dovetail-servicenow@0.0.56",
@@ -1288,79 +1369,6 @@
       "commits": [
         {
           "sha": "3ecabd113",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.45",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.45",
-      "prev_version": "0.0.44",
-      "published_at": "2026-09-30T21:15:07.753Z",
-      "git": {
-        "sha": "5ed116898825fdbe390d5f9e806ae797d34150ae",
-        "tag": "dovetail-servicenow@0.0.45"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "5ed116898",
-          "subject": "fix(servicenow): clone-action copies output mappings and IO labels (#284)",
-          "pr": 284
-        },
-        {
-          "sha": "2fd584e31",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-mcp@0.0.42",
-      "package": "@tenonhq/dovetail-mcp",
-      "version": "0.0.42",
-      "prev_version": "0.0.41",
-      "published_at": "2026-09-30T21:15:07.753Z",
-      "git": {
-        "sha": "5ed116898825fdbe390d5f9e806ae797d34150ae",
-        "tag": "dovetail-mcp@0.0.42"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "2fd584e31",
-          "subject": "chore(release): publish 2 packages [skip ci]"
-        }
-      ],
-      "exports_delta": null,
-      "narrative": null
-    },
-    {
-      "$schema": "dovetail-release-event/v1",
-      "event_id": "dovetail-servicenow@0.0.44",
-      "package": "@tenonhq/dovetail-servicenow",
-      "version": "0.0.44",
-      "prev_version": "0.0.43",
-      "published_at": "2026-09-30T19:56:06.848Z",
-      "git": {
-        "sha": "bbbafb8580e6ef3a37bf0db41c0257b46eb2c7fd",
-        "tag": "dovetail-servicenow@0.0.44"
-      },
-      "semver_bump": "patch",
-      "commits": [
-        {
-          "sha": "bbbafb858",
-          "subject": "fix(servicenow): define-action verify ignores server-defaulted maxLength (#283)",
-          "pr": 283
-        },
-        {
-          "sha": "80c775d5f",
           "subject": "chore(release): publish 2 packages [skip ci]"
         }
       ],
