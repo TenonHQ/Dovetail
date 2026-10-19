@@ -103,6 +103,12 @@ npx dove-sn view-flow --sys-id <id> --env .env.prod
 npx dove-sn add-choices --env ../envs/workshop.env --table ... --column ...
 ```
 
+A bare instance name works too: `--env loft` → `.env.loft` in the current
+directory, or — when it has none — the nearest `.env.loft` in a parent directory
+(up to 8 levels, never the home directory or above, only a file owned by you; the
+chosen path is printed to stderr), so a nested git worktree reaches the checkout's per-instance file. Paths
+and dotted names (`.env.prod`, `loft.env`) never walk up.
+
 `--env` (alias `--env-file`) wins over the `DOVETAIL_ENV_FILE` env var, which in
 turn beats the default `.env`. Variables already present in the environment are
 never overridden, so an exported `SN_INSTANCE` still takes precedence over the
