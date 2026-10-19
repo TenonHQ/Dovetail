@@ -162,6 +162,31 @@ describe("resolveEnvSelection — bare name walks up to a parent directory", fun
     }
   });
 
+  it("skips a parent file owned by another user (e.g. planted in /tmp)", function () {
+    touch(path.join(home, "a"));
+    var otherUid =
+      (typeof process.getuid === "function" ? process.getuid() : 0) + 4242;
+    var calls: string[] = [];
+    expect(
+      resolveEnvSelection(NAME, cwd, {
+        homeDir: home,
+        ownerUid: otherUid,
+        onParentMatch: function (p) {
+          calls.push(p);
+        },
+      }),
+    ).toBe(path.join(cwd, FILE));
+    expect(calls).toEqual([]);
+  });
+
+  it("accepts a parent file owned by the current user, and any owner when ownerUid < 0", function () {
+    var up3 = touch(path.join(home, "a"));
+    expect(resolveEnvSelection(NAME, cwd, { homeDir: home })).toBe(up3);
+    expect(
+      resolveEnvSelection(NAME, cwd, { homeDir: home, ownerUid: -1 }),
+    ).toBe(up3);
+  });
+
   it("keeps the selection when the callback throws", function () {
     var up1 = touch(path.join(home, "a", "b", "c"));
     expect(

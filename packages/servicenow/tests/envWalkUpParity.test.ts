@@ -28,7 +28,13 @@ interface Scenario {
   // that get a `<prefix><name>` file before resolving.
   filesAt: string[];
   value: string;
+  // Owner a parent match must have; omitted = the current user.
+  ownerUid?: number;
 }
+
+// A uid that does not own the fixture files.
+var OTHER_UID =
+  (typeof process.getuid === "function" ? process.getuid() : 0) + 4242;
 
 var SCENARIOS: Scenario[] = [
   { title: "found in cwd", filesAt: ["a/b/c/d", "a"], value: NAME },
@@ -48,6 +54,18 @@ var SCENARIOS: Scenario[] = [
     title: "prefixed basename present in cwd",
     filesAt: ["a/b/c/d"],
     value: FILE,
+  },
+  {
+    title: "parent file owned by another user skipped",
+    filesAt: ["a"],
+    value: NAME,
+    ownerUid: OTHER_UID,
+  },
+  {
+    title: "ownership check disabled (ownerUid < 0)",
+    filesAt: ["a"],
+    value: NAME,
+    ownerUid: -1,
   },
 ];
 
@@ -83,12 +101,14 @@ describe("dove / dove-sn --env walk-up parity", function () {
       var snCalls: string[] = [];
       var coreResult = core.resolveEnvArgPath(s.value, cwd, {
         homeDir: home,
+        ownerUid: s.ownerUid,
         onParentMatch: function (p) {
           coreCalls.push(p);
         },
       });
       var snResult = sn.resolveEnvSelection(s.value, cwd, {
         homeDir: home,
+        ownerUid: s.ownerUid,
         onParentMatch: function (p) {
           snCalls.push(p);
         },

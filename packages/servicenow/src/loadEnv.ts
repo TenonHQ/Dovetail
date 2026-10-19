@@ -79,7 +79,12 @@ export function resolveEnvSelection(raw: string, cwd?: string, options?: EnvWalk
     return inCwd;
   }
   var opts = options || {};
-  var found = findEnvFileUpward({ fileName: fileName, startDir: base, homeDir: opts.homeDir });
+  var found = findEnvFileUpward({
+    fileName: fileName,
+    startDir: base,
+    homeDir: opts.homeDir,
+    ownerUid: opts.ownerUid,
+  });
   if (found === null) {
     return inCwd;
   }
@@ -108,15 +113,22 @@ export interface EnvWalkUpOptions {
   homeDir?: string;
   /** Called with the chosen path when the file was found in a parent directory. */
   onParentMatch?: (foundPath: string) => void;
+  /**
+   * Owner a parent match must have (defaults to process.getuid(); a negative
+   * value, or a platform without getuid, skips the check). Injectable for tests.
+   */
+  ownerUid?: number;
 }
 
 /**
  * Look for `fileName` in the parent directories of `startDir` (not in
- * `startDir` itself) and return the nearest one that exists as a regular file.
- * Bounds: at most `maxLevels` parents (default ENV_WALK_UP_MAX_LEVELS); never
- * the home directory or anything above it; never the filesystem root. Uses
- * stat only and never reads a file. Never throws: bad input or no match
- * returns null.
+ * `startDir` itself) and return the nearest one that exists as a regular file
+ * owned by the current user. Bounds: at most `maxLevels` parents (default
+ * ENV_WALK_UP_MAX_LEVELS); never the home directory or anything above it;
+ * never the filesystem root. A file owned by someone else (e.g. planted in a
+ * shared or world-writable ancestor such as /tmp when the cwd is outside the
+ * home directory) is skipped, never selected. Uses stat only and never reads
+ * a file. Never throws: bad input or no match returns null.
  *
  * Keep behaviorally identical to findEnvFileUpward in
  * packages/core/src/envArg.ts — tests/envWalkUpParity.test.ts runs both.
@@ -126,6 +138,7 @@ export function findEnvFileUpward(args: {
   startDir: string;
   homeDir?: string;
   maxLevels?: number;
+  ownerUid?: number;
 }): string | null {
   if (!args || typeof args.fileName !== "string" || typeof args.startDir !== "string") {
     return null;
@@ -143,6 +156,8 @@ export function findEnvFileUpward(args: {
       : ENV_WALK_UP_MAX_LEVELS;
   var home = typeof args.homeDir === "string" ? args.homeDir : safeHomeDir();
   var homeResolved = home.length > 0 ? path.resolve(home) : "";
+  var ownerUid =
+    typeof args.ownerUid === "number" && isFinite(args.ownerUid) ? args.ownerUid : currentUid();
 
   var dir = path.resolve(args.startDir);
   for (var level = 0; level < maxLevels; level++) {
@@ -158,11 +173,35 @@ export function findEnvFileUpward(args: {
       break; // never the home directory or above it
     }
     var candidate = path.join(dir, fileName);
-    if (isExistingFile(candidate)) {
+    if (isOwnedFile({ candidate: candidate, ownerUid: ownerUid })) {
       return candidate;
     }
   }
   return null;
+}
+
+// True when the path is a regular file owned by `ownerUid` (any owner when
+// `ownerUid` is negative). Stat only. Never throws.
+function isOwnedFile(args: { candidate: string; ownerUid: number }): boolean {
+  try {
+    var stat = fs.statSync(args.candidate);
+    if (!stat.isFile()) {
+      return false;
+    }
+    return args.ownerUid < 0 || stat.uid === args.ownerUid;
+  } catch (e) {
+    return false;
+  }
+}
+
+// process.getuid(), or -1 where it does not exist (Windows), which disables
+// the ownership check. Never throws.
+function currentUid(): number {
+  try {
+    return typeof process.getuid === "function" ? process.getuid() : -1;
+  } catch (e) {
+    return -1;
+  }
 }
 
 // True when `dir` is `of` itself or one of its ancestors. Both absolute.
