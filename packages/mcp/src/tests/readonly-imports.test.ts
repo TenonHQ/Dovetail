@@ -29,6 +29,12 @@ var FORBIDDEN_SYMBOLS = [
   "addComment",
   "setCustomField",
   "linkTask",
+  "createGoal",
+  "updateGoal",
+  "deleteGoal",
+  "createKeyResult",
+  "editKeyResult",
+  "deleteKeyResult",
   "addChoicesToField",
   "pushWithUpdateSet",
   "createRecord",
@@ -37,8 +43,9 @@ var FORBIDDEN_SYMBOLS = [
 ];
 
 // The ONE declared Phase-2 write module and the exact write symbols it may use.
-// Least privilege: only the four verbs wired as MCP tools — destructive verbs
-// (deleteTask, updateTaskStatus, addComment) stay banned even here. Gmail /
+// Least privilege: only the verbs wired as MCP tools — destructive verbs
+// (deleteTask, updateTaskStatus, addComment, deleteGoal, deleteKeyResult) stay
+// banned even here. Gmail /
 // Calendar / ServiceNow write symbols are likewise NOT permitted. Adding a new
 // verb means: (1) appending it here, (2) updating the ESLint override in
 // .eslintrc.json, and (3) wiring it as an MCP tool — all visible in one diff.
@@ -48,7 +55,11 @@ var WRITE_MODULE_ALLOW: Record<string, string[]> = {
     "createTask",
     "updateTask",
     "setCustomField",
-    "linkTask"
+    "linkTask",
+    "createGoal",
+    "updateGoal",
+    "createKeyResult",
+    "editKeyResult"
   ]
 };
 

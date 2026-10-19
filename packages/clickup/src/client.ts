@@ -8,6 +8,9 @@ import {
   ClickUpFolder,
   ClickUpList,
   ClickUpComment,
+  ClickUpGoal,
+  ClickUpKeyResult,
+  ClickUpKeyResultType,
   ListMyTasksResult,
   ListTeamTasksResult,
   TasksByStatus,
@@ -21,6 +24,14 @@ import {
   SetCustomFieldParams,
   LinkTaskParams,
   AddCommentParams,
+  GetGoalsParams,
+  GetGoalParams,
+  CreateGoalParams,
+  UpdateGoalParams,
+  DeleteGoalParams,
+  CreateKeyResultParams,
+  EditKeyResultParams,
+  DeleteKeyResultParams,
   GetSpacesParams,
   GetFoldersParams,
   GetListsParams,
@@ -460,6 +471,223 @@ export async function addComment(params: {
   }
 }
 
+// --- Goals ---
+
+function goalPath(goalId: string): string {
+  return "/api/v2/goal/" + encodeURIComponent(goalId);
+}
+
+function keyResultPath(keyResultId: string): string {
+  return "/api/v2/key_result/" + encodeURIComponent(keyResultId);
+}
+
+// ClickUp wraps goal payloads in an envelope ({ goal }, { goals }, { key_result }).
+// Fail loudly on an unexpected shape rather than hand callers undefined.
+function unwrap<T>(data: unknown, key: string, context: string): T {
+  if (data && typeof data === "object" && key in data) {
+    var value = (data as Record<string, unknown>)[key];
+    if (value !== undefined && value !== null) {
+      return value as T;
+    }
+  }
+  throw new Error("ClickUp API error (" + context + "): response missing '" + key + "'");
+}
+
+/**
+ * @description Lists the Goals in a workspace (team). Key results are not included — use getGoal.
+ * @param params - Object with client, teamId, and optional includeCompleted.
+ * @returns Array of goals.
+ */
+export async function getGoals(params: {
+  client: AxiosInstance;
+  teamId: string;
+  includeCompleted?: boolean;
+}): Promise<ClickUpGoal[]> {
+  var context = "goals for team '" + params.teamId + "'";
+  try {
+    var response = await params.client.get(
+      "/api/v2/team/" + encodeURIComponent(params.teamId) + "/goal",
+      { params: params.includeCompleted ? { include_completed: true } : {} }
+    );
+    return unwrap<ClickUpGoal[]>(response.data, "goals", context);
+  } catch (error) {
+    return handleApiError(error, context);
+  }
+}
+
+/**
+ * @description Fetches one Goal, including its key results.
+ * @param params - Object with client and goalId.
+ * @returns The goal.
+ */
+export async function getGoal(params: {
+  client: AxiosInstance;
+  goalId: string;
+}): Promise<ClickUpGoal> {
+  var context = "goal '" + params.goalId + "'";
+  try {
+    var response = await params.client.get(goalPath(params.goalId));
+    return unwrap<ClickUpGoal>(response.data, "goal", context);
+  } catch (error) {
+    return handleApiError(error, context);
+  }
+}
+
+/**
+ * @description Creates a Goal in a workspace (team).
+ * @param params - Object with client, teamId, name, dueDate (epoch ms), and optional description, owners, color.
+ * @returns The created goal.
+ */
+export async function createGoal(params: {
+  client: AxiosInstance;
+  teamId: string;
+  name: string;
+  dueDate: number;
+  description?: string;
+  owners?: number[];
+  color?: string;
+}): Promise<ClickUpGoal> {
+  var context = "creating goal '" + params.name + "'";
+  var owners = params.owners || [];
+  var body: Record<string, unknown> = {
+    name: params.name,
+    due_date: params.dueDate,
+    description: params.description || "",
+    multiple_owners: owners.length > 1,
+    owners: owners,
+  };
+  if (params.color !== undefined) body.color = params.color;
+  try {
+    var response = await params.client.post(
+      "/api/v2/team/" + encodeURIComponent(params.teamId) + "/goal",
+      body
+    );
+    return unwrap<ClickUpGoal>(response.data, "goal", context);
+  } catch (error) {
+    return handleApiError(error, context);
+  }
+}
+
+/**
+ * @description Updates a Goal's name, due date, description, owners, or color.
+ * @param params - Object with client, goalId, and the fields to change.
+ * @returns The updated goal.
+ */
+export async function updateGoal(params: {
+  client: AxiosInstance;
+  goalId: string;
+  name?: string;
+  dueDate?: number;
+  description?: string;
+  addOwners?: number[];
+  remOwners?: number[];
+  color?: string;
+}): Promise<ClickUpGoal> {
+  var context = "updating goal '" + params.goalId + "'";
+  var body: Record<string, unknown> = {};
+  if (params.name !== undefined) body.name = params.name;
+  if (params.dueDate !== undefined) body.due_date = params.dueDate;
+  if (params.description !== undefined) body.description = params.description;
+  if (params.addOwners !== undefined) body.add_owners = params.addOwners;
+  if (params.remOwners !== undefined) body.rem_owners = params.remOwners;
+  if (params.color !== undefined) body.color = params.color;
+  try {
+    var response = await params.client.put(goalPath(params.goalId), body);
+    return unwrap<ClickUpGoal>(response.data, "goal", context);
+  } catch (error) {
+    return handleApiError(error, context);
+  }
+}
+
+/**
+ * @description Deletes a Goal and its key results. Destructive — not exposed as an MCP tool.
+ * @param params - Object with client and goalId.
+ */
+export async function deleteGoal(params: {
+  client: AxiosInstance;
+  goalId: string;
+}): Promise<void> {
+  try {
+    await params.client.delete(goalPath(params.goalId));
+  } catch (error) {
+    return handleApiError(error, "deleting goal '" + params.goalId + "'");
+  }
+}
+
+/**
+ * @description Creates a key result (Target) on a Goal. Steps are integers.
+ * @param params - Object with client, goalId, name, type, stepsStart, stepsEnd, and optional unit, owners, taskIds, listIds.
+ * @returns The created key result.
+ */
+export async function createKeyResult(params: {
+  client: AxiosInstance;
+  goalId: string;
+  name: string;
+  type: ClickUpKeyResultType;
+  stepsStart: number;
+  stepsEnd: number;
+  unit?: string;
+  owners?: number[];
+  taskIds?: string[];
+  listIds?: string[];
+}): Promise<ClickUpKeyResult> {
+  var context = "creating key result '" + params.name + "' on goal '" + params.goalId + "'";
+  var body = {
+    name: params.name,
+    owners: params.owners || [],
+    type: params.type,
+    steps_start: params.stepsStart,
+    steps_end: params.stepsEnd,
+    unit: params.unit || "",
+    task_ids: params.taskIds || [],
+    list_ids: params.listIds || [],
+  };
+  try {
+    var response = await params.client.post(goalPath(params.goalId) + "/key_result", body);
+    return unwrap<ClickUpKeyResult>(response.data, "key_result", context);
+  } catch (error) {
+    return handleApiError(error, context);
+  }
+}
+
+/**
+ * @description Records progress on a key result: sets steps_current and logs the note.
+ * @param params - Object with client, keyResultId, stepsCurrent (integer), and note.
+ * @returns The updated key result.
+ */
+export async function editKeyResult(params: {
+  client: AxiosInstance;
+  keyResultId: string;
+  stepsCurrent: number;
+  note: string;
+}): Promise<ClickUpKeyResult> {
+  var context = "editing key result '" + params.keyResultId + "'";
+  try {
+    var response = await params.client.put(keyResultPath(params.keyResultId), {
+      steps_current: params.stepsCurrent,
+      note: params.note,
+    });
+    return unwrap<ClickUpKeyResult>(response.data, "key_result", context);
+  } catch (error) {
+    return handleApiError(error, context);
+  }
+}
+
+/**
+ * @description Deletes a key result. Destructive — not exposed as an MCP tool.
+ * @param params - Object with client and keyResultId.
+ */
+export async function deleteKeyResult(params: {
+  client: AxiosInstance;
+  keyResultId: string;
+}): Promise<void> {
+  try {
+    await params.client.delete(keyResultPath(params.keyResultId));
+  } catch (error) {
+    return handleApiError(error, "deleting key result '" + params.keyResultId + "'");
+  }
+}
+
 // --- Workspace / Hierarchy ---
 
 /**
@@ -817,6 +1045,14 @@ export interface ClickUpApi {
   setCustomField(params: SetCustomFieldParams): Promise<void>;
   linkTask(params: LinkTaskParams): Promise<void>;
   addComment(params: AddCommentParams): Promise<ClickUpComment>;
+  getGoals(params: GetGoalsParams): Promise<ClickUpGoal[]>;
+  getGoal(params: GetGoalParams): Promise<ClickUpGoal>;
+  createGoal(params: CreateGoalParams): Promise<ClickUpGoal>;
+  updateGoal(params: UpdateGoalParams): Promise<ClickUpGoal>;
+  deleteGoal(params: DeleteGoalParams): Promise<void>;
+  createKeyResult(params: CreateKeyResultParams): Promise<ClickUpKeyResult>;
+  editKeyResult(params: EditKeyResultParams): Promise<ClickUpKeyResult>;
+  deleteKeyResult(params: DeleteKeyResultParams): Promise<void>;
   getTeams(): Promise<ClickUpTeam[]>;
   getSpaces(params: GetSpacesParams): Promise<ClickUpSpace[]>;
   getFolders(params: GetFoldersParams): Promise<ClickUpFolder[]>;
@@ -915,6 +1151,67 @@ export function createClickUpApi(config: ClickUpClientConfig): ClickUpApi {
         taskId: params.taskId,
         commentText: params.commentText,
       });
+    },
+    getGoals: function (params: GetGoalsParams) {
+      return getGoals({
+        client: client,
+        teamId: params.teamId,
+        includeCompleted: params.includeCompleted,
+      });
+    },
+    getGoal: function (params: GetGoalParams) {
+      return getGoal({ client: client, goalId: params.goalId });
+    },
+    createGoal: function (params: CreateGoalParams) {
+      return createGoal({
+        client: client,
+        teamId: params.teamId,
+        name: params.name,
+        dueDate: params.dueDate,
+        description: params.description,
+        owners: params.owners,
+        color: params.color,
+      });
+    },
+    updateGoal: function (params: UpdateGoalParams) {
+      return updateGoal({
+        client: client,
+        goalId: params.goalId,
+        name: params.name,
+        dueDate: params.dueDate,
+        description: params.description,
+        addOwners: params.addOwners,
+        remOwners: params.remOwners,
+        color: params.color,
+      });
+    },
+    deleteGoal: function (params: DeleteGoalParams) {
+      return deleteGoal({ client: client, goalId: params.goalId });
+    },
+    createKeyResult: function (params: CreateKeyResultParams) {
+      return createKeyResult({
+        client: client,
+        goalId: params.goalId,
+        name: params.name,
+        type: params.type,
+        stepsStart: params.stepsStart,
+        stepsEnd: params.stepsEnd,
+        unit: params.unit,
+        owners: params.owners,
+        taskIds: params.taskIds,
+        listIds: params.listIds,
+      });
+    },
+    editKeyResult: function (params: EditKeyResultParams) {
+      return editKeyResult({
+        client: client,
+        keyResultId: params.keyResultId,
+        stepsCurrent: params.stepsCurrent,
+        note: params.note,
+      });
+    },
+    deleteKeyResult: function (params: DeleteKeyResultParams) {
+      return deleteKeyResult({ client: client, keyResultId: params.keyResultId });
     },
     getTeams: function () {
       return getTeams({ client: client });

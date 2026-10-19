@@ -26,8 +26,8 @@ function makeFullDeps(): RegistryDeps {
 }
 
 describe("registry — TOOL_NAMES", function () {
-  it("exposes exactly 16 tool names", function () {
-    expect(TOOL_NAMES.length).toBe(16);
+  it("exposes exactly 22 tool names", function () {
+    expect(TOOL_NAMES.length).toBe(22);
   });
 
   it("has unique names", function () {
@@ -49,6 +49,12 @@ describe("registry — TOOL_NAMES", function () {
       "clickup_set_custom_field",
       "clickup_create_task",
       "clickup_link_tasks",
+      "clickup_get_goals",
+      "clickup_get_goal",
+      "clickup_create_goal",
+      "clickup_update_goal",
+      "clickup_create_key_result",
+      "clickup_edit_key_result",
       "gmail_get_unread",
       "gmail_get_starred",
       "gmail_search",
@@ -66,7 +72,7 @@ describe("registry — descriptors", function () {
   it("produces a descriptor per tool with a description and shape", function () {
     var deps = makeFullDeps();
     var descs = buildDescriptorsForTests(deps);
-    expect(descs.length).toBe(16);
+    expect(descs.length).toBe(22);
     for (var i = 0; i < descs.length; i++) {
       var d = descs[i];
       expect(typeof d.description).toBe("string");
@@ -118,6 +124,8 @@ describe("registry — annotations", function () {
     "clickup_get_task",
     "clickup_search_tasks",
     "clickup_get_team_sync",
+    "clickup_get_goals",
+    "clickup_get_goal",
     "gmail_get_unread",
     "gmail_get_starred",
     "gmail_search",
@@ -170,5 +178,17 @@ describe("registry — annotations", function () {
     expect(map["clickup_link_tasks"].annotations.readOnlyHint).toBe(false);
     expect(map["clickup_link_tasks"].annotations.destructiveHint).toBe(false);
     expect(map["clickup_link_tasks"].annotations.idempotentHint).toBe(true);
+
+    ["clickup_create_goal", "clickup_create_key_result"].forEach(function (name) {
+      expect(map[name].annotations.readOnlyHint).toBe(false);
+      expect(map[name].annotations.destructiveHint).toBe(false);
+      expect(map[name].annotations.idempotentHint).toBe(false);
+    });
+
+    ["clickup_update_goal", "clickup_edit_key_result"].forEach(function (name) {
+      expect(map[name].annotations.readOnlyHint).toBe(false);
+      expect(map[name].annotations.destructiveHint).toBe(true);
+      expect(map[name].annotations.idempotentHint).toBe(true);
+    });
   });
 });

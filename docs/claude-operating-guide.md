@@ -20,9 +20,9 @@ MCP tools surface in a session as `mcp__<server-key>__<tool>` (e.g. `mcp__claude
 
 ---
 
-## 2. `dovetail-mcp` — 16 tools (read + gated ClickUp writes)
+## 2. `dovetail-mcp` — 22 tools (read + gated ClickUp writes)
 
-Source: `packages/mcp/src/registry.ts`. The 4 write tools throw unless `SINC_MCP_WRITES_ENABLE=1` is set, and they return a **dry-run preview** unless you pass `confirm:true` (gate: `packages/mcp/src/tools/clickup-write.ts`).
+Source: `packages/mcp/src/registry.ts`. The 8 write tools throw unless `SINC_MCP_WRITES_ENABLE=1` is set, and they return a **dry-run preview** unless you pass `confirm:true` (gate: `packages/mcp/src/tools/clickup-write.ts`).
 
 ### ClickUp — read (4)
 | Tool | What it does | When to use |
@@ -32,13 +32,25 @@ Source: `packages/mcp/src/registry.ts`. The 4 write tools throw unless `SINC_MCP
 | `clickup_search_tasks` | Substring search across team task name/description | Find a task when you don't have the ID |
 | `clickup_get_team_sync` | Structured team sync across the 7-stage pipeline (Blocked → Done) + unmapped/unassigned | A sprint-board read or standup snapshot |
 
-### ClickUp — write (4) · gated `SINC_MCP_WRITES_ENABLE=1`, dry-run unless `confirm:true`
+### ClickUp Goals — read (2)
+| Tool | What it does | When to use |
+|---|---|---|
+| `clickup_get_goals` | List the workspace's Goals with percent complete (no key results) | Find a goal id, or an OKR roll-up at a glance |
+| `clickup_get_goal` | One Goal with its key results — steps start/end/current and last action | Read back after every goal or key-result write to confirm it landed |
+
+### ClickUp — write (8) · gated `SINC_MCP_WRITES_ENABLE=1`, dry-run unless `confirm:true`
 | Tool | What it does |
 |---|---|
 | `clickup_update_task` | Update name/markdownContent/status/priority. Use `customTaskIds:true`+`teamId` for IDs like `DEV-225` |
 | `clickup_set_custom_field` | Set one custom-field value (`POST /task/{id}/field/{fieldId}`) |
 | `clickup_create_task` | Create a task in a list (content, status, priority, assignees, customFields) |
 | `clickup_link_tasks` | Link two tasks (`POST /task/{id}/link/{linksTo}`) |
+| `clickup_create_goal` | Create a Goal (name, dueDate `YYYY-MM-DD`, description, owners, color); teamId defaults to `CLICKUP_TEAM_ID` |
+| `clickup_update_goal` | Update a Goal's name/dueDate/description/color, or owners via `addOwners`/`remOwners` |
+| `clickup_create_key_result` | Add a key result: `number`/`currency`/`boolean`/`percentage`/`automatic`. Steps are integers (use a finer unit for precision); boolean is always 0→1; automatic needs `taskIds` or `listIds` |
+| `clickup_edit_key_result` | Record progress: `stepsCurrent` + a required `note` (put the period and the evidence link in it), then read back with `clickup_get_goal` |
+
+Deleting goals or key results is deliberately **not** an MCP tool — `deleteGoal` / `deleteKeyResult` exist only as `dovetail-clickup` client methods.
 
 ### Gmail — read (4)
 `gmail_get_unread`, `gmail_get_starred`, `gmail_search` (Gmail query syntax), `gmail_get_action_required` (matches subject patterns/labels: "action required", "urgent", "asap", "time sensitive").

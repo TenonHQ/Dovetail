@@ -129,6 +129,46 @@ export interface ClickUpComment {
   date: string;
 }
 
+// --- Goals ---
+
+export type ClickUpKeyResultType = "number" | "currency" | "boolean" | "percentage" | "automatic";
+
+// Key result (ClickUp "Target"). Step values are integers on write; ClickUp may
+// return them as numbers or numeric strings on read.
+export interface ClickUpKeyResult {
+  id: string;
+  goal_id: string;
+  name: string;
+  type: ClickUpKeyResultType;
+  unit: string | null;
+  steps_start: number | string | null;
+  steps_end: number | string | null;
+  steps_current: number | string | null;
+  percent_completed: number | null;
+  completed: boolean;
+  task_ids: string[];
+  owners: ClickUpUser[];
+  last_action?: unknown;
+  [key: string]: unknown;
+}
+
+export interface ClickUpGoal {
+  id: string;
+  pretty_id: string;
+  name: string;
+  team_id: string;
+  description: string;
+  color: string;
+  due_date: string | null;
+  start_date: string | null;
+  date_created: string;
+  percent_completed: number | null;
+  owners: ClickUpUser[];
+  // Present on getGoal; absent on the getGoals list.
+  key_results?: ClickUpKeyResult[];
+  [key: string]: unknown;
+}
+
 // --- Result Types ---
 
 export interface TasksByStatus {
@@ -222,6 +262,68 @@ export interface DeleteTaskParams {
 export interface AddCommentParams {
   taskId: string;
   commentText: string;
+}
+
+export interface GetGoalsParams {
+  teamId: string;
+  includeCompleted?: boolean;
+}
+
+export interface GetGoalParams {
+  goalId: string;
+}
+
+export interface CreateGoalParams {
+  teamId: string;
+  name: string;
+  // Due date as epoch milliseconds.
+  dueDate: number;
+  description?: string;
+  // ClickUp user ids. multiple_owners is derived from the count.
+  owners?: number[];
+  // Hex color, e.g. "#32a852".
+  color?: string;
+}
+
+export interface UpdateGoalParams {
+  goalId: string;
+  name?: string;
+  // Due date as epoch milliseconds.
+  dueDate?: number;
+  description?: string;
+  addOwners?: number[];
+  remOwners?: number[];
+  color?: string;
+}
+
+export interface DeleteGoalParams {
+  goalId: string;
+}
+
+export interface CreateKeyResultParams {
+  goalId: string;
+  name: string;
+  type: ClickUpKeyResultType;
+  // Integers only — the ClickUp v2 API rejects fractional steps.
+  stepsStart: number;
+  stepsEnd: number;
+  unit?: string;
+  owners?: number[];
+  // Required (at least one of the two) for type "automatic".
+  taskIds?: string[];
+  listIds?: string[];
+}
+
+export interface EditKeyResultParams {
+  keyResultId: string;
+  // Integer only.
+  stepsCurrent: number;
+  // Required by the ClickUp API; recorded on the key result's activity.
+  note: string;
+}
+
+export interface DeleteKeyResultParams {
+  keyResultId: string;
 }
 
 export interface GetSpacesParams {

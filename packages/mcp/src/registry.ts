@@ -1,5 +1,5 @@
 /**
- * Tool registration glue. Exports TOOL_NAMES (the canonical 12-tuple) and
+ * Tool registration glue. Exports TOOL_NAMES (the canonical tool tuple) and
  * registerAllTools(), which wires every handler with telemetry + JSON
  * serialization for MCP transport.
  *
@@ -35,7 +35,13 @@ import {
   clickupUpdateTaskSchema,
   clickupSetCustomFieldSchema,
   clickupCreateTaskSchema,
-  clickupLinkTasksSchema
+  clickupLinkTasksSchema,
+  clickupGetGoalsSchema,
+  clickupGetGoalSchema,
+  clickupCreateGoalSchema,
+  clickupUpdateGoalSchema,
+  clickupCreateKeyResultSchema,
+  clickupEditKeyResultSchema
 } from "./schemas/clickup";
 import {
   gmailGetUnreadSchema,
@@ -54,14 +60,20 @@ import {
   clickupListTasks,
   clickupGetTask,
   clickupSearchTasks,
-  clickupGetTeamSync
+  clickupGetTeamSync,
+  clickupGetGoals,
+  clickupGetGoal
 } from "./tools/clickup";
 import type { ClickUpDeps } from "./tools/clickup";
 import {
   clickupUpdateTask,
   clickupSetCustomField,
   clickupCreateTask,
-  clickupLinkTasks
+  clickupLinkTasks,
+  clickupCreateGoal,
+  clickupUpdateGoal,
+  clickupCreateKeyResult,
+  clickupEditKeyResult
 } from "./tools/clickup-write";
 import {
   gmailGetUnread,
@@ -88,6 +100,12 @@ export var TOOL_NAMES = [
   "clickup_set_custom_field",
   "clickup_create_task",
   "clickup_link_tasks",
+  "clickup_get_goals",
+  "clickup_get_goal",
+  "clickup_create_goal",
+  "clickup_update_goal",
+  "clickup_create_key_result",
+  "clickup_edit_key_result",
   "gmail_get_unread",
   "gmail_get_starred",
   "gmail_search",
@@ -196,6 +214,60 @@ function buildDescriptors(deps: RegistryDeps): ToolDescriptor[] {
       annotations: WRITE_ADDITIVE_IDEMPOTENT,
       handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
         return clickupLinkTasks(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_get_goals",
+      description: "List the ClickUp Goals in a workspace with percent complete (no key results — use clickup_get_goal). teamId optional if CLICKUP_TEAM_ID is set.",
+      shape: clickupGetGoalsSchema.shape,
+      annotations: READ_ONLY,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupGetGoals(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_get_goal",
+      description: "Fetch one ClickUp Goal with its key results (steps_start/end/current, last action). Use it to read back after any goal or key-result write.",
+      shape: clickupGetGoalSchema.shape,
+      annotations: READ_ONLY,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupGetGoal(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_create_goal",
+      description: "Gated write: create a ClickUp Goal (name, dueDate YYYY-MM-DD, description, owners, color). teamId optional if CLICKUP_TEAM_ID is set. Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true.",
+      shape: clickupCreateGoalSchema.shape,
+      annotations: WRITE_CREATE,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupCreateGoal(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_update_goal",
+      description: "Gated write: update a ClickUp Goal's name, dueDate, description, color, or owners (addOwners/remOwners). Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true.",
+      shape: clickupUpdateGoalSchema.shape,
+      annotations: WRITE_OVERWRITE,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupUpdateGoal(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_create_key_result",
+      description: "Gated write: add a key result (Target) to a Goal. type: number | currency | boolean | percentage | automatic. Steps are integers (pick a finer unit for precision); boolean is always 0→1; automatic needs taskIds or listIds. Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true.",
+      shape: clickupCreateKeyResultSchema.shape,
+      annotations: WRITE_CREATE,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupCreateKeyResult(args, deps.clickup as ClickUpDeps);
+      })
+    },
+    {
+      name: "clickup_edit_key_result",
+      description: "Gated write: record progress on a key result — sets stepsCurrent (integer) and logs a required note; put the period and the evidence link in the note. Read back with clickup_get_goal. Requires SINC_MCP_WRITES_ENABLE=1; dry-run unless confirm:true.",
+      shape: clickupEditKeyResultSchema.shape,
+      annotations: WRITE_OVERWRITE,
+      handler: requireConfig(clickupReady, "ClickUp", deps.missingDescription, function (args) {
+        return clickupEditKeyResult(args, deps.clickup as ClickUpDeps);
       })
     },
     {

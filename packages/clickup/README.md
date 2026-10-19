@@ -50,6 +50,7 @@ var digest = await formatTeamSync({ api: api, teamId: process.env.CLICKUP_TEAM_I
 - **Client:** `createClickUpApi`, `createClient`
 - **Users/Teams:** `getAuthorizedUser`, `getTeams`
 - **Tasks:** `getTask`, `listMyTasks`, `listTeamTasks`, `createTask`, `updateTask`, `updateTaskStatus`, `deleteTask`, `addComment`
+- **Goals:** `getGoals`, `getGoal`, `createGoal`, `updateGoal`, `deleteGoal`, `createKeyResult`, `editKeyResult`, `deleteKeyResult` — key-result steps are integers
 - **Hierarchy:** `getSpaces`, `getFolders`, `getLists`, `getSpaceLists`, `getListTasks`, `findListByName`
 - **Formatting:** `formatForClaude`, `formatTaskDetail`, `formatTaskSummary`, `formatTeamSync`
 - **Parsing:** `parseClickUpIdentifier` — extracts task/list/space IDs from ClickUp URLs
