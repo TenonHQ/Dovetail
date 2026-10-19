@@ -82,3 +82,71 @@ export type ClickupUpdateTaskInput = z.infer<typeof clickupUpdateTaskSchema>;
 export type ClickupSetCustomFieldInput = z.infer<typeof clickupSetCustomFieldSchema>;
 export type ClickupCreateTaskInput = z.infer<typeof clickupCreateTaskSchema>;
 export type ClickupLinkTasksInput = z.infer<typeof clickupLinkTasksSchema>;
+
+// --- Goals + Key Results ---
+// Goal and key-result ids are UUIDs. Key-result steps are integers — the ClickUp
+// v2 API rejects fractional values, so callers needing precision pick a finer
+// unit (hours, not days). Cross-field rules (boolean 0→1, automatic needs
+// taskIds/listIds, start ≠ end) are enforced in clickup-write.ts.
+
+var goalIdSchema = z.string().min(1);
+var dueDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dueDate must be YYYY-MM-DD");
+var colorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "color must be #RRGGBB");
+var userIdsSchema = z.array(z.number().int().positive());
+
+export var clickupGetGoalsSchema = z.object({
+  teamId: z.string().min(1).optional(),
+  includeCompleted: z.boolean().optional()
+}).strict();
+
+export var clickupGetGoalSchema = z.object({
+  goalId: goalIdSchema
+}).strict();
+
+export var clickupCreateGoalSchema = z.object({
+  name: z.string().min(1),
+  dueDate: dueDateSchema,
+  description: z.string().optional(),
+  owners: userIdsSchema.optional(),
+  color: colorSchema.optional(),
+  teamId: z.string().min(1).optional(),
+  confirm: z.boolean().optional()
+}).strict();
+
+export var clickupUpdateGoalSchema = z.object({
+  goalId: goalIdSchema,
+  name: z.string().min(1).optional(),
+  dueDate: dueDateSchema.optional(),
+  description: z.string().optional(),
+  addOwners: userIdsSchema.optional(),
+  remOwners: userIdsSchema.optional(),
+  color: colorSchema.optional(),
+  confirm: z.boolean().optional()
+}).strict();
+
+export var clickupCreateKeyResultSchema = z.object({
+  goalId: goalIdSchema,
+  name: z.string().min(1),
+  type: z.enum(["number", "currency", "boolean", "percentage", "automatic"]),
+  stepsStart: z.number().int(),
+  stepsEnd: z.number().int(),
+  unit: z.string().optional(),
+  owners: userIdsSchema.optional(),
+  taskIds: z.array(z.string().min(1)).optional(),
+  listIds: z.array(z.string().min(1)).optional(),
+  confirm: z.boolean().optional()
+}).strict();
+
+export var clickupEditKeyResultSchema = z.object({
+  keyResultId: z.string().min(1),
+  stepsCurrent: z.number().int(),
+  note: z.string().trim().min(1, "note is required (period + evidence link)"),
+  confirm: z.boolean().optional()
+}).strict();
+
+export type ClickupGetGoalsInput = z.infer<typeof clickupGetGoalsSchema>;
+export type ClickupGetGoalInput = z.infer<typeof clickupGetGoalSchema>;
+export type ClickupCreateGoalInput = z.infer<typeof clickupCreateGoalSchema>;
+export type ClickupUpdateGoalInput = z.infer<typeof clickupUpdateGoalSchema>;
+export type ClickupCreateKeyResultInput = z.infer<typeof clickupCreateKeyResultSchema>;
+export type ClickupEditKeyResultInput = z.infer<typeof clickupEditKeyResultSchema>;

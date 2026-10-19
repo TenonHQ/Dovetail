@@ -27,7 +27,13 @@
             "updateTask",
             "updateTaskStatus",
             "deleteTask",
-            "addComment"
+            "addComment",
+            "createGoal",
+            "updateGoal",
+            "deleteGoal",
+            "createKeyResult",
+            "editKeyResult",
+            "deleteKeyResult"
           ],
           "message": "dovetail-mcp is read-only; ClickUp write operations are forbidden."
         },
@@ -56,9 +62,11 @@
               "importNames": [
                 "updateTaskStatus",
                 "deleteTask",
-                "addComment"
+                "addComment",
+                "deleteGoal",
+                "deleteKeyResult"
               ],
-              "message": "dovetail-mcp write module allows only createTask/updateTask/setCustomField/linkTask. Destructive ClickUp verbs stay out — wire a new MCP tool explicitly and update the override + WRITE_MODULE_ALLOW together."
+              "message": "dovetail-mcp write module allows only createTask/updateTask/setCustomField/linkTask/createGoal/updateGoal/createKeyResult/editKeyResult. Destructive ClickUp verbs stay out — wire a new MCP tool explicitly and update the override + WRITE_MODULE_ALLOW together."
             },
             {
               "name": "@tenonhq/dovetail-gmail",

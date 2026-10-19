@@ -11,14 +11,19 @@ import {
   createClient,
   getTask,
   listMyTasks,
-  listTeamTasks
+  listTeamTasks,
+  getGoals,
+  getGoal
 } from "@tenonhq/dovetail-clickup";
+import type { ClickUpGoal } from "@tenonhq/dovetail-clickup";
 import type { ClickUpConfig } from "../config";
 import {
   ClickupListTasksInput,
   ClickupGetTaskInput,
   ClickupSearchTasksInput,
-  ClickupGetTeamSyncInput
+  ClickupGetTeamSyncInput,
+  ClickupGetGoalsInput,
+  ClickupGetGoalInput
 } from "../schemas/clickup";
 import { buildTeamSyncJson, TeamSyncJson } from "./teamsync";
 
@@ -36,7 +41,7 @@ export function resolveClient(deps: ClickUpDeps): AxiosInstance {
   return factory(deps.config);
 }
 
-function requireTeamId(deps: ClickUpDeps, override?: string): string {
+export function requireTeamId(deps: ClickUpDeps, override?: string): string {
   var teamId = override || deps.config.defaultTeamId;
   if (!teamId) {
     throw new Error(
@@ -125,4 +130,26 @@ export async function clickupGetTeamSync(
   var client = resolveClient(deps);
   var teamId = requireTeamId(deps, args.teamId);
   return await buildTeamSyncJson({ client: client, teamId: teamId });
+}
+
+export async function clickupGetGoals(
+  args: ClickupGetGoalsInput,
+  deps: ClickUpDeps
+): Promise<{ goals: ClickUpGoal[]; total: number }> {
+  var client = resolveClient(deps);
+  var teamId = requireTeamId(deps, args.teamId);
+  var goals = await getGoals({
+    client: client,
+    teamId: teamId,
+    includeCompleted: args.includeCompleted
+  });
+  return { goals: goals, total: goals.length };
+}
+
+export async function clickupGetGoal(
+  args: ClickupGetGoalInput,
+  deps: ClickUpDeps
+): Promise<ClickUpGoal> {
+  var client = resolveClient(deps);
+  return await getGoal({ client: client, goalId: args.goalId });
 }

@@ -50,7 +50,7 @@ clear "not configured" error.
 > with `gmail.readonly` + `calendar.readonly` scopes is recommended for
 > defence-in-depth and is tracked separately.
 
-## Tools (16)
+## Tools (22)
 
 | Tool                            | Purpose                                        |
 |---------------------------------|------------------------------------------------|
@@ -62,6 +62,12 @@ clear "not configured" error.
 | `clickup_set_custom_field` 🔒   | **Gated write** — set one custom-field value   |
 | `clickup_create_task` 🔒        | **Gated write** — create a task in a list      |
 | `clickup_link_tasks` 🔒         | **Gated write** — link two tasks               |
+| `clickup_get_goals`             | Goals in a workspace with percent complete     |
+| `clickup_get_goal`              | One Goal with its key results (read-back after writes) |
+| `clickup_create_goal` 🔒        | **Gated write** — create a Goal (dueDate `YYYY-MM-DD`) |
+| `clickup_update_goal` 🔒        | **Gated write** — rename / re-date / recolor / change owners |
+| `clickup_create_key_result` 🔒  | **Gated write** — add a key result (number/currency/boolean/percentage/automatic; integer steps) |
+| `clickup_edit_key_result` 🔒    | **Gated write** — set `stepsCurrent` + required progress note |
 | `gmail_get_unread`              | Unread inbox emails                            |
 | `gmail_get_starred`             | Starred emails                                 |
 | `gmail_search`                  | Gmail query syntax                             |
@@ -177,7 +183,10 @@ which may use only the ClickUp write functions. Every other tool module stays
 read-only. Three layers enforce this:
 
 1. **Imports.** Read tool modules import only read functions; the write module
-   imports only `createTask` / `updateTask` / `setCustomField` / `linkTask`.
+   imports only `createTask` / `updateTask` / `setCustomField` / `linkTask` /
+   `createGoal` / `updateGoal` / `createKeyResult` / `editKeyResult`.
+   `deleteGoal` / `deleteKeyResult` exist in `dovetail-clickup` but are banned
+   everywhere in this package, the write module included.
 2. **ESLint** (`.eslintrc.json` `no-restricted-imports`) blocks write imports
    from `dovetail-clickup` / `dovetail-gmail` / `dovetail-google-calendar` /
    `dovetail-servicenow`, with a scoped `overrides` entry that permits the
