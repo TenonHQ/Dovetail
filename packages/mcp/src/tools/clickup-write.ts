@@ -199,9 +199,11 @@ interface DryRunPreview {
 }
 
 // "YYYY-MM-DD" → epoch ms at the end of that day (UTC), the shape ClickUp wants.
+// Date.parse rolls impossible days over (2026-02-30 → 2026-03-02), so the parsed
+// date must round-trip to the same calendar day.
 function toDueDateMs(dueDate: string): number {
   var ms = Date.parse(dueDate + "T23:59:59Z");
-  if (isNaN(ms)) {
+  if (isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== dueDate) {
     throw new Error("dueDate '" + dueDate + "' is not a real calendar date.");
   }
   return ms;

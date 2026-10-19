@@ -126,6 +126,20 @@ describe("clickup goal write validation", function () {
     );
   });
 
+  it("rejects a day that would roll over into the next month", async function () {
+    await expect(clickupCreateGoal({ name: "n", dueDate: "2026-02-30" }, deps)).rejects.toThrow(
+      "not a real calendar date"
+    );
+    await expect(
+      clickupUpdateGoal({ goalId: "g-1", dueDate: "2026-02-29" }, deps)
+    ).rejects.toThrow("not a real calendar date");
+  });
+
+  it("accepts a leap day", async function () {
+    var res = await clickupCreateGoal({ name: "n", dueDate: "2028-02-29" }, deps);
+    expect(res).toMatchObject({ dryRun: true, fields: { dueDate: "2028-02-29" } });
+  });
+
   it("rejects a key result with no range", async function () {
     await expect(
       clickupCreateKeyResult({ goalId: "g-1", name: "n", type: "number", stepsStart: 5, stepsEnd: 5 }, deps)
