@@ -147,8 +147,16 @@ export interface ClickUpKeyResult {
   percent_completed: number | null;
   completed: boolean;
   task_ids: string[];
-  owners: ClickUpUser[];
-  last_action?: unknown;
+  // The API reads back a single `owner` (verified live), though writes take `owners`.
+  owner?: unknown;
+  // Last progress entry, including the note recorded by editKeyResult.
+  last_action?: {
+    note?: string;
+    steps_before?: number | string | null;
+    steps_taken?: number | string | null;
+    date_modified?: number | string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
