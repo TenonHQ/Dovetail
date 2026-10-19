@@ -3,6 +3,7 @@
 // last-wins precedence, absence, and resolution of bare instance names,
 // explicit env filenames, and relative/absolute paths.
 
+import crypto from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -155,7 +156,17 @@ describe("resolveEnvArgPath", function () {
   });
 
   it("defaults to process.cwd() when no cwd is given", function () {
-    expect(resolveEnvArgPath("demo8")).toBe(path.resolve(process.cwd(), ENV_PREFIX + "demo8"));
+    // Hermetic: run from a temp dir with a random name, so a bare name can't
+    // walk up to a real per-instance file above the checkout.
+    var savedCwd = process.cwd();
+    var name = "cwddefault" + crypto.randomBytes(6).toString("hex");
+    var dir = fs.realpathSync(tmpDir);
+    process.chdir(dir);
+    try {
+      expect(resolveEnvArgPath(name)).toBe(path.join(dir, ENV_PREFIX + name));
+    } finally {
+      process.chdir(savedCwd);
+    }
   });
 
   it("throws on an empty or non-string selector", function () {

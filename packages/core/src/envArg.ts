@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 /**
@@ -27,6 +28,20 @@ var ENV_FLAGS = ["--env", "--env-file", "--envFile", "-e"];
 
 // Prefix a bare instance name is expanded with (`prod` → `.env.prod`).
 var BARE_NAME_PREFIX = ".env.";
+
+/**
+ * How many parent directories a bare instance name's file is looked for in,
+ * above the cwd. Mirrored in packages/servicenow/src/loadEnv.ts.
+ */
+export var ENV_WALK_UP_MAX_LEVELS = 8;
+
+/** Options for the parent-directory lookup of a bare instance name. */
+export interface EnvWalkUpOptions {
+  /** Home directory to stop below (defaults to os.homedir()). Injectable for tests. */
+  homeDir?: string;
+  /** Called with the chosen path when the file was found in a parent directory. */
+  onParentMatch?: (foundPath: string) => void;
+}
 
 /**
  * @description Extracts the env-file selector from a raw argv slice. Supports
@@ -70,14 +85,24 @@ export function parseEnvArg(argv: string[]): string | undefined {
  *      `workshop.env`) is an explicit filename in cwd, used as-is even when
  *      it does not exist yet — `dove login --env` may be about to create it.
  *   4. Anything else is a bare instance name: `prod` → `<cwd>/.env.prod`.
- * Does not check existence; a missing file keeps dove's historical behavior
- * (nothing is loaded from it).
+ *      When that file does not exist, the parent directories are searched
+ *      (findEnvFileUpward) and the nearest existing `.env.prod` wins, so a
+ *      nested git worktree can use the per-instance file of the checkout it
+ *      lives in. Nothing found → `<cwd>/.env.prod`, as before.
+ * Only rule 4 walks up; paths and explicit filenames never do. Existence is
+ * checked with stat only — no file is read here. A missing file keeps dove's
+ * historical behavior (nothing is loaded from it).
  * @param {string} rawPath - The value returned by parseEnvArg.
  * @param {string} [cwd] - Base directory for relative paths and bare names (defaults to process.cwd()).
+ * @param {EnvWalkUpOptions} [options] - Home-directory bound and a callback for a parent-directory match.
  * @returns {string} An absolute path to the requested .env file.
  * @throws {Error} When rawPath is not a non-empty string.
  */
-export function resolveEnvArgPath(rawPath: string, cwd?: string): string {
+export function resolveEnvArgPath(
+  rawPath: string,
+  cwd?: string,
+  options?: EnvWalkUpOptions,
+): string {
   if (typeof rawPath !== "string" || rawPath.trim().length === 0) {
     throw new Error("--env must be a non-empty env-file name or path.");
   }
@@ -95,7 +120,125 @@ export function resolveEnvArgPath(rawPath: string, cwd?: string): string {
   if (value.indexOf(".") !== -1) {
     return literal;
   }
-  return path.resolve(base, BARE_NAME_PREFIX + value);
+  var fileName = BARE_NAME_PREFIX + value;
+  var inCwd = path.resolve(base, fileName);
+  if (isExistingFile(inCwd)) {
+    return inCwd;
+  }
+  var opts = options || {};
+  var found = findEnvFileUpward({
+    fileName: fileName,
+    startDir: base,
+    homeDir: opts.homeDir,
+  });
+  if (found === null) {
+    return inCwd;
+  }
+  if (typeof opts.onParentMatch === "function") {
+    try {
+      opts.onParentMatch(found);
+    } catch (e) {
+      // A logging callback must never change which file is selected.
+    }
+  }
+  return found;
+}
+
+/**
+ * @description Looks for `fileName` in the parent directories of `startDir`
+ * (not in `startDir` itself) and returns the nearest one that exists as a
+ * regular file. Bounds: at most `maxLevels` parents (default
+ * ENV_WALK_UP_MAX_LEVELS); never the home directory or anything above it;
+ * never the filesystem root. Uses stat only and never reads a file. Never
+ * throws: bad input or no match returns null.
+ * Keep behaviorally identical to findEnvFileUpward in
+ * packages/servicenow/src/loadEnv.ts — packages/servicenow/tests/envWalkUpParity.test.ts
+ * runs both.
+ * @param {{fileName: string, startDir: string, homeDir?: string, maxLevels?: number}} args
+ * @returns {string|null} The absolute path of the nearest match, or null.
+ */
+export function findEnvFileUpward(args: {
+  fileName: string;
+  startDir: string;
+  homeDir?: string;
+  maxLevels?: number;
+}): string | null {
+  if (
+    !args ||
+    typeof args.fileName !== "string" ||
+    typeof args.startDir !== "string"
+  ) {
+    return null;
+  }
+  var fileName = args.fileName;
+  if (
+    fileName.length === 0 ||
+    /[\\/]/.test(fileName) ||
+    fileName === "." ||
+    fileName === ".."
+  ) {
+    return null;
+  }
+  if (args.startDir.length === 0) {
+    return null;
+  }
+  var maxLevels =
+    typeof args.maxLevels === "number" &&
+    isFinite(args.maxLevels) &&
+    args.maxLevels >= 0
+      ? Math.floor(args.maxLevels)
+      : ENV_WALK_UP_MAX_LEVELS;
+  var home = typeof args.homeDir === "string" ? args.homeDir : safeHomeDir();
+  var homeResolved = home.length > 0 ? path.resolve(home) : "";
+
+  var dir = path.resolve(args.startDir);
+  for (var level = 0; level < maxLevels; level++) {
+    var parent = path.dirname(dir);
+    if (parent === dir) {
+      break; // already at the root
+    }
+    dir = parent;
+    if (path.dirname(dir) === dir) {
+      break; // never the filesystem root
+    }
+    if (
+      homeResolved.length > 0 &&
+      isSameOrAncestor({ dir: dir, of: homeResolved })
+    ) {
+      break; // never the home directory or above it
+    }
+    var candidate = path.join(dir, fileName);
+    if (isExistingFile(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * @description True when `dir` is `of` itself or one of its ancestors.
+ * @param {{dir: string, of: string}} args - Both absolute.
+ * @returns {boolean}
+ */
+function isSameOrAncestor(args: { dir: string; of: string }): boolean {
+  var rel = path.relative(args.dir, args.of);
+  if (rel === "") {
+    return true;
+  }
+  return rel.indexOf("..") !== 0 && !path.isAbsolute(rel);
+}
+
+/**
+ * @description os.homedir(), or "" when it cannot be determined. Never throws.
+ * @returns {string}
+ */
+function safeHomeDir(): string {
+  try {
+    var home = os.homedir();
+    return typeof home === "string" ? home : "";
+  } catch (e) {
+    return "";
+  }
 }
 
 /**
